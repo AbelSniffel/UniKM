@@ -1,19 +1,16 @@
 # UniKM / Universal Key Manager
-
 A cross-platform desktop application for organizing and managing your game product keys and activation codes. UniKM features Steam integration, encryption, and a themeable UI.
+This is a complete rewrite of SteamKM2, using Dart language and Flutter as the front-end.
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.2%2B-02569B?logo=flutter)
-![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.1.0-purple)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 
----
 
 ## Overview
 
 UniKM keeps all your game keys in one place: organized, searchable, and secure. Whether you have a handful of codes or hundreds from Humble Bundle, Fanatical, Green Man Gaming bundles or from some other place, UniKM gives you a place to store them efficiently. It integrates directly with Steam to enrich your library with cover art, ratings, and tags automatically, and optionally encrypts your database so your keys stay private.
-
----
 
 ## Features
 
@@ -70,16 +67,7 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 - One-click download and install of the latest release
 - Option to skip specific versions, updates are not forced onto the user
 
----
-
-### Screenshots
-<img width="2441" height="1402" alt="image" src="https://github.com/user-attachments/assets/71819ef7-7b58-423b-9ed2-8b3e0d9f7e30" />
-<img width="2433" height="1396" alt="image" src="https://github.com/user-attachments/assets/9cd9aaa5-bd23-4404-9160-cdae990f3564" />
-
----
-
 ### Supported Platforms
-
 | Platform | Status |
 |----------|--------|
 | Windows  | ✅ Fully supported |
@@ -87,6 +75,11 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 | Linux    | ⚠️ Experimental |
 | Android  | ⚠️ Experimental |
 | iOS      | ⚠️ Experimental |
+
+
+### Screenshots
+<img width="2441" height="1402" alt="image" src="https://github.com/user-attachments/assets/71819ef7-7b58-423b-9ed2-8b3e0d9f7e30" />
+<img width="2433" height="1396" alt="image" src="https://github.com/user-attachments/assets/9cd9aaa5-bd23-4404-9160-cdae990f3564" />
 
 ---
 
