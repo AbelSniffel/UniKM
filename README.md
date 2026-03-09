@@ -12,6 +12,8 @@ This is a complete rewrite of SteamKM2, using Dart language and Flutter as the f
 
 UniKM keeps all your game keys in one place: organized, searchable, and secure. Whether you have a handful of codes or hundreds from Humble Bundle, Fanatical, Green Man Gaming bundles or from some other place, UniKM gives you a place to store them efficiently. It integrates directly with Steam to enrich your library with cover art, ratings, and tags automatically, and optionally encrypts your database so your keys stay private.
 
+<img width="2441" height="1402" alt="image" src="https://github.com/user-attachments/assets/71819ef7-7b58-423b-9ed2-8b3e0d9f7e30" />
+
 ## Features
 
 ### Game Library Management
@@ -77,8 +79,7 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 | iOS      | ⚠️ Experimental |
 
 
-### Screenshots
-<img width="2441" height="1402" alt="image" src="https://github.com/user-attachments/assets/71819ef7-7b58-423b-9ed2-8b3e0d9f7e30" />
+### More Pictures
 <img width="2433" height="1396" alt="image" src="https://github.com/user-attachments/assets/9cd9aaa5-bd23-4404-9160-cdae990f3564" />
 
 ---
