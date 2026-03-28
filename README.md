@@ -4,7 +4,7 @@ This is a complete rewrite of SteamKM2, using Dart language and Flutter as the f
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.2%2B-02569B?logo=flutter)
-![Version](https://img.shields.io/badge/Version-1.1.0-purple)
+![Version](https://img.shields.io/badge/Version-1.2.0-purple)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 
 
@@ -12,7 +12,8 @@ This is a complete rewrite of SteamKM2, using Dart language and Flutter as the f
 
 UniKM keeps all your game keys in one place: organized, searchable, and secure. Whether you have a handful of codes or hundreds from Humble Bundle, Fanatical, Green Man Gaming bundles or from some other place, UniKM gives you a place to store them efficiently. It integrates directly with Steam to enrich your library with cover art, ratings, and tags automatically, and optionally encrypts your database so your keys stay private.
 
-<img width="2441" height="1402" alt="image" src="https://github.com/user-attachments/assets/71819ef7-7b58-423b-9ed2-8b3e0d9f7e30" />
+<img width="2163" height="1345" alt="image" src="https://github.com/user-attachments/assets/5528459f-5b56-43fb-bbfb-7c0d49c6dd64" />
+
 
 ## Features
 
@@ -49,7 +50,7 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 - Automatic scheduled backups with one-click restore
 
 ### Import & Export
-- Import from CSV, JSON, or legacy SQLite databases (SteamKM2)
+- Import from CSV, JSON, or legacy SQLite databases
 - Batch import multiple games from a file
 - Export your full library to JSON or CSV
 
@@ -73,23 +74,22 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 | Platform | Status |
 |----------|--------|
 | Windows  | ✅ Fully supported |
-| macOS    | ⚠️ Experimental |
 | Linux    | ⚠️ Experimental |
+| macOS    | ⚠️ Experimental |
 | Android  | ⚠️ Experimental |
 | iOS      | ⚠️ Experimental |
 
 
 ### More Pictures
-<img width="2433" height="1396" alt="image" src="https://github.com/user-attachments/assets/9cd9aaa5-bd23-4404-9160-cdae990f3564" />
+<img width="2166" height="1345" alt="image" src="https://github.com/user-attachments/assets/74d0b954-f74e-4c22-ab0e-c2803d16d0f2" />
 
 ---
 
-### Migrating from a Previous Version
+### Migrating from SteamKM1/SteamKM2 to UniKM V1.2.0+
 From SteamKM1:
-- SteamKM1 → SteamKM2: Export your library from SteamKM1 as a JSON file, then import it into SteamKM2 using the Import button on the Add Games page.
-- SteamKM2 → UniKM: Once your data is in SteamKM2, open UniKM and use Menu (☰) → Import Database → Select Source file or Drag the file to the source file box. The SteamKM2 database must be unencrypted before importing.
+- Open the (+) Menu → Click on Backup Games → Select either Encrypted or Regular Json → Press OK
+- Open UniKM and use Menu (☰) button on the title bar → Import Database → Select Source file or Drag the file to the source file box
 
-From SteamKM2 to UniKM:
-- Open UniKM and use Menu (☰) button on the title bar → Import Database → Select Source file or Drag the file to the source file box. UniKM will map all your entries to the new schema.
-
-Direct migration from SteamKM1 to UniKM will be coming soon.
+From SteamKM2:
+- Open the Settings Page (⚙) → Click on Backup / Export Database button → Select Standard Backup → Press Export
+- Open UniKM and use Menu (☰) button on the title bar → Import Database → Select Source file or Drag the file to the source file box
