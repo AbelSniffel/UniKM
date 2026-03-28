@@ -117,6 +117,7 @@ class SearchableSectionGroupBox extends StatelessWidget {
     if (!_show) return const SizedBox.shrink();
     return SectionGroupBox(
       title: group.title,
+      description: group.description,
       theme: theme,
       titleIcon: titleIcon,
       searchQuery: searchQuery,
@@ -273,6 +274,7 @@ class SettingsSearchGroup {
 
   List<String> get indexTexts => [
     title,
+    if (description != null && description!.trim().isNotEmpty) description!,
     ...settings.expand((setting) => setting.indexTexts),
     ...extraTexts,
   ];
@@ -376,7 +378,7 @@ class SettingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       child: Row(
         children: [
           Expanded(

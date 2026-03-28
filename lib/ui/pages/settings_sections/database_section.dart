@@ -1,6 +1,7 @@
 /// Database & security settings section.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -35,36 +36,41 @@ Future<String?> showCreateDatabaseChoiceDialog(
     context: context,
     barrierDismissible: true,
     builder: (ctx) {
-      return Dialog(
-        backgroundColor: theme.background,
-        child: Container(
-          width: 420,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DialogHeader(
-                icon: Icons.note_add,
-                title: 'Create Database',
-                theme: theme,
-                showCloseButton: true,
-              ),
-              const SizedBox(height: 16),
-              const Text('Choose the type of database you want to create.'),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pop(ctx, 'unencrypted'),
-                icon: const Icon(Icons.note_add),
-                label: const Text('Unencrypted database'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pop(ctx, 'encrypted'),
-                icon: const Icon(Icons.lock),
-                label: const Text('Encrypted database'),
-              ),
-            ],
+      return DialogInteractionScope(
+        onDismiss: () => Navigator.pop(ctx),
+        child: Dialog(
+          backgroundColor: theme.background,
+          child: Container(
+            width: 420,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DialogHeader(
+                  icon: Icons.note_add,
+                  title: 'Create Database',
+                  theme: theme,
+                  showCloseButton: true,
+                ),
+                const SizedBox(height: 16),
+                const Text('Choose the type of database you want to create.'),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(ctx, 'unencrypted'),
+                  style: themedFilledButtonStyle(theme),
+                  icon: const Icon(Icons.note_add),
+                  label: const Text('Unencrypted database'),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(ctx, 'encrypted'),
+                  style: themedFilledButtonStyle(theme),
+                  icon: const Icon(Icons.lock),
+                  label: const Text('Encrypted database'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -294,13 +300,18 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
 
       final db = container.read(databaseProvider);
       if (db != null) {
+        // Flush WAL data to the main .db file before closing so the background
+        // SQLite isolate holds the lock for as short a time as possible.
+        try {
+          await db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+        } catch (_) {}
         await db.close();
         container.read(databaseNotifierProvider.notifier).clearDatabase();
       }
 
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 300));
 
-      await _encryptionManager!.enable(password);
+      await _encryptionManager!.enable(password, deletePlaintextFile: false);
 
       if (mounted) {
         setState(() => _encryptionState = EncryptionState.encrypted);
@@ -315,6 +326,28 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
           OpenDatabaseRequest(_encryptionManager!.dbPath, password: password),
         );
       }
+
+      // Schedule deferred deletion in a background retry loop.
+      // Windows Defender / Search can hold the file lock long after close();
+      // we store the path so _bootstrap() can retry on the next launch too.
+      final prefs = container.read(sharedPreferencesProvider);
+      await prefs.setString(
+        EncryptionManager.pendingPlaintextDeletionKey,
+        _encryptionManager!.dbPath,
+      );
+      unawaited(
+        _encryptionManager!.deletePlaintextDatabaseFile(
+          throwOnFailure: false,
+          maxAttempts: 30,
+          initialDelay: const Duration(milliseconds: 200),
+        ).then((deleted) async {
+          if (deleted) {
+            await prefs.remove(
+              EncryptionManager.pendingPlaintextDeletionKey,
+            );
+          }
+        }),
+      );
     } catch (e) {
       NotificationManager.instance.error('Failed to enable encryption: $e');
       final callback = container.read(databaseSwitchCallbackProvider);
@@ -436,15 +469,15 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   label: _isLoading
                       ? DatabaseSection.encryptionStatusSpec.label
                       : isEncrypted
-                          ? (isUnlocked
-                                ? 'Encrypted (Unlocked)'
-                                : 'Encrypted (Locked)')
-                          : 'Not Encrypted',
+                      ? (isUnlocked
+                            ? 'Encrypted (Unlocked)'
+                            : 'Encrypted (Locked)')
+                      : 'Not Encrypted',
                   labelColor: _isLoading
                       ? null
                       : isEncrypted
-                          ? Colors.green
-                          : Colors.orange,
+                      ? Colors.green
+                      : Colors.orange,
                   description: DatabaseSection.encryptionStatusSpec.description,
                   child: _isLoading
                       ? const SizedBox(
@@ -598,54 +631,71 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             ),
           ),
 
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    showImportDialog(context);
-                  },
-                  icon: const Icon(Icons.download),
-                  label: const Text('Import DB'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    showExportDialog(context);
-                  },
-                  icon: const Icon(Icons.upload),
-                  label: const Text('Export DB'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _showChangeDatabaseDialog,
-                  icon: const Icon(Icons.swap_horiz),
-                  label: const Text('Change DB'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final choice = await showCreateDatabaseChoiceDialog(
-                      context,
-                      widget.theme,
-                    );
-                    if (choice == 'unencrypted') {
-                      await _createDatabase(encrypted: false);
-                    } else if (choice == 'encrypted') {
-                      await _createDatabase(encrypted: true);
-                    }
-                  },
-                  icon: const Icon(Icons.note_add),
-                  label: const Text('New DB'),
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const spacing = 12.0;
+              final maxWidth = constraints.maxWidth;
+              final columns = maxWidth < 520
+                  ? 1
+                  : maxWidth < 900
+                  ? 2
+                  : 4;
+              final buttonWidth =
+                  (maxWidth - spacing * (columns - 1)) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  SizedBox(
+                    width: buttonWidth,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        showImportDialog(context);
+                      },
+                      icon: const Icon(Icons.download),
+                      label: const Text('Import DB'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: buttonWidth,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        showExportDialog(context);
+                      },
+                      icon: const Icon(Icons.upload),
+                      label: const Text('Export DB'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: buttonWidth,
+                    child: OutlinedButton.icon(
+                      onPressed: _showChangeDatabaseDialog,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text('Change DB'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: buttonWidth,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final choice = await showCreateDatabaseChoiceDialog(
+                          context,
+                          widget.theme,
+                        );
+                        if (choice == 'unencrypted') {
+                          await _createDatabase(encrypted: false);
+                        } else if (choice == 'encrypted') {
+                          await _createDatabase(encrypted: true);
+                        }
+                      },
+                      icon: const Icon(Icons.note_add),
+                      label: const Text('New DB'),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           if (nextBackupTime != null) ...[
@@ -861,9 +911,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog> {
                         behavior: HitTestBehavior.opaque,
                         onSecondaryTapDown: (details) async {
                           final overlay =
-                              Overlay.of(
-                                    context,
-                                  ).context.findRenderObject()
+                              Overlay.of(context).context.findRenderObject()
                                   as RenderBox;
                           final position = RelativeRect.fromRect(
                             Rect.fromPoints(

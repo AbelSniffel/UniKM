@@ -71,6 +71,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   late String _workingThemeId;
   int? _selectedIconCodePoint;
   bool _isEditing = false;
+  bool _saved = false;
 
   @override
   void initState() {
@@ -642,7 +643,16 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   Widget build(BuildContext context) {
     final previewTheme = ref.watch(themeProvider);
 
-    return AlertDialog(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop && !_saved) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(themeProvider.notifier).cancelPreview();
+          });
+        }
+      },
+      child: AlertDialog(
       backgroundColor: previewTheme.background,
       title: Row(
         children: [
@@ -746,9 +756,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         TextButton(
           onPressed: () {
             Navigator.pop(context);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              ref.read(themeProvider.notifier).cancelPreview();
-            });
           },
           child: Text(
             'Cancel',
@@ -782,12 +789,14 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
               _isEditing ? 'Theme "$name" updated' : 'Theme "$name" saved',
             );
             if (!context.mounted) return;
+            _saved = true;
             Navigator.pop(context);
           },
           style: ElevatedButton.styleFrom(backgroundColor: previewTheme.accent),
           child: Text(_isEditing ? 'Update' : 'Save'),
         ),
       ],
+    ),
     );
   }
 }

@@ -19,8 +19,11 @@ import '../../ui/widgets/notification_system.dart';
 
 // Fixed OS notification IDs so grouped notifications replace the previous one.
 const int _osIdExpired = 1001;
-const int _osIdSoon = 1002;
+const int _osIdToday = 1002;
+const int _osIdSoon = 1003;
 const int _osIdTest = 9998;
+const int _maxNotificationNames = 7;
+const Duration _deadlineToastDuration = Duration(seconds: 10);
 
 /// Singleton service that checks game deadlines and fires reminders.
 ///
@@ -29,8 +32,8 @@ const int _osIdTest = 9998;
 /// - OS-level desktop notifications (Linux/macOS via flutter_local_notifications,
 ///   Windows via native WinRT PowerShell toast).
 ///
-/// Games are grouped — one notification for all expired games and one for all
-/// soon-expiring games, rather than one notification per game.
+/// Games are grouped by deadline state — expired, due today, and expiring soon
+/// — rather than showing one notification per game.
 ///
 /// The timer runs once every 24 hours so users receive at most one notification
 /// batch per day. An immediate check is also performed at app startup.
@@ -88,38 +91,48 @@ class DeadlineNotificationService {
   Future<void> checkDeadlines(List<Game> games, {required bool enabled}) async {
     if (!enabled) return;
 
-    final expired =
-        games.where((g) => g.hasDeadline && g.isExpired).toList();
-    final soon = games
-        .where((g) => g.hasDeadline && g.isDeadlineSoon && !g.isExpired)
-        .toList();
+    final expired = games.where((g) => g.hasDeadline && g.isExpired).toList();
+    final today = games.where(_isDueToday).toList();
+    final soon = games.where(_isDueSoon).toList();
 
     // In-app toasts (always shown when games are found).
     if (expired.isNotEmpty) {
       final count = expired.length;
       NotificationManager.instance.warning(
-        count == 1
-            ? '"${expired[0].title}" key deadline has already passed!'
-            : '$count key deadlines have already passed: ${_nameList(expired)}',
+        _notificationNameList(expired),
         title: count == 1 ? 'Key Expired' : '$count Keys Expired',
+        autoDismissAfter: _deadlineToastDuration,
+      );
+    }
+
+    if (today.isNotEmpty) {
+      final count = today.length;
+      NotificationManager.instance.warning(
+        _notificationNameList(today),
+        title: count == 1 ? 'Key Expiring Today' : '$count Keys Expiring Today',
+        autoDismissAfter: _deadlineToastDuration,
       );
     }
 
     if (soon.isNotEmpty) {
       final count = soon.length;
       NotificationManager.instance.warning(
-        count == 1
-            ? '"${soon[0].title}" expires in ${_dayLabel(soon[0].daysUntilDeadline ?? 0)}.'
-            : '$count keys expiring soon: ${_nameList(soon)}',
+        _notificationNameList(soon),
         title: count == 1 ? 'Key Expiring Soon' : '$count Keys Expiring Soon',
+        autoDismissAfter: _deadlineToastDuration,
       );
     }
 
     // OS notifications (once per game per day, grouped).
-    final newExpired =
-        expired.where((g) => !_notifiedGameIds.contains(g.id)).toList();
-    final newSoon =
-        soon.where((g) => !_notifiedGameIds.contains(g.id)).toList();
+    final newExpired = expired
+        .where((g) => !_notifiedGameIds.contains(g.id))
+        .toList();
+    final newToday = today
+        .where((g) => !_notifiedGameIds.contains(g.id))
+        .toList();
+    final newSoon = soon
+        .where((g) => !_notifiedGameIds.contains(g.id))
+        .toList();
 
     if (newExpired.isNotEmpty) {
       for (final g in newExpired) {
@@ -129,9 +142,19 @@ class DeadlineNotificationService {
       await _showOsNotification(
         id: _osIdExpired,
         title: count == 1 ? 'Key Expired' : '$count Keys Expired',
-        body: count == 1
-            ? '${newExpired[0].title} — deadline has already passed!'
-            : '${_nameList(newExpired)} — deadlines have passed.',
+        body: _notificationNameList(newExpired),
+      );
+    }
+
+    if (newToday.isNotEmpty) {
+      for (final g in newToday) {
+        _notifiedGameIds.add(g.id);
+      }
+      final count = newToday.length;
+      await _showOsNotification(
+        id: _osIdToday,
+        title: count == 1 ? 'Key Expiring Today' : '$count Keys Expiring Today',
+        body: _notificationNameList(newToday),
       );
     }
 
@@ -143,9 +166,7 @@ class DeadlineNotificationService {
       await _showOsNotification(
         id: _osIdSoon,
         title: count == 1 ? 'Key Expiring Soon' : '$count Keys Expiring Soon',
-        body: count == 1
-            ? '${newSoon[0].title} — expires in ${_dayLabel(newSoon[0].daysUntilDeadline ?? 0)}.'
-            : '${_nameList(newSoon)} — expiring soon.',
+        body: _notificationNameList(newSoon),
       );
     }
   }
@@ -242,7 +263,7 @@ class DeadlineNotificationService {
     required String body,
   }) async {
     final safeTitle = title.replaceAll("'", ' ').replaceAll('\n', ' ');
-    final safeBody  = body .replaceAll("'", ' ').replaceAll('\n', ' ');
+    final safeBody = body.replaceAll("'", ' ').replaceAll('\n', ' ');
 
     final script =
         "[Windows.UI.Notifications.ToastNotificationManager,"
@@ -258,10 +279,13 @@ class DeadlineNotificationService {
         "[Windows.UI.Notifications.ToastNotificationManager]::"
         r"CreateToastNotifier('UniKM').Show($t);";
 
-    await Process.run(
-      'powershell',
-      ['-WindowStyle', 'Hidden', '-NonInteractive', '-Command', script],
-    );
+    await Process.run('powershell', [
+      '-WindowStyle',
+      'Hidden',
+      '-NonInteractive',
+      '-Command',
+      script,
+    ]);
   }
 
   /// Linux/macOS notification via flutter_local_notifications plugin.
@@ -281,12 +305,35 @@ class DeadlineNotificationService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  String _dayLabel(int days) => days == 1 ? '1 day' : '$days days';
+  bool _isDueToday(Game game) {
+    if (!game.hasDeadline || game.deadlineDate == null || game.isExpired) {
+      return false;
+    }
 
-  String _nameList(List<Game> games) {
-    const max = 3;
-    final shown = games.take(max).map((g) => g.title).join(', ');
-    if (games.length <= max) return shown;
-    return '$shown +${games.length - max} more';
+    final daysUntilDeadline = game.daysUntilDeadline;
+    return daysUntilDeadline != null && daysUntilDeadline <= 0;
+  }
+
+  bool _isDueSoon(Game game) {
+    if (!game.hasDeadline || !game.isDeadlineSoon || game.isExpired) {
+      return false;
+    }
+
+    final daysUntilDeadline = game.daysUntilDeadline;
+    return daysUntilDeadline != null && daysUntilDeadline > 0;
+  }
+
+  String _notificationNameList(List<Game> games) {
+    final visibleNames = games
+        .take(_maxNotificationNames)
+        .map((game) => game.title)
+        .join(', ');
+
+    final remainingCount = games.length - _maxNotificationNames;
+    if (remainingCount <= 0) {
+      return visibleNames;
+    }
+
+    return '$visibleNames +$remainingCount more';
   }
 }

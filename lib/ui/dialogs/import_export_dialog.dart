@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
@@ -13,13 +14,19 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../../core/database/database.dart';
+import '../../core/services/encryption_manager.dart';
 import '../../core/services/legacy_db_converter.dart';
+import '../../core/services/legacy_encrypted_import.dart';
+import '../../core/services/steamkm1_import.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import 'database_unlock_dialog.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
 import '../widgets/toggle_switch.dart';
+
+enum _ImportFileKind { sqlite, encrypted, json, csv, txt, unsupported }
 
 /// Show export dialog
 Future<void> showExportDialog(BuildContext context) {
@@ -46,7 +53,7 @@ class ExportDialog extends ConsumerStatefulWidget {
 }
 
 class _ExportDialogState extends ConsumerState<ExportDialog> {
-  String _exportFormat = 'json';
+  String _exportFormat = 'db';
   bool _includeUsed = true;
   bool _includeTags = true;
   bool _includeNotes = true;
@@ -186,9 +193,9 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
       if (_includeTags && g.tagIds.isNotEmpty) {
         final tagNames = g.tagIds
-            .map((id) => tags.firstWhere((t) => t.id == id, orElse: () => null))
+            .map((id) => tags.where((t) => t.id == id).firstOrNull)
             .where((t) => t != null)
-            .map((t) => t.name)
+            .map((t) => t!.name)
             .toList();
         map['tags'] = tagNames;
       }
@@ -284,9 +291,9 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
       if (_includeTags) {
         final tagNames = g.tagIds
-            .map((id) => tags.firstWhere((t) => t.id == id, orElse: () => null))
+            .map((id) => tags.where((t) => t.id == id).firstOrNull)
             .where((t) => t != null)
-            .map((t) => t.name)
+            .map((t) => t!.name)
             .join(';');
         row.add(_csvEscape(tagNames));
       }
@@ -340,6 +347,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
             // Format selection
             SectionGroupBox(
               title: 'Format',
+              titleIcon: Icons.format_align_center,
               theme: theme,
               child: RadioGroup<String>(
                 groupValue: _exportFormat,
@@ -420,26 +428,27 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
             // Options
             if (_exportFormat != 'db' && _exportFormat != 'enc')
               SectionGroupBox(
-                title: 'Options',
+                title: 'Include Additional Information',
+                titleIcon: Icons.info_outline,
                 theme: theme,
                 child: Column(
                   children: [
                     _OptionRow(
                       theme: theme,
-                      label: 'Include used keys',
+                      label: 'Used Keys',
                       value: _includeUsed,
                       onChanged: (v) => setState(() => _includeUsed = v),
                     ),
                     if (_exportFormat != 'txt') ...[
                       _OptionRow(
                         theme: theme,
-                        label: 'Include tags',
+                        label: 'Tags',
                         value: _includeTags,
                         onChanged: (v) => setState(() => _includeTags = v),
                       ),
                       _OptionRow(
                         theme: theme,
-                        label: 'Include notes',
+                        label: 'Notes',
                         value: _includeNotes,
                         onChanged: (v) => setState(() => _includeNotes = v),
                       ),
@@ -490,6 +499,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   bool _isImporting = false;
   int _previewCount = 0;
   bool _isDragging = false;
+  bool _isHovering = false;
+  bool _allowDuplicates = false;
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
   bool get _isMerge => _importMode == 'merge' || _importMode == 'skip';
@@ -512,7 +523,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: 'Select Database File',
       type: FileType.custom,
-      allowedExtensions: ['db', 'sqlite', 'sqlite3', 'enc', 'json', 'csv'],
+      allowedExtensions: ['db', 'sqlite', 'sqlite3', 'enc', 'json', 'csv', 'txt', 'bak'],
     );
 
     if (result != null && result.files.isNotEmpty) {
@@ -524,11 +535,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   Future<void> _handleSelectedFilePath(String path) async {
-    final extension = p.extension(path).toLowerCase();
-    const supported = {'.db', '.sqlite', '.sqlite3', '.enc', '.json', '.csv'};
-    if (!supported.contains(extension)) {
+    final kind = _classifyImportFile(path);
+    if (kind == _ImportFileKind.unsupported) {
       NotificationManager.instance.error(
-        'Unsupported file type. Please select .db, .sqlite, .sqlite3, .enc, .json, or .csv',
+        'Unsupported file type. Please select .db, .sqlite, .sqlite3, .enc, .json, .csv, .txt, or supported .bak backups',
       );
       return;
     }
@@ -542,14 +552,37 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     await _scanFileForCount(File(path));
   }
 
+  _ImportFileKind _classifyImportFile(String path) {
+    final lowerPath = path.toLowerCase();
+    if (lowerPath.endsWith('.db') ||
+        lowerPath.endsWith('.sqlite') ||
+        lowerPath.endsWith('.sqlite3') ||
+        lowerPath.endsWith('.db.bak') ||
+        lowerPath.endsWith('.sqlite.bak') ||
+        lowerPath.endsWith('.sqlite3.bak')) {
+      return _ImportFileKind.sqlite;
+    }
+    if (lowerPath.endsWith('.enc') || lowerPath.endsWith('.enc.bak')) {
+      return _ImportFileKind.encrypted;
+    }
+    if (lowerPath.endsWith('.json') || lowerPath.endsWith('.json.bak')) {
+      return _ImportFileKind.json;
+    }
+    if (lowerPath.endsWith('.csv')) {
+      return _ImportFileKind.csv;
+    }
+    if (lowerPath.endsWith('.txt')) {
+      return _ImportFileKind.txt;
+    }
+    return _ImportFileKind.unsupported;
+  }
+
   Future<void> _scanFileForCount(File file) async {
     try {
-      final extension = p.extension(file.path).toLowerCase();
+      final kind = _classifyImportFile(file.path);
       int count = 0;
 
-      if (extension == '.db' ||
-          extension == '.sqlite' ||
-          extension == '.sqlite3') {
+      if (kind == _ImportFileKind.sqlite) {
         // Count games in SQLite
         final sourceDb = sqlite3.sqlite3.open(
           file.path,
@@ -561,16 +594,21 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         } finally {
           sourceDb.dispose();
         }
-      } else if (extension == '.enc') {
+      } else if (kind == _ImportFileKind.encrypted) {
         // Can't preview count without password.
         count = 0;
-      } else if (extension == '.json') {
+      } else if (kind == _ImportFileKind.json) {
         final content = await file.readAsString();
         final data = jsonDecode(content);
         if (data is Map && data['games'] is List) {
           count = (data['games'] as List).length;
+        } else if (looksLikeSteamKm1JsonExportData(data)) {
+          count = parseSteamKm1JsonExportData(data).length;
         }
-      } else if (extension == '.csv') {
+      } else if (kind == _ImportFileKind.txt) {
+        final content = await file.readAsString();
+        count = parseSteamKm1TextExport(content).length;
+      } else if (kind == _ImportFileKind.csv) {
         final lines = await file.readAsLines();
         count = lines.length - 1; // Exclude header
         if (count < 0) count = 0;
@@ -594,7 +632,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
     try {
       final file = File(_selectedFile!);
-      final extension = p.extension(_selectedFile!).toLowerCase();
+      final kind = _classifyImportFile(_selectedFile!);
 
       final db = ref.read(requireDatabaseProvider);
       if (_isReplace) {
@@ -606,18 +644,28 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
       task = NotificationManager.instance.beginTask('Importing...');
 
-      if (extension == '.db' ||
-          extension == '.sqlite' ||
-          extension == '.sqlite3' ||
-          extension == '.enc') {
+      var completed = true;
+      if (kind == _ImportFileKind.sqlite) {
         // Import SQLite database
         await _importSqliteDatabase(file, task: task);
-      } else if (extension == '.json') {
+      } else if (kind == _ImportFileKind.encrypted) {
+        completed = await _importEncryptedFile(file, task: task);
+      } else if (kind == _ImportFileKind.json) {
         // Import JSON
         await _importJson(file, task: task);
-      } else if (extension == '.csv') {
+      } else if (kind == _ImportFileKind.txt) {
+        // Import plain text export
+        await _importTxt(file, task: task);
+      } else if (kind == _ImportFileKind.csv) {
         // Import CSV
         await _importCsv(file, task: task);
+      } else {
+        throw Exception('Unsupported import file');
+      }
+
+      if (!completed) {
+        task.dismiss();
+        return;
       }
 
       task.completeSuccess('Import completed');
@@ -631,6 +679,126 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         setState(() => _isImporting = false);
       }
     }
+  }
+
+  Future<bool> _importEncryptedFile(
+    File file, {
+    NotificationHandle? task,
+  }) async {
+    final encryptedKind = await detectEncryptedImportKind(file);
+    switch (encryptedKind) {
+      case EncryptedImportKind.uniKmDatabase:
+        return _importEncryptedDatabase(
+          file,
+          title: 'Unlock UniKM Backup',
+          message: 'This UniKM backup is encrypted. Enter the password to import it.',
+          task: task,
+          decrypt: (password) => decryptUniKmDatabaseToTemp(file, password),
+        );
+      case EncryptedImportKind.steamKm2Database:
+        return _importEncryptedDatabase(
+          file,
+          title: 'Unlock SteamKM2 Backup',
+          message: 'This SteamKM2 backup is encrypted. Enter the password to import it.',
+          task: task,
+          decrypt: (password) => decryptSteamKm2DatabaseToTemp(file, password),
+        );
+      case EncryptedImportKind.steamKm1Json:
+        return _importSteamKm1EncryptedBackup(file, task: task);
+      case EncryptedImportKind.unknown:
+        throw Exception('Unsupported encrypted import format');
+    }
+  }
+
+  Future<bool> _importEncryptedDatabase(
+    File file, {
+    required String title,
+    required String message,
+    required Future<PreparedEncryptedDatabaseImport> Function(String password)
+    decrypt,
+    NotificationHandle? task,
+  }) async {
+    final prepared = await _promptForEncryptedImport(
+      title: title,
+      message: message,
+      task: task,
+      action: decrypt,
+    );
+    if (prepared == null) {
+      return false;
+    }
+
+    try {
+      await _importSqliteDatabase(File(prepared.databasePath), task: task);
+      return true;
+    } finally {
+      await prepared.dispose();
+    }
+  }
+
+  Future<bool> _importSteamKm1EncryptedBackup(
+    File file, {
+    NotificationHandle? task,
+  }) async {
+    final decryptedJson = await _promptForEncryptedImport<String>(
+      title: 'Unlock SteamKM1 Backup',
+      message: 'This SteamKM1 backup is encrypted. Enter the password to import it.',
+      task: task,
+      action: (password) => decryptSteamKm1JsonExport(file, password),
+    );
+    if (decryptedJson == null) {
+      return false;
+    }
+
+    final decoded = jsonDecode(decryptedJson);
+    final records = parseSteamKm1JsonExportData(decoded);
+    await _importSteamKm1Records(
+      records,
+      sourceFile: file,
+      sourceLabel: 'SteamKM1 encrypted backup',
+      task: task,
+    );
+    return true;
+  }
+
+  Future<T?> _promptForEncryptedImport<T>({
+    required String title,
+    required String message,
+    required Future<T> Function(String password) action,
+    NotificationHandle? task,
+  }) async {
+    while (true) {
+      final password = await _promptForImportPassword(
+        title: title,
+        message: message,
+      );
+      if (password == null) {
+        return null;
+      }
+
+      try {
+        return await action(password);
+      } on InvalidPasswordException {
+        task?.update(message: 'Incorrect password, try again...');
+        NotificationManager.instance.error('Incorrect password');
+      }
+    }
+  }
+
+  Future<String?> _promptForImportPassword({
+    required String title,
+    required String message,
+  }) {
+    final theme = ref.read(themeProvider);
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => DatabaseUnlockDialog(
+        theme: theme,
+        title: title,
+        message: message,
+      ),
+    );
   }
 
   Future<void> _importSqliteDatabase(
@@ -697,7 +865,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         // Check for duplicate keys
         final key = row['game_key'] as String;
         final existingId = await db.getGameIdByKey(key);
-        if (_isMerge && existingId != null) {
+        if (_isMerge && existingId != null && !_allowDuplicates) {
           skippedCount++;
           continue;
         }
@@ -788,6 +956,13 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       await ref.read(gamesProvider.notifier).refresh();
       await ref.read(tagsProvider.notifier).refresh();
       await persistEncryptedDbIfNeeded(ref);
+
+      // Evict only the overwritten image paths from Flutter's cache so game
+      // cards immediately display fresh artwork without reloading every other
+      // cached image unnecessarily.
+      for (final path in copiedImagePaths) {
+        PaintingBinding.instance.imageCache.evict(FileImage(File(path)));
+      }
 
       String message = 'Imported $importedCount games';
       if (updatedCount > 0) message += ', updated $updatedCount';
@@ -886,18 +1061,11 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       return initial;
     }
 
-    final stem = p.basenameWithoutExtension(safeName);
-    final ext = p.extension(safeName);
-    var suffix = 1;
-    while (true) {
-      final candidate = File(
-        p.join(targetImagesDir.path, '${stem}_import$suffix$ext'),
-      );
-      if (!await candidate.exists()) {
-        return candidate;
-      }
-      suffix++;
-    }
+    // A file with the same name already exists at the destination but the
+    // source is a different path (e.g. re-importing the same database from
+    // another location). Overwrite it so there is always exactly one image
+    // per appID
+    return initial;
   }
 
   String _normalizeForCompare(String path) {
@@ -906,11 +1074,25 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
   Future<void> _importJson(File file, {NotificationHandle? task}) async {
     final content = await file.readAsString();
+    final decoded = jsonDecode(content);
+    if (looksLikeSteamKm1JsonExportData(decoded)) {
+      final records = parseSteamKm1JsonExportData(decoded);
+      await _importSteamKm1Records(
+        records,
+        sourceFile: file,
+        sourceLabel: 'SteamKM1 JSON',
+        task: task,
+      );
+      return;
+    }
+
     final db = ref.read(requireDatabaseProvider);
 
     try {
       // Parse JSON using simple approach (no external package)
-      final data = _parseJsonSimple(content);
+      final data = decoded is Map<String, dynamic>
+          ? decoded
+          : _parseJsonSimple(content);
 
       if (data == null || data['games'] == null) {
         throw Exception('Invalid JSON format - missing games array');
@@ -944,7 +1126,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         if (key == null || key.isEmpty) continue;
 
         final existingId = await db.getGameIdByKey(key);
-        if (_isMerge && existingId != null) {
+        if (_isMerge && existingId != null && !_allowDuplicates) {
           skippedCount++;
           continue;
         }
@@ -1027,6 +1209,130 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     } catch (e) {
       throw Exception('JSON import failed: $e');
     }
+  }
+
+  Future<void> _importTxt(File file, {NotificationHandle? task}) async {
+    final content = await file.readAsString();
+    final records = parseSteamKm1TextExport(content);
+    if (records.isEmpty) {
+      throw Exception('No valid games found in text import');
+    }
+
+    await _importSteamKm1Records(
+      records,
+      sourceFile: file,
+      sourceLabel: 'SteamKM1 text',
+      task: task,
+    );
+  }
+
+  Future<void> _importSteamKm1Records(
+    List<SteamKm1ImportedGame> records, {
+    required File sourceFile,
+    required String sourceLabel,
+    NotificationHandle? task,
+  }) async {
+    final db = ref.read(requireDatabaseProvider);
+    final imagesDir = await _resolveManagedImagesDirectory();
+    final importedCoverPathCache = <String, String>{};
+    final copiedImagePaths = <String>{};
+    final categoryTagIdMap = <String, int>{};
+
+    int importedCount = 0;
+    int skippedCount = 0;
+    int updatedCount = 0;
+
+    for (final record in records) {
+      final existingId = await db.getGameIdByKey(record.key);
+      if (_isMerge && existingId != null && !_allowDuplicates) {
+        skippedCount++;
+        continue;
+      }
+
+      final sourceCoverImage = record.iconPath ?? '';
+      final normalizedCoverImage = await _normalizeImportedCoverImagePath(
+        sourceCoverImage,
+        sourceDbFile: sourceFile,
+        targetImagesDir: imagesDir,
+        cache: importedCoverPathCache,
+      );
+      if (sourceCoverImage.trim().isNotEmpty &&
+          normalizedCoverImage != sourceCoverImage) {
+        copiedImagePaths.add(normalizedCoverImage);
+      }
+
+      final notes = (record.developer != null && record.developer!.isNotEmpty)
+          ? 'Developer: ${record.developer!}'
+          : '';
+      final reviewScore = record.reviewScore ?? 0;
+      final reviewCount = record.reviewCount ?? 0;
+
+      int gameId;
+      if (_isUpdate && existingId != null) {
+        gameId = existingId;
+        await db.updateGameFields(
+          gameId,
+          title: record.title,
+          platform: 'Steam',
+          notes: notes,
+          coverImage: normalizedCoverImage,
+          steamAppId: record.appId ?? '',
+          reviewScore: reviewScore,
+          reviewCount: reviewCount,
+          updatedAt: DateTime.now(),
+        );
+        updatedCount++;
+      } else {
+        gameId = await db.insertGame(
+          GamesCompanion.insert(
+            title: record.title,
+            gameKey: record.key,
+            platform: const Value('Steam'),
+            notes: Value(notes),
+            coverImage: Value(normalizedCoverImage),
+            steamAppId: Value(record.appId ?? ''),
+            reviewScore: Value(reviewScore),
+            reviewCount: Value(reviewCount),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        importedCount++;
+      }
+
+      final category = record.category?.trim() ?? '';
+      if (category.isNotEmpty && category.toLowerCase() != 'new') {
+        final existingTagId = categoryTagIdMap[category];
+        final tagId = existingTagId ?? (await db.getOrCreateTag(category)).id;
+        categoryTagIdMap[category] = tagId;
+        await db.setTagsForGame(gameId, <int>[tagId]);
+      } else {
+        await db.setTagsForGame(gameId, const <int>[]);
+      }
+
+      if (task != null && importedCount + updatedCount + skippedCount > 0) {
+        final done = importedCount + updatedCount + skippedCount;
+        task.update(message: 'Imported $done from $sourceLabel...');
+      }
+    }
+
+    await ref.read(gamesProvider.notifier).refresh();
+    await ref.read(tagsProvider.notifier).refresh();
+    await persistEncryptedDbIfNeeded(ref);
+
+    String message = 'Imported $importedCount games from $sourceLabel';
+    if (updatedCount > 0) {
+      message += ', updated $updatedCount';
+    }
+    if (categoryTagIdMap.isNotEmpty) {
+      message += ', mapped ${categoryTagIdMap.length} categories to tags';
+    }
+    if (copiedImagePaths.isNotEmpty) {
+      message += ', copied ${copiedImagePaths.length} cover images';
+    }
+    if (skippedCount > 0) {
+      message += ' (skipped $skippedCount duplicates)';
+    }
+    NotificationManager.instance.success(message);
   }
 
   Map<String, dynamic>? _parseJsonSimple(String content) {
@@ -1228,6 +1534,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             // File selection
             SectionGroupBox(
               title: 'Source File',
+              titleIcon: Icons.upload_file,
               theme: theme,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1235,6 +1542,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                   Focus(
                     autofocus: false,
                     child: MouseRegion(
+                      onEnter: (_) => setState(() => _isHovering = true),
+                      onExit: (_) => setState(() => _isHovering = false),
                       child: DropTarget(
                         enable: true,
                         onDragDone: (details) async {
@@ -1251,12 +1560,16 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                             decoration: BoxDecoration(
                               color: _isDragging
                                   ? theme.accent.withValues(alpha: 0.1)
-                                  : theme.inputBackground,
+                                  : _isHovering
+                                      ? theme.accent.withValues(alpha: 0.05)
+                                      : theme.inputBackground,
                               borderRadius: BorderRadius.circular(theme.cornerRadius),
                               border: Border.all(
                                 color: _isDragging
                                     ? theme.accent
-                                    : (_selectedFile != null ? theme.accent : theme.border),
+                                    : _isHovering
+                                        ? theme.accent.withValues(alpha: 0.5)
+                                        : (_selectedFile != null ? theme.accent : theme.border),
                                 width: _isDragging ? 2 : 1,
                               ),
                             ),
@@ -1301,7 +1614,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Supported: .db, .sqlite, .enc, .json, .csv',
+                    'Supported: .db, .sqlite, .enc, .json, .csv, .txt, and compatible .bak backups',
                     style: TextStyle(color: theme.textSecondary, fontSize: 12),
                   ),
                   if (_selectedFile != null && _previewCount > 0) ...[
@@ -1313,7 +1626,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(theme.cornerRadius),
                       ),
                       child: Row(
                         children: [
@@ -1341,56 +1654,76 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
             const SizedBox(height: 16),
 
-            // Import mode
+            // Import settings and options in connected groupboxes
             SectionGroupBox(
-              title: 'Import Mode',
+              title: 'Import Settings',
+              titleIcon: Icons.swap_horiz,
               theme: theme,
-              child: RadioGroup<String>(
-                groupValue: _importMode,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _importMode = v);
-                },
-                child: Column(
-                  children: [
-                    RadioListTile<String>(
-                      title: Text(
-                        'Merge',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Add new games, skip duplicates',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'merge',
-                      activeColor: theme.accent,
+              groupPosition: SectionGroupPosition.first,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RadioGroup<String>(
+                    groupValue: _importMode,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _importMode = v);
+                    },
+                    child: Column(
+                      children: [
+                        RadioListTile<String>(
+                          title: Text(
+                            'Merge',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                          subtitle: Text(
+                            'Add new games, skip duplicates',
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
+                          value: 'merge',
+                          activeColor: theme.accent,
+                        ),
+                        RadioListTile<String>(
+                          title: Text(
+                            'Replace',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                          subtitle: Text(
+                            'Clear existing data and import',
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
+                          value: 'replace',
+                          activeColor: theme.accent,
+                        ),
+                        RadioListTile<String>(
+                          title: Text(
+                            'Update',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                          subtitle: Text(
+                            'Add new and update existing',
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
+                          value: 'update',
+                          activeColor: theme.accent,
+                        ),
+                      ],
                     ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'Replace',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Clear existing data and import',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'replace',
-                      activeColor: theme.accent,
-                    ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'Update',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Add new and update existing',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'update',
-                      activeColor: theme.accent,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+            ),
+            SectionGroupBox(
+              title: 'Options',
+              titleIcon: Icons.settings,
+              theme: theme,
+              groupPosition: SectionGroupPosition.last,
+              alternateBackground: true,
+              child: _OptionRow(
+                theme: theme,
+                label: 'Allow duplicate keys',
+                value: _allowDuplicates,
+                onChanged: (v) => setState(() => _allowDuplicates = v),
               ),
             ),
 

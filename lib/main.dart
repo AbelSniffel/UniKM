@@ -193,6 +193,28 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
 
     try {
       final prefs = ref.read(sharedPreferencesProvider);
+
+      // Clean up any plaintext DB file that was locked during the previous
+      // session's encryption process and could not be deleted at the time.
+      final pendingDelete = prefs.getString(
+        EncryptionManager.pendingPlaintextDeletionKey,
+      );
+      if (pendingDelete != null && pendingDelete.isNotEmpty) {
+        try {
+          final f = File(pendingDelete);
+          if (await f.exists()) {
+            await f.delete();
+            debugPrint(
+              '[Encryption] Deleted pending plaintext DB on startup: $pendingDelete',
+            );
+          }
+        } catch (e) {
+          debugPrint('[Encryption] Could not delete pending plaintext DB: $e');
+        } finally {
+          await prefs.remove(EncryptionManager.pendingPlaintextDeletionKey);
+        }
+      }
+
       final configuredPath = prefs.getString(SettingsKeys.databasePath) ?? '';
       final baseDbPath = configuredPath.isNotEmpty
           ? configuredPath
@@ -204,8 +226,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
         while (true) {
           final password = await _promptForDatabasePassword();
           if (password == null) {
-            await windowManager.close();
-            return;
+            exit(0);
           }
 
           try {

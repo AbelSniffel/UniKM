@@ -67,6 +67,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
   bool _isRestoring = false;
   bool _showPassword = false;
   bool _isDragging = false;
+  bool _isHovering = false;
 
   @override
   void initState() {
@@ -327,7 +328,8 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
               TabBar(
                 labelColor: theme.textPrimary,
                 unselectedLabelColor: theme.textSecondary,
-                indicatorColor: theme.accent,
+                indicator: theme.tabIndicator,
+                indicatorSize: TabBarIndicatorSize.tab,
                 tabs: [
                   Tab(text: 'Existing Backups (${_backups.length}/$maxBackups)'),
                   const Tab(text: 'Restore from File'),
@@ -392,6 +394,8 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                           Focus(
                             autofocus: false,
                             child: MouseRegion(
+                              onEnter: (_) => setState(() => _isHovering = true),
+                              onExit: (_) => setState(() => _isHovering = false),
                               child: DropTarget(
                                 enable: true,
                                 onDragDone: (details) {
@@ -406,12 +410,14 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                                   child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: _isDragging ? theme.accent.withValues(alpha: 0.1) : theme.surface,
+                                      color: _isDragging ? theme.accent.withValues(alpha: 0.1) : _isHovering ? theme.accent.withValues(alpha: 0.05) : theme.surface,
                                       borderRadius: BorderRadius.circular(theme.cornerRadius),
                                       border: Border.all(
                                         color: _isDragging
                                             ? theme.accent
-                                            : (_selectedBackupPath != null ? theme.accent : theme.border),
+                                            : _isHovering
+                                                ? theme.accent.withValues(alpha: 0.5)
+                                                : (_selectedBackupPath != null ? theme.accent : theme.border),
                                         width: _isDragging ? 2 : 1,
                                       ),
                                     ),

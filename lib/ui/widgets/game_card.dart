@@ -3,24 +3,22 @@
 library;
 
 import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
-
 import '../../core/constants/app_constants.dart';
-import '../../core/constants/platform_patterns.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
 import 'game_cover_image.dart';
+import 'dialog_helpers.dart';
 import 'notification_system.dart';
+import 'platform_icon.dart';
 import 'tag_width_cache.dart';
 import '../dialogs/game_details_dialog.dart';
 import '../dialogs/steam_lookup_dialog.dart';
@@ -39,6 +37,9 @@ class GameCard extends ConsumerStatefulWidget {
 
 class _GameCardState extends ConsumerState<GameCard>
     with TickerProviderStateMixin {
+  static const Duration _newBadgeLifetime = Duration(days: 1);
+  static const Duration _hoverAnimationDuration = Duration(milliseconds: 180);
+
   bool _isHovered = false;
 
   // Unified hover AnimationController — a single clock drives both the scale
@@ -73,13 +74,14 @@ class _GameCardState extends ConsumerState<GameCard>
   void initState() {
     super.initState();
     _hoverController = AnimationController(
-      duration: kCardHoverAnimation,
+      duration: _hoverAnimationDuration,
+      reverseDuration: _hoverAnimationDuration,
       vsync: this,
     );
     _hoverAnim = CurvedAnimation(
       parent: _hoverController,
-      curve: Curves.easeOut,
-      reverseCurve: Curves.linear,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
     );
     _selectionController = AnimationController(
       duration: kMediumAnimation,
@@ -156,7 +158,6 @@ class _GameCardState extends ConsumerState<GameCard>
       );
       return;
     }
-
     final allGames = ref.read(gamesProvider.select((s) => s.filteredGames));
     final selectedIds = ref.read(
       gamesProvider.select((s) => s.selectedGameIds),
@@ -184,10 +185,43 @@ class _GameCardState extends ConsumerState<GameCard>
       idsToPass = [widget.game.id];
     }
 
-    showDialog(
-      context: context,
-      builder: (context) =>
-          GameDetailsDialog(initialGameId: widget.game.id, gameIds: idsToPass),
+    showGameDetailsDialog(
+      context,
+      widget.game,
+      gameIds: idsToPass,
+      onViewedGame: (gameId) => markGameAsViewed(ref, gameId),
+    );
+  }
+
+  bool _shouldShowNewBadge(Set<int> viewedGameIds) {
+    if (viewedGameIds.contains(widget.game.id)) {
+      return false;
+    }
+
+    final age = DateTime.now().difference(widget.game.createdAt);
+    return !age.isNegative && age <= _newBadgeLifetime;
+  }
+
+  Widget _buildNewBadge(AppThemeData theme) {
+    final addedLabel = DateFormat('dd/MM/yyyy').format(widget.game.createdAt);
+    return Tooltip(
+      message: 'Added $addedLabel',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: theme.accent,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Text(
+          'NEW',
+          style: TextStyle(
+            color: theme.primaryButtonText,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
     );
   }
 
@@ -330,27 +364,17 @@ class _GameCardState extends ConsumerState<GameCard>
         ? 'Delete "${targets.first.title}"?'
         : 'Delete ${targets.length} games?';
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.background,
-        title: Text(title),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: theme.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      theme: theme,
+      title: title,
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmIcon: Icons.delete,
+      destructive: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       final ids = targets.map((g) => g.id).toList();
       final ok = await ref.read(gamesProvider.notifier).deleteGames(ids);
 
@@ -597,8 +621,21 @@ class _GameCardState extends ConsumerState<GameCard>
     final isSelected = ref.watch(
       gamesProvider.select((s) => s.selectedGameIds.contains(widget.game.id)),
     );
+    final viewedGameIds = ref.watch(viewedNewGameIdsProvider);
     final fetchStatus = ref.watch(
       batchFetchProvider.select((s) => s.getStatus(widget.game.id)),
+    );
+    final showNewBadge = _shouldShowNewBadge(viewedGameIds);
+    final options = _CardViewOptions(
+      showTitle: cardSettings.showTitle,
+      showTitleOnNoPicture: cardSettings.showTitleOnNoPicture,
+      showPlatform: cardSettings.showPlatform,
+      showTags: cardSettings.showTags,
+      showTagsOnHoverOnly: cardSettings.showTagsOnHoverOnly,
+      showDeadline: cardSettings.showDeadline,
+      showRatingsNow:
+          cardSettings.showRatings &&
+          (!cardSettings.showTagsOnHoverOnly || _isHovered),
     );
 
     // Drive selection animation from build() — forward/reverse are no-ops if
@@ -613,41 +650,26 @@ class _GameCardState extends ConsumerState<GameCard>
         ? _buildGridCard(
             theme,
             isSelected,
-            cardSettings.showTitle,
-            cardSettings.showPlatform,
-            cardSettings.showTags,
-            cardSettings.showTagsOnHoverOnly,
-            cardSettings.showDeadline,
-            cardSettings.showRatings,
+            options,
             fetchStatus,
+            showNewBadge,
           )
         : _buildListCard(
             theme,
             isSelected,
-            cardSettings.showTitle,
-            cardSettings.showPlatform,
-            cardSettings.showTags,
-            cardSettings.showTagsOnHoverOnly,
-            cardSettings.showDeadline,
-            cardSettings.showRatings,
+            options,
             fetchStatus,
+            showNewBadge,
           );
   }
 
   Widget _buildGridCard(
     AppThemeData theme,
     bool isSelected,
-    bool showTitle,
-    bool showPlatform,
-    bool showTags,
-    bool showTagsOnHoverOnly,
-    bool showDeadline,
-    bool showRatings,
+    _CardViewOptions options,
     GameFetchStatus? fetchStatus,
+    bool showNewBadge,
   ) {
-    final showMetaOnHover = showTagsOnHoverOnly;
-    final showRatingsNow = showRatings && (!showMetaOnHover || _isHovered);
-
     // Corner radius captured once per build so the AnimatedBuilder closure
     // never allocates a new BorderRadius on every animation tick.
     final radius = BorderRadius.circular(theme.cornerRadius);
@@ -704,19 +726,43 @@ class _GameCardState extends ConsumerState<GameCard>
                     ),
 
                   // Deadline badge on the left edge of the card (over the cover image).
-                  if (showDeadline && widget.game.hasDeadline)
+                  _buildSelectionOverlay(theme, isSelected),
+                  AnimatedSwitcher(
+                    duration: kFastAnimation,
+                    transitionBuilder: (child, anim) =>
+                        FadeTransition(opacity: anim, child: child),
+                    child: fetchStatus != null
+                        ? KeyedSubtree(
+                            key: ValueKey(fetchStatus),
+                            child: _buildFetchStatusOverlay(theme, fetchStatus),
+                          )
+                        : const SizedBox.shrink(key: ValueKey<Null>(null)),
+                  ),
+
+                  if (options.showDeadline && widget.game.hasDeadline || showNewBadge)
                     Positioned(
                       left: 8,
                       top: 8,
-                      child: _buildDeadlineBadge(
-                        theme,
-                        borderRadius: BorderRadius.circular(11),
-                        showIcon: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        minHeight: 22.0,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (showNewBadge)
+                            _buildNewBadge(theme),
+                          if (showNewBadge && options.showDeadline && widget.game.hasDeadline)
+                            const SizedBox(height: 6),
+                          if (options.showDeadline && widget.game.hasDeadline)
+                            _buildDeadlineBadge(
+                              theme,
+                              borderRadius: BorderRadius.circular(11),
+                              showIcon: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              minHeight: 22.0,
+                            ),
+                        ],
                       ),
                     ),
 
@@ -728,13 +774,14 @@ class _GameCardState extends ConsumerState<GameCard>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (showTitle) _buildTitleChip(theme),
+                        if (options.showTitleOnNoPicture ? !widget.game.hasCoverImage : options.showTitle)
+                          _buildTitleChip(theme),
                         const SizedBox(height: 4),
-                        if (showTags && widget.game.tags.isNotEmpty)
+                        if (options.showTags && widget.game.tags.isNotEmpty)
                           _buildAnimatedTagsRow(
                             context,
                             theme,
-                            isVisible: !showTagsOnHoverOnly || _isHovered,
+                            isVisible: !options.showTagsOnHoverOnly || _isHovered,
                             // Grid card width is fixed — pass it directly to skip
                             // the LayoutBuilder secondary layout pass on every
                             // visible card during window resize.
@@ -748,22 +795,9 @@ class _GameCardState extends ConsumerState<GameCard>
                     right: 0,
                     child: _buildTopRightChips(
                       theme,
-                      showPlatform: showPlatform,
-                      showDeadline: showDeadline,
-                      showRatings: showRatingsNow,
+                      showPlatform: options.showPlatform,
+                      showRatings: options.showRatingsNow,
                     ),
-                  ),
-                  _buildSelectionOverlay(theme, isSelected),
-                  AnimatedSwitcher(
-                    duration: kFastAnimation,
-                    transitionBuilder: (child, anim) =>
-                        FadeTransition(opacity: anim, child: child),
-                    child: fetchStatus != null
-                        ? KeyedSubtree(
-                            key: ValueKey(fetchStatus),
-                            child: _buildFetchStatusOverlay(theme, fetchStatus),
-                          )
-                        : const SizedBox.shrink(key: ValueKey<Null>(null)),
                   ),
                 ],
               ),
@@ -777,17 +811,10 @@ class _GameCardState extends ConsumerState<GameCard>
   Widget _buildListCard(
     AppThemeData theme,
     bool isSelected,
-    bool showTitle,
-    bool showPlatform,
-    bool showTags,
-    bool showTagsOnHoverOnly,
-    bool showDeadline,
-    bool showRatings,
+    _CardViewOptions options,
     GameFetchStatus? fetchStatus,
+    bool showNewBadge,
   ) {
-    final showMetaOnHover = showTagsOnHoverOnly;
-    final showRatingsNow = showRatings && (!showMetaOnHover || _isHovered);
-
     // Pre-compute decoration constants once per build — not per animation tick.
     final listRadius = BorderRadius.circular(theme.cornerRadius);
     final listGradient = LinearGradient(
@@ -818,7 +845,7 @@ class _GameCardState extends ConsumerState<GameCard>
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: listGradient,
-                  boxShadow: (!isSelected && t > 0.001)
+                  boxShadow: (t > 0.001)
                       ? [
                           BoxShadow(
                             color: theme.accent.withValues(alpha: t * 0.18),
@@ -859,20 +886,31 @@ class _GameCardState extends ConsumerState<GameCard>
                                 ),
                               ),
 
-                            // Deadline badge positioned on the cover image's left edge.
-                            if (showDeadline && widget.game.hasDeadline)
+                            // NEW and Deadline badges positioned on the cover image's left edge.
+                            if (showNewBadge || (options.showDeadline && widget.game.hasDeadline))
                               Positioned(
                                 left: 8,
                                 top: 8,
-                                child: _buildDeadlineBadge(
-                                  theme,
-                                  borderRadius: BorderRadius.circular(11),
-                                  showIcon: true,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  minHeight: 22.0,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (showNewBadge)
+                                      _buildNewBadge(theme),
+                                    if (showNewBadge && options.showDeadline && widget.game.hasDeadline)
+                                      const SizedBox(height: 6),
+                                    if (options.showDeadline && widget.game.hasDeadline)
+                                      _buildDeadlineBadge(
+                                        theme,
+                                        borderRadius: BorderRadius.circular(11),
+                                        showIcon: true,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        minHeight: 22.0,
+                                      ),
+                                  ],
                                 ),
                               ),
 
@@ -881,38 +919,7 @@ class _GameCardState extends ConsumerState<GameCard>
                       ),
                     ),
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    widget.game.title,
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            const Spacer(),
-                            if (showTags && widget.game.tags.isNotEmpty)
-                              _buildAnimatedTagsRow(
-                                context,
-                                theme,
-                                isVisible: !showTagsOnHoverOnly || _isHovered,
-                              ),
-                          ],
-                        ),
-                      ),
+                      child: const SizedBox.expand(),
                     ),
                   ],
                 ),
@@ -936,14 +943,54 @@ class _GameCardState extends ConsumerState<GameCard>
                         )
                       : const SizedBox.shrink(key: ValueKey<Null>(null)),
                 ),
+                Positioned.fill(
+                  child: Row(
+                    children: [
+                      const SizedBox(width: kListCardImageWidth),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      widget.game.title,
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              const Spacer(),
+                              if (options.showTags && widget.game.tags.isNotEmpty)
+                                _buildAnimatedTagsRow(
+                                  context,
+                                  theme,
+                                  isVisible: !options.showTagsOnHoverOnly || _isHovered,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Positioned(
                   right: 0,
                   top: 0,
                   child: _buildTopRightChips(
                     theme,
-                    showPlatform: showPlatform,
-                    showDeadline: showDeadline,
-                    showRatings: showRatingsNow,
+                    showPlatform: options.showPlatform,
+                    showRatings: options.showRatingsNow,
                   ),
                 ),
 
@@ -1046,21 +1093,38 @@ class _GameCardState extends ConsumerState<GameCard>
 
   Widget _buildGradientOverlay(AppThemeData theme, bool isSelected) {
     if (isSelected) {
-      // Use pre-computed gradient — no inline Color.withValues allocation per build.
-      return DecoratedBox(
-        decoration: BoxDecoration(gradient: theme.gridCardSelectedGradient),
+      return CustomPaint(
+        painter: _CardGlowPainter(
+          accentColor: theme.accent,
+          primaryColor: theme.primary,
+          selected: true,
+          cornerRadius: theme.cornerRadius,
+        ),
         child: const SizedBox.expand(),
       );
     }
 
-    if (_isHovered) {
-      return DecoratedBox(
-        decoration: BoxDecoration(gradient: theme.gridCardHoverGradient),
-        child: const SizedBox.expand(),
-      );
-    }
-
-    return const SizedBox.shrink();
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _hoverAnim,
+        builder: (context, child) {
+          final t = _hoverAnim.value;
+          if (t <= 0.0) {
+            return const SizedBox.shrink();
+          }
+          return Opacity(opacity: t, child: child);
+        },
+        child: CustomPaint(
+          painter: _CardGlowPainter(
+            accentColor: theme.accent,
+            primaryColor: theme.primary,
+            selected: false,
+            cornerRadius: theme.cornerRadius,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
   }
 
   Widget _buildUsedOverlay(AppThemeData theme, {required Size patternSize}) {
@@ -1166,7 +1230,7 @@ class _GameCardState extends ConsumerState<GameCard>
 
           return Container(
             decoration: BoxDecoration(
-              color: theme.primary.withValues(alpha: 0.35 * t),
+              color: theme.primary.withValues(alpha: 0.55 * t),
               border: Border.all(
                 color: theme.accent.withValues(alpha: t),
                 width: 3.0,
@@ -1221,7 +1285,7 @@ class _GameCardState extends ConsumerState<GameCard>
       curve: Curves.easeOut,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.9),
+        color: color,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -1277,7 +1341,6 @@ class _GameCardState extends ConsumerState<GameCard>
   Widget _buildTopRightChips(
     AppThemeData theme, {
     required bool showPlatform,
-    required bool showDeadline,
     required bool showRatings,
   }) {
     // Top-right area only contains review badges now — the deadline badge
@@ -1318,7 +1381,6 @@ class _GameCardState extends ConsumerState<GameCard>
                   isVisible: showRatingChip,
                   child: _buildBadgeGroup(
                     theme,
-                    showDeadline: showDeadline,
                     showRatings: true,
                   ),
                 ),
@@ -1393,7 +1455,6 @@ class _GameCardState extends ConsumerState<GameCard>
 
   Widget _buildBadgeGroup(
     AppThemeData theme, {
-    required bool showDeadline,
     required bool showRatings,
   }) {
     // Badge size
@@ -1467,56 +1528,19 @@ class _GameCardState extends ConsumerState<GameCard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
+        color: theme.background.withValues(alpha: 0.75),
         // Make the title a true pill/stadium so it matches tag chips
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         widget.game.title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
+        style: TextStyle(
           fontWeight: FontWeight.w600,
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
     );
-  }
-
-  IconData _platformIconFor(GamePlatform platform) {
-    return switch (platform) {
-      GamePlatform.steam => FontAwesomeIcons.steamSymbol,
-      GamePlatform.epicGames => FontAwesomeIcons.store,
-      GamePlatform.gog => FontAwesomeIcons.solidFloppyDisk,
-      GamePlatform.origin => FontAwesomeIcons.circleDot,
-      GamePlatform.ubisoft => FontAwesomeIcons.coins,
-      GamePlatform.xbox => FontAwesomeIcons.xbox,
-      GamePlatform.playStation => FontAwesomeIcons.playstation,
-      GamePlatform.nintendo => FontAwesomeIcons.gamepad,
-      GamePlatform.humble => FontAwesomeIcons.store,
-      GamePlatform.itchio => FontAwesomeIcons.gamepad,
-      GamePlatform.webLink => FontAwesomeIcons.link,
-      GamePlatform.other => FontAwesomeIcons.question,
-    };
-  }
-
-  double _platformIconSizeFor(GamePlatform platform, {double? minHeight}) {
-    final double base = minHeight != null
-        ? math.max(23.0, math.min(minHeight * 0.6, 28.0))
-        : 18.0;
-
-    double multiplier;
-    if (platform == GamePlatform.steam) {
-      multiplier = 1.14;
-    } else if (platform == GamePlatform.nintendo ||
-        platform == GamePlatform.itchio) {
-      multiplier = 0.91;
-    } else {
-      multiplier = 1.0;
-    }
-
-    return base * multiplier;
   }
 
   IconData _ratingIconFor(int score, int reviewCount) {
@@ -1538,7 +1562,7 @@ class _GameCardState extends ConsumerState<GameCard>
     final platform = widget.game.platformEnum;
     final platformLabel = widget.game.platform;
     // Scale icon size per-platform (steam/gamepad adjusted).
-    final double iconSize = _platformIconSizeFor(
+    final double iconSize = platformIconSizeFor(
       platform,
       minHeight: minHeight,
     );
@@ -1560,8 +1584,8 @@ class _GameCardState extends ConsumerState<GameCard>
               color: theme.basePrimary,
               shape: BoxShape.circle,
             ),
-            child: FaIcon(
-              _platformIconFor(platform),
+            child: PlatformIcon(
+              platform: platform,
               size: iconSize,
               color: theme.primaryButtonText,
             ),
@@ -1587,8 +1611,8 @@ class _GameCardState extends ConsumerState<GameCard>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              FaIcon(
-                _platformIconFor(platform),
+              PlatformIcon(
+                platform: platform,
                 size: iconSize,
                 color: theme.primaryButtonText,
               ),
@@ -1648,6 +1672,7 @@ class _GameCardState extends ConsumerState<GameCard>
     final isUrgent = daysLeft <= 3 && !isExpired;
     final isSoon = daysLeft <= 7 && !isExpired && !isUrgent;
     final isDueSoon = daysLeft <= 14 && !isExpired;
+    final dueText = daysLeft == 0 ? 'Today' : '$daysLeft days';
     final iconOnly = !isExpired && !isDueSoon;
     // Scale icon/text with badge height and allow larger caps so 'EXPIRED'
     // becomes prominent.
@@ -1663,10 +1688,10 @@ class _GameCardState extends ConsumerState<GameCard>
       text = 'Expired';
     } else if (isUrgent) {
       badgeColor = theme.deadlineUrgent;
-      text = '$daysLeft days';
+      text = dueText;
     } else if (isSoon) {
       badgeColor = theme.deadlineSoon;
-      text = '$daysLeft days';
+      text = dueText;
     } else {
       badgeColor = theme.deadlineNormal;
       final date = widget.game.deadlineDate;
@@ -2085,6 +2110,125 @@ class _GameCardState extends ConsumerState<GameCard>
       ),
     );
   }
+}
+
+class _CardViewOptions {
+  const _CardViewOptions({
+    required this.showTitle,
+    required this.showTitleOnNoPicture,
+    required this.showPlatform,
+    required this.showTags,
+    required this.showTagsOnHoverOnly,
+    required this.showDeadline,
+    required this.showRatingsNow,
+  });
+
+  final bool showTitle;
+  final bool showTitleOnNoPicture;
+  final bool showPlatform;
+  final bool showTags;
+  final bool showTagsOnHoverOnly;
+  final bool showDeadline;
+  final bool showRatingsNow;
+}
+
+/// Paints an inward glow overlay from all four edges of a game card.
+///
+/// The accent color apex sits at the bottom-left corner (bottom + left edge
+/// glows accumulate via srcOver). The primary color apex sits at the top-right
+/// corner (top + right edge glows accumulate). The card center stays fully
+/// transparent so cover art is never obscured.
+/// Paints an inward frame glow around a game card.
+///
+/// A horizontal [LinearGradient] (accent → primary) fills the card, then an
+/// alpha mask shaped like a frame — fully opaque at the card edges, punched
+/// out in the centre by a blurred inner [RRect] — is applied via [BlendMode.dstIn].
+/// The blur on the inner boundary creates the soft feathered fall-off and the
+/// rounded corners of the inner edge follow [cornerRadius].
+class _CardGlowPainter extends CustomPainter {
+  const _CardGlowPainter({
+    required this.accentColor,
+    required this.primaryColor,
+    required this.selected,
+    required this.cornerRadius,
+  });
+
+  final Color accentColor;
+  final Color primaryColor;
+  final bool selected;
+  final double cornerRadius;
+
+  static const double _hoverAlpha = 0.85;
+  static const double _selectedAlpha = 0.95;
+  // Frame depth as a fraction of the shorter card dimension.
+  static const double _glowDepthFraction = 0.035;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double alpha = selected ? _selectedAlpha : _hoverAlpha;
+    final rect = Offset.zero & size;
+    final double glowDepth =
+        math.min(size.width, size.height) * _glowDepthFraction;
+    final double blurSigma = glowDepth * 0.45;
+
+    // Inner corner radius keeps the inner boundary visually concentric with
+    // the card's outer corners.
+    final double innerRadius =
+        (cornerRadius - glowDepth * 0.4).clamp(0.0, cornerRadius);
+
+    // ── Outer layer composited at the target alpha ────────────────────────
+    canvas.saveLayer(
+      rect,
+      Paint()..color = Color.fromARGB((alpha * 255).round(), 255, 255, 255),
+    );
+
+    // Color fill: smooth gradient left (accent) → right (primary).
+    // Left edges receive accent, right edges receive primary, and the top/
+    // bottom edges blend between the two colours along their length.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [accentColor, primaryColor],
+        ).createShader(rect),
+    );
+
+    // ── Alpha mask: frame shape with soft rounded inner boundary ──────────
+    // dstIn retains the gradient only where the mask has alpha.
+    canvas.saveLayer(rect, Paint()..blendMode = BlendMode.dstIn);
+
+    // Full-opacity base — gradient is initially visible everywhere.
+    canvas.drawRect(rect, Paint()..color = const Color(0xFFFFFFFF));
+
+    // Punch out the centre using a blurred inner RRect (dstOut removes it).
+    // The Gaussian blur softens the inner boundary for a natural falloff;
+    // the rounded corners of the RRect mirror the card's own corner radius.
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        glowDepth,
+        glowDepth,
+        size.width - glowDepth,
+        size.height - glowDepth,
+        Radius.circular(innerRadius),
+      ),
+      Paint()
+        ..blendMode = BlendMode.dstOut
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma)
+        ..color = const Color(0xFFFFFFFF),
+    );
+
+    canvas.restore(); // alpha mask layer → gradient is now frame-shaped
+    canvas.restore(); // composite to parent at target alpha
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardGlowPainter old) =>
+      old.accentColor != accentColor ||
+      old.primaryColor != primaryColor ||
+      old.selected != selected ||
+      old.cornerRadius != cornerRadius;
 }
 
 class _UsedPatternPainter extends CustomPainter {

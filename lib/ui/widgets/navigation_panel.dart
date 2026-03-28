@@ -11,6 +11,9 @@ import '../../providers/app_providers.dart';
 import 'badge.dart';
 import 'hover_builder.dart';
 
+const kNavigationPanelCollapsedWidth = 56.0;
+const kNavigationPanelExpandedWidth = 95.0;
+
 /// Navigation item data
 class NavItem {
   const NavItem({
@@ -99,7 +102,7 @@ class NavigationPanel extends ConsumerWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.all(8),
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -197,10 +200,10 @@ class NavigationPanel extends ConsumerWidget {
     return Expanded(
       child: Column(
         children: [
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           for (var i = 0; i < items.length; i++)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: SizedBox(
                 width: double.infinity,
                 child: _NavButton(
@@ -217,7 +220,7 @@ class NavigationPanel extends ConsumerWidget {
             ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.all(8),
             child: _ThemeSelector(
               theme: theme,
               position: position,
@@ -225,14 +228,13 @@ class NavigationPanel extends ConsumerWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.all(8),
             child: _CollapseButton(
               theme: theme,
               isCollapsed: isCollapsed,
               position: position,
             ),
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -287,8 +289,6 @@ class MorphingIconButton extends StatelessWidget {
             child: Icon(
               toggled ? iconToggled : iconUntoggled,
               key: ValueKey<bool>(toggled),
-              color: theme.textSecondary,
-              size: size,
             ),
           ),
         ),
@@ -312,8 +312,8 @@ class _CollapseButton extends ConsumerWidget {
     return MorphingIconButton(
       theme: theme,
       toggled: isCollapsed,
-      iconToggled: Icons.more_vert,
-      iconUntoggled: Icons.menu,
+      iconToggled: Icons.chevron_right,
+      iconUntoggled: Icons.chevron_left,
       tooltipToggled: 'Expand navigation',
       tooltipUntoggled: 'Collapse navigation',
       onTap: () => ref.read(settingsProvider.notifier).setSetting(SettingsKeys.navBarCollapsed, !isCollapsed),
@@ -371,33 +371,32 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
     final allThemes = notifier.getAllThemes();
     final current = ref.read(themeProvider);
 
-    final selected = await showMenu<String>(
+    final selected = await showMenu<AppThemeData>(
       context: context,
       position: _menuPosition(),
       color: widget.theme.surface,
       elevation: 10,
-      constraints: const BoxConstraints(maxWidth: 220),
+      constraints: const BoxConstraints(maxWidth: 250),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
         side: BorderSide(color: widget.theme.border),
       ),
       items: [
-        PopupMenuItem<String>(
+        PopupMenuItem<AppThemeData>(
           enabled: false,
-          height: 36,
+          height: 28,
           child: Text(
             'Select Theme',
             style: TextStyle(
               color: widget.theme.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
-        PopupMenuDivider(height: 1, key: const ValueKey('theme-menu-divider')),
         for (final t in allThemes)
-          PopupMenuItem<String>(
-            value: t.id,
+          PopupMenuItem<AppThemeData>(
+            value: t,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: _ThemeMenuItem(
               data: t,
@@ -409,7 +408,7 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
     );
 
     if (selected != null && mounted) {
-      notifier.setThemeById(selected);
+      notifier.setTheme(selected);
     }
   }
 
@@ -419,7 +418,7 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
     final isHorizontal =
         widget.position == NavBarPosition.top ||
         widget.position == NavBarPosition.bottom;
-    final compact = isHorizontal || widget.isCollapsed;
+    final icon = Icon(current.icon, color: widget.theme.accent, size: 24);
 
     return Tooltip(
       message: 'Change theme',
@@ -428,7 +427,7 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
         builder: (context, hovered, _) => AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 8 : 12,
+            horizontal: isHorizontal || widget.isCollapsed ? 8 : 12,
             vertical: 8,
           ),
           decoration: BoxDecoration(
@@ -437,24 +436,11 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
                 : widget.theme.navItemHover.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
           ),
-          child: compact
-              ? Icon(current.icon, color: widget.theme.accent, size: 20)
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(current.icon, color: widget.theme.accent, size: 20),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        current.name,
-                        style: TextStyle(
-                          color: widget.theme.textSecondary,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+          child: isHorizontal
+              ? icon
+              : SizedBox(
+                  width: double.infinity,
+                  child: Center(child: icon),
                 ),
         ),
       ),
@@ -536,102 +522,40 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final showIcon = isCollapsed || appearance != NavBarAppearance.textOnly;
     final showText = !isCollapsed && appearance != NavBarAppearance.iconOnly;
-
-    // If locked, show lock icon instead of normal icon
-    Widget? iconWidget;
-    if (showIcon) {
-      iconWidget = isLocked
-          ? Icon(
-              Icons.lock_rounded,
-              color: theme.textSecondary.withValues(alpha: 0.5),
-              size: 20,
-            )
-          : Icon(
-              isSelected ? (item.selectedIcon ?? item.icon) : item.icon,
-              color: isSelected ? theme.accent : theme.textSecondary,
-              size: 20,
-            );
-
-      // Alternate icon color between its normal color and theme.primary when
-      // there is an active notification for this page.
-      if (item.pulsate && !isLocked) {
-        final currentIcon = isSelected ? (item.selectedIcon ?? item.icon) : item.icon;
-        final baseColor = isSelected ? theme.accent : theme.textSecondary;
-        iconWidget = iconWidget.animate(
-          onPlay: (controller) => controller.repeat(reverse: true),
-        ).custom(
-          duration: const Duration(milliseconds: 1000),
-          curve: Curves.easeInOutQuad,
-          builder: (context, value, _) => Icon(
-            currentIcon,
-            color: Color.lerp(baseColor, theme.primary, value),
-            size: 20,
-          ),
-        );
-      }
-    }
-
-    Widget? textWidget;
-    if (showText) {
-      textWidget = Text(
-        item.label,
-        style: TextStyle(
-          color: isLocked
-              ? theme.textSecondary.withValues(alpha: 0.5)
-              : (isSelected ? theme.textPrimary : theme.textSecondary),
-          fontSize: isHorizontal ? null : 12,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-        ),
-      );
-    }
+    final displayIcon = item.selectedIcon ?? item.icon;
 
     final tooltipText = isLocked
         ? '${item.label} (Locked during fetch)'
         : (isCollapsed ? item.label : '');
 
-    Widget button = HoverPressBuilder(
-      onTap: isLocked ? null : onTap,
-      builder: (context, hovered, _) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isLocked
-              ? theme.navItemHover.withValues(alpha: 0.3)
-              : (isSelected
-                    ? theme.navItemSelected
-                    : (hovered
-                          ? theme.navItemHover
-                          : theme.navItemHover.withValues(alpha: 0))),
-          borderRadius: BorderRadius.circular(theme.cornerRadius*1.25),
-        ),
-        child: isHorizontal
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ?iconWidget,
-                  if (iconWidget != null && textWidget != null)
-                    const SizedBox(width: 8),
-                  ?textWidget,
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  ?iconWidget,
-                  if (iconWidget != null && textWidget != null)
-                    const SizedBox(height: 4),
-                  ?textWidget,
-                ],
+    Widget button = AppNavigationButton(
+      theme: theme,
+      variant: AppNavigationButtonVariant.navigation,
+      isSelected: isSelected,
+      isEnabled: !isLocked,
+      isHorizontal: isHorizontal,
+      onTap: onTap,
+      iconData: showIcon ? (isLocked ? Icons.lock_rounded : displayIcon) : null,
+      iconBuilder: showIcon && item.pulsate && !isLocked
+          ? (context, color, size) => Icon(
+              displayIcon,
+              color: color,
+              size: size,
+            ).animate(
+              onPlay: (controller) => controller.repeat(reverse: true),
+            ).custom(
+              duration: const Duration(milliseconds: 1000),
+              curve: Curves.easeInOutQuad,
+              builder: (context, value, _) => Icon(
+                displayIcon,
+                color: Color.lerp(color, theme.primary, value),
+                size: size,
               ),
-      ),
+            )
+          : null,
+      labelText: showText ? item.label : null,
+      tooltipMessage: tooltipText.isEmpty ? null : tooltipText,
     );
-
-    if (tooltipText.isNotEmpty) {
-      button = Tooltip(message: tooltipText, child: button);
-    }
 
     if (item.badgeCount != null && item.badgeCount! > 0 && !isLocked) {
       button = button.withCountBadge(

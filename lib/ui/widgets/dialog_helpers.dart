@@ -8,8 +8,108 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+
+ButtonStyle themedFilledButtonStyle(
+  AppThemeData theme, {
+  bool destructive = false,
+}) {
+  final backgroundColor = destructive ? theme.error : theme.accent;
+  final foregroundColor = destructive ? Colors.white : theme.primaryButtonText;
+  final disabledBackground = Color.alphaBlend(
+    theme.background.withValues(alpha: 0.4),
+    backgroundColor.withValues(alpha: 0.5),
+  );
+  final disabledForeground = foregroundColor.withValues(alpha: 0.7);
+
+  return ButtonStyle(
+    backgroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) {
+        return disabledBackground;
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return backgroundColor.withValues(alpha: 0.9);
+      }
+      return backgroundColor;
+    }),
+    foregroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) {
+        return disabledForeground;
+      }
+      return foregroundColor;
+    }),
+  );
+}
+
+class DialogInteractionScope extends StatelessWidget {
+  const DialogInteractionScope({
+    super.key,
+    required this.child,
+    this.onPrimaryAction,
+    this.onDismiss,
+    this.enableEscapeDismiss = true,
+    this.enableEnterToPrimary = true,
+  });
+
+  final Widget child;
+  final VoidCallback? onPrimaryAction;
+  final VoidCallback? onDismiss;
+  final bool enableEscapeDismiss;
+  final bool enableEnterToPrimary;
+
+  bool _shouldHandlePrimaryAction() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext == null) {
+      return true;
+    }
+
+    final focusedWidget = focusedContext.widget;
+    if (focusedWidget is EditableText) {
+      final maxLines = focusedWidget.maxLines;
+      if (maxLines == null || maxLines > 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (intent) {
+              if (enableEscapeDismiss) {
+                (onDismiss ?? () => Navigator.of(context).maybePop()).call();
+              }
+              return null;
+            },
+          ),
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) {
+              if (enableEnterToPrimary &&
+                  onPrimaryAction != null &&
+                  _shouldHandlePrimaryAction()) {
+                onPrimaryAction!.call();
+              }
+              return null;
+            },
+          ),
+        },
+        child: Focus(autofocus: true, child: child),
+      ),
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // DialogHeader
@@ -377,19 +477,22 @@ class DialogActionBar extends StatelessWidget {
     final primaryButton = confirmIcon != null
         ? ElevatedButton.icon(
             onPressed: effectiveEnabled ? onConfirm : null,
+            style: themedFilledButtonStyle(theme, destructive: destructive),
             icon: isLoading ? spinnerWidget : Icon(confirmIcon),
             label: Text(
               isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel,
             ),
           )
+        : destructive
+        ? ElevatedButton(
+            onPressed: effectiveEnabled ? onConfirm : null,
+            style: themedFilledButtonStyle(theme, destructive: true),
+            child: Text(
+              isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel,
+            ),
+          )
         : OutlinedButton(
             onPressed: effectiveEnabled ? onConfirm : null,
-            style: destructive
-                ? OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                  )
-                : null,
             child: Text(
               isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel,
             ),
@@ -437,21 +540,26 @@ Future<bool> showConfirmDialog({
 }) async {
   final result = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: theme.background,
-      title: Text(title, style: TextStyle(color: theme.textPrimary)),
-      content: Text(message, style: TextStyle(color: theme.textSecondary)),
-      actions: [
-        DialogActionBar(
-          theme: theme,
-          onCancel: () => Navigator.pop(ctx, false),
-          onConfirm: () => Navigator.pop(ctx, true),
-          cancelLabel: cancelLabel,
-          confirmLabel: confirmLabel,
-          confirmIcon: confirmIcon,
-          destructive: destructive,
-        ),
-      ],
+    barrierDismissible: true,
+    builder: (ctx) => DialogInteractionScope(
+      onPrimaryAction: () => Navigator.pop(ctx, true),
+      onDismiss: () => Navigator.pop(ctx, false),
+      child: AlertDialog(
+        backgroundColor: theme.background,
+        title: Text(title, style: TextStyle(color: theme.textPrimary)),
+        content: Text(message, style: TextStyle(color: theme.textSecondary)),
+        actions: [
+          DialogActionBar(
+            theme: theme,
+            onCancel: () => Navigator.pop(ctx, false),
+            onConfirm: () => Navigator.pop(ctx, true),
+            cancelLabel: cancelLabel,
+            confirmLabel: confirmLabel,
+            confirmIcon: confirmIcon,
+            destructive: destructive,
+          ),
+        ],
+      ),
     ),
   );
   return result ?? false;

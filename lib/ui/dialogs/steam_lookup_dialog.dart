@@ -3,15 +3,19 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../../core/database/database.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
+import '../widgets/app_tag_chip.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
+import '../widgets/toggle_switch.dart';
 import '../../core/services/logging.dart';
 
 /// Show Steam lookup dialog for a game
@@ -66,6 +70,82 @@ class SteamApplyOptions {
   }
 }
 
+class _SteamOptionRow extends StatelessWidget {
+  const _SteamOptionRow({
+    required this.theme,
+    required this.label,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.showDividerBelow = false,
+  });
+
+  final AppThemeData theme;
+  final String label;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool showDividerBelow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: theme.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: theme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              AppToggleSwitch(
+                value: value,
+                onChanged: onChanged,
+                theme: theme,
+              ),
+            ],
+          ),
+        ),
+        if (showDividerBelow)
+          Divider(color: theme.border.withValues(alpha: 0.45), height: 1),
+      ],
+    );
+  }
+}
+
+List<Tag> _steamPreviewTags(List<String> names) {
+  return List.generate(
+    names.length,
+    (index) => Tag(
+      id: -(index + 1),
+      name: names[index],
+      colorHex: '#000000',
+      isSteamTag: true,
+    ),
+  );
+}
+
 /// Apply a SteamSearchResult to a game with the given options.
 /// Returns null on success or an error message on failure.
 Future<String?> applySteamResultToGame(
@@ -111,7 +191,7 @@ Future<String?> _applySteamResultToGameWithRead(
     AppLog.d('[applySteamResultToGame]   Steam result: AppID=${result.appId}, Tags=[${result.tags.join(", ")}]');
     AppLog.d('[applySteamResultToGame]   Options: applyTags=${options.applyTags}');
     
-    final db = read(requireDatabaseProvider);
+    final db = read(requireDatabaseProvider) as AppDatabase;
     final steamService = read(steamServiceProvider);
 
     // Download image if needed
@@ -281,58 +361,68 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                   ],
                   if (showApplyOptions) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      'Apply Options',
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontWeight: FontWeight.w600,
+                    SectionGroupBox(
+                      title: 'Apply Options',
+                      theme: theme,
+                      titleIcon: Icons.tune,
+                      groupPosition: showApplyToAll
+                          ? SectionGroupPosition.first
+                          : SectionGroupPosition.only,
+                      child: Column(
+                        children: [
+                          _SteamOptionRow(
+                            theme: theme,
+                            label: 'AppID',
+                            description: 'Save Steam AppID',
+                            value: applyAppId,
+                            onChanged: (v) => setState2(() => applyAppId = v),
+                            showDividerBelow: false,
+                          ),
+                          _SteamOptionRow(
+                            theme: theme,
+                            label: 'Tags',
+                            description: 'Add Steam tags',
+                            value: applyTags,
+                            onChanged: (v) => setState2(() => applyTags = v),
+                            showDividerBelow: false,
+                          ),
+                          _SteamOptionRow(
+                            theme: theme,
+                            label: 'Cover Image',
+                            description: 'Download Steam header image',
+                            value: applyImage,
+                            onChanged: (v) => setState2(() => applyImage = v),
+                            showDividerBelow: false,
+                          ),
+                          _SteamOptionRow(
+                            theme: theme,
+                            label: 'Reviews',
+                            description: 'Score and review count',
+                            value: applyReviews,
+                            onChanged: (v) =>
+                                setState2(() => applyReviews = v),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      value: applyAppId,
-                      onChanged: (v) => setState2(() => applyAppId = v),
-                      title: const Text('AppID'),
-                      subtitle: const Text('Save Steam AppID'),
-                      activeThumbColor: theme.accent,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    SwitchListTile(
-                      value: applyTags,
-                      onChanged: (v) => setState2(() => applyTags = v),
-                      title: const Text('Tags'),
-                      subtitle: const Text('Add Steam tags'),
-                      activeThumbColor: theme.accent,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    SwitchListTile(
-                      value: applyImage,
-                      onChanged: (v) => setState2(() => applyImage = v),
-                      title: const Text('Cover Image'),
-                      subtitle: const Text('Download Steam header image'),
-                      activeThumbColor: theme.accent,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    SwitchListTile(
-                      value: applyReviews,
-                      onChanged: (v) => setState2(() => applyReviews = v),
-                      title: const Text('Reviews'),
-                      subtitle: const Text('Score and review count'),
-                      activeThumbColor: theme.accent,
-                      contentPadding: EdgeInsets.zero,
                     ),
                   ],
                   if (showApplyToAll) ...[
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      value: applyToAll,
-                      onChanged: (v) =>
-                          setState2(() => applyToAll = v ?? false),
-                      title: const Text(
-                        'Do this for all remaining selected games',
+                    SectionGroupBox(
+                      title: 'Batch Action',
+                      theme: theme,
+                      titleIcon: Icons.done_all,
+                      groupPosition: showApplyOptions
+                          ? SectionGroupPosition.last
+                          : SectionGroupPosition.only,
+                      alternateBackground: true,
+                      child: _SteamOptionRow(
+                        theme: theme,
+                        label: 'Apply to all',
+                        description:
+                            'Do this for all remaining selected games',
+                        value: applyToAll,
+                        onChanged: (v) => setState2(() => applyToAll = v),
                       ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
                     ),
                   ],
                 ],
@@ -644,9 +734,16 @@ Future<void> performSteamBatchLookup(
   });
 
   if (failed > 0) {
-    handle.completeError('Updated $updated, failed $failed, not found $notFound');
+    final errorMessage = StringBuffer('Updated $updated, failed $failed');
+    if (notFound > 0) {
+      errorMessage.write(', not found $notFound');
+    }
+    handle.completeError(errorMessage.toString());
   } else {
-    handle.completeSuccess('Updated $updated, not found $notFound');
+    final successMessage = notFound > 0
+        ? 'Updated $updated, not found $notFound'
+        : 'Updated $updated';
+    handle.completeSuccess(successMessage);
   }
 }
 
@@ -781,8 +878,10 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
             children: [
               // Game being looked up
               SectionGroupBox(
-                title: 'Looking up',
+                title: 'Looked Up',
                 theme: theme,
+                titleIcon: Icons.search,
+                groupPosition: SectionGroupPosition.first,
                 child: Text(
                   widget.game.title,
                   style: TextStyle(
@@ -792,8 +891,6 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
                   ),
                 ),
               ),
-
-              const SizedBox(height: 16),
 
               // Search status / results
               if (_isSearching)
@@ -837,6 +934,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     return SectionGroupBox(
       title: 'Searching Steam...',
       theme: theme,
+      titleIcon: FontAwesomeIcons.steam,
+      groupPosition: SectionGroupPosition.last,
+      alternateBackground: true,
       child: const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: CircularProgressIndicator()),
@@ -848,6 +948,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     return SectionGroupBox(
       title: 'Search Failed',
       theme: theme,
+      titleIcon: Icons.error_outline,
+      groupPosition: SectionGroupPosition.last,
+      alternateBackground: true,
       child: Column(
         children: [
           Icon(Icons.error_outline, color: theme.error, size: 48),
@@ -878,6 +981,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         SectionGroupBox(
           title: 'Found on Steam',
           theme: theme,
+          titleIcon: FontAwesomeIcons.steam,
+          groupPosition: SectionGroupPosition.middle,
+          alternateBackground: true,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -960,44 +1066,36 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           ),
         ),
 
-        const SizedBox(height: 16),
-
         // Tags preview
         if (_result!.tags.isNotEmpty) ...[
           SectionGroupBox(
-            title: 'Tags (${_result!.tags.length})',
+            title: 'Steam Tags (${_result!.tags.length})',
             theme: theme,
+            titleIcon: FontAwesomeIcons.steam,
+            groupPosition: SectionGroupPosition.middle,
             child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _result!.tags.map((tag) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: theme.accent.withValues(alpha: 0.3),
+              spacing: 6,
+              runSpacing: 6,
+              children: _steamPreviewTags(_result!.tags)
+                  .map(
+                    (tag) => AppTagChip(
+                      tag: tag,
+                      theme: theme,
+                      isSelected: true,
                     ),
-                  ),
-                  child: Text(
-                    tag,
-                    style: TextStyle(color: theme.textPrimary, fontSize: 12),
-                  ),
-                );
-              }).toList(),
+                  )
+                  .toList(),
             ),
           ),
-          const SizedBox(height: 16),
         ],
 
         // Apply options
         SectionGroupBox(
           title: 'Apply Options',
           theme: theme,
+          titleIcon: Icons.tune,
+          groupPosition: SectionGroupPosition.last,
+          alternateBackground: _result!.tags.isNotEmpty,
           child: Column(
             children: [
               _buildOption(
@@ -1044,35 +1142,12 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     bool value,
     ValueChanged<bool> onChanged,
   ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: theme.accent,
-          ),
-        ],
-      ),
+    return _SteamOptionRow(
+      theme: theme,
+      label: label,
+      description: description,
+      value: value,
+      onChanged: onChanged,
     );
   }
 }

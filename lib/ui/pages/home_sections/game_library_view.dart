@@ -13,9 +13,10 @@ import '../../../core/shortcuts/app_shortcuts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
+import '../../dialogs/import_export_dialog.dart';
 import '../../widgets/game_card.dart';
 import 'animated_game_card.dart';
-import 'selection_overlay.dart';
+import 'selection_ribbon.dart';
 
 class GameLibraryView extends ConsumerWidget {
   const GameLibraryView({
@@ -74,6 +75,7 @@ class GameLibraryView extends ConsumerWidget {
       );
 
       return _buildEmptyState(
+        context,
         ref,
         theme,
         filteredGames.isEmpty,
@@ -174,59 +176,66 @@ class GameLibraryView extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(
+    BuildContext context,
     WidgetRef ref,
     AppThemeData theme,
     bool isEmpty,
     bool hasFilters,
   ) {
     return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                hasFilters ? Icons.filter_alt_off : Icons.videogame_asset_off,
-                size: 80,
-                color: theme.textHint,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                hasFilters ? 'No games match your filters' : 'No games yet',
-                style: TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hasFilters
-                    ? 'Try adjusting your filters or search query'
-                    : 'Add your first game to get started',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-              if (hasFilters) ...[
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () {
-                    ref.read(gamesProvider.notifier).setSearchQuery('');
-                    ref.read(gamesProvider.notifier).clearAllFilters();
-                  },
-                  icon: const Icon(Icons.clear_all),
-                  label: const Text('Clear Filters'),
-                ),
-              ] else ...[
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => ref
-                      .read(currentNavProvider.notifier)
-                      .setNav(NavItem.addGames),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Game'),
-                ),
-              ],
-            ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            hasFilters ? Icons.filter_alt_off : Icons.videogame_asset_off,
+            size: 80,
+            color: theme.textHint,
           ),
-        );
+          const SizedBox(height: 16),
+          Text(
+            hasFilters ? 'No games match your filters' : 'No games yet',
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasFilters
+                ? 'Try adjusting your filters or search query'
+                : 'Add your first game to get started',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          if (hasFilters) ...[
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () {
+                ref.read(gamesProvider.notifier).setSearchQuery('');
+                ref.read(gamesProvider.notifier).clearAllFilters();
+              },
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear Filters'),
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => ref
+                  .read(currentNavProvider.notifier)
+                  .setNav(NavItem.addGames),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Game'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () => showImportDialog(context),
+              icon: const Icon(Icons.download),
+              label: const Text('Import Games'),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildGameList(
@@ -241,7 +250,8 @@ class GameLibraryView extends ConsumerWidget {
     final useProgressiveReveal = GameLibraryView.shouldUseProgressiveReveal(
       games.length,
     );
-    final shouldAnimateEntries = playEntryAnimations &&
+    final shouldAnimateEntries =
+        playEntryAnimations &&
         games.isNotEmpty &&
         games.length <= _maxAnimatedEntries;
 
@@ -251,118 +261,119 @@ class GameLibraryView extends ConsumerWidget {
     // selection changes.
 
     final persistedScrollOffset = ref.read(gameLibraryScrollOffsetProvider);
-    final scrollOffset = scrollController.hasClients && scrollController.offset.isFinite
-      ? scrollController.offset
-      : persistedScrollOffset;
-    final viewportHeight = scrollController.hasClients &&
-        scrollController.position.viewportDimension.isFinite &&
-        scrollController.position.viewportDimension > 0
-      ? scrollController.position.viewportDimension
-      : MediaQuery.sizeOf(context).height;
+    final scrollOffset =
+        scrollController.hasClients && scrollController.offset.isFinite
+        ? scrollController.offset
+        : persistedScrollOffset;
+    final viewportHeight =
+        scrollController.hasClients &&
+            scrollController.position.viewportDimension.isFinite &&
+            scrollController.position.viewportDimension > 0
+        ? scrollController.position.viewportDimension
+        : MediaQuery.sizeOf(context).height;
 
     if (viewMode == GameListViewMode.grid) {
-      return _GameListWithSelectionOverlay(
-        theme: theme,
+      return _GameListWithSelectionRibbon(
         child: _wrapDragSelection(
           ref,
           _ProgressiveReveal(
-            totalCount: games.length,
-            initialVisibleHint: _estimatedVisibleHint(
-              context,
-              viewMode: viewMode,
-              scrollOffset: scrollOffset,
-              viewportHeight: viewportHeight,
-            ),
-            builder: (visibleCount) => GridView.builder(
-              key: const PageStorageKey('game-library-scroll'),
-              controller: scrollController,
-              padding: const EdgeInsets.all(12),
-              clipBehavior: Clip.hardEdge,
-              addAutomaticKeepAlives: false,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
-                mainAxisExtent: kGridCardHeight + kGridCardSpacing,
-                crossAxisSpacing: kGridCardSpacing,
-                mainAxisSpacing: kGridCardSpacing,
+                  totalCount: games.length,
+                  initialVisibleHint: _estimatedVisibleHint(
+                    context,
+                    viewMode: viewMode,
+                    scrollOffset: scrollOffset,
+                    viewportHeight: viewportHeight,
+                  ),
+                  builder: (visibleCount) => GridView.builder(
+                    key: const PageStorageKey('game-library-scroll'),
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(12),
+                    clipBehavior: Clip.hardEdge,
+                    addAutomaticKeepAlives: false,
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
+                          mainAxisExtent: kGridCardHeight + kGridCardSpacing,
+                          crossAxisSpacing: kGridCardSpacing,
+                          mainAxisSpacing: kGridCardSpacing,
+                        ),
+                    itemCount: visibleCount,
+                    itemBuilder: (context, index) {
+                      final game = games[index];
+                      final card = GameCard(key: ValueKey(game.id), game: game);
+
+                      final shouldAnimateCard =
+                          shouldAnimateEntries || useProgressiveReveal;
+                      final cappedIndex = index > _maxAnimatedStaggerIndex
+                          ? _maxAnimatedStaggerIndex
+                          : index;
+                      final progressiveStagger = index % 10;
+                      final staggerIndex = useProgressiveReveal
+                          ? progressiveStagger
+                          : cappedIndex;
+
+                      return shouldAnimateCard
+                          ? AnimatedGameCard(
+                              key: ValueKey('anim_${game.id}'),
+                              delay: Duration(milliseconds: staggerIndex * 16),
+                              child: card,
+                            )
+                          : card;
+                    },
+                  ),
+                ),
               ),
-              itemCount: visibleCount,
-              itemBuilder: (context, index) {
-                final game = games[index];
-                final card = GameCard(key: ValueKey(game.id), game: game);
-
-                final shouldAnimateCard =
-                    shouldAnimateEntries || useProgressiveReveal;
-                final cappedIndex = index > _maxAnimatedStaggerIndex
-                    ? _maxAnimatedStaggerIndex
-                    : index;
-                final progressiveStagger = index % 10;
-                final staggerIndex = useProgressiveReveal
-                    ? progressiveStagger
-                    : cappedIndex;
-
-                return shouldAnimateCard
-                    ? AnimatedGameCard(
-                        key: ValueKey('anim_${game.id}'),
-                        delay: Duration(milliseconds: staggerIndex * 16),
-                        child: card,
-                      )
-                    : card;
-              },
-            ),
-          ),
-        ),
-      );
+        );
     }
 
-    return _GameListWithSelectionOverlay(
-      theme: theme,
+    return _GameListWithSelectionRibbon(
       child: _wrapDragSelection(
         ref,
         _ProgressiveReveal(
-          totalCount: games.length,
-          initialVisibleHint: _estimatedVisibleHint(
-            context,
-            viewMode: viewMode,
-            scrollOffset: scrollOffset,
-            viewportHeight: viewportHeight,
-          ),
-          builder: (visibleCount) => ListView.builder(
-            key: const PageStorageKey('game-library-scroll'),
-            controller: scrollController,
-            itemExtent: kListCardHeight + kListCardSpacing,
-            padding: const EdgeInsets.all(12),
-            clipBehavior: Clip.hardEdge,
-            addAutomaticKeepAlives: false,
-            itemCount: visibleCount,
-            itemBuilder: (context, index) {
-              final game = games[index];
-              final card = GameCard(key: ValueKey(game.id), game: game);
+                totalCount: games.length,
+                initialVisibleHint: _estimatedVisibleHint(
+                  context,
+                  viewMode: viewMode,
+                  scrollOffset: scrollOffset,
+                  viewportHeight: viewportHeight,
+                ),
+                builder: (visibleCount) => ListView.builder(
+                  key: const PageStorageKey('game-library-scroll'),
+                  controller: scrollController,
+                  itemExtent: kListCardHeight + kListCardSpacing,
+                  padding: const EdgeInsets.all(12),
+                  clipBehavior: Clip.hardEdge,
+                  addAutomaticKeepAlives: false,
+                  itemCount: visibleCount,
+                  itemBuilder: (context, index) {
+                    final game = games[index];
+                    final card = GameCard(key: ValueKey(game.id), game: game);
 
-              final shouldAnimateCard =
-                  shouldAnimateEntries || useProgressiveReveal;
-              final cappedIndex = index > _maxAnimatedStaggerIndex
-                  ? _maxAnimatedStaggerIndex
-                  : index;
-              final progressiveStagger = index % 10;
-              final staggerIndex = useProgressiveReveal
-                  ? progressiveStagger
-                  : cappedIndex;
+                    final shouldAnimateCard =
+                        shouldAnimateEntries || useProgressiveReveal;
+                    final cappedIndex = index > _maxAnimatedStaggerIndex
+                        ? _maxAnimatedStaggerIndex
+                        : index;
+                    final progressiveStagger = index % 10;
+                    final staggerIndex = useProgressiveReveal
+                        ? progressiveStagger
+                        : cappedIndex;
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: kListCardSpacing),
-                child: shouldAnimateCard
-                    ? AnimatedGameCard(
-                        key: ValueKey('anim_${game.id}'),
-                        delay: Duration(milliseconds: staggerIndex * 12),
-                        slideX: true,
-                        child: card,
-                      )
-                    : card,
-              );
-            },
-          ),
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: kListCardSpacing),
+                      child: shouldAnimateCard
+                          ? AnimatedGameCard(
+                              key: ValueKey('anim_${game.id}'),
+                              delay: Duration(milliseconds: staggerIndex * 12),
+                              slideX: true,
+                              child: card,
+                            )
+                          : card,
+                    );
+                  },
+                ),
+              ),
         ),
-      ),
     );
   }
 
@@ -390,8 +401,10 @@ class GameLibraryView extends ConsumerWidget {
     final rowExtent = kGridCardHeight + kGridCardSpacing;
     final firstVisibleRow = (scrollOffset / rowExtent).floor();
     final viewportRows = (viewportHeight / rowExtent).ceil();
-    final contentWidth =
-        (MediaQuery.sizeOf(context).width - 32).clamp(1.0, double.infinity);
+    final contentWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
+      1.0,
+      double.infinity,
+    );
     final columns = (contentWidth / (kGridCardWidth + kGridCardSpacing))
         .ceil()
         .clamp(1, 9999)
@@ -421,49 +434,120 @@ class GameLibraryView extends ConsumerWidget {
   }
 }
 
-/// Wraps the game grid/list with the selection action bar overlay.
+/// Wraps the game grid/list with the selection ribbon.
 ///
-/// This is extracted into its own [ConsumerWidget] so that selection changes
-/// ONLY rebuild the overlay animation — not the underlying grid or list widget.
+/// This is extracted into its own [ConsumerStatefulWidget] so that selection
+/// changes
+/// ONLY rebuild the ribbon animation — not the underlying grid or list widget.
 /// The grid/list is passed in as [child] and remains stable across selection
 /// changes, which is the primary driver of resize-adjacent rebuild overhead.
-class _GameListWithSelectionOverlay extends ConsumerWidget {
-  const _GameListWithSelectionOverlay({
-    required this.child,
-    required this.theme,
-  });
+class _GameListWithSelectionRibbon extends ConsumerStatefulWidget {
+  const _GameListWithSelectionRibbon({required this.child});
 
   final Widget child;
-  final AppThemeData theme;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedGameIds = ref.watch(
-      gamesProvider.select((s) => s.selectedGameIds),
-    );
-    final hasSelection = selectedGameIds.isNotEmpty;
+  ConsumerState<_GameListWithSelectionRibbon> createState() =>
+      _GameListWithSelectionRibbonState();
+}
 
-    return Stack(
+class _GameListWithSelectionRibbonState
+    extends ConsumerState<_GameListWithSelectionRibbon>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+  bool _hasSelection = false;
+  late final AnimationController _ribbonController;
+  late final Animation<double> _ribbonAnimation;
+  ProviderSubscription<bool>? _hasSelectionSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _ribbonController = AnimationController(
+      vsync: this,
+      duration: kFastAnimation,
+    );
+    _ribbonAnimation = CurvedAnimation(
+      parent: _ribbonController,
+      curve: Curves.easeInOutCubic,
+    );
+
+    // Sync immediately so the ribbon is pre-shown if games are already selected
+    // (e.g. navigating back to this page with an active selection).
+    _hasSelection = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
+    );
+    if (_hasSelection) _ribbonController.value = 1.0;
+
+    _hasSelectionSub = ref.listenManual(
+      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
+      (_, hasSelection) {
+        setState(() => _hasSelection = hasSelection);
+        if (hasSelection) {
+          _ribbonController.forward();
+        } else {
+          _ribbonController.reverse().then((_) {
+            if (mounted && _expanded) setState(() => _expanded = false);
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _hasSelectionSub?.close();
+    _ribbonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showExpandedList = _hasSelection && _expanded;
+
+    return Column(
       children: [
-        child,
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: IgnorePointer(
-            ignoring: !hasSelection,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              offset: hasSelection ? Offset.zero : const Offset(0, 1.0),
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                opacity: hasSelection ? 1 : 0,
-                child: Builder(
-                  builder: (ctx) =>
-                      buildSelectionOverlay(ctx, ref, theme, selectedGameIds),
+        Expanded(
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              widget.child,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  ignoring: !showExpandedList,
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    offset: showExpandedList
+                        ? Offset.zero
+                        : const Offset(0, 1.0),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      opacity: showExpandedList ? 1.0 : 0.0,
+                      child: const SelectionRibbonExpandedPanel(),
+                    ),
+                  ),
                 ),
+              ),
+            ],
+          ),
+        ),
+        // SizeTransition + FadeTransition share one controller so the ribbon
+        // content is always present during animation — no empty-container
+        // artifact from swapping children mid-transition.
+        ClipRect(
+          child: SizeTransition(
+            sizeFactor: _ribbonAnimation,
+            axisAlignment: 1.0,
+            child: FadeTransition(
+              opacity: _ribbonAnimation,
+              child: SelectionRibbon(
+                isExpanded: _expanded,
+                onToggleExpand: () => setState(() => _expanded = !_expanded),
               ),
             ),
           ),

@@ -28,6 +28,10 @@ class CardDisplaySection extends ConsumerWidget {
     label: 'Show title chip',
     description: 'Display game title chip on cards',
   );
+  static const SettingTextSpec showTitleOnNoPictureSpec = SettingTextSpec(
+    label: 'Show title on only picture-less cards',
+    description: 'Show the title chip only on cards that have no cover image',
+  );
   static const SettingTextSpec showPlatformSpec = SettingTextSpec(
     label: 'Show platform chip',
     description: 'Display platform icon on game cards',
@@ -55,6 +59,7 @@ class CardDisplaySection extends ConsumerWidget {
     settings: [
       showTagsOnHoverOnlySpec,
       showTitleSpec,
+      showTitleOnNoPictureSpec,
       showPlatformSpec,
       showTagsSpec,
       showDeadlineSpec,
@@ -99,9 +104,18 @@ class CardDisplaySection extends ConsumerWidget {
                 theme: theme,
                 spec: showTagsOnHoverOnlySpec,
                 value: cardSettings.showTagsOnHoverOnly,
-                showDividerBelow: true,
                 onChanged: (value) => settingsNotifier.setSetting(
                   SettingsKeys.showTagsOnHoverOnly,
+                  value,
+                ),
+              ),
+              SpecToggleSettingRow(
+                theme: theme,
+                spec: showTitleOnNoPictureSpec,
+                value: cardSettings.showTitleOnNoPicture,
+                showDividerBelow: true,
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.showTitleOnNoPicture,
                   value,
                 ),
               ),

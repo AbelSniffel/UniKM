@@ -30,10 +30,13 @@ class EnableEncryptionDialog extends ConsumerStatefulWidget {
     // `encryptionManager.enable(password)` and reopening the database.
     final result = await showDialog<String?>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => EnableEncryptionDialog(
-        theme: theme,
-        encryptionManager: encryptionManager,
+      barrierDismissible: true,
+      builder: (context) => DialogInteractionScope(
+        onDismiss: () => Navigator.of(context).pop(null),
+        child: EnableEncryptionDialog(
+          theme: theme,
+          encryptionManager: encryptionManager,
+        ),
       ),
     );
     return result;
@@ -70,64 +73,68 @@ class _EnableEncryptionDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: widget.theme.surface,
-      title: DialogHeader(
-        icon: Icons.lock,
-        title: 'Enable Encryption',
-        theme: widget.theme,
-        iconColor: widget.theme.baseAccent,
-        spacing: 8,
-      ),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DialogBanner.caution(
-                theme: widget.theme,
-                message: 'WARNING: If you forget your password, your data cannot be recovered!',
-                textColor: Colors.orange.shade700,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Create a strong password to encrypt your database:',
-                style: TextStyle(color: widget.theme.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              PasswordField(
-                controller: _passwordController,
-                labelText: 'Password',
-                validator: requiredPasswordWithLength(),
-              ),
-              const SizedBox(height: 12),
-              PasswordField(
-                controller: _confirmController,
-                labelText: 'Confirm Password',
-                validator: confirmPassword(_passwordController),
-              ),
-              const SizedBox(height: 16),
-              DialogBanner.info(
-                theme: widget.theme,
-                message: 'Uses AES-256-GCM with PBKDF2 key derivation',
-              ),
-            ],
+    return DialogInteractionScope(
+      onPrimaryAction: _isLoading ? null : _confirm,
+      onDismiss: () => Navigator.of(context).pop(null),
+      child: AlertDialog(
+        backgroundColor: widget.theme.surface,
+        title: DialogHeader(
+          icon: Icons.lock,
+          title: 'Enable Encryption',
+          theme: widget.theme,
+          iconColor: widget.theme.baseAccent,
+          spacing: 8,
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DialogBanner.caution(
+                  theme: widget.theme,
+                  message: 'WARNING: If you forget your password, your data cannot be recovered!',
+                  textColor: Colors.orange.shade700,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Create a strong password to encrypt your database:',
+                  style: TextStyle(color: widget.theme.textPrimary),
+                ),
+                const SizedBox(height: 16),
+                PasswordField(
+                  controller: _passwordController,
+                  labelText: 'Password',
+                  validator: requiredPasswordWithLength(),
+                ),
+                const SizedBox(height: 12),
+                PasswordField(
+                  controller: _confirmController,
+                  labelText: 'Confirm Password',
+                  validator: confirmPassword(_passwordController),
+                ),
+                const SizedBox(height: 16),
+                DialogBanner.info(
+                  theme: widget.theme,
+                  message: 'Uses AES-256-GCM with PBKDF2 key derivation',
+                ),
+              ],
+            ),
           ),
         ),
+        actions: [
+          DialogActionBar(
+            theme: widget.theme,
+            onCancel: () => Navigator.of(context).pop(null),
+            onConfirm: _isLoading ? null : _confirm,
+            confirmIcon: Icons.lock,
+            confirmLabel: 'Enable Encryption',
+            isLoading: _isLoading,
+          ),
+        ],
       ),
-      actions: [
-        DialogActionBar(
-          theme: widget.theme,
-          onCancel: () => Navigator.of(context).pop(null),
-          onConfirm: _isLoading ? null : _confirm,
-          confirmIcon: Icons.lock,
-          confirmLabel: 'Enable Encryption',
-          isLoading: _isLoading,
-        ),
-      ],
     );
   }
 }
@@ -150,10 +157,13 @@ class ChangePasswordDialog extends ConsumerStatefulWidget {
   ) async {
     final result = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => ChangePasswordDialog(
-        theme: theme,
-        encryptionManager: encryptionManager,
+      barrierDismissible: true,
+      builder: (context) => DialogInteractionScope(
+        onDismiss: () => Navigator.of(context).pop(false),
+        child: ChangePasswordDialog(
+          theme: theme,
+          encryptionManager: encryptionManager,
+        ),
       ),
     );
     return result ?? false;
@@ -205,7 +215,10 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DialogInteractionScope(
+      onPrimaryAction: _isLoading ? null : _changePassword,
+      onDismiss: () => Navigator.of(context).pop(false),
+      child: AlertDialog(
       backgroundColor: widget.theme.surface,
       title: DialogHeader(
         icon: Icons.key,
@@ -266,6 +279,7 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
           isLoading: _isLoading,
         ),
       ],
+      ),
     );
   }
 }
@@ -288,10 +302,13 @@ class DisableEncryptionDialog extends ConsumerStatefulWidget {
   ) async {
     final result = await showDialog<String?>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => DisableEncryptionDialog(
-        theme: theme,
-        encryptionManager: encryptionManager,
+      barrierDismissible: true,
+      builder: (context) => DialogInteractionScope(
+        onDismiss: () => Navigator.of(context).pop(null),
+        child: DisableEncryptionDialog(
+          theme: theme,
+          encryptionManager: encryptionManager,
+        ),
       ),
     );
     return result;
@@ -337,7 +354,10 @@ class _DisableEncryptionDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DialogInteractionScope(
+      onPrimaryAction: _isLoading ? null : _confirm,
+      onDismiss: () => Navigator.of(context).pop(null),
+      child: AlertDialog(
       backgroundColor: widget.theme.surface,
       title: DialogHeader(
         icon: Icons.lock_open,
@@ -398,6 +418,7 @@ class _DisableEncryptionDialogState
           destructive: true,
         ),
       ],
+      ),
     );
   }
 }
@@ -414,8 +435,11 @@ class UnlockDatabaseDialog extends StatefulWidget {
   static Future<String?> show(BuildContext context, AppThemeData theme) async {
     return showDialog<String?>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => UnlockDatabaseDialog(theme: theme),
+      barrierDismissible: true,
+      builder: (context) => DialogInteractionScope(
+        onDismiss: () => Navigator.of(context).pop(null),
+        child: UnlockDatabaseDialog(theme: theme),
+      ),
     );
   }
 
@@ -440,7 +464,10 @@ class _UnlockDatabaseDialogState extends State<UnlockDatabaseDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DialogInteractionScope(
+      onPrimaryAction: _unlock,
+      onDismiss: () => Navigator.of(context).pop(null),
+      child: AlertDialog(
       backgroundColor: widget.theme.surface,
       title: DialogHeader(
         icon: Icons.lock,
@@ -481,6 +508,7 @@ class _UnlockDatabaseDialogState extends State<UnlockDatabaseDialog> {
           confirmLabel: 'Unlock',
         ),
       ],
+      ),
     );
   }
 }

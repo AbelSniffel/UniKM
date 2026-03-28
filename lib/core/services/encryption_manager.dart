@@ -39,6 +39,12 @@ enum EncryptionState {
 
 /// Encryption manager for the database
 class EncryptionManager {
+  /// SharedPreferences key used to persist a plaintext DB path that needs
+  /// to be deleted on the next app launch (belt-and-suspenders for Windows
+  /// file-lock situations where the retry loop in the same session times out).
+  static const String pendingPlaintextDeletionKey =
+      'pending_plaintext_deletion';
+
   final String dbPath;
   final AesGcm _cipher = AesGcm.with256bits();
   
@@ -64,7 +70,10 @@ class EncryptionManager {
   bool get isEncrypted => state == EncryptionState.encrypted;
   
   /// Enable encryption with the given password
-  Future<void> enable(String password) async {
+  Future<void> enable(
+    String password, {
+    bool deletePlaintextFile = true,
+  }) async {
     if (isEncrypted) {
       throw StateError('Database is already encrypted');
     }
@@ -100,12 +109,36 @@ class EncryptionManager {
     
     // Write encrypted file
     await File(encryptedPath).writeAsBytes(output.toBytes());
-    
-    // Delete plain file (best-effort with backoff on Windows file locks)
-    await _deleteWithRetry(
-      plainFile,
+
+    if (deletePlaintextFile) {
+      await deletePlaintextDatabaseFile(throwOnFailure: false);
+    }
+  }
+
+  Future<bool> deletePlaintextDatabaseFile({
+    bool throwOnFailure = true,
+    int maxAttempts = 8,
+    Duration initialDelay = const Duration(milliseconds: 50),
+  }) async {
+    // Best-effort removal of SQLite WAL companion files first.
+    // These can hold OS-level locks that prevent deletion of the main .db file
+    // on Windows, especially right after the connection is closed.
+    for (final suffix in ['-wal', '-shm']) {
+      await _deleteWithRetry(
+        File('$dbPath$suffix'),
+        label: 'plain DB companion ($suffix)',
+        throwOnFailure: false,
+        maxAttempts: 3,
+        initialDelay: const Duration(milliseconds: 30),
+      );
+    }
+
+    return _deleteWithRetry(
+      File(dbPath),
       label: 'plain database',
-      throwOnFailure: false,
+      throwOnFailure: throwOnFailure,
+      maxAttempts: maxAttempts,
+      initialDelay: initialDelay,
     );
   }
   
@@ -290,11 +323,14 @@ class EncryptionManager {
   }
 
   bool _isFileInUse(FileSystemException e) {
-    // Windows file lock error code is 32.
-    return e.osError?.errorCode == 32;
+    // Windows file-lock error codes:
+    //   32 = ERROR_SHARING_VIOLATION  (file held by another process)
+    //   33 = ERROR_LOCK_VIOLATION     (region lock on the file)
+    final code = e.osError?.errorCode;
+    return code == 32 || code == 33;
   }
 
-  Future<void> _deleteWithRetry(
+  Future<bool> _deleteWithRetry(
     File file, {
     required String label,
     bool throwOnFailure = true,
@@ -308,7 +344,7 @@ class EncryptionManager {
         if (await file.exists()) {
           await file.delete();
         }
-        return;
+        return true;
       } on FileSystemException catch (e) {
         final isLocked = _isFileInUse(e);
         final isLastAttempt = attempt == maxAttempts;
@@ -319,13 +355,15 @@ class EncryptionManager {
           AppLog.w(
             '[Encryption] Failed to delete $label after $attempt attempts: $e',
           );
-          return;
+          return false;
         }
       }
 
       await Future.delayed(delay);
       delay *= 2;
     }
+
+    return !(await file.exists());
   }
 }
 

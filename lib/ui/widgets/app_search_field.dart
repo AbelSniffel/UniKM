@@ -21,7 +21,7 @@ import '../../core/theme/app_theme.dart';
 ///   onChanged: (value) => ref.read(provider.notifier).setSearchQuery(value),
 /// )
 /// ```
-class AppSearchField extends StatelessWidget {
+class AppSearchField extends StatefulWidget {
   const AppSearchField({
     super.key,
     required this.theme,
@@ -32,6 +32,9 @@ class AppSearchField extends StatelessWidget {
     this.showClearButton = true,
     this.onCleared,
     this.contentPadding,
+    this.backgroundColor,
+    this.onSubmitted,
+    this.prefixIcon,
   });
 
   final AppThemeData theme;
@@ -51,37 +54,110 @@ class AppSearchField extends StatelessWidget {
   /// Override the content padding. Defaults to theme-appropriate value.
   final EdgeInsetsGeometry? contentPadding;
 
+  /// Overrides the default background color used for the filled input.
+  /// If null, falls back to [theme.inputBackground].
+  final Color? backgroundColor;
+
+  /// Called when the user submits the field from the keyboard.
+  final ValueChanged<String>? onSubmitted;
+
+  /// Optional leading icon override. Defaults to the standard search icon.
+  final IconData? prefixIcon;
+
+  @override
+  State<AppSearchField> createState() => _AppSearchFieldState();
+}
+
+class _AppSearchFieldState extends State<AppSearchField> {
+  late final TextEditingController _internalController;
+
+  TextEditingController get _effectiveController =>
+      widget.controller ?? _internalController;
+
+  @override
+  void initState() {
+    super.initState();
+    _internalController = TextEditingController();
+    _effectiveController.addListener(_handleTextChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant AppSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      (oldWidget.controller ?? _internalController).removeListener(
+        _handleTextChanged,
+      );
+      _effectiveController.addListener(_handleTextChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _effectiveController.removeListener(_handleTextChanged);
+    _internalController.dispose();
+    super.dispose();
+  }
+
+  void _handleTextChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final showClear =
-        showClearButton && controller != null && controller!.text.isNotEmpty;
+    final controller = _effectiveController;
+    final showClear = widget.showClearButton && controller.text.isNotEmpty;
+
+    final effectiveContentPadding =
+        widget.contentPadding ??
+        const EdgeInsets.symmetric(vertical: 8, horizontal: 12);
 
     return TextField(
       controller: controller,
-      focusNode: focusNode,
-      onChanged: onChanged,
-      style: TextStyle(color: theme.textPrimary),
+      focusNode: widget.focusNode,
+      onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
+      style: TextStyle(color: widget.theme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: TextStyle(color: theme.textHint),
-        prefixIcon: Icon(Icons.search, color: theme.textHint),
+        isDense: true,
+        hintText: widget.hintText,
+        hintStyle: TextStyle(color: widget.theme.textHint),
+        prefixIcon: Icon(
+          widget.prefixIcon ?? Icons.search,
+          color: widget.theme.textHint,
+          size: 18,
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 34,
+          minHeight: 32,
+        ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 34,
+          minHeight: 32,
+        ),
         suffixIcon: showClear
             ? IconButton(
-                icon: Icon(Icons.clear, color: theme.textHint),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 32),
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                icon: Icon(Icons.clear, color: widget.theme.textHint, size: 16),
                 onPressed: () {
-                  controller!.clear();
-                  onChanged('');
-                  onCleared?.call();
+                  controller.clear();
+                  widget.onChanged('');
+                  widget.onCleared?.call();
                 },
               )
             : null,
         filled: true,
-        fillColor: theme.inputBackground,
+        fillColor: widget.backgroundColor ?? widget.theme.inputBackground,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          borderSide: BorderSide(color: theme.border),
+          borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
+          borderSide: BorderSide(color: widget.theme.border),
         ),
-        contentPadding: contentPadding,
+        contentPadding: effectiveContentPadding,
       ),
     );
   }

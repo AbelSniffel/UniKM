@@ -2,16 +2,20 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/constants/app_constants.dart';
 import '../core/services/backup_service.dart';
 import '../core/services/logging.dart';
+import '../core/services/update_service.dart';
 import '../core/settings/settings_model.dart';
 import '../core/theme/app_theme.dart';
 import '../providers/app_providers.dart';
@@ -41,6 +45,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
   Timer? _windowSaveDebounce;
   bool _applyingSavedWindowState = false;
   Timer? _autoBackupTimer;
+  Timer? _autoUpdateTimer;
+  bool _isClosingWindow = false;
 
   @override
   void initState() {
@@ -48,12 +54,14 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     windowManager.addListener(this);
     _initWindow();
     _initAutoBackup();
+    _initAutoUpdateChecks();
   }
 
   @override
   void dispose() {
     _windowSaveDebounce?.cancel();
     _autoBackupTimer?.cancel();
+    _autoUpdateTimer?.cancel();
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -63,6 +71,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
       _updateAutoBackup();
+    });
+  }
+
+  void _initAutoUpdateChecks() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scheduleNextAutoUpdateCheck(useStartupDelay: true);
     });
   }
 
@@ -113,24 +128,55 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     }
   }
 
+  void _scheduleNextAutoUpdateCheck({bool useStartupDelay = false}) {
+    _autoUpdateTimer?.cancel();
+    _autoUpdateTimer = null;
+
+    final updatesSettings = ref.read(updatesSettingsProvider);
+    if (!updatesSettings.autoCheckEnabled ||
+        updatesSettings.autoCheckIntervalMinutes <= 0) {
+      ref.read(nextAutoUpdateTimeProvider.notifier).setNextUpdateTime(null);
+      return;
+    }
+
+    final delay = useStartupDelay
+        ? const Duration(seconds: 3)
+        : Duration(minutes: updatesSettings.autoCheckIntervalMinutes);
+
+    ref
+        .read(nextAutoUpdateTimeProvider.notifier)
+        .setNextUpdateTime(DateTime.now().add(delay));
+
+    _autoUpdateTimer = Timer(delay, () async {
+      if (!mounted) return;
+
+      try {
+        final updateState = ref.read(updateProvider);
+        if (!updateState.isChecking) {
+          await ref.read(updateProvider.notifier).checkForUpdates();
+        }
+      } catch (e) {
+        AppLog.w('Automatic update check failed', error: e);
+      }
+
+      if (!mounted) return;
+      _scheduleNextAutoUpdateCheck();
+    });
+  }
+
   Future<void> _initWindow() async {
     await windowManager.ensureInitialized();
     // Prevent immediate close so we can persist encrypted DB changes.
     await windowManager.setPreventClose(true);
 
-    final shellSettings = ref.read(appShellSettingsProvider);
-    final width = shellSettings.windowWidth;
-    final height = shellSettings.windowHeight;
-    final x = shellSettings.windowX;
-    final y = shellSettings.windowY;
-    final maximized = shellSettings.windowMaximized;
-
     _applyingSavedWindowState = true;
+    final shellSettings = ref.read(appShellSettingsProvider);
+    final initialSize = await _resolveInitialWindowSize(shellSettings);
 
     final windowOptions = WindowOptions(
-      size: Size(width, height),
+      size: initialSize,
       minimumSize: const Size(kMinWindowWidth, kMinWindowHeight),
-      center: x == null || y == null,
+      center: false,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
@@ -138,19 +184,88 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-
-      if (x != null && y != null) {
-        await windowManager.setPosition(Offset(x, y));
-      }
-
-      if (maximized) {
+      await _positionWindowOnPrimaryDisplay(initialSize);
+      if (shellSettings.windowMaximized) {
         await windowManager.maximize();
       }
+      await _requestInitialWindowFocus();
 
       _applyingSavedWindowState = false;
     });
+  }
+
+  Future<void> _requestInitialWindowFocus() async {
+    await windowManager.show();
+    await windowManager.focus();
+
+    if (Platform.isWindows) {
+      try {
+        await windowManager.setAlwaysOnTop(true);
+        await windowManager.focus();
+      } catch (_) {
+        // Best effort only.
+      }
+
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 160), () async {
+          if (!mounted) return;
+          try {
+            await windowManager.setAlwaysOnTop(false);
+            await windowManager.focus();
+          } catch (_) {
+            // Best effort only.
+          }
+        }),
+      );
+      return;
+    }
+
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 80), () async {
+        if (!mounted) return;
+        try {
+          await windowManager.focus();
+        } catch (_) {
+          // Best effort only.
+        }
+      }),
+    );
+  }
+
+  Future<Size> _resolveInitialWindowSize(AppShellSettings shellSettings) async {
+    final primaryDisplay = await screenRetriever.getPrimaryDisplay();
+    final visibleSize = primaryDisplay.visibleSize ?? primaryDisplay.size;
+    final maxWidth = visibleSize.width.toDouble();
+    final maxHeight = visibleSize.height.toDouble();
+    final minWidth = math.min(kMinWindowWidth, maxWidth);
+    final minHeight = math.min(kMinWindowHeight, maxHeight);
+    final hasSavedPlacement =
+        shellSettings.windowX != null && shellSettings.windowY != null;
+
+    final preferredWidth = hasSavedPlacement
+        ? shellSettings.windowWidth
+        : kDefaultWindowWidth;
+    final preferredHeight = hasSavedPlacement
+        ? shellSettings.windowHeight
+        : kDefaultWindowHeight;
+
+    return Size(
+      preferredWidth.clamp(minWidth, maxWidth),
+      preferredHeight.clamp(minHeight, maxHeight),
+    );
+  }
+
+  Future<void> _positionWindowOnPrimaryDisplay(Size windowSize) async {
+    final primaryDisplay = await screenRetriever.getPrimaryDisplay();
+    final visibleSize = primaryDisplay.visibleSize ?? primaryDisplay.size;
+    final visiblePosition =
+        primaryDisplay.visiblePosition ?? const Offset(0, 0);
+    final centeredX =
+        visiblePosition.dx + ((visibleSize.width - windowSize.width) / 2);
+    final centeredY =
+        visiblePosition.dy + ((visibleSize.height - windowSize.height) / 2);
+
+    await windowManager.setPosition(Offset(centeredX, centeredY));
   }
 
   void _scheduleSaveWindowState() {
@@ -219,11 +334,31 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
 
   @override
   void onWindowClose() async {
+    if (_isClosingWindow) {
+      return;
+    }
+
     final isPreventClose = await windowManager.isPreventClose();
     if (!isPreventClose) return;
 
-    unawaited(_cleanupOnClose());
-    await windowManager.destroy();
+    _isClosingWindow = true;
+
+    try {
+      await windowManager.hide();
+    } catch (_) {
+      // Best effort only.
+    }
+
+    try {
+      await _cleanupOnClose();
+    } finally {
+      try {
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
+      } catch (_) {
+        await windowManager.destroy();
+      }
+    }
   }
 
   @override
@@ -232,6 +367,17 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     final currentNav = ref.watch(currentNavProvider);
     final shellSettings = ref.watch(appShellSettingsProvider);
 
+    ref.listen<UpdatesSettings>(updatesSettingsProvider, (previous, next) {
+      if (previous == null) {
+        return;
+      }
+
+      if (previous.autoCheckEnabled != next.autoCheckEnabled ||
+          previous.autoCheckIntervalMinutes != next.autoCheckIntervalMinutes) {
+        _scheduleNextAutoUpdateCheck();
+      }
+    });
+
     NotificationManager.instance.setEnabled(shellSettings.notificationsEnabled);
 
     final navPosition = shellSettings.navBarPosition;
@@ -239,8 +385,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
     final gradientAnimation = shellSettings.gradientAnimation;
     final navCollapsed = shellSettings.navBarCollapsed;
 
-    // Navigation panel width depends on collapsed state
-    final navWidth = navCollapsed ? 56.0 : 110.0;
+    // Keep the expanded vertical rail compact while preserving button spacing.
+    final navWidth = navCollapsed
+      ? nav_panel.kNavigationPanelCollapsedWidth
+      : nav_panel.kNavigationPanelExpandedWidth;
 
     final navItems = NavItem.values
         .map(
@@ -286,6 +434,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
       lockedIndices: batchFetchActive ? {NavItem.addGames.index} : {},
     );
 
+    final animatedSideNavigationPanel = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOutCubic,
+      width: navWidth,
+      child: navigationPanel,
+    );
+
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -312,7 +467,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
                   child: switch (navPosition) {
                     NavBarPosition.left => Row(
                       children: [
-                        SizedBox(width: navWidth, child: navigationPanel),
+                        animatedSideNavigationPanel,
                         // Thin animated gradient separator on the inner edge
                         AnimatedGradientBar(
                           theme: theme,
@@ -333,7 +488,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> with WindowListener {
                           isVertical: true,
                           width: 6,
                         ),
-                        SizedBox(width: navWidth, child: navigationPanel),
+                        animatedSideNavigationPanel,
                       ],
                     ),
                     NavBarPosition.top => Column(
@@ -636,66 +791,86 @@ class _MenuButton extends StatefulWidget {
 
 class _MenuButtonState extends State<_MenuButton> {
   bool _isHovered = false;
+  bool _isPressed = false;
+
+  Future<void> _openMenu() async {
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      button.localToGlobal(Offset.zero) & button.size,
+      Offset.zero & overlay.size,
+    );
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      color: widget.theme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: widget.theme.border),
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'import',
+          child: Row(
+            children: [
+              Icon(
+                Icons.file_download,
+                size: 18,
+                color: widget.theme.textPrimary,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Import Database',
+                style: TextStyle(color: widget.theme.textPrimary),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'export',
+          child: Row(
+            children: [
+              Icon(
+                Icons.file_upload,
+                size: 18,
+                color: widget.theme.textPrimary,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Export Database',
+                style: TextStyle(color: widget.theme.textPrimary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!mounted) return;
+
+    if (selected == 'import') {
+      showImportDialog(context);
+    } else if (selected == 'export') {
+      showExportDialog(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: PopupMenuButton<String>(
-        tooltip: 'Menu',
-        offset: const Offset(0, 32),
-        color: widget.theme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: widget.theme.border),
-        ),
-        onSelected: (value) {
-          switch (value) {
-            case 'import':
-              showImportDialog(context);
-              break;
-            case 'export':
-              showExportDialog(context);
-              break;
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => setState(() => _isPressed = true),
+        onPointerUp: (_) {
+          if (_isPressed) {
+            _openMenu();
           }
+          setState(() => _isPressed = false);
         },
-        itemBuilder: (context) => [
-          PopupMenuItem<String>(
-            value: 'import',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.file_download,
-                  size: 18,
-                  color: widget.theme.textPrimary,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Import Database',
-                  style: TextStyle(color: widget.theme.textPrimary),
-                ),
-              ],
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'export',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.file_upload,
-                  size: 18,
-                  color: widget.theme.textPrimary,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Export Database',
-                  style: TextStyle(color: widget.theme.textPrimary),
-                ),
-              ],
-            ),
-          ),
-        ],
+        onPointerCancel: (_) => setState(() => _isPressed = false),
         child: Container(
           width: 36,
           height: 32,

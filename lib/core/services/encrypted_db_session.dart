@@ -52,6 +52,11 @@ class EncryptedDbSession {
       if (shouldPersistOnClose()) {
         await persistFromTemp();
       }
+      if (encryptionManager.isEncrypted) {
+        await encryptionManager.deletePlaintextDatabaseFile(
+          throwOnFailure: false,
+        );
+      }
       // Clean up temp file and directory after database is closed
       await _cleanupTempFiles();
     }

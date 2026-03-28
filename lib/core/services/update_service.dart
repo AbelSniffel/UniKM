@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -493,6 +494,21 @@ class UpdateService {
     }
 
     return result;
+  }
+}
+
+/// State for the next scheduled automatic update check.
+final nextAutoUpdateTimeProvider =
+    NotifierProvider<NextAutoUpdateTimeNotifier, DateTime?>(
+      NextAutoUpdateTimeNotifier.new,
+    );
+
+class NextAutoUpdateTimeNotifier extends Notifier<DateTime?> {
+  @override
+  DateTime? build() => null;
+
+  void setNextUpdateTime(DateTime? value) {
+    state = value;
   }
 }
 

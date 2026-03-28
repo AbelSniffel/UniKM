@@ -16,7 +16,7 @@ class AppConstants {
 // APP INFO
 // =============================================================================
 const String kAppName = 'UniKM';
-const String kAppVersion = '1.1.0';
+const String kAppVersion = '1.2.0';
 const String kGitHubRepo = 'AbelSniffel/UniKM';
 
 // =============================================================================
@@ -55,18 +55,17 @@ const int kTooltipHideDelay = 50; // milliseconds
 // =============================================================================
 const double kDefaultWindowWidth = 1300.0;
 const double kDefaultWindowHeight = 900.0;
-const double kMinWindowWidth = 800.0;
+const double kMinWindowWidth = 700.0;
 const double kMinWindowHeight = 600.0;
 
 // =============================================================================
 // ANIMATION DURATIONS
 // =============================================================================
 const Duration kVeryFastAnimation = Duration(milliseconds: 100);
-const Duration kFastAnimation = Duration(milliseconds: 150);
+const Duration kFastAnimation = Duration(milliseconds: 160);
 const Duration kMediumAnimation = Duration(milliseconds: 250);
-const Duration kSlowAnimation = Duration(milliseconds: 400);
-const Duration kPageTransition = Duration(milliseconds: 300);
-const Duration kCardHoverAnimation = Duration(milliseconds: 150);
+const Duration kSlowAnimation = Duration(milliseconds: 350);
+const Duration kPageTransition = Duration(milliseconds: 250);
 
 // =============================================================================
 // DATABASE
@@ -84,6 +83,5 @@ const int kDefaultMaxBackupCount = 10;
 // =============================================================================
 // STEAM API
 // =============================================================================
-const String kSteamStoreApiBase = 'https://store.steampowered.com/api';
-const String kSteamCdnBase = 'https://steamcdn-a.akamaihd.net';
-const Duration kSteamApiCacheDuration = Duration(hours: 24);
+const String kSteamStoreApiBase = 'https://store.steampowered.com/api'; // Don't forget to use these
+const String kSteamCdnBase = 'https://steamcdn-a.akamaihd.net'; // Don't forget to use these

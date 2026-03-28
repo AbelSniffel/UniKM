@@ -38,6 +38,7 @@ class SectionGroupBox extends ConsumerStatefulWidget {
     required this.child,
     this.titleLocation,
     this.padding = const EdgeInsets.all(12),
+    this.description,
     this.titleIcon,
     this.trailing,
     this.borderColor,
@@ -56,6 +57,7 @@ class SectionGroupBox extends ConsumerStatefulWidget {
   final String title;
   final AppThemeData theme;
   final Widget child;
+  final String? description;
 
   /// Optional override. When null, uses `SettingsKeys.sectionTitleLocation`.
   final SectionTitleLocation? titleLocation;
@@ -161,6 +163,39 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
     );
   }
 
+  Widget _buildHeaderText({required Color titleColor}) {
+    final description = widget.description?.trim();
+    final hasDescription = description != null && description.isNotEmpty;
+
+    return RichText(
+      softWrap: true,
+      overflow: TextOverflow.visible,
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: widget.title,
+            style: TextStyle(
+              color: titleColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          if (hasDescription)
+            TextSpan(
+              text: '  $description',
+              style: TextStyle(
+                color: widget.theme.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                height: 1.35,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLeftTitle(double highlightValue) {
     final baseBorderColor = widget.borderColor ?? widget.theme.border;
     final effectiveBorderColor =
@@ -231,21 +266,36 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
             children: [
               Row(
                 children: [
-                  if (widget.titleIcon != null) ...[
-                    Icon(
-                      widget.titleIcon,
-                      size: 18,
-                      color: widget.theme.accent,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: TextStyle(
-                        color: widget.theme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.theme.accent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(
+                          widget.theme.cornerRadius,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.titleIcon != null) ...[
+                            Icon(
+                              widget.titleIcon,
+                              size: 18,
+                              color: widget.theme.accent,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: _buildHeaderText(
+                              titleColor: widget.theme.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -357,45 +407,94 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
         ? BorderRadius.vertical(top: Radius.circular(cr))
         : BorderRadius.zero;
 
-    final content = Column(
-      crossAxisAlignment: widget.shrinkToChild
-          ? CrossAxisAlignment.start
-          : CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            // remove themed background so header is transparent
-            borderRadius: titleHeaderRadius,
-          ),
-          child: Row(
+    final titleHeader = Container(
+      padding: EdgeInsets.fromLTRB(
+        widget.padding.left,
+        12,
+        widget.padding.right,
+        12,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: titleHeaderRadius,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (widget.titleIcon != null) ...[
-                Icon(widget.titleIcon, size: 18, color: widget.theme.accent),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                widget.title,
-                style: TextStyle(
-                  color: widget.theme.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Container(
+                  //padding: const EdgeInsets.symmetric(
+                  //  horizontal: 12,
+                  //  vertical: 6,
+                  //),
+                  decoration: BoxDecoration(
+                    //color: widget.theme.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(
+                      widget.theme.cornerRadius,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.titleIcon != null) ...[
+                        Icon(
+                          widget.titleIcon,
+                          size: 18,
+                          color: widget.theme.accent,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: _buildHeaderText(
+                          titleColor: widget.theme.accent,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (widget.trailing != null) ...[
-                const Spacer(),
+                const SizedBox(width: 12),
                 widget.trailing!,
               ],
             ],
           ),
-        ),
-        Padding(
-          padding: widget.padding,
+        ],
+      ),
+    );
+
+    // When this box is placed inside an Expanded (tight height constraint),
+    // wrap the content in Expanded so the child receives a bounded height
+    // and a SingleChildScrollView can scroll instead of overflowing.
+    // When placed inside a scrollable (unbounded height), use plain Padding
+    // so the box sizes naturally to its content.
+    final content = LayoutBuilder(
+      builder: (context, constraints) {
+        final fitToHeight =
+            !widget.shrinkToChild && constraints.hasBoundedHeight;
+        final contentWidget = Padding(
+          padding: EdgeInsets.only(
+            left: widget.padding.left,
+            right: widget.padding.right,
+            bottom: widget.padding.bottom,
+          ),
           child: widget.shrinkToChild
               ? Align(alignment: Alignment.centerLeft, child: widget.child)
               : widget.child,
-        ),
-      ],
+        );
+        return Column(
+          crossAxisAlignment: widget.shrinkToChild
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.stretch,
+          children: [
+            titleHeader,
+            fitToHeight ? Expanded(child: contentWidget) : contentWidget,
+          ],
+        );
+      },
     );
 
     final hasCorners = roundTopCorners || roundBottomCorners;
@@ -606,7 +705,6 @@ class InnerGroupBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        // inner boxes also used surfaceVariant; make transparent by default
         borderRadius: BorderRadius.circular(theme.cornerRadius / 2),
       ),
       child: Column(

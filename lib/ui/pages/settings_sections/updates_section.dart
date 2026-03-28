@@ -1,10 +1,13 @@
 /// Updates settings section.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
+import '../../../core/services/update_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
@@ -48,7 +51,7 @@ class UpdatesSection extends ConsumerStatefulWidget {
   static const List<SettingsSearchGroup> searchGroups = [
     SettingsSearchGroup(
       title: 'Update Preferences',
-      settings: [includePrereleaseSpec, autoCheckSpec, intervalSpec],
+      settings: [autoCheckSpec, intervalSpec, includePrereleaseSpec],
     ),
     SettingsSearchGroup(
       title: 'GitHub Repository & API',
@@ -70,6 +73,8 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
   final _repoController = TextEditingController();
   final _tokenController = TextEditingController();
   final _intervalController = TextEditingController();
+  Timer? _countdownTicker;
+  DateTime _now = DateTime.now();
 
   @override
   void initState() {
@@ -78,19 +83,58 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     _repoController.text = updates.updateRepo;
     _tokenController.text = updates.githubApiToken;
     _intervalController.text = updates.autoCheckIntervalMinutes.toString();
+    _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _now = DateTime.now();
+      });
+    });
   }
 
   @override
   void dispose() {
+    _countdownTicker?.cancel();
     _repoController.dispose();
     _tokenController.dispose();
     _intervalController.dispose();
     super.dispose();
   }
 
+  String _formatNextUpdateTime(DateTime nextTime) {
+    final diff = nextTime.difference(_now);
+
+    if (diff.isNegative) {
+      return 'Running now...';
+    }
+
+    if (diff.inMinutes < 1) {
+      return 'In less than a minute';
+    }
+
+    if (diff.inMinutes == 1) {
+      return 'In 1 minute';
+    }
+
+    if (diff.inMinutes < 60) {
+      return 'In ${diff.inMinutes} minutes';
+    }
+
+    final hours = diff.inHours;
+    final minutes = diff.inMinutes % 60;
+    if (minutes == 0) {
+      return 'In $hours hour${hours > 1 ? 's' : ''}';
+    }
+
+    return 'In $hours hour${hours > 1 ? 's' : ''} $minutes min';
+  }
+
   @override
   Widget build(BuildContext context) {
     final updates = ref.watch(updatesSettingsProvider);
+    final nextUpdateCheck = ref.watch(nextAutoUpdateTimeProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final isSearching = widget.searchQuery.trim().isNotEmpty;
 
@@ -127,23 +171,21 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               children: [
                 SpecToggleSettingRow(
                   theme: widget.theme,
+                  spec: UpdatesSection.autoCheckSpec,
+                  value: updates.autoCheckEnabled,
+                  onChanged: (value) => settingsNotifier.setSetting(
+                    SettingsKeys.autoUpdateCheck,
+                    value,
+                  ),
+                ),
+
+                SpecToggleSettingRow(
+                  theme: widget.theme,
                   spec: UpdatesSection.includePrereleaseSpec,
                   value: updates.includePrerelease,
                   showDividerBelow: false,
                   onChanged: (value) => settingsNotifier.setSetting(
                     SettingsKeys.includePreReleases,
-                    value,
-                  ),
-                ),
-
-                const Divider(),
-
-                SpecToggleSettingRow(
-                  theme: widget.theme,
-                  spec: UpdatesSection.autoCheckSpec,
-                  value: updates.autoCheckEnabled,
-                  onChanged: (value) => settingsNotifier.setSetting(
-                    SettingsKeys.autoUpdateCheck,
                     value,
                   ),
                 ),
@@ -167,6 +209,55 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                     },
                   ),
                 ),
+
+                if (updates.autoCheckEnabled && nextUpdateCheck != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: widget.theme.accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(
+                        widget.theme.cornerRadius,
+                      ),
+                      border: Border.all(
+                        color: widget.theme.accent.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.schedule,
+                          color: widget.theme.accent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Next Scheduled Update Check',
+                                style: TextStyle(
+                                  color: widget.theme.textPrimary,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatNextUpdateTime(nextUpdateCheck),
+                                style: TextStyle(
+                                  color: widget.theme.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

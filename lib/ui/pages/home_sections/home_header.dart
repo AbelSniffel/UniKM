@@ -11,7 +11,12 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/app_search_field.dart';
+import '../../widgets/app_tag_chip.dart';
+import '../../widgets/page_header_title.dart';
+import '../../widgets/platform_icon.dart';
 import 'animated_view_mode_toggle.dart';
+
+const double _compactHeaderFiltersBreakpoint = 900.0;
 
 class HomeHeader extends ConsumerStatefulWidget {
   const HomeHeader({
@@ -63,9 +68,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
     final tags = ref.watch(tagsProvider);
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       decoration: BoxDecoration(
-        color: theme.surface,
+        color: theme.navBackground,
         border: Border(bottom: BorderSide(color: theme.border)),
       ),
       child: Column(
@@ -74,42 +79,22 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
           // Title, game count, and search/filters inline
           LayoutBuilder(
             builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 900;
+              final isNarrow =
+                  constraints.maxWidth < _compactHeaderFiltersBreakpoint;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text(
-                        'Game Library',
-                        style: TextStyle(
-                          color: theme.textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      PageHeaderTitle(
+                        title: 'Game Library',
+                        icon: Icons.home,
+                        theme: theme,
+                        showTitle: false,
+                        tooltip: 'Game Library Page',
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(
-                            theme.cornerRadius,
-                          ),
-                        ),
-                        child: Text(
-                          gamesCount == totalGamesCount
-                              ? '$gamesCount games'
-                              : '$gamesCount / $totalGamesCount games',
-                          style: TextStyle(
-                            color: theme.accent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      _buildGamesCountChip(theme, gamesCount, totalGamesCount),
                       const SizedBox(width: 8),
 
                       // Search field (always visible, fills remaining space)
@@ -125,9 +110,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                                 .setSearchQuery(value);
                           },
                           onCleared: () {
-                            ref
-                                .read(gamesProvider.notifier)
-                                .setSearchQuery('');
+                            ref.read(gamesProvider.notifier).setSearchQuery('');
                           },
                         ),
                       ),
@@ -136,17 +119,22 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                       if (!isNarrow) ...[
                         const SizedBox(width: 8),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 140),
-                          child: _buildPlatformDropdown(
-                            theme,
-                            platformFilter,
-                          ),
+                          constraints: const BoxConstraints(maxWidth: 180),
+                          child: _buildPlatformDropdown(theme, platformFilter),
                         ),
                         const SizedBox(width: 8),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 170),
+                          constraints: const BoxConstraints(maxWidth: 220),
                           child: _buildSortDropdown(theme, sortMode),
                         ),
+                        const SizedBox(width: 8),
+                        _buildFiltersToggleButton(
+                          context,
+                          theme,
+                          activeFiltersState,
+                        ),
+                      ] else ...[
+                        // Narrow layout: filters button only (on first row)
                         const SizedBox(width: 8),
                         _buildFiltersToggleButton(
                           context,
@@ -160,31 +148,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                       _buildViewModeToggle(context, ref, theme, viewMode),
                     ],
                   ),
-
-                  // Narrow layout: platform, sort, filters on second row
-                  if (isNarrow) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildPlatformDropdown(
-                            theme,
-                            platformFilter,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildSortDropdown(theme, sortMode),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFiltersToggleButton(
-                          context,
-                          theme,
-                          activeFiltersState,
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               );
             },
@@ -205,7 +168,21 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                     duration: kMediumAnimation,
                     curve: Curves.linear,
                     opacity: _showTagsPanel ? 1.0 : 0.0,
-                    child: _buildTagsPanel(theme, tags, activeFiltersState),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow =
+                            constraints.maxWidth <
+                            _compactHeaderFiltersBreakpoint;
+                        return _buildTagsPanel(
+                          theme,
+                          tags,
+                          activeFiltersState,
+                          isNarrow: isNarrow,
+                          platformFilter: platformFilter,
+                          sortMode: sortMode,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -238,14 +215,50 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
     );
   }
 
+  Widget _buildGamesCountChip(
+    AppThemeData theme,
+    int gamesCount,
+    int totalGamesCount,
+  ) {
+    final labelStyle = TextStyle(
+      color: theme.accent,
+      fontWeight: FontWeight.w600,
+    );
+
+    // Align to the left so AnimatedSize grows rightward, not in both directions.
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ClipRect(
+        child: AnimatedSize(
+          duration: kFastAnimation,
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.accent.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+            ),
+            child: Text(
+              gamesCount < totalGamesCount
+                  ? '$gamesCount / $totalGamesCount Games'
+                  : '$gamesCount Games',
+              style: labelStyle,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Platform dropdown
   // ---------------------------------------------------------------------------
 
-  Widget _buildPlatformDropdown(
-    AppThemeData theme,
-    String? platformFilter,
-  ) {
+  Widget _buildPlatformDropdown(AppThemeData theme, String? platformFilter) {
     return DropdownButtonFormField<String>(
       initialValue: platformFilter ?? '',
       isExpanded: true,
@@ -256,29 +269,46 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       style: TextStyle(color: theme.textPrimary),
       dropdownColor: theme.surface,
       decoration: InputDecoration(
-        filled: true,
-        fillColor: theme.inputBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          borderSide: BorderSide(color: theme.border),
-        ),
+        border: InputBorder.none,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       ),
       hint: Text('All Platforms', style: TextStyle(color: theme.textHint)),
       items: [
         DropdownMenuItem<String>(
           value: '',
-          child: Text(
-            'All Platforms',
-            style: TextStyle(color: theme.textPrimary),
-          ),
+          child: _buildPlatformMenuLabel(theme, label: 'All Platforms'),
         ),
         ...GamePlatform.values.map(
           (p) => DropdownMenuItem<String>(
             value: p.displayName,
-            child: Text(
-              p.displayName,
-              style: TextStyle(color: theme.textPrimary),
+            child: _buildPlatformMenuLabel(
+              theme,
+              label: p.displayName,
+              platform: p,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlatformMenuLabel(
+    AppThemeData theme, {
+    required String label,
+    GamePlatform? platform,
+  }) {
+    return Row(
+      children: [
+        if (platform != null) ...[
+          PlatformIcon(platform: platform, color: theme.textPrimary, size: 16),
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: theme.textPrimary),
           ),
         ),
       ],
@@ -301,12 +331,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       dropdownColor: theme.surface,
       isExpanded: true,
       decoration: InputDecoration(
-        filled: true,
-        fillColor: theme.inputBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          borderSide: BorderSide(color: theme.border),
-        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       ),
       items: GameSortMode.values
           .map(
@@ -314,11 +340,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
               value: mode,
               child: Row(
                 children: [
-                  Icon(
-                    _sortIconFor(mode),
-                    color: theme.textSecondary,
-                    size: 18,
-                  ),
+                  Icon(_sortIconFor(mode), color: theme.textPrimary, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -349,7 +371,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       bool showDlcOnly,
       bool showUsedOnly,
       bool showNoPicturesOnly,
-    }) state,
+    })
+    state,
   ) {
     final filterCount =
         state.tagFilters.length +
@@ -358,40 +381,58 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
         (state.showUsedOnly ? 1 : 0) +
         (state.showNoPicturesOnly ? 1 : 0);
     final hasActiveFilters = filterCount > 0;
-    final isActive = _showTagsPanel || hasActiveFilters;
+    final isActive = _showTagsPanel;
+    final iconColor = (isActive || hasActiveFilters)
+        ? theme.accent
+        : theme.textPrimary;
 
-    return GestureDetector(
-      onTap: () => setState(() => _showTagsPanel = !_showTagsPanel),
-      onSecondaryTapUp: (details) => _showFiltersContextMenu(
-        context,
-        details.globalPosition,
-        theme,
-        state,
-      ),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding: theme.controlPadding,
-          decoration: BoxDecoration(
-            color: isActive ? theme.accent : theme.inputBackground,
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            border: Border.all(color: isActive ? theme.accent : theme.border),
+    return ClipRect(
+      child: GestureDetector(
+        onSecondaryTapUp: (details) => _showFiltersContextMenu(
+          context,
+          details.globalPosition,
+          theme,
+          state,
+        ),
+        child: TextButton.icon(
+          onPressed: () => setState(() => _showTagsPanel = !_showTagsPanel),
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (isActive) {
+                return theme.accent.withValues(alpha: 0.30);
+              }
+              if (states.contains(WidgetState.hovered)) {
+                return theme.navItemHover;
+              }
+              return Colors.transparent;
+            }),
+            overlayColor: WidgetStatePropertyAll(
+              theme.accent.withValues(alpha: 0.16),
+            ),
+            foregroundColor: WidgetStatePropertyAll(theme.textPrimary),
+            iconColor: WidgetStatePropertyAll(iconColor),
+            iconSize: const WidgetStatePropertyAll(18),
+            visualDensity: VisualDensity.compact,
           ),
-          child: Row(
+          icon: const Icon(Icons.tune),
+          // Animate only the count suffix so the button width tracks its
+          // label naturally — no manual measurement needed.
+          label: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.tune,
-                color: isActive ? theme.primaryButtonText : theme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                hasActiveFilters ? 'Filters ($filterCount)' : 'Filters',
-                style: TextStyle(
-                  color: isActive
-                      ? theme.primaryButtonText
-                      : theme.textSecondary,
+              const Text('Filters'),
+              ClipRect(
+                child: AnimatedSize(
+                  duration: kFastAnimation,
+                  curve: Curves.easeInOutCubic,
+                  child: hasActiveFilters
+                      ? Text(
+                          ' ($filterCount)',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
             ],
@@ -415,8 +456,12 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       bool showDlcOnly,
       bool showUsedOnly,
       bool showNoPicturesOnly,
-    }) state,
-  ) {
+    })
+    state, {
+    required bool isNarrow,
+    required String? platformFilter,
+    required GameSortMode sortMode,
+  }) {
     final tagFilters = state.tagFilters;
     // Filter tags by search query
     final filteredTags = _tagSearchQuery.isEmpty
@@ -433,14 +478,83 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.05),
+        color: theme.accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.6)),
+        border: Border.all(color: theme.accent.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Filter option chips row (top)
+          // Narrow layout: platform and sort filters at top
+          if (isNarrow) ...[
+            Row(
+              children: [
+                Expanded(child: _buildPlatformDropdown(theme, platformFilter)),
+                const SizedBox(width: 8),
+                Expanded(child: _buildSortDropdown(theme, sortMode)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Divider(color: theme.border.withValues(alpha: 0.3), height: 1),
+            const SizedBox(height: 10),
+          ],
+
+          // Search bar + clear button
+          Row(
+            children: [
+              Expanded(
+                child: AppSearchField(
+                  theme: theme,
+                  backgroundColor: theme.navBackground,
+                  hintText: 'Search tags...',
+                  onChanged: (value) => setState(() => _tagSearchQuery = value),
+                  showClearButton: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: tagFilters.isNotEmpty
+                    ? () => ref.read(gamesProvider.notifier).setTagFilters([])
+                    : null,
+                icon: const Icon(Icons.label_off, size: 16),
+                label: Text(
+                  tagFilters.isNotEmpty
+                      ? 'Clear Tags (${tagFilters.length})'
+                      : 'Clear Tags',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Scrollable tags using native Wrap for correct row-wrapping
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: filteredTags.map((tag) {
+                  return AppTagChip(
+                    tag: tag,
+                    theme: theme,
+                    isSelected: tagFilters.contains(tag.id),
+                    onTap: () => ref
+                        .read(gamesProvider.notifier)
+                        .toggleTagFilter(tag.id),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Divider(color: theme.border.withValues(alpha: 0.3), height: 1),
+          const SizedBox(height: 10),
+          // Filter option chips row
           Row(
             children: [
               _buildFilterOptionChip(
@@ -480,61 +594,17 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
               ),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: (state.showDeadlineOnly || state.showDlcOnly ||
-                        state.showUsedOnly || state.showNoPicturesOnly)
+                onPressed:
+                    (state.showDeadlineOnly ||
+                        state.showDlcOnly ||
+                        state.showUsedOnly ||
+                        state.showNoPicturesOnly)
                     ? _clearBoolFilters
                     : null,
                 icon: const Icon(Icons.filter_list_off, size: 16),
                 label: const Text('Clear Options'),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Divider(color: theme.border.withValues(alpha: 0.3), height: 1),
-          const SizedBox(height: 10),
-          // Search bar + clear button
-          Row(
-            children: [
-              Expanded(
-                child: AppSearchField(
-                  theme: theme,
-                  hintText: 'Search tags...',
-                  onChanged: (value) => setState(() => _tagSearchQuery = value),
-                  showClearButton: false,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: tagFilters.isNotEmpty
-                    ? () => ref.read(gamesProvider.notifier).setTagFilters([])
-                    : null,
-                icon: const Icon(Icons.label_off, size: 16),
-                label: Text(
-                  tagFilters.isNotEmpty
-                      ? 'Clear Tags (${tagFilters.length})'
-                      : 'Clear Tags',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-
-          // Scrollable tags using native Wrap for correct row-wrapping
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 120),
-            child: SingleChildScrollView(
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: filteredTags.map((tag) {
-                  return _buildFilterTagChip(theme, tag, tagFilters);
-                }).toList(),
-              ),
-            ),
           ),
         ],
       ),
@@ -565,7 +635,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       bool showDlcOnly,
       bool showUsedOnly,
       bool showNoPicturesOnly,
-    }) state,
+    })
+    state,
   ) {
     final hasTagFilters = state.tagFilters.isNotEmpty;
     final hasBoolFilters =
@@ -669,7 +740,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
     required VoidCallback onTap,
   }) {
     final baseColor = theme.accent;
-    final bg = isActive ? baseColor.withValues(alpha: 0.35) : Colors.transparent;
+    final bg = isActive
+        ? baseColor.withValues(alpha: 0.35)
+        : Colors.transparent;
     final borderColor = isActive
         ? baseColor.withValues(alpha: 0.5)
         : baseColor.withValues(alpha: 0.0);
@@ -683,7 +756,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
             border: Border.all(color: borderColor),
           ),
           child: Row(
@@ -697,64 +770,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Builds a single tag chip matching the tag management section styling.
-  Widget _buildFilterTagChip(
-    AppThemeData theme,
-    Tag tag,
-    List<int> tagFilters,
-  ) {
-    final isSelected = tagFilters.contains(tag.id);
-    final isSteam = tag.isSteamTag;
-    final baseColor = isSteam ? theme.accent : theme.primary;
-
-    // Match tag management chip styling from tags_section.dart _TagChip
-    final bg = isSelected
-        ? baseColor.withValues(alpha: 0.35)
-        : Colors.transparent;
-    final borderColor = isSelected
-        ? baseColor.withValues(alpha: 0.5)
-        : baseColor.withValues(alpha: 0.0);
-    final dotColor = isSelected ? baseColor : baseColor.withValues(alpha: 0.4);
-
-    return GestureDetector(
-      onTap: () => ref.read(gamesProvider.notifier).toggleTagFilter(tag.id),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Colored dot indicator (same as tag management)
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                tag.name,
                 style: TextStyle(
                   color: theme.textPrimary,
                   fontSize: 13,

@@ -14,7 +14,7 @@ import 'settings_providers.dart';
 /// The top-level navigation destinations in the app.
 enum NavItem {
   home('Library', Icons.home, Icons.home_outlined),
-  addGames('Add Games', Icons.add_circle, Icons.add_circle_outline),
+  addGames('New', Icons.add_circle, Icons.add_circle_outline),
   updates('Updates', Icons.update, Icons.update_outlined),
   settings('Settings', Icons.settings, Icons.settings_outlined);
 

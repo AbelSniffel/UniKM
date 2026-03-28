@@ -1,12 +1,14 @@
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import 'hover_builder.dart';
 
 /// A unified preview card widget used in settings (e.g., ThemeCard, GradientEffectPreview)
-class HoverPreviewCard extends StatelessWidget {
+class HoverPreviewCard extends StatefulWidget {
   const HoverPreviewCard({
     super.key,
     required this.name,
@@ -15,10 +17,12 @@ class HoverPreviewCard extends StatelessWidget {
     required this.backgroundBuilder,
     this.isCustom = false,
     this.onTap,
+    this.onDoubleTap,
     this.onEdit,
     this.onDelete,
     this.onSecondaryTapDown,
     this.icon,
+    this.overlayWidget,
   });
 
   final String name;
@@ -30,6 +34,7 @@ class HoverPreviewCard extends StatelessWidget {
   // Custom theme specific features
   final bool isCustom;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final void Function(TapDownDetails)? onSecondaryTapDown;
@@ -37,51 +42,106 @@ class HoverPreviewCard extends StatelessWidget {
   // Background icon features
   final IconData? icon;
 
+  /// Optional interactive widget placed at the bottom-right corner of the card.
+  /// Receives pointer events before the card's [onTap], so it remains fully
+  /// interactive without triggering the card selection.
+  final Widget? overlayWidget;
+
+  @override
+  State<HoverPreviewCard> createState() => _HoverPreviewCardState();
+}
+
+class _HoverPreviewCardState extends State<HoverPreviewCard> {
+  bool _suppressAnimation = false;
+  bool _lastTickerEnabled = true;
+
+  void _triggerImmediateTap() {
+    widget.onTap?.call();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (tickerEnabled && !_lastTickerEnabled) {
+      // Page just became visible again — snap to the current visual state
+      // instantly (avoids animating the selection border in), then re-enable
+      // animations the following frame so hover transitions work correctly.
+      _suppressAnimation = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _suppressAnimation = false);
+      });
+    }
+    _lastTickerEnabled = tickerEnabled;
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final useImmediateTap = widget.onTap != null && widget.onDoubleTap != null;
+
     return HoverBuilder(
       builder: (context, isHovered) {
-        final borderWidth = (isSelected || isHovered) ? 2.5 : 0.0;
-        final borderColor = isSelected
-            ? theme.accent
+        final animationDuration = _suppressAnimation
+            ? Duration.zero
+            : kVeryFastAnimation;
+        final borderWidth = (widget.isSelected || isHovered) ? 2.5 : 0.0;
+        final borderColor = widget.isSelected
+            ? widget.theme.accent
             : isHovered
-            ? theme.accent.withValues(alpha: 0.6)
-            : theme.border.withValues(alpha: 0.1);
+            ? widget.theme.accent.withValues(alpha: 0.6)
+            : widget.theme.border.withValues(alpha: 0.1);
 
-        final innerRadius = theme.cornerRadius > borderWidth
-            ? theme.cornerRadius - borderWidth
+        final innerRadius = widget.theme.cornerRadius > borderWidth
+            ? widget.theme.cornerRadius - borderWidth
             : 0.0;
 
-        return InkWell(
-          onTap: onTap,
-          onSecondaryTapDown: onSecondaryTapDown,
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 75),
+        return Listener(
+          // When both onTap and onDoubleTap are provided, use the raw pointer-down
+          // event for immediate selection so there is no gesture-arena delay caused
+          // by the DoubleTapGestureRecognizer competing with the TapGestureRecognizer.
+          onPointerDown: useImmediateTap
+              ? (event) {
+                  if (event.buttons & kPrimaryMouseButton != 0) {
+                    _triggerImmediateTap();
+                  }
+                }
+              : null,
+          child: InkWell(
+            onTap: useImmediateTap ? () {} : widget.onTap,
+            onDoubleTap: widget.onDoubleTap,
+            onSecondaryTapDown: widget.onSecondaryTapDown,
+            borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
+            child: AnimatedContainer(
+            duration: animationDuration,
             width: 120,
             height: 64,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
+              borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
               border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: isSelected || isHovered
-                  ? [BoxShadow(color: theme.accent, blurRadius: 3)]
+              boxShadow: widget.isSelected || isHovered
+                  ? [BoxShadow(color: widget.theme.accent, blurRadius: 3)]
                   : null,
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(innerRadius),
               child: Stack(
                 children: [
-                  backgroundBuilder(context, innerRadius),
+                  widget.backgroundBuilder(context, innerRadius),
 
-                  if (icon != null)
+                  if (widget.icon != null)
                     // Subtle large background icon for depth
                     Positioned(
                       right: 0,
                       bottom: 0,
                       child: Icon(
-                        icon,
+                        widget.icon,
                         size: 45,
-                        color: theme.surface.withValues(alpha: 0.25),
+                        color: widget.theme.surface.withValues(alpha: 0.25),
                       ),
                     ),
 
@@ -97,10 +157,10 @@ class HoverPreviewCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
+                        borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
                       ),
                       child: Text(
-                        name,
+                        widget.name,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -112,31 +172,41 @@ class HoverPreviewCard extends StatelessWidget {
                   ),
 
                   // Hover controls for custom themes
-                  if (isCustom && isHovered)
+                  if (widget.isCustom && isHovered)
                     Positioned(
                       bottom: 4,
                       right: 4,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (onEdit != null)
-                            _buildSmallButton(Icons.edit, onEdit!),
-                          if (onDelete != null) ...[
+                          if (widget.onEdit != null)
+                            _buildSmallButton(Icons.edit, widget.onEdit!),
+                          if (widget.onDelete != null) ...[
                             const SizedBox(width: 4),
                             _buildSmallButton(
                               Icons.delete,
-                              onDelete!,
+                              widget.onDelete!,
                               color: Colors.redAccent,
                             ),
                           ],
                         ],
                       ),
                     ),
+
+                  // Interactive overlay — rendered last so its gesture
+                  // recognizers win over the parent InkWell.
+                  if (widget.overlayWidget != null)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: widget.overlayWidget!,
+                    ),
                 ],
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }
@@ -148,7 +218,7 @@ class HoverPreviewCard extends StatelessWidget {
   }) {
     return Material(
       color: Colors.black.withValues(alpha: 0.6),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
+      borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onBtnTap,

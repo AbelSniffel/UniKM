@@ -77,6 +77,9 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       SettingsKeys.navBarCenterButtons:
           _prefs.getBool(SettingsKeys.navBarCenterButtons) ??
           DefaultSettings.navBarCenterButtons,
+        SettingsKeys.settingsSectionPanelCollapsed:
+          _prefs.getBool(SettingsKeys.settingsSectionPanelCollapsed) ??
+          DefaultSettings.settingsSectionPanelCollapsed,
 
       // Animations
       SettingsKeys.gradientAnimation: GradientAnimation.values.firstWhere(
@@ -116,11 +119,17 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
                 DefaultSettings.gameSortMode.name),
         orElse: () => DefaultSettings.gameSortMode,
       ),
+        SettingsKeys.viewedNewGameIds:
+          _prefs.getStringList(SettingsKeys.viewedNewGameIds) ??
+          const <String>[],
 
       // Game Card Visual
       SettingsKeys.showTitleChip:
           _prefs.getBool(SettingsKeys.showTitleChip) ??
           DefaultSettings.showTitleChip,
+      SettingsKeys.showTitleOnNoPicture:
+          _prefs.getBool(SettingsKeys.showTitleOnNoPicture) ??
+          DefaultSettings.showTitleOnNoPicture,
       SettingsKeys.showPlatformChip:
           _prefs.getBool(SettingsKeys.showPlatformChip) ??
           DefaultSettings.showPlatformChip,
@@ -385,13 +394,43 @@ final swapGradientColorsProvider = Provider<bool>((ref) {
   );
 });
 
-final selectionBarCollapsedProvider = Provider<bool>((ref) {
-  return ref.watch(
+final viewedNewGameIdsProvider = Provider<Set<int>>((ref) {
+  final rawIds = ref.watch(
     settingsProvider.select(
-      (s) => (s[SettingsKeys.selectionBarCollapsed] as bool?) ?? false,
+      (s) => (s[SettingsKeys.viewedNewGameIds] as List<String>?) ?? const [],
     ),
   );
+  return rawIds.map(int.tryParse).whereType<int>().toSet();
 });
+
+Future<void> markGameAsViewed(WidgetRef ref, int gameId) {
+  return markGamesAsViewed(ref, <int>[gameId]);
+}
+
+Future<void> markGamesAsViewed(WidgetRef ref, Iterable<int> gameIds) async {
+  final requestedIds = gameIds
+      .where((id) => id > 0)
+      .map((id) => id.toString())
+      .toSet();
+  if (requestedIds.isEmpty) {
+    return;
+  }
+
+  final currentIds = ref.read(
+    settingsProvider.select(
+      (s) => (s[SettingsKeys.viewedNewGameIds] as List<String>?) ?? const [],
+    ),
+  );
+  final mergedSet = {...currentIds, ...requestedIds};
+  if (mergedSet.length == currentIds.length) {
+    return;
+  }
+
+  final merged = mergedSet.toList()..sort();
+  await ref
+      .read(settingsProvider.notifier)
+      .setSetting(SettingsKeys.viewedNewGameIds, merged);
+}
 
 final legacyDefaultTagsCleanupDoneProvider = Provider<bool>((ref) {
   return ref.watch(

@@ -71,6 +71,7 @@ class _HoverBuilderState extends State<HoverBuilder> {
       cursor: widget.cursor,
       onEnter: widget.enabled ? _onEnter : null,
       onExit: widget.enabled ? _onExit : null,
+      opaque: false,
       child: widget.builder(context, _isHovered && widget.enabled),
     );
   }
@@ -152,6 +153,7 @@ class _HoverPressBuilderState extends State<HoverPressBuilder> {
       cursor: widget.enabled ? widget.cursor : SystemMouseCursors.basic,
       onEnter: widget.enabled ? _onEnter : null,
       onExit: widget.enabled ? _onExit : null,
+      opaque: false,
       child: GestureDetector(
         onTap: widget.enabled ? widget.onTap : null,
         onTapDown: widget.enabled ? _onTapDown : null,

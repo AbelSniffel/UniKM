@@ -29,28 +29,31 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return HoverPressBuilder(
-      onTap: _handleTap,
-      builder: (context, isHovered, isPressed) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          // Special case: view-mode toggle should not show a "selected"
-          // background — treat it like a neutral toggle and only show hover.
-          color: isHovered ? widget.theme.navItemHover : widget.theme.navItemHover.withValues(alpha: 0),
-          borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
-        ),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          switchInCurve: Curves.easeInOut,
-          switchOutCurve: Curves.easeInOut,
-          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: ScaleTransition(scale: anim, child: child)),
-          child: Icon(
-            widget.isGridView ? Icons.apps : Icons.view_list,
-            key: ValueKey<bool>(widget.isGridView),
-            color: widget.theme.accent,
-            size: 20,
+    return Tooltip(
+      message: widget.isGridView ? 'Switch to list view' : 'Switch to grid view',
+      child: HoverPressBuilder(
+        onTap: _handleTap,
+        builder: (context, isHovered, isPressed) => AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            // Special case: view-mode toggle should not show a "selected"
+            // background — treat it like a neutral toggle and only show hover.
+            color: isHovered ? widget.theme.navItemHover : Colors.transparent,
+            borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeInOut,
+            switchOutCurve: Curves.easeInOut,
+            transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: ScaleTransition(scale: anim, child: child)),
+            child: Icon(
+              widget.isGridView ? Icons.apps : Icons.view_list,
+              key: ValueKey<bool>(widget.isGridView),
+              color: widget.theme.accent,
+              size: 20,
+            ),
           ),
         ),
       ),

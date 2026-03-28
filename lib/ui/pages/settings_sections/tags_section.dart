@@ -6,12 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../core/constants/legacy_default_tag_names.dart';
-import '../../../core/database/database.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_utils.dart';
-import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
+import '../../widgets/app_search_field.dart';
+import '../../widgets/app_tag_chip.dart';
+import '../../widgets/dialog_helpers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/section_groupbox.dart';
 import 'settings_common.dart';
@@ -97,44 +98,29 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
       final colorHex = colorToHex(widget.theme.primary);
       await db.getOrCreateTag(name, color: colorHex);
       await ref.read(tagsProvider.notifier).refresh();
-      await persistEncryptedDbIfNeeded(ref);
+      // Clear field and show notification immediately — don't wait for
+      // encryption, which can be slow and would delay visible UI feedback.
       _newTagController.clear();
       NotificationManager.instance.success('Tag "$name" created');
+      await persistEncryptedDbIfNeeded(ref);
     } catch (e) {
       NotificationManager.instance.error('Failed to create tag: $e');
     }
   }
 
   Future<void> _deleteTag(int tagId, String tagName) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: widget.theme.background,
-        title: Text(
-          'Delete Tag',
-          style: TextStyle(color: widget.theme.textPrimary),
-        ),
-        content: Text(
+      theme: widget.theme,
+      title: 'Delete Tag',
+      message:
           'Are you sure you want to delete "$tagName"?\n\nThis will remove the tag from all games.',
-          style: TextStyle(color: widget.theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: widget.theme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Delete',
+      confirmIcon: Icons.delete,
+      destructive: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         final db = ref.read(requireDatabaseProvider);
         await db.deleteTag(tagId);
@@ -157,36 +143,18 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: widget.theme.background,
-        title: Text(
-          'Delete All Custom Tags',
-          style: TextStyle(color: widget.theme.textPrimary),
-        ),
-        content: Text(
-          'Are you sure you want to delete ${customTags.length} custom tags?\n\n'
-          'This will remove them from all games. Steam tags will not be affected.',
-          style: TextStyle(color: widget.theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: widget.theme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete All', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      theme: widget.theme,
+      title: 'Delete All Custom Tags',
+      message:
+          'Are you sure you want to delete ${customTags.length} custom tags?\n\nThis will remove them from all games. Steam tags will not be affected.',
+      confirmLabel: 'Delete All',
+      confirmIcon: Icons.delete_sweep,
+      destructive: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         final db = ref.read(requireDatabaseProvider);
         for (final tag in customTags) {
@@ -210,37 +178,18 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: widget.theme.background,
-        title: Text(
-          'One-time Cleanup',
-          style: TextStyle(color: widget.theme.textPrimary),
-        ),
-        content: Text(
-          'Remove $legacyCustomCount old default tags (non-Steam)?\n\n'
-          'They will also be removed from any games.\n'
-          'This button disappears after running once.',
-          style: TextStyle(color: widget.theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: widget.theme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Remove', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      theme: widget.theme,
+      title: 'One-time Cleanup',
+      message:
+          'Remove $legacyCustomCount old default tags (non-Steam)?\n\nThey will also be removed from any games.\nThis button disappears after running once.',
+      confirmLabel: 'Remove',
+      confirmIcon: Icons.delete_forever,
+      destructive: true,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       final deletedCount = await ref
@@ -264,36 +213,18 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
   }
 
   Future<void> _clearUnusedNonUserTags() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: widget.theme.background,
-        title: Text(
-          'Clear Unused Tags',
-          style: TextStyle(color: widget.theme.textPrimary),
-        ),
-        content: Text(
-          'Delete unused Steam tags?\n\n'
-          'Unused custom (user-made) tags will be kept.',
-          style: TextStyle(color: widget.theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: widget.theme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Clear', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      theme: widget.theme,
+      title: 'Clear Unused Tags',
+      message:
+          'Delete unused Steam tags?\n\nUnused custom (user-made) tags will be kept.',
+      confirmLabel: 'Clear',
+      confirmIcon: Icons.delete_sweep,
+      destructive: true,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       final deletedCount = await ref
@@ -345,7 +276,10 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           group: TagsSection.maintenanceSearchGroup,
         );
 
-    if (isSearching && !showCustomTags && !showSteamTags && !showTagMaintenance) {
+    if (isSearching &&
+        !showCustomTags &&
+        !showSteamTags &&
+        !showTagMaintenance) {
       return const SizedBox.shrink();
     }
 
@@ -356,7 +290,8 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
         SectionGroupEntry(
           visible: showCustomTags,
           builder: (position, isAlternate) => SectionGroupBox(
-            title: '${TagsSection.customTagsSearchGroup.title} (${customTags.length})',
+            title:
+                '${TagsSection.customTagsSearchGroup.title} (${customTags.length})',
             theme: widget.theme,
             titleIcon: Icons.label,
             searchQuery: widget.searchQuery,
@@ -364,95 +299,90 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
             groupPosition: position,
             alternateBackground: isAlternate,
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _newTagController,
-                      style: TextStyle(color: widget.theme.textPrimary),
-                      decoration: InputDecoration(
-                        hintText: TagsSection.customTagsInputSpec.label,
-                        hintStyle: TextStyle(color: widget.theme.textHint),
-                        filled: true,
-                        fillColor: widget.theme.inputBackground,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            widget.theme.cornerRadius,
-                          ),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onSubmitted: (_) => _createTag(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _createTag,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 18,
-                      ),
-                    ),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Create'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (customTags.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    'No custom tags created yet',
-                    style: TextStyle(color: widget.theme.textHint),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else ...[
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: customTags
-                      .map(
-                        (tag) => _TagChip(
-                          tag: tag,
-                          theme: widget.theme,
-                          onDelete: () => _deleteTag(tag.id, tag.name),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 16),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Row(
                   children: [
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: _deleteAllCustomTags,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
+                    Expanded(
+                      child: AppSearchField(
+                        theme: widget.theme,
+                        controller: _newTagController,
+                        hintText: TagsSection.customTagsInputSpec.label,
+                        prefixIcon: Icons.label_outline,
+                        onChanged: (_) {},
+                        onSubmitted: (_) => _createTag(),
                       ),
-                      icon: const Icon(Icons.delete_sweep, size: 18),
-                      label: const Text('Delete All Custom Tags'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: _createTag,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create'),
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                if (customTags.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      'No custom tags created yet',
+                      style: TextStyle(color: widget.theme.textHint),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else ...[
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxH = constraints.maxHeight.isFinite
+                          ? constraints.maxHeight
+                          : 300.0;
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxH),
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: customTags
+                                .map(
+                                  (tag) => AppTagChip(
+                                    tag: tag,
+                                    theme: widget.theme,
+                                    isSelected: true,
+                                    onDelete: () => _deleteTag(tag.id, tag.name),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _deleteAllCustomTags,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                        icon: const Icon(Icons.delete_sweep, size: 18),
+                        label: const Text('Delete All Custom Tags'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
           ),
         ),
         // Steam tags section
         SectionGroupEntry(
           visible: showSteamTags,
           builder: (position, isAlternate) => SectionGroupBox(
-            title: '${TagsSection.steamTagsSearchGroup.title} (${steamTags.length})',
+            title:
+                '${TagsSection.steamTagsSearchGroup.title} (${steamTags.length})',
             theme: widget.theme,
             titleIcon: FontAwesomeIcons.steam,
             searchQuery: widget.searchQuery,
@@ -460,47 +390,58 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
             groupPosition: position,
             alternateBackground: isAlternate,
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (steamTags.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    '${TagsSection.steamTagsInfoSpec.label}\n\n${TagsSection.steamTagsInfoSpec.description}',
-                    style: TextStyle(color: widget.theme.textHint),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: steamTags
-                      .map(
-                        (tag) => _TagChip(
-                          tag: tag,
-                          theme: widget.theme,
-                          showDelete: false,
-                        ),
-                      )
-                      .toList(),
-                ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _clearUnusedNonUserTags,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (steamTags.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      '${TagsSection.steamTagsInfoSpec.label}\n\n${TagsSection.steamTagsInfoSpec.description}',
+                      style: TextStyle(color: widget.theme.textHint),
+                      textAlign: TextAlign.center,
                     ),
-                    icon: const Icon(Icons.delete_sweep, size: 18),
-                    label: const Text('Clear unused Steam tags'),
+                  )
+                else ...[
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxH = constraints.maxHeight.isFinite
+                          ? constraints.maxHeight
+                          : 200.0;
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxH),
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: steamTags
+                                .map(
+                                  (tag) => AppTagChip(
+                                    tag: tag,
+                                    theme: widget.theme,
+                                    isSelected: true,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _clearUnusedNonUserTags,
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        icon: const Icon(Icons.delete_sweep, size: 18),
+                        label: const Text('Clear unused Steam tags'),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         ),
         SectionGroupEntry(
@@ -542,68 +483,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Tag chip widget
-class _TagChip extends StatelessWidget {
-  const _TagChip({
-    required this.tag,
-    required this.theme,
-    this.onDelete,
-    this.showDelete = true,
-  });
-
-  final dynamic tag;
-  final AppThemeData theme;
-  final VoidCallback? onDelete;
-  final bool showDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSteam =
-        (tag is Tag && tag.isSteamTag) || (tag is TagEntry && tag.isSteamTag);
-
-    final baseColor = isSteam ? theme.accent : theme.primary;
-    final displayBg = baseColor.withValues(alpha: 0.2);
-    final displayBorder = baseColor.withValues(alpha: 0.5);
-    final dotColor = baseColor;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: displayBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: displayBorder),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            tag.name,
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          if (showDelete && onDelete != null) ...[
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: onDelete,
-              borderRadius: BorderRadius.circular(12),
-              child: Icon(Icons.close, size: 14, color: theme.textSecondary),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

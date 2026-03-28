@@ -35,7 +35,74 @@ class DevWindowOverlay extends ConsumerStatefulWidget {
 }
 
 class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
+  static NotificationHandle? _fetchPreviewHandle;
+  static int _fetchPreviewStep = 0;
+
   Offset position = const Offset(100, 100);
+
+  static const List<({String title, String message, double progress})>
+  _fetchPreviewStates = [
+    (title: 'Portal 2', message: 'Fetching Steam data (1/4)', progress: 0.18),
+    (
+      title: 'Half-Life 2',
+      message: 'Fetching Steam data (2/4)',
+      progress: 0.42,
+    ),
+    (
+      title: 'Left 4 Dead 2',
+      message: 'Fetching Steam data (3/4)',
+      progress: 0.71,
+    ),
+    (
+      title: 'Team Fortress 2',
+      message: 'Fetching Steam data (4/4)',
+      progress: 0.94,
+    ),
+  ];
+
+  bool get _hasActiveFetchPreview {
+    final handle = _fetchPreviewHandle;
+    if (handle == null) return false;
+    return NotificationManager.instance.currentNotifications.any(
+      (notification) => notification.id == handle.id,
+    );
+  }
+
+  void _showOrAdvanceFetchPreview() {
+    final nextState =
+        _fetchPreviewStates[_fetchPreviewStep % _fetchPreviewStates.length];
+
+    if (!_hasActiveFetchPreview) {
+      _fetchPreviewHandle = NotificationManager.instance.beginTask(
+        nextState.message,
+        type: NotificationType.steam,
+        title: nextState.title,
+        progress: nextState.progress,
+        actionLabel: 'Cancel',
+        onAction: _clearFetchPreview,
+      );
+    } else {
+      _fetchPreviewHandle!.update(
+        message: nextState.message,
+        title: nextState.title,
+        progress: nextState.progress,
+        actionLabel: 'Cancel',
+        onAction: _clearFetchPreview,
+      );
+    }
+
+    _fetchPreviewStep = (_fetchPreviewStep + 1) % _fetchPreviewStates.length;
+    setState(() {});
+  }
+
+  void _clearFetchPreview() {
+    _fetchPreviewHandle?.dismiss();
+    _fetchPreviewHandle = null;
+    _fetchPreviewStep = 0;
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +124,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         child: Container(
           width: 380,
           decoration: BoxDecoration(
-            color: theme.surface,
+            color: theme.surface.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(theme.cornerRadius),
             border: Border.all(color: theme.accent, width: 1.5),
           ),
@@ -74,8 +141,10 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: theme.accent.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(theme.cornerRadius)),
+                    color: theme.accent.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(theme.cornerRadius - 5),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -90,10 +159,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                         ),
                       ),
                       const Spacer(),
-                      _CloseButton(
-                        onPressed: widget.onClose,
-                        theme: theme,
-                      ),
+                      _CloseButton(onPressed: widget.onClose, theme: theme),
                     ],
                   ),
                 ),
@@ -101,7 +167,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
 
               //  Body
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -210,7 +276,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                       children: [
                         Expanded(
                           child: _DevButton(
-                            label: 'In-App Toast',
+                            label: 'In-App Notification',
                             icon: Icons.message_outlined,
                             theme: theme,
                             onPressed: () => NotificationManager.instance.info(
@@ -239,6 +305,21 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                       theme: theme,
                       onPressed: () => DeadlineNotificationService.instance
                           .triggerAndRestart(ref),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DevButton(
+                            label: _hasActiveFetchPreview
+                                ? 'Advance Fetch Preview'
+                                : 'Show Fetch Preview',
+                            icon: Icons.cloud_download_outlined,
+                            theme: theme,
+                            onPressed: _showOrAdvanceFetchPreview,
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 12),
@@ -328,20 +409,10 @@ class _DevButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = theme.accent as Color;
     return SizedBox(
       height: 32,
       child: OutlinedButton.icon(
         onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          side: BorderSide(color: effectiveColor.withValues(alpha: 0.4)),
-          foregroundColor: effectiveColor,
-          backgroundColor: effectiveColor.withValues(alpha: 0.07),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(theme.cornerRadius as double),
-          ),
-        ),
         icon: Icon(icon, size: 14),
         label: Text(label, style: const TextStyle(fontSize: 12)),
       ),
@@ -371,9 +442,6 @@ class _CompactDevButton extends StatelessWidget {
         side: BorderSide(color: effectiveColor.withValues(alpha: 0.35)),
         foregroundColor: effectiveColor,
         backgroundColor: effectiveColor.withValues(alpha: 0.05),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius as double),
-        ),
         textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
       ),
       child: Text(label),
@@ -419,11 +487,7 @@ class _CloseButtonState extends State<_CloseButton> {
             color: bgColor,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            Icons.close,
-            size: 18,
-            color: widget.theme.textPrimary,
-          ),
+          child: Icon(Icons.close, size: 18, color: widget.theme.textPrimary),
         ),
       ),
     );

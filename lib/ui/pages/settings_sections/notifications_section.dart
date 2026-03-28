@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
-import '../../widgets/notification_system.dart';
 import '../../widgets/toggle_switch.dart';
 import 'settings_common.dart';
 
@@ -49,16 +48,10 @@ class NotificationsSection extends ConsumerWidget {
     settings: [deadlineRemindersSpec, updateNotificationsSpec],
   );
 
-  static const SettingsSearchGroup testSearchGroup = SettingsSearchGroup(
-    title: 'Test Notification',
-    extraTexts: ['This is a test notification!'],
-  );
-
   static List<String> get sectionSearchTexts => [
     'Notification Settings',
     ...displaySearchGroup.indexTexts,
     ...typesSearchGroup.indexTexts,
-    ...testSearchGroup.indexTexts,
   ];
 
   @override
@@ -77,13 +70,8 @@ class NotificationsSection extends ConsumerWidget {
       matchesSearch: matchesSearch,
       group: typesSearchGroup,
     );
-    final showTest = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: testSearchGroup,
-    );
 
-    if (isSearching && !showDisplay && !showTypes && !showTest) {
+    if (isSearching && !showDisplay && !showTypes) {
       return const SizedBox.shrink();
     }
 
@@ -100,37 +88,19 @@ class NotificationsSection extends ConsumerWidget {
             matchesSearch: matchesSearch,
             groupPosition: position,
             isAlternate: isAlternate,
-            extraMatch: showTest ? () => true : null,
             child: Column(
               children: [
-                // Show the enable toggle and the Test Notification button on the same row
                 SettingRow(
                   theme: theme,
                   label: enableNotificationsSpec.label,
                   description: enableNotificationsSpec.description,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (showTest) ...[
-                        OutlinedButton.icon(
-                          onPressed: notifications.enabled
-                              ? () => NotificationManager.instance.info(
-                                  'This is a test notification!',
-                                )
-                              : null,
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Test Notification'),
-                        ),
-                      ],
-                      AppToggleSwitch(
-                        value: notifications.enabled,
-                        onChanged: (value) => settingsNotifier.setSetting(
-                          SettingsKeys.notificationsEnabled,
-                          value,
-                        ),
-                        theme: theme,
-                      ),
-                    ],
+                  child: AppToggleSwitch(
+                    value: notifications.enabled,
+                    onChanged: (value) => settingsNotifier.setSetting(
+                      SettingsKeys.notificationsEnabled,
+                      value,
+                    ),
+                    theme: theme,
                   ),
                 ),
               ],

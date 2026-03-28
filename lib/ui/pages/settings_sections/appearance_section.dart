@@ -12,9 +12,11 @@ import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/animated_gradient_bar.dart';
+import '../../widgets/dialog_helpers.dart';
 import '../../widgets/hover_preview_card.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../widgets/toggle_switch.dart';
 import 'settings_common.dart';
 import 'settings_theme_editor.dart';
 
@@ -66,9 +68,14 @@ class AppearanceSection extends ConsumerWidget {
   static const SettingTextSpec gradientIntroSpec = SettingTextSpec(
     label: 'Select an animation for the gradient bar',
   );
+  static const SettingTextSpec toggleStyleSpec = SettingTextSpec(
+    label: 'Toggle Style',
+    description: 'Choose how toggle switches appear throughout the app',
+  );
 
   static const SettingsSearchGroup themeSearchGroup = SettingsSearchGroup(
     title: 'Theme',
+    description: 'Select a theme for the application',
     settings: [themeIntroSpec],
     extraTexts: ['Import Theme', 'Export Theme', 'Create'],
   );
@@ -81,10 +88,17 @@ class AppearanceSection extends ConsumerWidget {
 
   static SettingsSearchGroup get gradientSearchGroup => SettingsSearchGroup(
     title: 'Gradient Bar Effect',
+    description: gradientIntroSpec.label,
     settings: [gradientIntroSpec, gradientSwapSpec],
     extraTexts: [
       ...GradientAnimation.values.map((effect) => effect.displayName),
     ],
+  );
+
+  static SettingsSearchGroup get toggleSearchGroup => const SettingsSearchGroup(
+    title: 'Toggle Switches',
+    settings: [toggleStyleSpec],
+    extraTexts: ['Regular', 'Dot'],
   );
 
   static List<String> get sectionSearchTexts => [
@@ -92,12 +106,13 @@ class AppearanceSection extends ConsumerWidget {
     ...themeSearchGroup.indexTexts,
     ...navigationSearchGroup.indexTexts,
     ...gradientSearchGroup.indexTexts,
+    ...toggleSearchGroup.indexTexts,
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(customThemesJsonProvider);
-    final appearance = ref.watch(appearanceSettingsProvider);
+    final activeThemeId = ref.watch(themeProvider.select((value) => value.id));
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final navBarPosition = ref.watch(
       appShellSettingsProvider.select((s) => s.navBarPosition),
@@ -132,11 +147,17 @@ class AppearanceSection extends ConsumerWidget {
       matchesSearch: matchesSearch,
       group: gradientSearchGroup,
     );
+    final showToggleSection = shouldShowSettingsGroup(
+      query: searchQuery,
+      matchesSearch: matchesSearch,
+      group: toggleSearchGroup,
+    );
 
     if (isSearching &&
         !showThemeSection &&
         !showNavBarSection &&
-        !showGradientSection) {
+        !showGradientSection &&
+        !showToggleSection) {
       return const SizedBox.shrink();
     }
 
@@ -159,11 +180,6 @@ class AppearanceSection extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  themeIntroSpec.label,
-                  style: TextStyle(color: theme.textSecondary),
-                ),
-                const SizedBox(height: 12),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -172,7 +188,6 @@ class AppearanceSection extends ConsumerWidget {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          barrierDismissible: false,
                           builder: (ctx) => ThemeEditorDialog(theme: theme),
                         );
                       },
@@ -184,7 +199,7 @@ class AppearanceSection extends ConsumerWidget {
                       icon: const Icon(Icons.file_upload_outlined, size: 16),
                       label: const Text('Import Theme'),
                     ),
-                    if (appearance.currentTheme.isNotEmpty)
+                    if (activeThemeId.isNotEmpty)
                       OutlinedButton.icon(
                         onPressed: () {
                           final current = ref.read(themeProvider);
@@ -205,16 +220,13 @@ class AppearanceSection extends ConsumerWidget {
                   children: [
                     // Built-in themes
                     ...builtInThemes.map((themeData) {
-                      final isSelected =
-                          appearance.currentTheme == themeData.id;
+                      final isSelected = activeThemeId == themeData.id;
                       return ThemeCard(
                         themeData: themeData,
                         isSelected: isSelected,
                         isCustom: false,
                         onTap: () {
-                          ref
-                              .read(themeProvider.notifier)
-                              .setThemeById(themeData.id);
+                          ref.read(themeProvider.notifier).setTheme(themeData);
                         },
                         onSecondaryTapDown: (details) => _showThemeContextMenu(
                           context,
@@ -226,17 +238,15 @@ class AppearanceSection extends ConsumerWidget {
                     }),
                     // Custom themes with edit/delete
                     ...customThemes.map((themeData) {
-                      final isSelected =
-                          appearance.currentTheme == themeData.id;
+                      final isSelected = activeThemeId == themeData.id;
                       return ThemeCard(
                         themeData: themeData,
                         isSelected: isSelected,
                         isCustom: true,
                         onTap: () {
-                          ref
-                              .read(themeProvider.notifier)
-                              .setThemeById(themeData.id);
+                          ref.read(themeProvider.notifier).setTheme(themeData);
                         },
+                        onDoubleTap: () => _editCustomTheme(context, ref, themeData),
                         onEdit: () => _editCustomTheme(context, ref, themeData),
                         onDelete: () => _deleteCustomTheme(
                           context,
@@ -256,6 +266,16 @@ class AppearanceSection extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        ),
+        SectionGroupEntry(
+          visible: showToggleSection,
+          builder: (position, isAlternate) => _ToggleStyleSection(
+            theme: theme,
+            searchQuery: searchQuery,
+            isSearchMatch: isSearching,
+            groupPosition: position,
+            isAlternate: isAlternate,
           ),
         ),
         SectionGroupEntry(
@@ -285,7 +305,7 @@ class AppearanceSection extends ConsumerWidget {
                   theme: theme,
                   spec: navPositionSpec,
                   child: SizedBox(
-                    width: 220,
+                    width: 120,
                     child: DropdownButtonFormField<NavBarPosition>(
                       initialValue: navBarPosition,
                       isExpanded: true,
@@ -348,14 +368,13 @@ class AppearanceSection extends ConsumerWidget {
     WidgetRef ref,
     AppThemeData themeData,
   ) {
-    final appearance = ref.read(appearanceSettingsProvider);
-    if (appearance.currentTheme != themeData.id) {
+    final activeThemeId = ref.read(themeProvider).id;
+    if (activeThemeId != themeData.id) {
       ref.read(themeProvider.notifier).setThemeById(themeData.id);
     }
 
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (context) => ThemeEditorDialog(
         theme: ref.read(themeProvider),
         existingTheme: themeData,
@@ -369,29 +388,17 @@ class AppearanceSection extends ConsumerWidget {
     String id,
     String name,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: theme.background,
-        title: Text('Delete Theme', style: TextStyle(color: theme.textPrimary)),
-        content: Text(
-          'Are you sure you want to delete "$name"?',
-          style: TextStyle(color: theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      theme: theme,
+      title: 'Delete Theme',
+      message: 'Are you sure you want to delete "$name"?',
+      confirmLabel: 'Delete',
+      confirmIcon: Icons.delete,
+      destructive: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       await ref.read(themeProvider.notifier).deleteCustomTheme(id);
       NotificationManager.instance.success('Theme "$name" deleted');
     }
@@ -500,6 +507,7 @@ class ThemeCard extends StatelessWidget {
     required this.isSelected,
     required this.isCustom,
     required this.onTap,
+    this.onDoubleTap,
     this.onEdit,
     this.onDelete,
     this.onSecondaryTapDown,
@@ -509,6 +517,7 @@ class ThemeCard extends StatelessWidget {
   final bool isSelected;
   final bool isCustom;
   final VoidCallback onTap;
+  final VoidCallback? onDoubleTap;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final void Function(TapDownDetails)? onSecondaryTapDown;
@@ -521,6 +530,7 @@ class ThemeCard extends StatelessWidget {
       isSelected: isSelected,
       isCustom: isCustom,
       onTap: onTap,
+      onDoubleTap: onDoubleTap,
       onEdit: onEdit,
       onDelete: onDelete,
       onSecondaryTapDown: onSecondaryTapDown,
@@ -545,6 +555,82 @@ class ThemeCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Toggle style selector
+// ---------------------------------------------------------------------------
+
+/// Settings section that lets the user pick between toggle switch styles.
+class _ToggleStyleSection extends ConsumerStatefulWidget {
+  const _ToggleStyleSection({
+    required this.theme,
+    required this.searchQuery,
+    required this.isSearchMatch,
+    this.groupPosition = SectionGroupPosition.only,
+    this.isAlternate = false,
+  });
+
+  final AppThemeData theme;
+  final String searchQuery;
+  final bool isSearchMatch;
+  final SectionGroupPosition groupPosition;
+  final bool isAlternate;
+
+  @override
+  ConsumerState<_ToggleStyleSection> createState() =>
+      _ToggleStyleSectionState();
+}
+
+class _ToggleStyleSectionState extends ConsumerState<_ToggleStyleSection> {
+  /// Shared demo value — toggling either card's switch toggles this state,
+  /// and both preview switches reflect it in real time.
+  bool _demoOn = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentStyle = ref.watch(toggleStyleProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+
+    return SectionGroupBox(
+      title: AppearanceSection.toggleSearchGroup.title,
+      description: AppearanceSection.toggleStyleSpec.description,
+      theme: widget.theme,
+      titleIcon: Icons.toggle_on_outlined,
+      searchQuery: widget.searchQuery,
+      isSearchMatch: widget.isSearchMatch,
+      groupPosition: widget.groupPosition,
+      alternateBackground: widget.isAlternate,
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: ToggleStyle.values.map((style) {
+          return HoverPreviewCard(
+            name: style.displayName,
+            theme: widget.theme,
+            isSelected: style == currentStyle,
+            onTap: () =>
+                settingsNotifier.setSetting(SettingsKeys.toggleStyle, style),
+            backgroundBuilder: (context, _) =>
+                Container(color: widget.theme.surface),
+            overlayWidget: Padding(
+              padding: const EdgeInsets.only(right: 6, bottom: 6),
+              child: AppToggleSwitch(
+                value: _demoOn,
+                onChanged: (v) => setState(() => _demoOn = v),
+                theme: widget.theme,
+                style: style,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gradient animation selector
+// ---------------------------------------------------------------------------
 
 /// Gradient animation effect selector section
 class _GradientAnimationSection extends ConsumerWidget {
@@ -573,6 +659,7 @@ class _GradientAnimationSection extends ConsumerWidget {
 
     return SectionGroupBox(
       title: AppearanceSection.gradientSearchGroup.title,
+      description: AppearanceSection.gradientSearchGroup.description,
       theme: theme,
       titleIcon: Icons.gradient,
       searchQuery: searchQuery,
@@ -582,11 +669,6 @@ class _GradientAnimationSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            AppearanceSection.gradientIntroSpec.label,
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          const SizedBox(height: 12),
           // horizontal layout containing the gradient previews and a
           // dedicated area for the play/pause control.  By putting the
           // button in its own container on the right we "reserve" the space

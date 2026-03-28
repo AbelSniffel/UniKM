@@ -177,15 +177,15 @@ class AppThemeData {
 
   /// Surface color (cards, dialogs)
   Color get surface =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.04);
+      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.08);
 
   /// Surface variant (slightly different surface)
   Color get surfaceVariant =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.08);
+      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.12);
 
   /// Elevated surface (for elevated cards)
   Color get surfaceElevated =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.12);
+      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.16);
 
   /// Border color
   Color get border => isDark
@@ -213,20 +213,28 @@ class AppThemeData {
   /// Primary button pressed
   Color get primaryButtonPressed => blendColors(baseAccent, Colors.black, 0.1);
 
+  /// Primary button background when disabled.
+  ///
+  /// Keep a visible accent tint instead of falling back to Flutter's generic
+  /// grey so disabled actions still feel attached to the active theme.
+  Color get primaryButtonDisabled =>
+      blendColors(baseAccent, surface, isDark ? 0.72 : 0.8);
+
   /// Primary button text
   Color get primaryButtonText => contrastColor(basePrimary);
 
-  /// Secondary button background
-  Color get secondaryButton => surface;
-
-  /// Secondary button hover
-  Color get secondaryButtonHover => surfaceVariant;
+  /// Primary button foreground when disabled.
+  Color get primaryButtonDisabledText =>
+      contrastColor(primaryButtonDisabled).withValues(alpha: 0.78);
 
   /// Accent color (for highlights, links)
   Color get accent => baseAccent;
 
   /// Accent hover
   Color get accentHover => blendColors(baseAccent, Colors.white, 0.15);
+
+  /// Shared tab indicator with a taller silhouette and flared base.
+  Decoration get tabIndicator => FlaredTabIndicator(color: accent);
 
   /// Input field background
   Color get inputBackground => surface;
@@ -245,28 +253,29 @@ class AppThemeData {
       : Colors.black.withValues(alpha: 0.5);
 
   /// Navigation panel background
-  Color get navBackground => blendColors(baseBackground, basePrimary, 0.05);
+  Color get navBackground => blendColors(baseBackground, baseAccent, 0.035);
 
   /// Navigation item hover
-  Color get navItemHover => blendColors(navBackground, baseAccent, 0.1);
+  Color get navItemHover => baseAccent.withValues(alpha: 0.20);
 
   /// Navigation item selected
-  Color get navItemSelected => blendColors(navBackground, baseAccent, 0.2);
+  Color get navItemSelected => baseAccent.withValues(alpha: 0.35);
 
   /// Game card background
   Color get cardBackground => surface;
 
   /// Game card cover placeholder background (no image / loading error)
-  Color get cardCoverPlaceholder => blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.10);
+  Color get cardCoverPlaceholder =>
+      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.10);
 
   /// Game card hover
-  Color get cardHover => surfaceVariant;
+  Color get cardHover => surface;
 
   /// Game card selected
   Color get cardSelected => blendColors(surface, baseAccent, 0.2);
 
   /// Tag chip background
-  Color get tagBackground => surfaceVariant;
+  Color get tagBackground => surface;
 
   // ===========================================================================
   // PRE-COMPUTED LIST CARD GRADIENT COLORS (for performance)
@@ -288,8 +297,13 @@ class AppThemeData {
     final baseBg = tagBackground.withValues(alpha: 1.0);
     final baseBgHsl = HSLColor.fromColor(baseBg);
     const satThreshold = 0.12;
-    final tagChipDefaultColor = baseBgHsl.saturation < satThreshold ? Color.lerp(
-            baseBg,_applySaturation(baseAccent, 1.05).withValues(alpha: 0.95), 0.72,)! : baseBg;
+    final tagChipDefaultColor = baseBgHsl.saturation < satThreshold
+        ? Color.lerp(
+            baseBg,
+            _applySaturation(baseAccent, 1.05).withValues(alpha: 0.95),
+            0.72,
+          )!
+        : baseBg;
 
     return _AppThemeCache(
       listCardDefaultGradient: [
@@ -305,32 +319,7 @@ class AppThemeData {
         basePrimary.withValues(alpha: 0.65),
       ],
 
-      gridCardHoverOverlay: baseAccent.withValues(alpha: 0.7),
-      gridCardSelectedOverlay: baseAccent.withValues(alpha: 0.7),
-
       tagChipDefaultColor: tagChipDefaultColor,
-      gridCardSelectedGradient: LinearGradient(
-        begin: Alignment.bottomLeft,
-        end: Alignment.topRight,
-        colors: [
-          baseAccent.withValues(alpha: 0.95),
-          Colors.transparent,
-          Colors.transparent,
-          basePrimary.withValues(alpha: 0.95),
-        ],
-        stops: const [0.0, 0.45, 0.55, 1.0],
-      ),
-      gridCardHoverGradient: LinearGradient(
-        begin: Alignment.bottomLeft,
-        end: Alignment.topRight,
-        colors: [
-          baseAccent.withValues(alpha: 0.9),
-          Colors.transparent,
-          Colors.transparent,
-          basePrimary.withValues(alpha: 0.9),
-        ],
-        stops: const [0.0, 0.35, 0.65, 1.0],
-      ),
     );
   }
 
@@ -353,24 +342,10 @@ class AppThemeData {
   List<Color> get listCardDefaultGradient =>
       _cachedGradients.listCardDefaultGradient;
 
-  /// Gradient overlay color for grid card hover state — memoized.
-  Color get gridCardHoverOverlay => _cachedGradients.gridCardHoverOverlay;
-
-  /// Gradient overlay color for grid card selected state — memoized.
-  Color get gridCardSelectedOverlay => _cachedGradients.gridCardSelectedOverlay;
-
   /// Default tag chip background color for the theme (no tag-color override).
   /// Pre-computed once per theme via HSL saturation check, same logic as
   /// GameCard._buildTagChip's else-branch.
   Color get tagChipDefaultColor => _cachedGradients.tagChipDefaultColor;
-
-  /// Pre-computed [LinearGradient] for grid card selected overlay.
-  LinearGradient get gridCardSelectedGradient =>
-      _cachedGradients.gridCardSelectedGradient;
-
-  /// Pre-computed [LinearGradient] for grid card hover overlay.
-  LinearGradient get gridCardHoverGradient =>
-      _cachedGradients.gridCardHoverGradient;
 
   /// Status colors
   Color get success => const Color(0xFF28A745);
@@ -436,7 +411,10 @@ class AppThemeData {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryButton,
-          foregroundColor: primaryButtonText, // add shadow for the text to improve contrast
+          foregroundColor:
+              primaryButtonText, // add shadow for the text to improve contrast
+          disabledBackgroundColor: primaryButtonDisabled,
+          disabledForegroundColor: primaryButtonDisabledText,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(cornerRadius),
           ),
@@ -513,12 +491,11 @@ class AppThemeData {
       // Tooltips
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: surfaceElevated,
+          color: surface,
           borderRadius: BorderRadius.circular(cornerRadius),
           border: Border.all(color: border),
         ),
-        textStyle: TextStyle(color: textPrimary),
-      ),
+        textStyle: TextStyle(color: textPrimary),      ),
 
       // Scrollbar
       scrollbarTheme: ScrollbarThemeData(
@@ -530,6 +507,11 @@ class AppThemeData {
         }),
         radius: Radius.circular(scrollbarRadius),
         thickness: WidgetStateProperty.all(8),
+      ),
+
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primary,
+        linearTrackColor: surface,
       ),
 
       // Chips
@@ -584,6 +566,383 @@ class AppThemeData {
   }
 }
 
+/// Custom tab indicator with a slim top and wider, flared base.
+class FlaredTabIndicator extends Decoration {
+  const FlaredTabIndicator({
+    required this.color,
+    this.height = 5,
+    this.topWidthFactor = 0.4,
+    this.baseWidthFactor = 0.5,
+    this.bottomInset = 0,
+  });
+
+  final Color color;
+  final double height;
+  final double topWidthFactor;
+  final double baseWidthFactor;
+  final double bottomInset;
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _FlaredTabIndicatorPainter(this);
+  }
+}
+
+class _FlaredTabIndicatorPainter extends BoxPainter {
+  _FlaredTabIndicatorPainter(this.decoration);
+
+  final FlaredTabIndicator decoration;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null || size.isEmpty) return;
+
+    final rect = offset & size;
+    final maxShapeWidth = (rect.width - 10).clamp(36.0, 112.0);
+    final baseWidth = maxShapeWidth * decoration.baseWidthFactor;
+    final topWidth = maxShapeWidth * decoration.topWidthFactor;
+    final flareDx = (baseWidth - topWidth) / 2;
+
+    final bottom = rect.bottom - decoration.bottomInset;
+    final top = bottom - decoration.height;
+    final centerX = rect.center.dx;
+
+    final topLeft = Offset(centerX - topWidth / 2, top);
+    final topRight = Offset(centerX + topWidth / 2, top);
+    final bottomRight = Offset(centerX + baseWidth / 2, bottom - 1);
+    final bottomLeft = Offset(centerX - baseWidth / 2, bottom - 1);
+
+    final path = Path()
+      ..moveTo(topLeft.dx, topLeft.dy)
+      ..lineTo(topRight.dx, topRight.dy)
+      ..quadraticBezierTo(
+        topRight.dx + flareDx * 0.9,
+        top + decoration.height * 0.52,
+        bottomRight.dx,
+        bottomRight.dy,
+      )
+      ..lineTo(bottomLeft.dx, bottomLeft.dy)
+      ..quadraticBezierTo(
+        topLeft.dx - flareDx * 0.9,
+        top + decoration.height * 0.52,
+        topLeft.dx,
+        topLeft.dy,
+      )
+      ..close();
+
+    final fillPaint = Paint()
+      ..color = decoration.color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    canvas.drawPath(path, fillPaint);
+
+    final rimPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..isAntiAlias = true;
+    canvas.drawLine(topLeft, topRight, rimPaint);
+  }
+}
+
+enum AppNavigationButtonVariant {
+  navigation,
+  settingsSection,
+}
+
+class AppNavigationButton extends StatefulWidget {
+  const AppNavigationButton({
+    super.key,
+    required this.theme,
+    required this.isSelected,
+    required this.isEnabled,
+    required this.isHorizontal,
+    required this.onTap,
+    this.iconData,
+    this.labelText,
+    this.iconBuilder,
+    this.tooltipMessage,
+    this.padding,
+    this.alignment = Alignment.center,
+    this.borderRadiusMultiplier = 1.25,
+    this.selectedBackgroundColor,
+    this.hoverBackgroundColor,
+    this.disabledBackgroundColor,
+    this.minWidth = 45,
+    this.minHeight = 25,
+    this.horizontalSpacing = 8,
+    this.verticalSpacing = 0,
+    this.horizontalMainAxisSize = MainAxisSize.min,
+    this.horizontalMainAxisAlignment = MainAxisAlignment.center,
+    this.duration = const Duration(milliseconds: 1000),
+    this.variant = AppNavigationButtonVariant.navigation,
+    this.labelVisible = true,
+    this.reserveLabelSpace = true,
+    this.labelFadeDuration = Duration.zero,
+    this.labelFadeCurve = Curves.easeOut,
+  });
+
+  final AppThemeData theme;
+  final bool isSelected;
+  final bool isEnabled;
+  final bool isHorizontal;
+  final VoidCallback? onTap;
+  final IconData? iconData;
+  final String? labelText;
+  final Widget Function(BuildContext context, Color color, double size)? iconBuilder;
+  final String? tooltipMessage;
+  final EdgeInsetsGeometry? padding;
+  final AlignmentGeometry alignment;
+  final double borderRadiusMultiplier;
+  final Color? selectedBackgroundColor;
+  final Color? hoverBackgroundColor;
+  final Color? disabledBackgroundColor;
+  final double minWidth;
+  final double minHeight;
+  final double horizontalSpacing;
+  final double verticalSpacing;
+  final MainAxisSize horizontalMainAxisSize;
+  final MainAxisAlignment horizontalMainAxisAlignment;
+  final Duration duration;
+  final AppNavigationButtonVariant variant;
+  final bool labelVisible;
+  final bool reserveLabelSpace;
+  final Duration labelFadeDuration;
+  final Curve labelFadeCurve;
+
+  @override
+  State<AppNavigationButton> createState() => _AppNavigationButtonState();
+}
+
+class _AppNavigationButtonState extends State<AppNavigationButton> {
+  bool _hovered = false;
+
+  static const double _iconSize = 24;
+
+  Color get _iconColor => !widget.isEnabled
+      ? widget.theme.textSecondary.withValues(alpha: 0.5)
+      : (widget.isSelected ? widget.theme.accent : widget.theme.textSecondary);
+
+  TextStyle get _labelStyle {
+    return TextStyle(
+      color: !widget.isEnabled
+          ? widget.theme.textSecondary.withValues(alpha: 0.5)
+          : (widget.isSelected ? widget.theme.textPrimary : widget.theme.textSecondary),
+      fontSize: 13,
+      fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.normal,
+    );
+  }
+
+  Widget? _buildIcon() {
+    if (widget.iconBuilder != null) {
+      return widget.iconBuilder!(context, _iconColor, _iconSize);
+    }
+    final iconData = widget.iconData;
+    if (iconData == null) {
+      return null;
+    }
+    return Icon(iconData, color: _iconColor, size: _iconSize);
+  }
+
+  Widget? _buildLabel() {
+    final labelText = widget.labelText;
+    if (labelText == null || !widget.reserveLabelSpace) {
+      return null;
+    }
+
+    final label = Text(
+      labelText,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: _labelStyle,
+    );
+
+    if (widget.labelFadeDuration == Duration.zero) {
+      return widget.labelVisible ? label : null;
+    }
+
+    return IgnorePointer(
+      ignoring: !widget.labelVisible,
+      child: AnimatedOpacity(
+        opacity: widget.labelVisible ? 1 : 0,
+        duration: widget.labelFadeDuration,
+        curve: widget.labelFadeCurve,
+        child: label,
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    final icon = _buildIcon();
+    final label = _buildLabel();
+    final iconChildren = icon == null ? null : <Widget>[icon];
+    final horizontalLabelChildren = label == null
+        ? null
+        : <Widget>[
+            Flexible(
+              fit: FlexFit.loose,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: icon == null ? 0 : widget.horizontalSpacing,
+                ),
+                child: label,
+              ),
+            ),
+          ];
+    final verticalLabelChildren = label == null
+        ? null
+        : <Widget>[
+            Padding(
+              padding: EdgeInsets.only(
+                top: icon == null ? 0 : widget.verticalSpacing,
+              ),
+              child: label,
+            ),
+          ];
+
+    if (widget.isHorizontal) {
+      return Row(
+        mainAxisSize: widget.horizontalMainAxisSize,
+        mainAxisAlignment: widget.horizontalMainAxisAlignment,
+        children: [
+          ...?iconChildren,
+          ...?horizontalLabelChildren,
+        ],
+      );
+    } else {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ...?iconChildren,
+          ...?verticalLabelChildren,
+        ],
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final effectivePadding =
+        widget.padding ??
+        EdgeInsets.symmetric(
+          horizontal: widget.labelText == null ? 8 : 12,
+          vertical: 8,
+        );
+
+    final backgroundColor = !widget.isEnabled
+        ? (widget.disabledBackgroundColor ??
+              Colors.transparent)
+        : widget.isSelected
+        ? (widget.selectedBackgroundColor ?? widget.theme.navItemSelected)
+        : (_hovered
+              ? (widget.hoverBackgroundColor ?? widget.theme.navItemHover)
+              : Colors.transparent);
+
+    final borderRadius = BorderRadius.circular(
+      widget.theme.cornerRadius * widget.borderRadiusMultiplier,
+    );
+
+    final button = MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: backgroundColor,
+        animationDuration: widget.duration,
+        borderRadius: borderRadius,
+        child: InkWell(
+          onTap: widget.isEnabled ? widget.onTap : null,
+          borderRadius: borderRadius,
+          splashColor: widget.theme.navItemHover,
+          highlightColor: widget.theme.navItemSelected,
+          hoverColor: widget.theme.navItemHover,
+          child: Padding(
+            padding: effectivePadding,
+            child: Align(
+              alignment: widget.alignment,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                ),
+                child: _buildContent(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final tooltipMessage = widget.tooltipMessage;
+    if (tooltipMessage == null || tooltipMessage.isEmpty) {
+      return button;
+    }
+
+    return Tooltip(message: tooltipMessage, child: button);
+  }
+}
+
+class AppLinearProgressBar extends StatelessWidget {
+  const AppLinearProgressBar({
+    super.key,
+    required this.theme,
+    required this.value,
+    this.label,
+    this.minHeight = 20,
+    this.progressColor,
+    this.trackColor,
+    this.borderRadius,
+    this.labelStyle,
+  });
+
+  final AppThemeData theme;
+  final double? value;
+  final String? label;
+  final double minHeight;
+  final Color? progressColor;
+  final Color? trackColor;
+  final BorderRadius? borderRadius;
+  final TextStyle? labelStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final barRadius = BorderRadius.circular(theme.cornerRadius);
+    final fillColor = progressColor ?? theme.accent;
+    final backgroundColor = trackColor ?? theme.accent.withValues(alpha: 0.35);
+
+    return ClipRRect(
+      borderRadius: barRadius,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          LinearProgressIndicator(
+            value: value,
+            minHeight: minHeight,
+            backgroundColor: backgroundColor,
+            valueColor: AlwaysStoppedAnimation(fillColor),
+          ),
+          if (label != null)
+            IgnorePointer(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  label!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: labelStyle ??
+                      TextStyle(
+                        color: theme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Cache for expensive, immutable computed values of an [AppThemeData] instance.
 /// Created lazily the first time a gradient getter is accessed and retained for
 /// the lifetime of the theme object (via an [Expando] keyed on it).
@@ -592,21 +951,13 @@ class _AppThemeCache {
     required this.listCardHoverGradient,
     required this.listCardSelectedGradient,
     required this.listCardDefaultGradient,
-    required this.gridCardHoverOverlay,
-    required this.gridCardSelectedOverlay,
     required this.tagChipDefaultColor,
-    required this.gridCardSelectedGradient,
-    required this.gridCardHoverGradient,
   });
 
   final List<Color> listCardHoverGradient;
   final List<Color> listCardSelectedGradient;
   final List<Color> listCardDefaultGradient;
-  final Color gridCardHoverOverlay;
-  final Color gridCardSelectedOverlay;
   final Color tagChipDefaultColor;
-  final LinearGradient gridCardSelectedGradient;
-  final LinearGradient gridCardHoverGradient;
 }
 
 // =============================================================================
@@ -618,7 +969,7 @@ const kDarkTheme = AppThemeData(
   id: 'builtin-dark',
   name: 'Dark',
   baseBackground: Color(0xFF141414),
-  basePrimary: Color(0xFF3F5485),
+  basePrimary: Color.fromARGB(255, 32, 79, 197),
   baseAccent: Color(0xFF5F92FF),
   iconData: Icons.dark_mode, // Icons.dark_mode
 );
@@ -648,8 +999,8 @@ const kSunsetTheme = AppThemeData(
   id: 'builtin-sunset',
   name: 'Sunset',
   baseBackground: Color(0xFF2A1208),
-  basePrimary: Color(0xFFB45309),
-  baseAccent: Color(0xFFF59E0B),
+  basePrimary: Color.fromARGB(255, 226, 121, 0),
+  baseAccent: Color.fromARGB(255, 255, 167, 14),
   iconData: Icons.wb_twilight, // Icons.wb_twilight
 );
 
@@ -668,7 +1019,7 @@ const kForestTheme = AppThemeData(
   id: 'builtin-forest',
   name: 'Forest',
   baseBackground: Color(0xFF0D1F12),
-  basePrimary: Color(0xFF2D5A3D),
+  basePrimary: Color.fromARGB(255, 31, 179, 50),
   baseAccent: Color(0xFF4ADE80),
   iconData: Icons.forest, // Icons.forest
 );

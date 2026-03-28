@@ -228,29 +228,44 @@ class _HomePageState extends ConsumerState<HomePage> {
           children: [
             ListTile(
               leading: Icon(Icons.copy, color: theme.textSecondary),
-              title: Text('Key Only', style: TextStyle(color: theme.textPrimary)),
+              title: Text(
+                'Key Only',
+                style: TextStyle(color: theme.textPrimary),
+              ),
               onTap: () => Navigator.pop(ctx, 'copy_key'),
             ),
             ListTile(
               leading: const SizedBox(width: 24),
-              title: Text('Title + Key', style: TextStyle(color: theme.textPrimary)),
+              title: Text(
+                'Title + Key',
+                style: TextStyle(color: theme.textPrimary),
+              ),
               onTap: () => Navigator.pop(ctx, 'copy_title_key'),
             ),
             ListTile(
               leading: const SizedBox(width: 24),
-              title: Text('Discord Spoiler', style: TextStyle(color: theme.textPrimary)),
+              title: Text(
+                'Discord Spoiler',
+                style: TextStyle(color: theme.textPrimary),
+              ),
               onTap: () => Navigator.pop(ctx, 'copy_discord'),
             ),
             if (hasSteamKeys) ...[
               const Divider(height: 8),
               ListTile(
                 leading: const SizedBox(width: 24),
-                title: Text('Link Only', style: TextStyle(color: theme.textPrimary)),
+                title: Text(
+                  'Link Only',
+                  style: TextStyle(color: theme.textPrimary),
+                ),
                 onTap: () => Navigator.pop(ctx, 'copy_steam_link'),
               ),
               ListTile(
                 leading: const SizedBox(width: 24),
-                title: Text('Title + Link', style: TextStyle(color: theme.textPrimary)),
+                title: Text(
+                  'Title + Link',
+                  style: TextStyle(color: theme.textPrimary),
+                ),
                 onTap: () => Navigator.pop(ctx, 'copy_steam_link_title'),
               ),
             ],

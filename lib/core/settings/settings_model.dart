@@ -79,7 +79,7 @@ enum TooltipAnimation {
 enum ToggleStyle {
   regular,
   dot;
-  
+
   String get displayName {
     switch (this) {
       case ToggleStyle.regular: return 'Regular';
@@ -162,6 +162,8 @@ class SettingsKeys {
   static const String navBarAppearance = 'nav_bar_appearance';
   static const String navBarCollapsed = 'nav_bar_collapsed';
   static const String navBarCenterButtons = 'nav_bar_center_buttons';
+  static const String settingsSectionPanelCollapsed =
+      'settings_section_panel_collapsed';
   
   // Animations
   static const String gradientAnimation = 'gradient_animation';
@@ -173,10 +175,11 @@ class SettingsKeys {
   // Game List
   static const String gameListViewMode = 'game_list_view_mode';
   static const String gameSortMode = 'game_sort_mode';
-  static const String selectionBarCollapsed = 'selection_bar_collapsed';
+  static const String viewedNewGameIds = 'viewed_new_game_ids';
   
   // Game Card Visual
   static const String showTitleChip = 'show_title_chip';
+  static const String showTitleOnNoPicture = 'show_title_on_no_picture';
   static const String showPlatformChip = 'show_platform_chip';
   static const String showTagsChip = 'show_tags_chip';
   static const String showTagsOnHoverOnly = 'show_tags_on_hover_only';
@@ -247,6 +250,7 @@ class DefaultSettings {
   static const NavBarAppearance navBarAppearance = NavBarAppearance.iconAndText;
   static const bool navBarCollapsed = false;
   static const bool navBarCenterButtons = true;
+  static const bool settingsSectionPanelCollapsed = false;
   
   // Animations
   static const GradientAnimation gradientAnimation = GradientAnimation.scroll;
@@ -261,6 +265,7 @@ class DefaultSettings {
   
   // Game Card Visual
   static const bool showTitleChip = true;
+  static const bool showTitleOnNoPicture = true;
   static const bool showPlatformChip = true;
   static const bool showTagsChip = true;
   static const bool showTagsOnHoverOnly = true;
@@ -268,8 +273,8 @@ class DefaultSettings {
   static const bool showRatings = true; // Lives in "additional UI" section but included here for convenience
   
   // Toggle & Section Style
-  static const ToggleStyle toggleStyle = ToggleStyle.regular;
-  static const SectionTitleLocation sectionTitleLocation = SectionTitleLocation.left;
+  static const ToggleStyle toggleStyle = ToggleStyle.dot;
+  static const SectionTitleLocation sectionTitleLocation = SectionTitleLocation.top;
   
   // Backup
   static const bool autoBackupEnabled = true;
@@ -296,6 +301,7 @@ class DefaultSettings {
 class GameCardSettings {
   const GameCardSettings({
     required this.showTitle,
+    required this.showTitleOnNoPicture,
     required this.showPlatform,
     required this.showTags,
     required this.showTagsOnHoverOnly,
@@ -307,6 +313,8 @@ class GameCardSettings {
     return GameCardSettings(
       showTitle: (settings[SettingsKeys.showTitleChip] as bool?) ??
           DefaultSettings.showTitleChip,
+      showTitleOnNoPicture: (settings[SettingsKeys.showTitleOnNoPicture] as bool?) ??
+          DefaultSettings.showTitleOnNoPicture,
       showPlatform: (settings[SettingsKeys.showPlatformChip] as bool?) ??
           DefaultSettings.showPlatformChip,
       showTags: (settings[SettingsKeys.showTagsChip] as bool?) ??
@@ -322,6 +330,7 @@ class GameCardSettings {
   }
 
   final bool showTitle;
+  final bool showTitleOnNoPicture;
   final bool showPlatform;
   final bool showTags;
   final bool showTagsOnHoverOnly;
@@ -332,6 +341,7 @@ class GameCardSettings {
   bool operator ==(Object other) {
     return other is GameCardSettings &&
         other.showTitle == showTitle &&
+        other.showTitleOnNoPicture == showTitleOnNoPicture &&
         other.showPlatform == showPlatform &&
         other.showTags == showTags &&
         other.showTagsOnHoverOnly == showTagsOnHoverOnly &&
@@ -342,6 +352,7 @@ class GameCardSettings {
   @override
       int get hashCode => Object.hash(
         showTitle,
+        showTitleOnNoPicture,
         showPlatform,
         showTags,
         showTagsOnHoverOnly,
@@ -569,6 +580,7 @@ class AppShellSettings {
     required this.navBarAppearance,
     required this.gradientAnimation,
     required this.navBarCollapsed,
+    required this.settingsSectionPanelCollapsed,
     required this.autoBackupEnabled,
     required this.autoBackupIntervalMinutes,
     required this.developerMode,
@@ -595,6 +607,9 @@ class AppShellSettings {
       navBarCollapsed:
           (settings[SettingsKeys.navBarCollapsed] as bool?) ??
           DefaultSettings.navBarCollapsed,
+        settingsSectionPanelCollapsed:
+          (settings[SettingsKeys.settingsSectionPanelCollapsed] as bool?) ??
+          DefaultSettings.settingsSectionPanelCollapsed,
       autoBackupEnabled:
           (settings[SettingsKeys.autoBackupEnabled] as bool?) ??
           DefaultSettings.autoBackupEnabled,
@@ -619,6 +634,7 @@ class AppShellSettings {
   final NavBarAppearance navBarAppearance;
   final GradientAnimation gradientAnimation;
   final bool navBarCollapsed;
+  final bool settingsSectionPanelCollapsed;
   final bool autoBackupEnabled;
   final int autoBackupIntervalMinutes;
   final bool developerMode;
@@ -636,6 +652,7 @@ class AppShellSettings {
         other.navBarAppearance == navBarAppearance &&
         other.gradientAnimation == gradientAnimation &&
         other.navBarCollapsed == navBarCollapsed &&
+        other.settingsSectionPanelCollapsed == settingsSectionPanelCollapsed &&
         other.autoBackupEnabled == autoBackupEnabled &&
         other.autoBackupIntervalMinutes == autoBackupIntervalMinutes &&
         other.developerMode == developerMode &&
@@ -653,6 +670,7 @@ class AppShellSettings {
         navBarAppearance,
         gradientAnimation,
         navBarCollapsed,
+        settingsSectionPanelCollapsed,
         autoBackupEnabled,
         autoBackupIntervalMinutes,
         developerMode,

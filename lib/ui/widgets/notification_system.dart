@@ -12,15 +12,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Notification types
-enum NotificationType {
-  success,
-  error,
-  warning,
-  info,
-  update,
-  download,
-  steam,
-}
+enum NotificationType { success, error, warning, info, update, download, steam }
 
 /// Notification positions
 enum NotificationPosition {
@@ -126,7 +118,9 @@ class NotificationHandle {
       type: NotificationType.success,
       title: title,
       clearProgress: true,
-      autoDismissAfter: NotificationManager.defaultDuration(NotificationType.success),
+      autoDismissAfter: NotificationManager.defaultDuration(
+        NotificationType.success,
+      ),
     );
   }
 
@@ -137,7 +131,9 @@ class NotificationHandle {
       type: NotificationType.error,
       title: title,
       clearProgress: true,
-      autoDismissAfter: NotificationManager.defaultDuration(NotificationType.error),
+      autoDismissAfter: NotificationManager.defaultDuration(
+        NotificationType.error,
+      ),
     );
   }
 
@@ -149,11 +145,11 @@ class NotificationHandle {
 /// Notification manager singleton
 class NotificationManager {
   NotificationManager._();
-  
+
   static final NotificationManager instance = NotificationManager._();
 
   static const Duration dismissAnimationDuration = Duration(milliseconds: 200);
-  
+
   final _notifications = Queue<AppNotification>();
   final Map<String, Timer> _dismissTimers = <String, Timer>{};
   final Map<String, Timer> _removeTimers = <String, Timer>{};
@@ -168,13 +164,13 @@ class NotificationManager {
       dismissAll();
     }
   }
-  
+
   Stream<List<AppNotification>> get notifications => _controller.stream;
   List<AppNotification> get currentNotifications => _notifications.toList();
-  
+
   NotificationPosition _position = NotificationPosition.topRight;
   NotificationPosition get position => _position;
-  
+
   void setPosition(NotificationPosition position) {
     _position = position;
   }
@@ -215,8 +211,11 @@ class NotificationManager {
       return NotificationHandle(this, 'disabled');
     }
 
-    if (dedupe && _notifications.any((n) => n.message == message && n.type == type)) {
-      final existing = _notifications.firstWhere((n) => n.message == message && n.type == type);
+    if (dedupe &&
+        _notifications.any((n) => n.message == message && n.type == type)) {
+      final existing = _notifications.firstWhere(
+        (n) => n.message == message && n.type == type,
+      );
       return NotificationHandle(this, existing.id);
     }
 
@@ -238,12 +237,15 @@ class NotificationManager {
     final dismissAfter = autoDismissAfter ?? defaultDuration(type);
     if (shouldAutoDismiss && dismissAfter != Duration.zero) {
       _dismissTimers[notification.id]?.cancel();
-      _dismissTimers[notification.id] = Timer(dismissAfter, () => dismiss(notification.id));
+      _dismissTimers[notification.id] = Timer(
+        dismissAfter,
+        () => dismiss(notification.id),
+      );
     }
 
     return NotificationHandle(this, notification.id);
   }
-  
+
   void show({
     required String message,
     NotificationType type = NotificationType.info,
@@ -326,7 +328,7 @@ class NotificationManager {
       }
     }
   }
-  
+
   void dismiss(String id) {
     _dismissTimers.remove(id)?.cancel();
     if (_removeTimers.containsKey(id)) return;
@@ -352,7 +354,7 @@ class NotificationManager {
       _controller.add(_notifications.toList());
     });
   }
-  
+
   void dismissAll() {
     for (final t in _dismissTimers.values) {
       t.cancel();
@@ -365,23 +367,28 @@ class NotificationManager {
     _notifications.clear();
     _controller.add(_notifications.toList());
   }
-  
+
   void success(String message, {String? title}) {
     showHandle(message: message, type: NotificationType.success, title: title);
   }
-  
+
   void error(String message, {String? title}) {
     showHandle(message: message, type: NotificationType.error, title: title);
   }
-  
-  void warning(String message, {String? title}) {
-    showHandle(message: message, type: NotificationType.warning, title: title);
+
+  void warning(String message, {String? title, Duration? autoDismissAfter}) {
+    showHandle(
+      message: message,
+      type: NotificationType.warning,
+      title: title,
+      autoDismissAfter: autoDismissAfter,
+    );
   }
-  
+
   void info(String message, {String? title}) {
     showHandle(message: message, type: NotificationType.info, title: title);
   }
-  
+
   void dispose() {
     dismissAll();
     _controller.close();
@@ -407,11 +414,11 @@ class NotificationOverlay extends StatelessWidget {
       initialData: const [],
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? [];
-        
+
         if (notifications.isEmpty) {
           return const SizedBox.shrink();
         }
-        
+
         return Positioned(
           top: _isTop ? 16 : null,
           bottom: _isTop ? null : 16,
@@ -440,14 +447,17 @@ class NotificationOverlay extends StatelessWidget {
     );
   }
 
-  bool get _isTop => position == NotificationPosition.topLeft ||
+  bool get _isTop =>
+      position == NotificationPosition.topLeft ||
       position == NotificationPosition.topCenter ||
       position == NotificationPosition.topRight;
 
-  bool get _isLeft => position == NotificationPosition.topLeft ||
+  bool get _isLeft =>
+      position == NotificationPosition.topLeft ||
       position == NotificationPosition.bottomLeft;
 
-  bool get _isRight => position == NotificationPosition.topRight ||
+  bool get _isRight =>
+      position == NotificationPosition.topRight ||
       position == NotificationPosition.bottomRight;
 
   CrossAxisAlignment _getCrossAxisAlignment() {
@@ -493,135 +503,129 @@ class _NotificationToastState extends State<NotificationToast> {
         duration: NotificationManager.dismissAnimationDuration,
         offset: notification.isDismissing ? const Offset(0.2, 0) : Offset.zero,
         curve: Curves.easeIn,
-        child: GestureDetector(
-          onTap: () {
-            notification.onTap?.call();
-            widget.onDismiss();
-          },
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 360, minWidth: 280),
-            decoration: BoxDecoration(
-              color: theme.surfaceElevated,
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              border: Border.all(color: _getTypeColor().withValues(alpha: 0.5)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      _buildIcon(),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (notification.title != null)
-                              Text(
-                                notification.title!,
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            Text(
-                              notification.message,
-                              style: TextStyle(
-                                color: notification.title != null 
-                                    ? theme.textSecondary 
-                                    : theme.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close, size: 18, color: theme.textHint),
-                        onPressed: widget.onDismiss,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 24,
-                          minHeight: 24,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (notification.actionLabel != null &&
-                    notification.onAction != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: notification.onAction,
-                        child: Text(notification.actionLabel!),
-                      ),
+        child:
+            GestureDetector(
+                  onTap: () {
+                    notification.onTap?.call();
+                    widget.onDismiss();
+                  },
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      maxWidth: 360,
+                      minWidth: 280,
                     ),
-                  ),
-                if (notification.progress != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                notification.title ?? 'Processing',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: theme.textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_progressPercent(notification.progress)}%',
-                              style: TextStyle(
-                                color: theme.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: notification.progress,
-                            minHeight: 6,
-                            backgroundColor: theme.surfaceElevated.withValues(alpha: 0.6),
-                            valueColor: AlwaysStoppedAnimation(_getTypeColor()),
-                          ),
+                    decoration: BoxDecoration(
+                      color: theme.background.withValues(alpha: 0.93),
+                      borderRadius: BorderRadius.circular(theme.cornerRadius),
+                      border: Border.all(
+                        color: _getTypeColor().withValues(alpha: 0.3),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Row(
+                            children: [
+                              _buildIcon(),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (notification.title != null)
+                                      Text(
+                                        notification.title!,
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    Text(
+                                      notification.message,
+                                      style: TextStyle(
+                                        color: notification.title != null
+                                            ? theme.textSecondary
+                                            : theme.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: theme.textHint,
+                                ),
+                                onPressed: widget.onDismiss,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 24,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (notification.progress == null &&
+                            notification.actionLabel != null &&
+                            notification.onAction != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: notification.onAction,
+                                child: Text(notification.actionLabel!),
+                              ),
+                            ),
+                          ),
+                        if (notification.progress != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: AppLinearProgressBar(
+                                    theme: theme,
+                                    value: notification.progress,
+                                    label:
+                                        '${_progressPercent(notification.progress)}%',
+                                  ),
+                                ),
+                                if (notification.actionLabel != null &&
+                                    notification.onAction != null) ...[
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: notification.onAction,
+                                    child: Text(notification.actionLabel!),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-              ],
-            ),
-          ),
-        ).animate()
-          .fadeIn(duration: const Duration(milliseconds: 200))
-          .slideX(
-            begin: 0.3,
-            end: 0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          ),
+                )
+                .animate()
+                .fadeIn(duration: const Duration(milliseconds: 200))
+                .slideX(
+                  begin: 0.3,
+                  end: 0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                ),
       ),
     );
   }
@@ -632,13 +636,10 @@ class _NotificationToastState extends State<NotificationToast> {
       decoration: BoxDecoration(
         color: _getTypeColor().withValues(alpha: 0.2),
         border: Border.all(color: _getTypeColor().withValues(alpha: 0.35)),
-        shape: BoxShape.circle,
+        shape: BoxShape.rectangle,
+        borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
       ),
-      child: Icon(
-        _getTypeIcon(),
-        color: _getTypeColor(),
-        size: 20,
-      ),
+      child: Icon(_getTypeIcon(), color: _getTypeColor(), size: 20),
     );
   }
 
