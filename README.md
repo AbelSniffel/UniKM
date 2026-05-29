@@ -1,3 +1,5 @@
+## Version 1.3.0 WIP (release in June)
+
 # UniKM / Universal Key Manager
 A cross-platform desktop application for organizing and managing your game product keys and activation codes. UniKM features Steam integration, encryption, and a themeable UI.
 This is a complete rewrite of SteamKM2, using Dart language and Flutter as the front-end.
@@ -6,7 +8,6 @@ This is a complete rewrite of SteamKM2, using Dart language and Flutter as the f
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.2%2B-02569B?logo=flutter)
 ![Version](https://img.shields.io/badge/Version-1.2.0-purple)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue)
-
 
 ## Overview
 
