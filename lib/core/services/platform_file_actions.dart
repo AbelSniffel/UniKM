@@ -1,0 +1,197 @@
+library;
+
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class PlatformSaveTarget {
+  const PlatformSaveTarget({
+    required this.file,
+    required this.shouldShareAfterWrite,
+  });
+
+  final File file;
+  final bool shouldShareAfterWrite;
+}
+
+class PlatformFileActions {
+  const PlatformFileActions._();
+
+  static bool get isMobilePlatform => Platform.isAndroid || Platform.isIOS;
+  static bool get isAndroidMobile => Platform.isAndroid;
+
+  static bool get supportsDragAndDrop => !isMobilePlatform;
+
+  static Future<PlatformSaveTarget?> prepareExportTarget({
+    required String dialogTitle,
+    required String fileName,
+    required List<String> allowedExtensions,
+    String mobileSubdirectory = 'exports',
+  }) async {
+    if (!isMobilePlatform) {
+      final outputPath = await FilePicker.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: allowedExtensions,
+      );
+
+      if (outputPath == null || outputPath.isEmpty) {
+        return null;
+      }
+
+      return PlatformSaveTarget(
+        file: File(outputPath),
+        shouldShareAfterWrite: false,
+      );
+    }
+
+    if (Platform.isAndroid) {
+      final selectedDirectory = await FilePicker.getDirectoryPath(
+        dialogTitle: dialogTitle,
+      );
+
+      if (selectedDirectory == null || selectedDirectory.isEmpty) {
+        return null;
+      }
+
+      final outputPath = await createUniquePathInDirectory(
+        directoryPath: selectedDirectory,
+        fileName: fileName,
+      );
+
+      return PlatformSaveTarget(
+        file: File(outputPath),
+        shouldShareAfterWrite: false,
+      );
+    }
+
+    final outputPath = await createManagedFilePath(
+      fileName: fileName,
+      subdirectory: mobileSubdirectory,
+    );
+
+    return PlatformSaveTarget(
+      file: File(outputPath),
+      shouldShareAfterWrite: true,
+    );
+  }
+
+  static Future<String?> resolveDatabaseCreationPath({
+    required String dialogTitle,
+    required String fileName,
+    required List<String> allowedExtensions,
+  }) async {
+    if (!isMobilePlatform) {
+      final outputPath = await FilePicker.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: allowedExtensions,
+      );
+
+      if (outputPath == null || outputPath.isEmpty) {
+        return null;
+      }
+
+      return outputPath;
+    }
+
+    return createManagedFilePath(
+      fileName: fileName,
+      subdirectory: 'databases',
+    );
+  }
+
+  static Future<String> createUniquePathInDirectory({
+    required String directoryPath,
+    required String fileName,
+  }) async {
+    final targetDirectory = Directory(directoryPath);
+    if (!await targetDirectory.exists()) {
+      await targetDirectory.create(recursive: true);
+    }
+
+    final baseName = p.basenameWithoutExtension(fileName);
+    final extension = p.extension(fileName);
+    var candidatePath = p.join(targetDirectory.path, fileName);
+    var suffix = 2;
+
+    while (await File(candidatePath).exists()) {
+      candidatePath = p.join(
+        targetDirectory.path,
+        '${baseName}_$suffix$extension',
+      );
+      suffix++;
+    }
+
+    return candidatePath;
+  }
+
+  static Future<String> createManagedFilePath({
+    required String fileName,
+    String subdirectory = 'exports',
+  }) async {
+    final rootDirectory = await getApplicationDocumentsDirectory();
+    final targetDirectoryPath = p.join(rootDirectory.path, 'UniKM', subdirectory);
+    return createUniquePathInDirectory(
+      directoryPath: targetDirectoryPath,
+      fileName: fileName,
+    );
+  }
+
+  static Future<bool> shareFile(
+    File file, {
+    String? subject,
+    String? text,
+  }) async {
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: subject,
+        text: text,
+      ),
+    );
+
+    return result.status == ShareResultStatus.success;
+  }
+
+  static Future<void> shareText(
+    String text, {
+    String? subject,
+  }) async {
+    await SharePlus.instance.share(
+      ShareParams(text: text, subject: subject),
+    );
+  }
+
+  static Future<bool> openDirectory(String directoryPath) async {
+    if (Platform.isWindows) {
+      // explorer.exe always exits with a non-zero code even on success, so
+      // never check exitCode here — just launch and return true.
+      await Process.run('explorer', [directoryPath]);
+      return true;
+    }
+
+    if (Platform.isMacOS) {
+      final result = await Process.run('open', [directoryPath]);
+      return result.exitCode == 0;
+    }
+
+    if (Platform.isLinux) {
+      final result = await Process.run('xdg-open', [directoryPath]);
+      return result.exitCode == 0;
+    }
+
+    final uri = Uri.directory(directoryPath);
+    if (!await canLaunchUrl(uri)) {
+      return false;
+    }
+
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}

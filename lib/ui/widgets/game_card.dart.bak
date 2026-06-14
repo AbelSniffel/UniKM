@@ -1,0 +1,2821 @@
+/// GameCard widget - displays a game in grid or list view
+/// Matches the original Python GameCard with all features
+library;
+
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/services/platform_file_actions.dart';
+import '../../core/settings/settings_model.dart';
+import '../../core/theme/app_theme.dart';
+import '../../models/game.dart';
+import '../../providers/app_providers.dart';
+import 'game_cover_image.dart';
+import 'dialog_helpers.dart';
+import 'notification_system.dart';
+import 'platform_icon.dart';
+import 'popup_menu_helpers.dart';
+import 'tag_width_cache.dart';
+import '../dialogs/game_details_dialog.dart';
+import '../dialogs/steam_lookup_dialog.dart';
+import 'app_progress_indicator.dart';
+import '../dialogs/copy_actions_dialog.dart';
+
+/// Game card widget with grid and list modes
+/// Handles its own selection state and interactions for efficiency
+class GameCard extends ConsumerStatefulWidget {
+  const GameCard({super.key, required this.game});
+
+  final Game game;
+
+  @override
+  ConsumerState<GameCard> createState() => _GameCardState();
+}
+
+class _GameCardState extends ConsumerState<GameCard>
+    with TickerProviderStateMixin {
+  static const Duration _newBadgeLifetime = Duration(days: 1);
+  static const Duration _hoverAnimationDuration = Duration(milliseconds: 180);
+  static const double _dragStartSlop = 6.0;
+  static const double _badgeHeight = 28.0;
+  static const double _platformBadgeHeight = 32.0;
+  static const double _selectionIndicatorSize = 20.0;
+  static const EdgeInsets _selectionIndicatorPadding = EdgeInsets.all(8.0);
+
+  bool _isHovered = false;
+  bool _imageLoadFailed = false;
+
+  late final AnimationController _hoverController;
+  late final Animation<double> _hoverAnim;
+  late final AnimationController _selectionController;
+  late final Animation<double> _selectionAnim;
+
+  String? _lastTagCacheKey;
+  int _cachedTagBestCount = 0;
+  double _cachedTagBestWidth = 0.0;
+  bool _cachedTagCountFits = false;
+
+  PointerDeviceKind _lastPointerKind = PointerDeviceKind.mouse;
+  int? _activePrimaryPointer;
+  Offset? _primaryPointerDownPosition;
+  bool _primaryPointerExceededSlop = false;
+  bool _primaryPointerHandledByLongPress = false;
+  static final NumberFormat _compactNumber = NumberFormat.compact();
+  static final DateFormat _deadlineFormat = DateFormat('dd/MM/yyyy');
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverController = AnimationController(
+      duration: _hoverAnimationDuration,
+      reverseDuration: _hoverAnimationDuration,
+      vsync: this,
+    );
+    _hoverAnim = CurvedAnimation(
+      parent: _hoverController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    _selectionController = AnimationController(
+      duration: kMediumAnimation,
+      vsync: this,
+    );
+    _selectionAnim = CurvedAnimation(
+      parent: _selectionController,
+      curve: Curves.easeOutBack,
+      reverseCurve: Curves.easeInCubic,
+    );
+  }
+
+  @override
+  void didUpdateWidget(GameCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.game.coverImage != widget.game.coverImage) {
+      _imageLoadFailed = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    _selectionController.dispose();
+    super.dispose();
+  }
+
+  BorderRadius _chipBorderRadius(
+    AppThemeData theme,
+    double extent, {
+    double multiplier = 1.0,
+  }) {
+    return BorderRadius.circular(
+      math.min(theme.cornerRadius * multiplier, extent / 2),
+    );
+  }
+
+  bool get _isCtrlPressed {
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    return keys.contains(LogicalKeyboardKey.controlLeft) ||
+        keys.contains(LogicalKeyboardKey.controlRight) ||
+        keys.contains(LogicalKeyboardKey.metaLeft) ||
+        keys.contains(LogicalKeyboardKey.metaRight);
+  }
+
+  bool get _isShiftPressed {
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    return keys.contains(LogicalKeyboardKey.shiftLeft) ||
+        keys.contains(LogicalKeyboardKey.shiftRight);
+  }
+
+  void _handleTap() {
+    final notifier = ref.read(gamesProvider.notifier);
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+    final lastId = ref.read(lastSelectedGameIdProvider);
+    final isMultiSelectModeEnabled = ref.read(selectionMultiSelectModeProvider);
+
+    final isCtrlPressed = _isCtrlPressed || isMultiSelectModeEnabled;
+    final isShiftPressed = _isShiftPressed;
+
+    if (isShiftPressed && lastId != null) {
+      // Shift+Click: Range selection
+      notifier.selectRange(lastId, widget.game.id);
+    } else if (isCtrlPressed) {
+      // Ctrl+Click: Toggle selection
+      notifier.toggleGameSelection(widget.game.id);
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .setLastSelectedGameId(widget.game.id);
+    } else {
+      // Standard Click: Select exclusive
+      if (selectedIds.contains(widget.game.id) && selectedIds.length == 1) {
+        // Already selected and it's the only one, do nothing visually but update focus
+      } else {
+        notifier.clearSelection();
+        notifier.selectGame(widget.game.id);
+      }
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .setLastSelectedGameId(widget.game.id);
+    }
+  }
+
+  void _handleDoubleTap() {
+    // Block during batch fetch
+    if (ref.read(batchFetchProvider).isActive) {
+      NotificationManager.instance.warning(
+        'Cannot edit games while Steam data fetch is in progress',
+      );
+      return;
+    }
+    final allGames = ref.read(gamesProvider.select((s) => s.filteredGames));
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+
+    final List<int> idsToPass;
+    if (selectedIds.contains(widget.game.id) && selectedIds.length > 1) {
+      // Pass all selected IDs, sorted by their appearance in the full list
+      idsToPass = allGames
+          .where((g) => selectedIds.contains(g.id))
+          .map((g) => g.id)
+          .toList();
+    } else {
+      idsToPass = [widget.game.id];
+    }
+
+    showGameDetailsDialog(
+      context,
+      widget.game,
+      gameIds: idsToPass,
+      onViewedGame: (gameId) => markGameAsViewed(ref, gameId),
+    );
+  }
+
+  bool _shouldShowNewBadge(Set<int> viewedGameIds) {
+    if (viewedGameIds.contains(widget.game.id)) {
+      return false;
+    }
+
+    final age = DateTime.now().difference(widget.game.createdAt);
+    return !age.isNegative && age <= _newBadgeLifetime;
+  }
+
+  /// Visual thickness of each diagonal ribbon band (perpendicular to strip axis).
+  static const double _kRibbonHeight = 18.0;
+  static const double _kRibbonContainerWidth = 130.0;
+  static const double _kRibbonOffset = 15.0;
+
+  /// Builds a single 45-degree corner ribbon band at [bandIndex] (0 = closest
+  /// to the top-left corner).  Returns a [Positioned] widget that should be
+  /// placed directly inside the card's [Stack].  Clipping is provided naturally
+  /// by the surrounding [ClipRRect].
+  ///
+  /// If [addedDate] is supplied the ribbon is wrapped in a tooltip that shows
+  /// "Added dd/MM/yyyy".
+  Positioned _buildRibbonBand({
+    required String label,
+    required Color color,
+    required Color textColor,
+    required int bandIndex,
+    DateTime? addedDate,
+  }) {
+    // Centre of this band along the card diagonal (in layout-space pixels).
+    // _kRibbonOffset pushes all bands away from the corner, leaving a small gap.
+    final cx = _kRibbonOffset + (bandIndex + 0.5) * _kRibbonHeight / math.sqrt2;
+
+    Widget band = Container(
+      width: _kRibbonContainerWidth,
+      height: _kRibbonHeight,
+      color: color,
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.6,
+          decoration: TextDecoration.none,
+        ),
+      ),
+    );
+
+    if (addedDate != null) {
+      final addedLabel = DateFormat('dd/MM/yyyy').format(addedDate);
+      band = Tooltip(message: 'Added $addedLabel', child: band);
+    }
+
+    return Positioned(
+      left: cx - _kRibbonContainerWidth / 2,
+      top: cx - _kRibbonHeight / 2,
+      child: Transform.rotate(angle: -math.pi / 4, child: band),
+    );
+  }
+
+  void _handleLongPress() {
+    // Only allow long-press selection for touch input.
+    if (_lastPointerKind != PointerDeviceKind.touch) return;
+    // Prevent long press from interfering with drag selection
+    if (ref.read(dragSelectionProvider).isActive) return;
+
+    _primaryPointerHandledByLongPress = true;
+
+    ref.read(gamesProvider.notifier).toggleGameSelection(widget.game.id);
+    ref
+        .read(lastSelectedGameIdProvider.notifier)
+        .setLastSelectedGameId(widget.game.id);
+  }
+
+  void _handleDragSelectionEvent(PointerEvent event) {
+    if (event.kind != PointerDeviceKind.mouse) return;
+    if ((event.buttons & kPrimaryMouseButton) == 0) return;
+
+    final dragState = ref.read(dragSelectionProvider);
+    if (!dragState.isActive) return;
+    if (dragState.visitedIds.contains(widget.game.id)) return;
+
+    final notifier = ref.read(gamesProvider.notifier);
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+
+    if (_isShiftPressed || _isCtrlPressed) {
+      notifier.toggleGameSelection(widget.game.id);
+    } else {
+      final mode =
+          dragState.mode ??
+          (selectedIds.contains(widget.game.id)
+              ? DragSelectionMode.deselect
+              : DragSelectionMode.select);
+      if (dragState.mode == null) {
+        ref.read(dragSelectionProvider.notifier).setMode(mode);
+      }
+
+      if (mode == DragSelectionMode.select) {
+        notifier.selectGame(widget.game.id);
+      } else {
+        notifier.deselectGame(widget.game.id);
+      }
+    }
+
+    ref.read(dragSelectionProvider.notifier).markVisited(widget.game.id);
+    ref
+        .read(lastSelectedGameIdProvider.notifier)
+        .setLastSelectedGameId(widget.game.id);
+  }
+
+  void _resetPrimaryPointerTracking() {
+    _activePrimaryPointer = null;
+    _primaryPointerDownPosition = null;
+    _primaryPointerExceededSlop = false;
+    _primaryPointerHandledByLongPress = false;
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _lastPointerKind = event.kind;
+    if (event.kind == PointerDeviceKind.mouse &&
+        (event.buttons & kSecondaryMouseButton) != 0) {
+      return;
+    }
+    if ((event.buttons & kPrimaryButton) == 0) {
+      return;
+    }
+
+    _activePrimaryPointer = event.pointer;
+    _primaryPointerDownPosition = event.position;
+    _primaryPointerExceededSlop = false;
+    _primaryPointerHandledByLongPress = false;
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _activePrimaryPointer) return;
+
+    final downPosition = _primaryPointerDownPosition;
+    if (downPosition == null) return;
+
+    if (!_primaryPointerExceededSlop &&
+        (event.position - downPosition).distance > _dragStartSlop) {
+      _primaryPointerExceededSlop = true;
+
+      if (event.kind == PointerDeviceKind.mouse &&
+          (_isCtrlPressed || ref.read(selectionMultiSelectModeProvider))) {
+        final dragNotifier = ref.read(dragSelectionProvider.notifier);
+        final dragState = ref.read(dragSelectionProvider);
+        if (!dragState.isActive) {
+          dragNotifier.start(startId: widget.game.id);
+          _handleDragSelectionEvent(event);
+        }
+      }
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (event.pointer != _activePrimaryPointer) return;
+
+    final shouldHandleTap =
+        !_primaryPointerExceededSlop && !_primaryPointerHandledByLongPress;
+    _resetPrimaryPointerTracking();
+
+    if (shouldHandleTap) {
+      _handleTap();
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (event.pointer != _activePrimaryPointer) return;
+    _resetPrimaryPointerTracking();
+  }
+
+  List<Game> _getTargetGames() {
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+    if (selectedIds.contains(widget.game.id)) {
+      return ref.read(selectedGamesProvider);
+    }
+    return [widget.game];
+  }
+
+  Future<void> _toggleUsed() async {
+    final targets = _getTargetGames();
+    // Use the opposite state of the clicked game for all
+    final nextValue = !widget.game.isUsed;
+
+    final ok = await ref
+        .read(gamesProvider.notifier)
+        .setGamesUsed(targets.map((g) => g.id).toList(), nextValue);
+
+    if (!ok) {
+      final error = ref.read(gamesProvider.select((s) => s.error));
+      NotificationManager.instance.error(error ?? 'Failed to update games');
+      return;
+    }
+
+    final status = nextValue ? 'used' : 'unused';
+    if (targets.length == 1) {
+      NotificationManager.instance.info('Marked as $status');
+    } else {
+      NotificationManager.instance.info(
+        'Marked ${targets.length} games as $status',
+      );
+    }
+  }
+
+  Future<void> _openSteamPage() async {
+    final targets = _getTargetGames();
+
+    for (final game in targets) {
+      final title = game.title;
+      final appId = game.steamAppId;
+      final Uri url = appId.isNotEmpty
+          ? Uri.parse('https://store.steampowered.com/app/$appId')
+          : Uri.parse(
+              'https://store.steampowered.com/search/?term=${Uri.encodeComponent(title)}',
+            );
+
+      try {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        NotificationManager.instance.error(
+          'Failed to open Steam page for $title',
+        );
+      }
+    }
+
+    if (targets.length == 1) {
+      NotificationManager.instance.info(
+        'Opened Steam page for ${targets.first.title}',
+      );
+    } else {
+      NotificationManager.instance.info(
+        'Opened Steam pages for ${targets.length} games',
+      );
+    }
+  }
+
+  Future<void> _deleteGames() async {
+    // Block during batch fetch
+    if (ref.read(batchFetchProvider).isActive) {
+      NotificationManager.instance.warning(
+        'Cannot delete games while Steam data fetch is in progress',
+      );
+      return;
+    }
+
+    final targets = _getTargetGames();
+    final theme = ref.read(themeProvider);
+
+    final title = targets.length == 1
+        ? 'Delete "${targets.first.title}"?'
+        : 'Delete ${targets.length} games?';
+
+    final confirmed = await showConfirmDialog(
+      context: context,
+      theme: theme,
+      title: title,
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmIcon: Icons.delete,
+      destructive: true,
+    );
+
+    if (confirmed) {
+      final ids = targets.map((g) => g.id).toList();
+      final ok = await ref.read(gamesProvider.notifier).deleteGames(ids);
+
+      if (!ok) {
+        final error = ref.read(gamesProvider.select((s) => s.error));
+        NotificationManager.instance.error(error ?? 'Failed to delete games');
+        return;
+      }
+
+      if (targets.length == 1) {
+        NotificationManager.instance.success('Deleted: ${targets.first.title}');
+      } else {
+        NotificationManager.instance.success('Deleted ${targets.length} games');
+      }
+
+      // Do not clear the user's selection here — the provider updates the
+      // selectedGameIds to remove deleted IDs. Keeping selection allows the
+      // selection bar to remain when other items are still selected.
+    }
+  }
+
+  Future<void> _steamLookup() async {
+    final targets = _getTargetGames()
+        .where((g) => g.platform == 'Steam')
+        .toList();
+
+    if (targets.isEmpty) {
+      NotificationManager.instance.info('No Steam games selected');
+      return;
+    }
+
+    if (targets.length == 1) {
+      await _singleSteamLookup(targets.first);
+    } else {
+      await performSteamBatchLookup(context, targets);
+    }
+  }
+
+  Future<void> _singleSteamLookup(Game game) async {
+    await performSingleSteamLookup(context, ref, game);
+  }
+
+  void _showContextMenu(BuildContext context, Offset position) async {
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+    if (!selectedIds.contains(widget.game.id)) {
+      ref.read(gamesProvider.notifier).clearSelection();
+      ref.read(gamesProvider.notifier).selectGame(widget.game.id);
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .setLastSelectedGameId(widget.game.id);
+    }
+
+    final theme = ref.read(themeProvider);
+    final targetGames = _getTargetGames();
+    final count = targetGames.length;
+    final suffix = count > 1 ? ' ($count)' : '';
+    final isFetching = ref.read(batchFetchProvider).isActive;
+    final hasSteamTargets = targetGames.any((g) => g.platform == 'Steam');
+
+    PopupMenuItem<String> menuHeader(String text) {
+      return PopupMenuItem<String>(
+        enabled: false,
+        height: 32,
+        child: Text(
+          text,
+          style: TextStyle(
+            color: theme.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    PopupMenuItem<String> menuRowItem({
+      required String value,
+      required IconData icon,
+      required String label,
+      Color? iconColor,
+      Color? textColor,
+      bool enabled = true,
+      IconData? disabledIcon,
+      String? disabledLabel,
+      Color? disabledColor,
+    }) {
+      final resolvedEnabled = enabled;
+      final resolvedLabel = resolvedEnabled ? label : (disabledLabel ?? label);
+      final mutedColor = theme.textSecondary.withValues(alpha: 0.5);
+
+      return PopupMenuItem<String>(
+        value: resolvedEnabled ? value : null,
+        enabled: resolvedEnabled,
+        child: Row(
+          children: [
+            Icon(
+              resolvedEnabled ? icon : (disabledIcon ?? icon),
+              size: 18,
+              color: resolvedEnabled
+                  ? (iconColor ?? theme.textSecondary)
+                  : (disabledColor ?? mutedColor),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              resolvedLabel,
+              style: TextStyle(
+                color: resolvedEnabled
+                    ? (textColor ?? theme.textPrimary)
+                    : (disabledColor ?? mutedColor),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final overlayState = Overlay.maybeOf(context);
+    final overlayObject = overlayState?.context.findRenderObject();
+    if (overlayObject is! RenderBox) return;
+
+    final value = await showAppMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        position & const Size(1, 1),
+        Offset.zero & overlayObject.size,
+      ),
+      items: [
+        // single copy button to open dialog
+        menuHeader('Copy$suffix'),
+        menuRowItem(value: 'copy', icon: Icons.copy_all, label: 'Copy$suffix'),
+        const PopupMenuDivider(),
+        // always offer a "View Details" action, even when multiple games
+        // are selected.  The handler (_handleDoubleTap) already knows how to
+        // open the details dialog for all selected ids when count > 1.
+        menuRowItem(
+          value: 'details',
+          icon: Icons.info_outline,
+          label: 'View Details$suffix',
+          enabled: !isFetching,
+          disabledIcon: Icons.lock_rounded,
+          disabledLabel: 'View Details (Locked)$suffix',
+        ),
+        if (hasSteamTargets) ...[
+          menuRowItem(
+            value: 'open_steam',
+            icon: Icons.open_in_new,
+            label: 'Open Steam Page$suffix',
+          ),
+          menuRowItem(
+            value: 'steam_lookup',
+            icon: Icons.cloud_download,
+            label: 'Fetch Steam Data$suffix',
+            iconColor: theme.accent,
+            enabled: !isFetching,
+            disabledIcon: Icons.lock_rounded,
+            disabledLabel: 'Fetch Steam Data (Locked)$suffix',
+          ),
+        ],
+        const PopupMenuDivider(),
+        menuRowItem(
+          value: 'toggle_used',
+          icon: widget.game.isUsed
+              ? Icons.radio_button_unchecked
+              : Icons.check_circle,
+          label:
+              (widget.game.isUsed ? 'Mark as Unused' : 'Mark as Used') + suffix,
+          enabled: !isFetching,
+          disabledIcon: Icons.lock_rounded,
+          disabledLabel: 'Mark as Used/Unused (Locked)$suffix',
+        ),
+        const PopupMenuDivider(),
+        menuRowItem(
+          value: 'delete',
+          icon: Icons.delete_outline,
+          label: 'Delete$suffix',
+          iconColor: theme.error,
+          textColor: theme.error,
+          enabled: !isFetching,
+          disabledIcon: Icons.lock_rounded,
+          disabledLabel: 'Delete (Locked)$suffix',
+        ),
+      ],
+    );
+
+    if (value == null) return;
+    if (!context.mounted) return;
+    switch (value) {
+      case 'copy':
+        // show the unified copy dialog
+        showDialog(
+          context: context,
+          builder: (ctx) => CopyActionsDialog(targets: targetGames),
+        );
+        break;
+      case 'details':
+        _handleDoubleTap();
+        break;
+      case 'open_steam':
+        _openSteamPage();
+        break;
+      case 'steam_lookup':
+        _steamLookup();
+        break;
+      case 'toggle_used':
+        _toggleUsed();
+        break;
+      case 'delete':
+        _deleteGames();
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    final cardSettings = ref.watch(gameCardSettingsProvider);
+    final viewMode = ref.watch(viewModeProvider);
+    final isSelected = ref.watch(
+      gamesProvider.select((s) => s.selectedGameIds.contains(widget.game.id)),
+    );
+    final viewedGameIds = ref.watch(viewedNewGameIdsProvider);
+    final fetchStatus = ref.watch(
+      batchFetchProvider.select((s) => s.getStatus(widget.game.id)),
+    );
+    final showNewBadge = _shouldShowNewBadge(viewedGameIds);
+    final options = _CardViewOptions(
+      showTitle: cardSettings.showTitle,
+      showTitleOnNoPicture: cardSettings.showTitleOnNoPicture,
+      showPlatform: cardSettings.showPlatform,
+      showTags: cardSettings.showTags,
+      showTagsOnHoverOnly: cardSettings.showTagsOnHoverOnly,
+      showDeadline: cardSettings.showDeadline,
+      showRatingsNow:
+          cardSettings.showRatings &&
+          (!cardSettings.showTagsOnHoverOnly || _isHovered),
+      compactListView: cardSettings.compactListView,
+      slimListView: cardSettings.slimListView,
+    );
+
+    // Drive selection animation from build() — forward/reverse are no-ops if
+    // the controller is already at the target value, so this is inexpensive.
+    if (isSelected) {
+      _selectionController.forward();
+    } else {
+      _selectionController.reverse();
+    }
+
+    return viewMode == GameListViewMode.grid
+        ? _buildGridCard(theme, isSelected, options, fetchStatus, showNewBadge)
+        : _buildListCard(theme, isSelected, options, fetchStatus, showNewBadge);
+  }
+
+  Widget _buildGridCard(
+    AppThemeData theme,
+    bool isSelected,
+    _CardViewOptions options,
+    GameFetchStatus? fetchStatus,
+    bool showNewBadge,
+  ) {
+    final hasDlc = widget.game.isDlc;
+
+    // Corner radius captured once per build so the AnimatedBuilder closure
+    // never allocates a new BorderRadius on every animation tick.
+    final radius = BorderRadius.circular(theme.cornerRadius);
+    final bool titleVisible = options.showTitleOnNoPicture
+        ? (!widget.game.hasCoverImage || _imageLoadFailed)
+        : options.showTitle;
+    final bool tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
+    final bool tagsVisible =
+        tagsEnabled && (!options.showTagsOnHoverOnly || _isHovered);
+
+    // Single AnimatedBuilder drives both scale and shadow from one shared
+    // AnimationController, replacing the previous TweenAnimationBuilder
+    // (scale) + AnimatedContainer (shadow) dual-controller pattern.
+    return _buildInteractive(
+      RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _hoverAnim,
+          builder: (context, child) {
+            final t = _hoverAnim.value;
+            return Transform.scale(
+              scale: 1.0 + t * 0.015,
+              alignment: Alignment.center,
+              filterQuality: FilterQuality.medium,
+              child: SizedBox(
+                width: kGridCardWidth,
+                height: kGridCardHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    boxShadow: t > 0.001
+                        ? [
+                            BoxShadow(
+                              color: theme.accent.withValues(alpha: t * 0.2),
+                              blurRadius: t * 12,
+                              spreadRadius: t * 2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
+          // Static child subtree — not rebuilt on every animation tick.
+          child: ClipRRect(
+            borderRadius: radius,
+            child: SizedBox(
+              width: kGridCardWidth,
+              height: kGridCardHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildCoverImage(theme),
+                  _buildGradientOverlay(theme, isSelected),
+                  if (widget.game.isUsed)
+                    _buildUsedOverlay(
+                      theme,
+                      patternSize: const Size(kGridCardWidth, kGridCardHeight),
+                    ),
+
+                  _buildSelectionOverlay(theme, isSelected),
+                  AnimatedSwitcher(
+                    duration: kFastAnimation,
+                    transitionBuilder: (child, anim) =>
+                        FadeTransition(opacity: anim, child: child),
+                    child: fetchStatus != null
+                        ? KeyedSubtree(
+                            key: ValueKey(fetchStatus),
+                            child: _buildFetchStatusOverlay(theme, fetchStatus),
+                          )
+                        : const SizedBox.shrink(key: ValueKey<Null>(null)),
+                  ),
+
+                  // Corner ribbons (DLC / NEW) – clipped by the surrounding
+                  // ClipRRect to produce the diagonal banner effect.
+                  if (hasDlc)
+                    _buildRibbonBand(
+                      label: 'DLC',
+                      color: theme.accent,
+                      textColor: theme.primaryButtonText,
+                      bandIndex: 0,
+                    ),
+                  if (showNewBadge)
+                    _buildRibbonBand(
+                      label: 'NEW',
+                      color: theme.secondary,
+                      textColor: theme.primaryButtonText,
+                      bandIndex: hasDlc ? 1 : 0,
+                      addedDate: widget.game.createdAt,
+                    ),
+
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (options.showDeadline &&
+                            widget.game.hasDeadline) ...[
+                          _buildDeadlineBadge(
+                            theme,
+                            borderRadius: _chipBorderRadius(
+                              theme,
+                              _badgeHeight,
+                            ),
+                            showIcon: true,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            minHeight: _badgeHeight,
+                          ),
+                          if (options.showTitleOnNoPicture
+                              ? (!widget.game.hasCoverImage || _imageLoadFailed)
+                              : options.showTitle)
+                            const SizedBox(height: 4),
+                        ],
+                        if (titleVisible) _buildTitleChip(theme),
+                        if (tagsEnabled) ...[
+                          _buildAnimatedTagsRow(
+                            context,
+                            theme,
+                            isVisible: tagsVisible,
+                            topSpacing: 4.0,
+                            // Grid card width is fixed — pass it directly to skip
+                            // the LayoutBuilder secondary layout pass on every
+                            // visible card during window resize.
+                            fixedMaxWidth: kGridCardWidth - 16.0,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: _buildTopRightChips(
+                      theme,
+                      showPlatform: options.showPlatform,
+                      showRatings: options.showRatingsNow,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListCard(
+    AppThemeData theme,
+    bool isSelected,
+    _CardViewOptions options,
+    GameFetchStatus? fetchStatus,
+    bool showNewBadge,
+  ) {
+    final hasDlc = widget.game.isDlc;
+
+    final layout = _ListCardLayout.fromOptions(options);
+
+    // Pre-compute decoration constants once per build — not per animation tick.
+    final listRadius = BorderRadius.circular(theme.cornerRadius);
+    final gradientColors = _computeListGradientColors(theme, isSelected);
+    final listGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      // ignore: prefer_const_constructors — GradientRotation has no const constructor
+      transform: GradientRotation(25 * math.pi / 180),
+      colors: [theme.background, gradientColors[1], gradientColors[0]],
+      stops: const [0.10, 0.5, 1.0],
+    );
+    final bool tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
+    final bool tagsVisible =
+        tagsEnabled && (!options.showTagsOnHoverOnly || _isHovered);
+    final showListSideChips =
+        options.showPlatform ||
+        (options.showRatingsNow && widget.game.reviewCount > 0);
+
+    if (layout.useSlim) {
+      return _buildSlimListCard(theme, isSelected, options, fetchStatus);
+    }
+
+    return _buildListAnimatedShell(
+      height: layout.cardHeight,
+      scaleFactor: 0.006,
+      decorationBuilder: (t) => BoxDecoration(
+        gradient: listGradient,
+        boxShadow: (t > 0.001)
+            ? [
+                BoxShadow(
+                  color: theme.accent.withValues(alpha: t * 0.18),
+                  blurRadius: t * 12,
+                  spreadRadius: t * 2,
+                ),
+              ]
+            : null,
+        borderRadius: listRadius,
+      ),
+      child: Stack(
+        children: [
+          _buildListCoverPane(
+            theme,
+            cardImageWidth: layout.cardImageWidth,
+            cardHeight: layout.cardHeight,
+            hasDlc: hasDlc,
+            showNewBadge: showNewBadge,
+          ),
+          _buildSelectionOverlay(
+            theme,
+            isSelected,
+            imageWidth: layout.cardImageWidth,
+          ),
+          _buildAnimatedFetchOverlay(
+            theme,
+            fetchStatus,
+            imageWidth: layout.cardImageWidth,
+          ),
+          if (options.showDeadline && widget.game.hasDeadline)
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: _buildDeadlineBadge(
+                theme,
+                borderRadius: _chipBorderRadius(theme, _badgeHeight),
+                showIcon: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minHeight: _badgeHeight,
+              ),
+            ),
+          _buildListContentPane(
+            context,
+            theme,
+            options: options,
+            tagsEnabled: tagsEnabled,
+            tagsVisible: tagsVisible,
+            showListSideChips: showListSideChips,
+            ratingLeftOfPlatform: layout.useCompact,
+            cardImageWidth: layout.cardImageWidth,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlimListCard(
+    AppThemeData theme,
+    bool isSelected,
+    _CardViewOptions options,
+    GameFetchStatus? fetchStatus,
+  ) {
+    final showDeadline = options.showDeadline && widget.game.hasDeadline;
+    final showUsed = widget.game.isUsed;
+    final showDlc = widget.game.isDlc;
+    final showRating = options.showRatingsNow && widget.game.reviewCount > 0;
+
+    return _buildListAnimatedShell(
+      height: kSlimListCardHeight,
+      scaleFactor: 0.012,
+      decorationBuilder: (_) => BoxDecoration(
+        color: theme.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.zero,
+      ),
+      child: Stack(
+        children: [
+          // Draw accent tint behind content so title/chips remain clear.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedContainer(
+                duration: kFastAnimation,
+                curve: Curves.easeOut,
+                decoration: BoxDecoration(
+                  color: theme.accent.withValues(
+                    alpha: isSelected
+                        ? (_isHovered ? 0.80 : 0.65)
+                        : (_isHovered ? 0.40 : 0.0),
+                  ),
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+            ),
+          ),
+          // Keep the slim fetch tint under the text/chips layer.
+          _buildAnimatedFetchOverlay(
+            theme,
+            fetchStatus,
+            showStatusIcon: false,
+            showBorder: false,
+            borderRadius: BorderRadius.zero,
+            doneTintAlpha: 0.24,
+            activeTintAlpha: 0.44,
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.game.title,
+                      style: TextStyle(
+                        color: theme.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  _buildSlimListTrailingChips(
+                    theme,
+                    showUsed: showUsed,
+                    showDeadline: showDeadline,
+                    showDlc: showDlc,
+                    showRating: showRating,
+                    showPlatform: options.showPlatform,
+                    fetchStatus: fetchStatus,
+                    isSelected: isSelected,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListAnimatedShell({
+    required double height,
+    required double scaleFactor,
+    required BoxDecoration Function(double t) decorationBuilder,
+    required Widget child,
+  }) {
+    return _buildInteractive(
+      RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _hoverAnim,
+          builder: (context, staticChild) {
+            final t = _hoverAnim.value;
+            return Transform.scale(
+              scale: 1.0 + t * scaleFactor,
+              alignment: Alignment.center,
+              filterQuality: FilterQuality.medium,
+              child: DecoratedBox(
+                decoration: decorationBuilder(t),
+                child: staticChild,
+              ),
+            );
+          },
+          child: SizedBox(height: height, child: child),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlimListTrailingChips(
+    AppThemeData theme, {
+    required bool showUsed,
+    required bool showDeadline,
+    required bool showDlc,
+    required bool showRating,
+    required bool showPlatform,
+    required GameFetchStatus? fetchStatus,
+    required bool isSelected,
+  }) {
+    final baseChips = <Widget>[
+      if (showUsed) _buildUsedBadge(theme, minHeight: _badgeHeight),
+      if (showDeadline)
+        _buildDeadlineBadge(
+          theme,
+          borderRadius: _chipBorderRadius(theme, _badgeHeight),
+          showIcon: true,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minHeight: _badgeHeight,
+          forceIconOnly: true,
+        ),
+      if (showDlc) _buildDlcBadge(theme, minHeight: _badgeHeight),
+      if (showRating)
+        _buildRatingBadge(
+          theme,
+          borderRadius: _chipBorderRadius(theme, _badgeHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minHeight: _badgeHeight,
+        ),
+      if (showPlatform) _buildPlatformBadge(theme, minHeight: _badgeHeight),
+    ];
+
+    final hasExtraChips = fetchStatus != null || isSelected;
+    if (baseChips.isEmpty && !hasExtraChips) return const SizedBox.shrink();
+
+    final extraChips = <Widget>[
+      if (fetchStatus != null)
+        _buildSlimFetchStatusBadge(theme, fetchStatus, minHeight: _badgeHeight),
+      if (isSelected) _buildSlimSelectionBadge(theme, minHeight: _badgeHeight),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < baseChips.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          baseChips[i],
+        ],
+        if (hasExtraChips && baseChips.isNotEmpty) const SizedBox(width: 6),
+        ClipRect(
+          child: AnimatedSize(
+            duration: kFastAnimation,
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.centerRight,
+            child: hasExtraChips
+                ? RepaintBoundary(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int i = 0; i < extraChips.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 6),
+                          extraChips[i],
+                        ],
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInteractive(Widget child) {
+    return Listener(
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
+      child: MouseRegion(
+        onEnter: (event) {
+          _handleDragSelectionEvent(event);
+          if (!mounted) return;
+          setState(() => _isHovered = true);
+          _hoverController.forward();
+        },
+        onExit: (_) {
+          ref
+              .read(dragSelectionProvider.notifier)
+              .unmarkVisited(widget.game.id);
+          if (!mounted) return;
+          setState(() => _isHovered = false);
+          _hoverController.reverse();
+        },
+        child: GestureDetector(
+          onDoubleTap: _handleDoubleTap,
+          onLongPress: _handleLongPress,
+          onSecondaryTapDown: (details) =>
+              _showContextMenu(context, details.globalPosition),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedFetchOverlay(
+    AppThemeData theme,
+    GameFetchStatus? fetchStatus, {
+    double? imageWidth,
+    bool showBorder = true,
+    BorderRadius? borderRadius,
+    double doneTintAlpha = 0.32,
+    double activeTintAlpha = 0.28,
+    Alignment indicatorAlignment = Alignment.center,
+    EdgeInsets indicatorPadding = EdgeInsets.zero,
+    bool showTint = true,
+    bool showStatusIcon = true,
+  }) {
+    return AnimatedSwitcher(
+      duration: kFastAnimation,
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: fetchStatus != null
+          ? KeyedSubtree(
+              key: ValueKey(fetchStatus),
+              child: _buildFetchStatusOverlay(
+                theme,
+                fetchStatus,
+                borderRadius: borderRadius,
+                imageWidth: imageWidth,
+                showBorder: showBorder,
+                doneTintAlpha: doneTintAlpha,
+                activeTintAlpha: activeTintAlpha,
+                indicatorAlignment: indicatorAlignment,
+                indicatorPadding: indicatorPadding,
+                showTint: showTint,
+                showStatusIcon: showStatusIcon,
+              ),
+            )
+          : const SizedBox.shrink(key: ValueKey<Null>(null)),
+    );
+  }
+
+  Widget _buildListCoverPane(
+    AppThemeData theme, {
+    required double cardImageWidth,
+    required double cardHeight,
+    required bool hasDlc,
+    required bool showNewBadge,
+  }) {
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(theme.cornerRadius),
+          ),
+          child: SizedBox(
+            width: cardImageWidth,
+            height: cardHeight,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildCoverImage(theme),
+                if (widget.game.isUsed)
+                  _buildUsedOverlay(
+                    theme,
+                    patternSize: Size(cardImageWidth, cardHeight),
+                  ),
+
+                // Corner ribbons (DLC / NEW) on the cover image.
+                if (hasDlc)
+                  _buildRibbonBand(
+                    label: 'DLC',
+                    color: theme.accent,
+                    textColor: theme.primaryButtonText,
+                    bandIndex: 0,
+                  ),
+                if (showNewBadge)
+                  _buildRibbonBand(
+                    label: 'NEW',
+                    color: theme.secondary,
+                    textColor: theme.primaryButtonText,
+                    bandIndex: hasDlc ? 1 : 0,
+                    addedDate: widget.game.createdAt,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: const SizedBox.expand()),
+      ],
+    );
+  }
+
+  Widget _buildListContentPane(
+    BuildContext context,
+    AppThemeData theme, {
+    required _CardViewOptions options,
+    required bool tagsEnabled,
+    required bool tagsVisible,
+    required bool showListSideChips,
+    required bool ratingLeftOfPlatform,
+    required double cardImageWidth,
+  }) {
+    return Positioned.fill(
+      child: Row(
+        children: [
+          SizedBox(width: cardImageWidth),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.game.title,
+                          style: TextStyle(
+                            color: theme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (tagsEnabled) ...[
+                          const Spacer(),
+                          _buildAnimatedTagsRow(
+                            context,
+                            theme,
+                            isVisible: tagsVisible,
+                            topSpacing: 6.0,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (showListSideChips) ...[
+                    const SizedBox(width: kElementHSpacing),
+                    _buildTopRightChips(
+                      theme,
+                      showPlatform: options.showPlatform,
+                      showRatings: options.showRatingsNow,
+                      padding: EdgeInsets.zero,
+                      ratingLeftOfPlatform: ratingLeftOfPlatform,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCoverImage(AppThemeData theme) {
+    return GameCoverImage(
+      theme: theme,
+      coverImage: widget.game.hasCoverImage ? widget.game.coverImage : null,
+      onError: _imageLoadFailed
+          ? null
+          : () {
+              if (mounted) setState(() => _imageLoadFailed = true);
+            },
+    );
+  }
+
+  Widget _buildSquareIconBadge(
+    AppThemeData theme, {
+    required String tooltip,
+    required Color color,
+    required Widget icon,
+    required double size,
+    String? semanticsLabel,
+    BorderRadius? borderRadius,
+  }) {
+    Widget content = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: borderRadius ?? _chipBorderRadius(theme, size),
+      ),
+      child: icon,
+    );
+
+    if (semanticsLabel != null) {
+      content = Semantics(label: semanticsLabel, child: content);
+    }
+
+    return Tooltip(message: tooltip, child: content);
+  }
+
+  Widget _buildPillBadge(
+    AppThemeData theme, {
+    required String tooltip,
+    required Color color,
+    required Widget child,
+    BorderRadius? borderRadius,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    double? minHeight,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        alignment: Alignment.center,
+        padding: padding,
+        constraints: minHeight != null
+            ? BoxConstraints.tightFor(height: minHeight)
+            : null,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius:
+              borderRadius ??
+              _chipBorderRadius(theme, minHeight ?? _badgeHeight),
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  _FetchStatusVisual _fetchStatusVisual(
+    AppThemeData theme,
+    GameFetchStatus status, {
+    required double iconSize,
+    bool compactProcessingSpinner = false,
+  }) {
+    switch (status) {
+      case GameFetchStatus.waiting:
+        return _FetchStatusVisual(
+          color: theme.secondary,
+          tooltip: 'Queued for fetch',
+          icon: Icon(Icons.schedule, color: Colors.white, size: iconSize),
+        );
+      case GameFetchStatus.processing:
+        final spinnerSize = compactProcessingSpinner
+            ? (iconSize - 3.0).clamp(10.0, iconSize)
+            : iconSize;
+        return _FetchStatusVisual(
+          color: theme.background,
+          tooltip: 'Fetching from Steam',
+          icon: SizedBox(
+            width: spinnerSize,
+            height: spinnerSize,
+            child: AppCircularProgressIndicator(),
+          ),
+        );
+      case GameFetchStatus.done:
+        return _FetchStatusVisual(
+          color: Colors.green,
+          tooltip: 'Fetch completed',
+          icon: Icon(Icons.check, color: Colors.white, size: iconSize),
+        );
+      case GameFetchStatus.error:
+        return _FetchStatusVisual(
+          color: Colors.red,
+          tooltip: 'Fetch failed',
+          icon: Icon(Icons.error_outline, color: Colors.white, size: iconSize),
+        );
+    }
+  }
+
+  /// Apply saturation adjustment to a color (used for tag chip visibility)
+  static Color _applySaturation(Color color, double factor) {
+    final h = HSLColor.fromColor(color);
+    final newS = (h.saturation * factor).clamp(0.0, 1.0);
+    return h.withSaturation(newS).toColor();
+  }
+
+  /// Use pre-computed theme colors instead of calculating HSL on every frame
+  List<Color> _computeListGradientColors(AppThemeData theme, bool isSelected) {
+    if (isSelected) {
+      return theme.listCardSelectedGradient;
+    } else if (_isHovered) {
+      return theme.listCardHoverGradient;
+    }
+    return theme.listCardDefaultGradient;
+  }
+
+  Widget _buildGradientOverlay(AppThemeData theme, bool isSelected) {
+    if (isSelected) {
+      return CustomPaint(
+        painter: _CardGlowPainter(
+          accentColor: theme.accent,
+          primaryColor: theme.secondary,
+          selected: true,
+          cornerRadius: theme.cornerRadius,
+        ),
+        child: const SizedBox.expand(),
+      );
+    }
+
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _hoverAnim,
+        builder: (context, child) {
+          final t = _hoverAnim.value;
+          if (t <= 0.0) {
+            return const SizedBox.shrink();
+          }
+          return Opacity(opacity: t, child: child);
+        },
+        child: CustomPaint(
+          painter: _CardGlowPainter(
+            accentColor: theme.accent,
+            primaryColor: theme.secondary,
+            selected: false,
+            cornerRadius: theme.cornerRadius,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsedOverlay(AppThemeData theme, {required Size patternSize}) {
+    // Removed RepaintBoundary - it created a separate compositing layer
+    // that animated independently during AnimatedScale, causing jitter.
+    return IgnorePointer(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: theme.usedOverlay.withValues(alpha: 0.6)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment.center,
+                radius: 0.95,
+                colors: [
+                  Colors.transparent,
+                  theme.usedOverlay.withValues(alpha: 0.4),
+                ],
+                stops: const [0.55, 1.0],
+              ),
+            ),
+          ),
+          CustomPaint(
+            painter: _UsedPatternPainter(
+              textColor: Colors.white.withValues(alpha: 0.45),
+              // Bottom-left -> top-right tilt.
+              angleDegrees: -35,
+              patternSize: patternSize,
+            ),
+            isComplex: true,
+            willChange: false,
+            child: const SizedBox.expand(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Selection overlay with an animated checkmark.
+  ///
+  /// Driven by [_selectionController] (a stable controller that persists for
+  /// the lifetime of the card) rather than [TweenAnimationBuilder] (which
+  /// allocates a new controller on every [isSelected] flip). The [Icon] is
+  /// passed as the static [AnimatedBuilder.child] so it is never rebuilt on
+  /// animation ticks — only the surrounding [Container] decoration changes.
+  Widget _buildSelectionOverlay(
+    AppThemeData theme,
+    bool isSelected, {
+    double? imageWidth,
+    double tintOpacityScale = 1.0,
+    bool showBorder = true,
+    BorderRadius? borderRadiusOverride,
+    Alignment iconAlignment = Alignment.center,
+    EdgeInsets iconPadding = EdgeInsets.zero,
+    Color? overlayColor,
+  }) {
+    return IgnorePointer(
+      ignoring: !isSelected,
+      child: AnimatedBuilder(
+        animation: _selectionAnim,
+        builder: (context, child) {
+          final t = _selectionAnim.value.clamp(0.0, 1.0);
+          // if the animation is fully dismissed there's nothing to show at all
+          if (t <= 0.0) {
+            return const SizedBox.shrink();
+          }
+
+          final shadow = t > 0.01
+              ? [
+                  BoxShadow(
+                    color: theme.accent.withValues(alpha: 0.28 * t),
+                    blurRadius: 12 * t,
+                    spreadRadius: t,
+                  ),
+                ]
+              : null;
+
+          final borderRadius =
+              borderRadiusOverride ?? BorderRadius.circular(theme.cornerRadius);
+
+          final iconWidget = Container(
+            padding: EdgeInsets.all(4 + 4 * t),
+            decoration: BoxDecoration(
+              color: theme.accent.withValues(alpha: t),
+              shape: BoxShape.rectangle,
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+              boxShadow: shadow,
+            ),
+            // Static icon — fade it out with the animation so it disappears
+            // completely when t == 0.  Avoids the tiny residual checkmark
+            // visible on deselected cards.
+            child: SizedBox(
+              width: 10 + 10 * t,
+              height: 10 + 10 * t,
+              child: Opacity(opacity: t, child: child),
+            ),
+          );
+
+          // In list mode, keep the icon centred over the cover image rather
+          // than the full card width.
+          final centeredIcon = imageWidth != null
+              ? Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: imageWidth,
+                    child: Align(
+                      alignment: iconAlignment,
+                      child: Padding(padding: iconPadding, child: iconWidget),
+                    ),
+                  ),
+                )
+              : Align(
+                  alignment: iconAlignment,
+                  child: Padding(padding: iconPadding, child: iconWidget),
+                );
+
+          return Container(
+            decoration: BoxDecoration(
+              color: (overlayColor ?? theme.secondary).withValues(
+                alpha: 0.55 * t * tintOpacityScale,
+              ),
+              border: showBorder
+                  ? Border.all(
+                      color: theme.accent.withValues(alpha: t),
+                      width: 3.0,
+                    )
+                  : null,
+              borderRadius: borderRadius,
+            ),
+            child: centeredIcon,
+          );
+        },
+        child: const FittedBox(child: Icon(Icons.check, color: Colors.white)),
+      ),
+    );
+  }
+
+  /// Fetch status overlay for grid cards during batch Steam data fetch.
+  /// Uses [AnimatedSwitcher] (at the call site) for crossfading between states
+  /// and a smooth fade-out when the overlay is removed.
+  Widget _buildFetchStatusOverlay(
+    AppThemeData theme,
+    GameFetchStatus status, {
+    BorderRadius? borderRadius,
+    double? imageWidth,
+    bool showBorder = true,
+    double doneTintAlpha = 0.32,
+    double activeTintAlpha = 0.28,
+    Alignment indicatorAlignment = Alignment.center,
+    EdgeInsets indicatorPadding = EdgeInsets.zero,
+    bool showTint = true,
+    bool showStatusIcon = true,
+  }) {
+    final visual = _fetchStatusVisual(
+      theme,
+      status,
+      iconSize: _selectionIndicatorSize,
+    );
+    final color = visual.color;
+
+    final effectiveBorderRadius =
+        borderRadius ?? BorderRadius.circular(theme.cornerRadius);
+    final statusIcon = AnimatedContainer(
+      duration: kFastAnimation,
+      curve: Curves.easeOut,
+      padding: _selectionIndicatorPadding,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.rectangle,
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.45),
+            blurRadius: 14,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: AnimatedSwitcher(
+        duration: kVeryFastAnimation,
+        transitionBuilder: (child, anim) => ScaleTransition(
+          scale: anim,
+          child: FadeTransition(opacity: anim, child: child),
+        ),
+        child: SizedBox(
+          key: ValueKey(status),
+          width: _selectionIndicatorSize,
+          height: _selectionIndicatorSize,
+          child: Center(child: visual.icon),
+        ),
+      ),
+    );
+
+    Widget alignedStatusIcon = const SizedBox.shrink();
+    if (showStatusIcon) {
+      final positionedIcon = Align(
+        alignment: indicatorAlignment,
+        child: Padding(padding: indicatorPadding, child: statusIcon),
+      );
+
+      alignedStatusIcon = imageWidth != null
+          ? Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: imageWidth, child: positionedIcon),
+            )
+          : positionedIcon;
+    }
+
+    if (!showTint && !showBorder) {
+      return IgnorePointer(child: alignedStatusIcon);
+    }
+
+    final tintAlpha = status == GameFetchStatus.done
+        ? doneTintAlpha
+        : activeTintAlpha;
+    final overlayChild = showStatusIcon
+        ? alignedStatusIcon
+        : const SizedBox.expand();
+
+    return IgnorePointer(
+      child: AnimatedContainer(
+        duration: kFastAnimation,
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: showTint
+              ? color.withValues(alpha: tintAlpha)
+              : Colors.transparent,
+          border: showBorder
+              ? Border.all(
+                  color: status == GameFetchStatus.processing
+                      ? Colors.transparent
+                      : color,
+                  width: 3,
+                )
+              : null,
+          borderRadius: effectiveBorderRadius,
+        ),
+        child: overlayChild,
+      ),
+    );
+  }
+
+  Widget _buildTopRightChips(
+    AppThemeData theme, {
+    required bool showPlatform,
+    required bool showRatings,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 5.0, vertical: 5.0),
+    bool ratingLeftOfPlatform = false,
+  }) {
+    final bool showRatingChip = showRatings && widget.game.reviewCount > 0;
+    final bool hasPlatform = showPlatform;
+
+    if (!showRatingChip && !hasPlatform) return const SizedBox.shrink();
+
+    const double gap = 4.0;
+    final platformBadge = _buildPlatformBadge(
+      theme,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      minHeight: _platformBadgeHeight,
+    );
+
+    final topAlignedRating = _buildAnimatedRatingChip(
+      theme,
+      isVisible: showRatingChip,
+      fromTop: true,
+      borderRadius: _chipBorderRadius(theme, _badgeHeight),
+      minHeight: _badgeHeight,
+    );
+
+    final sideRating = _buildAnimatedRatingChip(
+      theme,
+      isVisible: showRatingChip,
+      fromTop: false,
+      borderRadius: _chipBorderRadius(theme, _platformBadgeHeight),
+      minHeight: _platformBadgeHeight,
+    );
+
+    final stackedRating = _buildAnimatedRatingChip(
+      theme,
+      isVisible: showRatingChip,
+      fromTop: true,
+      borderRadius: _chipBorderRadius(theme, 20.0),
+      topPadding: 4,
+    );
+
+    final Widget content;
+    if (!hasPlatform) {
+      content = topAlignedRating;
+    } else if (ratingLeftOfPlatform && showRatingChip) {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          sideRating,
+          const SizedBox(width: gap),
+          platformBadge,
+        ],
+      );
+    } else {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [platformBadge, if (showRatingChip) stackedRating],
+      );
+    }
+
+    return Padding(padding: padding, child: content);
+  }
+
+  Widget _buildAnimatedRatingChip(
+    AppThemeData theme, {
+    required bool isVisible,
+    required bool fromTop,
+    required BorderRadius borderRadius,
+    double? minHeight,
+    double topPadding = 0,
+  }) {
+    Widget rating = _buildRatingBadge(
+      theme,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      borderRadius: borderRadius,
+      minHeight: minHeight,
+    );
+
+    if (topPadding > 0) {
+      rating = Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: rating,
+      );
+    }
+
+    return _buildAnimatedReveal(
+      isVisible: isVisible,
+      fromTop: fromTop,
+      child: rating,
+    );
+  }
+
+  Widget _buildTitleChip(AppThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.background.withValues(alpha: 0.75),
+        borderRadius: _chipBorderRadius(theme, _badgeHeight),
+      ),
+      child: Text(
+        widget.game.title,
+        style: TextStyle(fontWeight: FontWeight.w600),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  IconData _ratingIconFor(int score, int reviewCount) {
+    if (reviewCount == 0) return Icons.help_outline_rounded;
+    if (score >= 95) return Icons.auto_awesome_rounded;
+    if (score >= 90) return Icons.thumb_up_alt_rounded;
+    if (score >= 75) return Icons.thumb_up_rounded;
+    if (score >= 60) return Icons.thumbs_up_down_rounded;
+    if (score >= 40) return Icons.thumb_down_alt_rounded;
+    return Icons.thumb_down_rounded;
+  }
+
+  Widget _buildPlatformBadge(
+    AppThemeData theme, {
+    BorderRadius? borderRadius,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    double? minHeight,
+  }) {
+    final platform = widget.game.platformEnum;
+    final platformLabel = widget.game.platform;
+    final double iconSize = platformIconSizeFor(platform, minHeight: minHeight);
+    final chipColor = theme.baseSecondary;
+    final bool iconOnly = minHeight != null;
+
+    if (iconOnly) {
+      return _buildSquareIconBadge(
+        theme,
+        tooltip: platformLabel,
+        color: chipColor,
+        size: minHeight,
+        semanticsLabel: platformLabel,
+        borderRadius: _chipBorderRadius(theme, minHeight),
+        icon: PlatformIcon(
+          platform: platform,
+          size: iconSize,
+          color: theme.primaryButtonText,
+        ),
+      );
+    }
+
+    return _buildPillBadge(
+      theme,
+      tooltip: platformLabel,
+      color: chipColor,
+      borderRadius: borderRadius,
+      padding: padding,
+      minHeight: minHeight,
+      child: Semantics(
+        label: platformLabel,
+        child: PlatformIcon(
+          platform: platform,
+          size: iconSize,
+          color: theme.accent,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlimFetchStatusBadge(
+    AppThemeData theme,
+    GameFetchStatus status, {
+    required double minHeight,
+  }) {
+    final iconSize = platformIconSizeFor(
+      widget.game.platformEnum,
+      minHeight: minHeight,
+    );
+    final visual = _fetchStatusVisual(
+      theme,
+      status,
+      iconSize: iconSize,
+      compactProcessingSpinner: true,
+    );
+
+    return _buildSquareIconBadge(
+      theme,
+      tooltip: visual.tooltip,
+      color: visual.color,
+      size: minHeight,
+      icon: AnimatedSwitcher(
+        duration: kVeryFastAnimation,
+        transitionBuilder: (child, anim) => ScaleTransition(
+          scale: anim,
+          child: FadeTransition(opacity: anim, child: child),
+        ),
+        child: SizedBox(
+          key: ValueKey(status),
+          width: iconSize,
+          height: iconSize,
+          child: Center(child: visual.icon),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlimSelectionBadge(
+    AppThemeData theme, {
+    required double minHeight,
+  }) {
+    final iconSize = platformIconSizeFor(
+      widget.game.platformEnum,
+      minHeight: minHeight,
+    );
+
+    return _buildSquareIconBadge(
+      theme,
+      tooltip: 'Selected',
+      color: theme.accent,
+      size: minHeight,
+      icon: Icon(Icons.check, color: Colors.white, size: iconSize),
+    );
+  }
+
+  Widget _buildRatingBadge(
+    AppThemeData theme, {
+    BorderRadius? borderRadius,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    double? minHeight,
+  }) {
+    final reviewCount = widget.game.reviewCount;
+    final ratingText = reviewCount == 0
+        ? 'No Reviews'
+        : '${widget.game.reviewScore}% · ${widget.game.reviewRating} · ${_compactNumber.format(reviewCount)}';
+
+    return _buildPillBadge(
+      theme,
+      tooltip: ratingText,
+      color: widget.game.reviewColor.withValues(alpha: 0.95),
+      borderRadius: borderRadius,
+      padding: padding,
+      minHeight: minHeight,
+      child: Icon(
+        _ratingIconFor(widget.game.reviewScore, reviewCount),
+        color: Colors.white,
+        size: 18.0,
+      ),
+    );
+  }
+
+  Widget _buildDeadlineStatusIcon(bool isExpired, {double size = 18.0}) {
+    return Icon(
+      isExpired ? Icons.event_busy : Icons.schedule,
+      color: Colors.white,
+      size: size,
+    );
+  }
+
+  Widget _buildDeadlineBadge(
+    AppThemeData theme, {
+    BorderRadius? borderRadius,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    bool showIcon = false,
+    double? minHeight,
+    bool forceIconOnly = false,
+  }) {
+    final daysLeft = widget.game.daysUntilDeadline ?? 0;
+    final isExpired = widget.game.isExpired;
+    final isUrgent = daysLeft <= 3 && !isExpired;
+    final isSoon = daysLeft <= 7 && !isExpired && !isUrgent;
+    final isDueSoon = daysLeft <= 14 && !isExpired;
+    final dueText = daysLeft == 0 ? 'Today' : '$daysLeft days';
+    final iconOnly = forceIconOnly || (!isExpired && !isDueSoon);
+    final iconSize = 18.0;
+
+    Color badgeColor;
+    String text;
+
+    if (isExpired) {
+      badgeColor = Colors.red;
+      text = 'Expired';
+    } else if (isUrgent) {
+      badgeColor = theme.deadlineUrgent;
+      text = dueText;
+    } else if (isSoon) {
+      badgeColor = theme.deadlineSoon;
+      text = dueText;
+    } else {
+      badgeColor = theme.deadlineNormal;
+      final date = widget.game.deadlineDate;
+      text = date != null ? _deadlineFormat.format(date) : 'Deadline';
+    }
+
+    final deadlineDate = widget.game.deadlineDate;
+
+    final String tooltipMessage;
+    if (isExpired) {
+      if (deadlineDate == null) {
+        tooltipMessage = 'Expired';
+      } else {
+        final daysAgo = daysLeft.abs();
+        final agoText = daysAgo == 0
+            ? 'today'
+            : daysAgo == 1
+            ? '1 day ago'
+            : '$daysAgo days ago';
+        tooltipMessage =
+            'Expired $agoText · ${_deadlineFormat.format(deadlineDate)}';
+      }
+    } else if (deadlineDate == null) {
+      tooltipMessage = text;
+    } else if (daysLeft == 0) {
+      tooltipMessage = 'Due today · ${_deadlineFormat.format(deadlineDate)}';
+    } else {
+      tooltipMessage =
+          'Due in $daysLeft days · ${_deadlineFormat.format(deadlineDate)}';
+    }
+
+    if (iconOnly && minHeight != null) {
+      return _buildSquareIconBadge(
+        theme,
+        tooltip: tooltipMessage,
+        color: badgeColor,
+        size: minHeight,
+        borderRadius: _chipBorderRadius(theme, minHeight),
+        icon: _buildDeadlineStatusIcon(isExpired, size: iconSize),
+      );
+    }
+
+    return Tooltip(
+      message: tooltipMessage,
+      child: IntrinsicWidth(
+        child: Container(
+          alignment: Alignment.center,
+          padding: padding,
+          constraints: minHeight != null
+              ? BoxConstraints(minHeight: minHeight)
+              : null,
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius:
+                borderRadius ??
+                _chipBorderRadius(theme, minHeight ?? _badgeHeight),
+          ),
+          child: iconOnly
+              ? _buildDeadlineStatusIcon(isExpired, size: iconSize)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showIcon) ...[
+                      _buildDeadlineStatusIcon(isExpired, size: iconSize),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      text,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsedBadge(AppThemeData theme, {double? minHeight}) {
+    const iconSize = 16.0;
+    const badgeColor = Color(0xFF607D8B);
+    return _buildSquareIconBadge(
+      theme,
+      tooltip: 'Used',
+      color: badgeColor,
+      size: minHeight ?? _badgeHeight,
+      borderRadius: _chipBorderRadius(theme, minHeight ?? _badgeHeight),
+      icon: const Icon(
+        Icons.check_circle_outline,
+        color: Colors.white,
+        size: iconSize,
+      ),
+    );
+  }
+
+  Widget _buildDlcBadge(AppThemeData theme, {double? minHeight}) {
+    return _buildSquareIconBadge(
+      theme,
+      tooltip: 'DLC',
+      color: theme.accent,
+      size: minHeight ?? _badgeHeight,
+      borderRadius: _chipBorderRadius(theme, minHeight ?? _badgeHeight),
+      icon: const Icon(Icons.extension, color: Colors.white, size: 14.0),
+    );
+  }
+
+  Widget _buildTagsRow(
+    BuildContext context,
+    AppThemeData theme, {
+    double? fixedMaxWidth,
+  }) {
+    final tagNames = widget.game.tags.map((t) => t.name).toList();
+    if (tagNames.isEmpty) return const SizedBox.shrink();
+
+    // When a fixed width is provided (grid mode — always kGridCardWidth - 16),
+    // skip LayoutBuilder entirely. Grid card dimensions never change on resize,
+    // eliminating the extra layout pass forced by LayoutBuilder for every
+    // visible card on every resize frame.
+    if (fixedMaxWidth != null) {
+      final textScaler = MediaQuery.textScalerOf(context);
+      return _buildTagsRowForWidth(
+        context,
+        theme,
+        fixedMaxWidth,
+        tagNames,
+        textScaler,
+      );
+    }
+
+    // List-mode fallback: width is dynamic (viewport-relative). Bucket to the
+    // nearest 8 px so the cache key is stable across small resize increments,
+    // reducing O(n) remeasurement frequency ~8× during window drag.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScaler = MediaQuery.textScalerOf(context);
+        final rawWidth =
+            constraints.hasBoundedWidth && constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        // Bucket to nearest 8 px to stabilise the cache key during resize.
+        final bucketedWidth = (rawWidth / 8).floorToDouble() * 8.0;
+        return _buildTagsRowForWidth(
+          context,
+          theme,
+          bucketedWidth,
+          tagNames,
+          textScaler,
+        );
+      },
+    );
+  }
+
+  Widget _buildTagsRowForWidth(
+    BuildContext context,
+    AppThemeData theme,
+    double maxWidth,
+    List<String> tagNames,
+    TextScaler textScaler,
+  ) {
+    final textDirection = Directionality.of(context);
+    final tagStyle = TextStyle(
+      color: theme.textPrimary,
+      fontSize: 11,
+      fontWeight: FontWeight.w300,
+    );
+    final countStyle = TextStyle(
+      color: theme.textPrimary,
+      fontSize: 11,
+      fontWeight: FontWeight.w300,
+    );
+    final baseTextStyle = DefaultTextStyle.of(context).style;
+    final resolvedTagStyle = baseTextStyle.merge(tagStyle);
+    final resolvedCountStyle = baseTextStyle.merge(countStyle);
+    const chipPadding = EdgeInsets.symmetric(horizontal: 6, vertical: 3);
+    const countPadding = EdgeInsets.symmetric(horizontal: 6, vertical: 3);
+    const gap = 4.0;
+
+    double measureChip(String text, TextStyle style, EdgeInsets padding) {
+      final textWidth = TagWidthCache.measureTextWidth(
+        text,
+        style,
+        textDirection,
+        textScaler,
+      );
+      // Add a safety buffer to account for:
+      // 1. Container borders (usually 1-2px)
+      // 2. Sub-pixel anti-aliasing differences
+      // 3. Potential slight font mismatches
+      // This ensures tags are strictly hidden rather than truncated.
+      return textWidth + padding.horizontal + 2.0;
+    }
+
+    // Cache key encodes the available width, text scale, and tag-id
+    // fingerprint. The layout loop is only re-run when one of these
+    // actually changes (rare on typical hover/selection rebuilds).
+    final tagFingerprint = widget.game.tags.map((t) => t.id).join(',');
+    final tagKey =
+        '${maxWidth.toStringAsFixed(0)}:${textScaler.scale(1.0).toStringAsFixed(3)}:$tagFingerprint';
+
+    int bestCount;
+    double bestTagsWidth;
+    bool countFits;
+
+    if (tagKey == _lastTagCacheKey) {
+      // Fast path: reuse cached layout, skipping all measurement calls.
+      bestCount = _cachedTagBestCount;
+      bestTagsWidth = _cachedTagBestWidth;
+      countFits = _cachedTagCountFits;
+    } else {
+      // Slow path: measure each tag and find the best-fit visible count.
+      final separatorWidth = TagWidthCache.measureTextWidth(
+        ' · ',
+        resolvedTagStyle,
+        textDirection,
+        textScaler,
+      );
+
+      final tagNameWidths = List<double>.generate(
+        tagNames.length,
+        (index) => TagWidthCache.measureTextWidth(
+          tagNames[index],
+          resolvedTagStyle,
+          textDirection,
+          textScaler,
+        ),
+        growable: false,
+      );
+
+      final countWidthCache = <int, double>{};
+      double countChipWidthFor(int remaining) {
+        return countWidthCache.putIfAbsent(
+          remaining,
+          () => measureChip('+$remaining', resolvedCountStyle, countPadding),
+        );
+      }
+
+      bestCount = 0;
+      double runningTextWidth = 0.0;
+      bestTagsWidth = 0.0;
+      for (var i = 0; i < tagNames.length; i++) {
+        runningTextWidth += tagNameWidths[i];
+        if (i > 0) {
+          runningTextWidth += separatorWidth;
+        }
+
+        final visibleCount = i + 1;
+        final remaining = tagNames.length - visibleCount;
+        final tagsWidth = runningTextWidth + chipPadding.horizontal + 2.0;
+
+        double trailingCountWidth = 0.0;
+        if (remaining > 0) {
+          trailingCountWidth = countChipWidthFor(remaining) + gap;
+        }
+
+        if (tagsWidth + trailingCountWidth <= maxWidth) {
+          bestCount = visibleCount;
+          bestTagsWidth = tagsWidth;
+        } else {
+          break;
+        }
+      }
+
+      // countFits must be computed here while countChipWidthFor is in scope.
+      final remainingForFit = tagNames.length - bestCount;
+      countFits = remainingForFit > 0
+          ? (countChipWidthFor(remainingForFit) +
+                    (bestTagsWidth > 0 ? bestTagsWidth + gap : 0.0) <=
+                maxWidth)
+          : false;
+
+      // Persist results — non-reactive cache fields, no setState needed.
+      _lastTagCacheKey = tagKey;
+      _cachedTagBestCount = bestCount;
+      _cachedTagBestWidth = bestTagsWidth;
+      _cachedTagCountFits = countFits;
+    }
+
+    final showTagsText = bestCount > 0;
+    final remainingCount = tagNames.length - bestCount;
+
+    final displayTags = showTagsText
+        ? tagNames.take(bestCount).join(' · ')
+        : '';
+    final displayCount = remainingCount > 0 ? '+$remainingCount' : '';
+    final representativeTag = widget.game.tags.first;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showTagsText)
+            Flexible(
+              fit: FlexFit.loose,
+              child: _buildTagChip(
+                theme,
+                displayTags,
+                padding: chipPadding,
+                overrideBackground: representativeTag.isSteamTag
+                    ? theme.accent
+                    : representativeTag.color,
+                overrideTextColor: theme.primaryButtonText,
+              ),
+            ),
+
+          if (remainingCount > 0 && countFits) ...[
+            if (showTagsText) const SizedBox(width: gap),
+            _buildTagChip(
+              theme,
+              displayCount,
+              padding: countPadding,
+              weight: FontWeight.w600,
+              overrideBackground: representativeTag.isSteamTag
+                  ? theme.accent.withValues(alpha: 0.92)
+                  : representativeTag.color.withValues(alpha: 0.92),
+              overrideTextColor: theme.primaryButtonText,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedTagsRow(
+    BuildContext context,
+    AppThemeData theme, {
+    required bool isVisible,
+    double? fixedMaxWidth,
+    double topSpacing = 0.0,
+  }) {
+    // When the tag row is hidden we avoid constructing the real widget at all
+    // because building it triggers expensive width measurement logic. The
+    // animation widgets still need a child to size against, so use a simple
+    // shrink widget instead. This dramatically cuts down on layout/paint
+    // churn during window resize when tags are not visible.
+    final Widget childWidget = isVisible
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (topSpacing > 0) SizedBox(height: topSpacing),
+              _buildTagsRow(context, theme, fixedMaxWidth: fixedMaxWidth),
+            ],
+          )
+        : const SizedBox.shrink();
+
+    return _VisibilityReveal(
+      isVisible: isVisible,
+      axisAlignment: 1.0,
+      alignment: Alignment.bottomLeft,
+      child: childWidget,
+    );
+  }
+
+  Widget _buildAnimatedReveal({
+    required bool isVisible,
+    required Widget child,
+    required bool fromTop,
+  }) {
+    return _VisibilityReveal(
+      isVisible: isVisible,
+      axisAlignment: fromTop ? -1.0 : 1.0,
+      alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+      child: child,
+    );
+  }
+
+  Widget _buildTagChip(
+    AppThemeData theme,
+    String text, {
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    FontWeight weight = FontWeight.w600,
+    Color? overrideBackground,
+    Color? overrideTextColor,
+  }) {
+    // If an explicit background is provided (representative tag color),
+    // prefer it — but slightly boost very low-saturation tag colors so
+    // they remain visible on busy covers.
+    Color chipColor;
+    if (overrideBackground != null) {
+      chipColor = overrideBackground.withValues(alpha: 0.95);
+      final hOverride = HSLColor.fromColor(chipColor);
+      if (hOverride.saturation < 0.06) {
+        chipColor = _applySaturation(chipColor, 1.2).withValues(alpha: 0.95);
+      }
+    } else {
+      // Use pre-computed theme value — HSL/saturation check was done once when
+      // the theme was built rather than on every widget build call.
+      chipColor = theme.tagChipDefaultColor;
+    }
+
+    // Ensure readable label color on top of chip
+    final chipTextColor =
+        overrideTextColor ??
+        (chipColor.computeLuminance() > 0.5 ? Colors.black : Colors.white);
+
+    return Container(
+      padding: padding,
+      // Use an effectively infinite radius so the chip becomes a true
+      // pill/stadium regardless of text size or font metrics.
+      decoration: BoxDecoration(
+        color: chipColor,
+        borderRadius: _chipBorderRadius(theme, _badgeHeight),
+        // subtle border to separate chip from busy cover images
+        border: Border.all(color: theme.border.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: chipTextColor,
+          fontSize: 12,
+          fontWeight: weight,
+        ),
+      ),
+    );
+  }
+}
+
+/// Explicit visibility animation that only runs when [isVisible] changes.
+///
+/// Unlike AnimatedSize, this does not start a new layout animation when the
+/// child changes size because of a parent resize, which keeps large card lists
+/// much cheaper during nav panel collapse/expand and window resizing.
+class _VisibilityReveal extends StatefulWidget {
+  const _VisibilityReveal({
+    required this.isVisible,
+    required this.axisAlignment,
+    required this.alignment,
+    required this.child,
+  });
+
+  final bool isVisible;
+  final double axisAlignment;
+  final Alignment alignment;
+  final Widget child;
+
+  @override
+  State<_VisibilityReveal> createState() => _VisibilityRevealState();
+}
+
+class _VisibilityRevealState extends State<_VisibilityReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _curve;
+  late final Animation<double> _opacity;
+
+  /// The widget currently being rendered inside the transitions.
+  ///
+  /// When hiding, this keeps the last visible snapshot alive for the duration
+  /// of the reverse animation so the content fades/collapses out smoothly
+  /// instead of snapping away the moment [widget.isVisible] becomes false.
+  late Widget _displayChild;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayChild = widget.child;
+    _controller = AnimationController(
+      vsync: this,
+      duration: kVeryFastAnimation,
+      reverseDuration: kFastAnimation,
+      value: widget.isVisible ? 1.0 : 0.0,
+    );
+    _curve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutCirc,
+      reverseCurve: Curves.easeInOutCirc,
+    );
+    _opacity = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _VisibilityReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isVisible) {
+      // Always adopt the latest child when visible (tags may have changed).
+      _displayChild = widget.child;
+      if (oldWidget.isVisible != widget.isVisible) {
+        _controller.forward();
+      }
+    } else if (oldWidget.isVisible != widget.isVisible) {
+      // isVisible just became false. Keep _displayChild as the last real
+      // content — the reverse animation plays against it. Once the animation
+      // finishes, swap in the new (collapsed/empty) child.
+      _controller.reverse().whenCompleteOrCancel(() {
+        if (mounted) setState(() => _displayChild = widget.child);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: SizeTransition(
+        sizeFactor: _curve,
+        axisAlignment: widget.axisAlignment,
+        child: Align(
+          alignment: widget.alignment,
+          heightFactor: 1.0,
+          child: IgnorePointer(
+            ignoring: !widget.isVisible,
+            child: FadeTransition(opacity: _opacity, child: _displayChild),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FetchStatusVisual {
+  const _FetchStatusVisual({
+    required this.color,
+    required this.icon,
+    required this.tooltip,
+  });
+
+  final Color color;
+  final Widget icon;
+  final String tooltip;
+}
+
+class _CardViewOptions {
+  const _CardViewOptions({
+    required this.showTitle,
+    required this.showTitleOnNoPicture,
+    required this.showPlatform,
+    required this.showTags,
+    required this.showTagsOnHoverOnly,
+    required this.showDeadline,
+    required this.showRatingsNow,
+    required this.compactListView,
+    required this.slimListView,
+  });
+
+  final bool showTitle;
+  final bool showTitleOnNoPicture;
+  final bool showPlatform;
+  final bool showTags;
+  final bool showTagsOnHoverOnly;
+  final bool showDeadline;
+  final bool showRatingsNow;
+  final bool compactListView;
+  final bool slimListView;
+}
+
+class _ListCardLayout {
+  const _ListCardLayout({
+    required this.useSlim,
+    required this.useCompact,
+    required this.cardHeight,
+    required this.cardImageWidth,
+  });
+
+  final bool useSlim;
+  final bool useCompact;
+  final double cardHeight;
+  final double cardImageWidth;
+
+  static _ListCardLayout fromOptions(_CardViewOptions options) {
+    final useSlim = options.slimListView;
+    // Use compact dimensions on mobile or when compact mode is on, unless the
+    // dedicated slim mode is enabled.
+    final useCompact =
+        !useSlim &&
+        (options.compactListView || PlatformFileActions.isMobilePlatform);
+
+    return _ListCardLayout(
+      useSlim: useSlim,
+      useCompact: useCompact,
+      cardHeight: useSlim
+          ? kSlimListCardHeight
+          : useCompact
+          ? kCompactListCardHeight
+          : kListCardHeight,
+      cardImageWidth: useCompact
+          ? kCompactListCardImageWidth
+          : kListCardImageWidth,
+    );
+  }
+}
+
+/// Paints an inward glow overlay from all four edges of a game card.
+///
+/// The accent color apex sits at the bottom-left corner (bottom + left edge
+/// glows accumulate via srcOver). The primary color apex sits at the top-right
+/// corner (top + right edge glows accumulate). The card center stays fully
+/// transparent so cover art is never obscured.
+/// Paints an inward frame glow around a game card.
+///
+/// A horizontal [LinearGradient] (accent → primary) fills the card, then an
+/// alpha mask shaped like a frame — fully opaque at the card edges, punched
+/// out in the centre by a blurred inner [RRect] — is applied via [BlendMode.dstIn].
+/// The blur on the inner boundary creates the soft feathered fall-off and the
+/// rounded corners of the inner edge follow [cornerRadius].
+class _CardGlowPainter extends CustomPainter {
+  const _CardGlowPainter({
+    required this.accentColor,
+    required this.primaryColor,
+    required this.selected,
+    required this.cornerRadius,
+  });
+
+  final Color accentColor;
+  final Color primaryColor;
+  final bool selected;
+  final double cornerRadius;
+
+  static const double _hoverAlpha = 0.85;
+  static const double _selectedAlpha = 0.95;
+  // Frame depth as a fraction of the shorter card dimension.
+  static const double _glowDepthFraction = 0.035;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double alpha = selected ? _selectedAlpha : _hoverAlpha;
+    final rect = Offset.zero & size;
+    final double glowDepth =
+        math.min(size.width, size.height) * _glowDepthFraction;
+    final double blurSigma = glowDepth * 0.45;
+
+    // Inner corner radius keeps the inner boundary visually concentric with
+    // the card's outer corners.
+    final double innerRadius = (cornerRadius - glowDepth * 0.4).clamp(
+      0.0,
+      cornerRadius,
+    );
+
+    // ── Outer layer composited at the target alpha ────────────────────────
+    canvas.saveLayer(
+      rect,
+      Paint()..color = Color.fromARGB((alpha * 255).round(), 255, 255, 255),
+    );
+
+    // Color fill: smooth gradient left (accent) → right (primary).
+    // Left edges receive accent, right edges receive primary, and the top/
+    // bottom edges blend between the two colours along their length.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [accentColor, primaryColor],
+        ).createShader(rect),
+    );
+
+    // ── Alpha mask: frame shape with soft rounded inner boundary ──────────
+    // dstIn retains the gradient only where the mask has alpha.
+    canvas.saveLayer(rect, Paint()..blendMode = BlendMode.dstIn);
+
+    // Full-opacity base — gradient is initially visible everywhere.
+    canvas.drawRect(rect, Paint()..color = const Color(0xFFFFFFFF));
+
+    // Punch out the centre using a blurred inner RRect (dstOut removes it).
+    // The Gaussian blur softens the inner boundary for a natural falloff;
+    // the rounded corners of the RRect mirror the card's own corner radius.
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        glowDepth,
+        glowDepth,
+        size.width - glowDepth,
+        size.height - glowDepth,
+        Radius.circular(innerRadius),
+      ),
+      Paint()
+        ..blendMode = BlendMode.dstOut
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma)
+        ..color = const Color(0xFFFFFFFF),
+    );
+
+    canvas.restore(); // alpha mask layer → gradient is now frame-shaped
+    canvas.restore(); // composite to parent at target alpha
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardGlowPainter old) =>
+      old.accentColor != accentColor ||
+      old.primaryColor != primaryColor ||
+      old.selected != selected ||
+      old.cornerRadius != cornerRadius;
+}
+
+class _UsedPatternPainter extends CustomPainter {
+  const _UsedPatternPainter({
+    required this.textColor,
+    required this.angleDegrees,
+    required this.patternSize,
+  });
+
+  static const String _label = 'USED';
+  static final Map<int, TextPainter> _textPainterCache = <int, TextPainter>{};
+  static const int _maxCacheEntries = 16;
+
+  final Color textColor;
+  final double angleDegrees;
+  final Size patternSize;
+
+  TextPainter _resolveTextPainter(double fontSize) {
+    // Quantize to keep cache small and stable during window resize drags.
+    final quantized = (fontSize * 2).round() / 2;
+    final cacheKey = Object.hash(textColor.toARGB32(), quantized);
+    final cached = _textPainterCache[cacheKey];
+    if (cached != null) return cached;
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: _label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: quantized,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    if (_textPainterCache.length >= _maxCacheEntries) {
+      _textPainterCache.remove(_textPainterCache.keys.first);
+    }
+    _textPainterCache[cacheKey] = painter;
+    return painter;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    // Clip to visible bounds, but generate pattern from a fixed virtual size
+    // so watermark stays visually static while parent layouts resize.
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+
+    final shortestSide = math.min(patternSize.width, patternSize.height);
+    final fontSize = (shortestSide * 0.10).clamp(18.0, 28.0);
+    final textPainter = _resolveTextPainter(fontSize);
+
+    final textWidth = textPainter.width;
+    final textHeight = textPainter.height;
+    final xStep = textWidth + fontSize * 1.3;
+    final yStep = textHeight + fontSize * 1.3;
+
+    final diagonal = math.sqrt(
+      patternSize.width * patternSize.width +
+          patternSize.height * patternSize.height,
+    );
+    final angle = angleDegrees * (math.pi / 180);
+
+    // Stable top-left anchor to avoid perceived drift during resize.
+    canvas.translate(patternSize.width / 2, patternSize.height / 2);
+    canvas.rotate(angle);
+    canvas.translate(-diagonal / 2, -diagonal / 2);
+
+    for (double rowY = -yStep; rowY < diagonal + yStep; rowY += yStep) {
+      final rowOffset = ((rowY / yStep).floor().isEven) ? 0.0 : xStep * 0.5;
+      for (double colX = -xStep; colX < diagonal + xStep; colX += xStep) {
+        textPainter.paint(canvas, Offset(colX + rowOffset, rowY));
+      }
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _UsedPatternPainter oldDelegate) {
+    return oldDelegate.textColor != textColor ||
+        oldDelegate.angleDegrees != angleDegrees ||
+        oldDelegate.patternSize != patternSize;
+  }
+}
