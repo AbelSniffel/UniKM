@@ -1,19 +1,17 @@
-## Version 1.3.0 WIP (release in June)
-
 # UniKM / Universal Key Manager
 A cross-platform desktop application for organizing and managing your game product keys and activation codes. UniKM features Steam integration, encryption, and a themeable UI.
 This is a complete rewrite of SteamKM2, using Dart language and Flutter as the front-end.
 
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![Flutter](https://img.shields.io/badge/Flutter-3.41.2%2B-02569B?logo=flutter)
-![Version](https://img.shields.io/badge/Version-1.2.0-purple)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20Linux-blue)
+![Flutter](https://img.shields.io/badge/Flutter-3.41.6%2B-02569B?logo=flutter)
+![Version](https://img.shields.io/badge/Version-1.3.0-purple)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 
 ## Overview
 
 UniKM keeps all your game keys in one place: organized, searchable, and secure. Whether you have a handful of codes or hundreds from Humble Bundle, Fanatical, Green Man Gaming bundles or from some other place, UniKM gives you a place to store them efficiently. It integrates directly with Steam to enrich your library with cover art, ratings, and tags automatically, and optionally encrypts your database so your keys stay private.
 
-<img width="2163" height="1345" alt="image" src="https://github.com/user-attachments/assets/5528459f-5b56-43fb-bbfb-7c0d49c6dd64" />
+<img width="953" height="629" alt="image" src="https://github.com/user-attachments/assets/9259b01c-139e-4767-958d-dfc0362b65bd" />
 
 
 ## Features
@@ -23,6 +21,11 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 - Right-click context menu for quick actions: copy key, mark used/unused, fetch Steam data, delete
 - Mark games as used or unused with visual indicators
 - Attach expiry/deadline dates with automatic reminder notifications
+
+### Device Syncronization
+- Same file across multiple devices
+- Remove/add/edit any game, and it will automatically sync to other paired devices
+- Local only network approach, no cloud services
 
 ### Steam Integration
 - Search the Steam store and auto-fill game details with a single click
@@ -75,9 +78,9 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 | Platform | Status |
 |----------|--------|
 | Windows  | ✅ Fully supported |
-| Linux    | ⚠️ Experimental |
+| Linux    | ✅ Fully supported |
+| Android  | ✅ Fully supported |
 | macOS    | ⚠️ Experimental |
-| Android  | ⚠️ Experimental |
 | iOS      | ⚠️ Experimental |
 
 
