@@ -11,10 +11,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/app_search_field.dart';
-import '../../widgets/app_tag_chip.dart';
+import '../../widgets/tag_list.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
 
 /// Tags management section
@@ -61,7 +62,7 @@ class TagsSection extends ConsumerStatefulWidget {
   );
 
   static const SettingsSearchGroup maintenanceSearchGroup = SettingsSearchGroup(
-    title: 'Tag Maintenance',
+    title: 'Tag Cleanup',
     settings: [maintenanceInfoSpec],
     extraTexts: ['Remove old default tags (one-time)', 'One-time Cleanup'],
   );
@@ -95,7 +96,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
 
     try {
       final db = ref.read(requireDatabaseProvider);
-      final colorHex = colorToHex(widget.theme.primary);
+      final colorHex = colorToHex(widget.theme.secondary);
       await db.getOrCreateTag(name, color: colorHex);
       await ref.read(tagsProvider.notifier).refresh();
       // Clear field and show notification immediately — don't wait for
@@ -313,10 +314,10 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                         onSubmitted: (_) => _createTag(),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
+                    const SizedBox(width: kElementHSpacing),
+                    ElevatedButton.icon(
                       onPressed: _createTag,
-                      icon: const Icon(Icons.add, size: 18),
+                      icon: const Icon(Icons.add),
                       label: const Text('Create'),
                     ),
                   ],
@@ -332,31 +333,15 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                     ),
                   )
                 else ...[
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final maxH = constraints.maxHeight.isFinite
-                          ? constraints.maxHeight
-                          : 300.0;
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: maxH),
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: customTags
-                                .map(
-                                  (tag) => AppTagChip(
-                                    tag: tag,
-                                    theme: widget.theme,
-                                    isSelected: true,
-                                    onDelete: () => _deleteTag(tag.id, tag.name),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      );
+                  TagList(
+                    tags: customTags,
+                    theme: widget.theme,
+                    allSelected: true,
+                    onTagDeleted: (tagId) {
+                      final tag = customTags.firstWhere((t) => t.id == tagId);
+                      _deleteTag(tag.id, tag.name);
                     },
+                    maxHeight: 300,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -384,7 +369,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
             title:
                 '${TagsSection.steamTagsSearchGroup.title} (${steamTags.length})',
             theme: widget.theme,
-            titleIcon: FontAwesomeIcons.steam,
+            titleIcon: FontAwesomeIcons.steam.data,
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,
@@ -402,30 +387,11 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                     ),
                   )
                 else ...[
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final maxH = constraints.maxHeight.isFinite
-                          ? constraints.maxHeight
-                          : 200.0;
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: maxH),
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: steamTags
-                                .map(
-                                  (tag) => AppTagChip(
-                                    tag: tag,
-                                    theme: widget.theme,
-                                    isSelected: true,
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      );
-                    },
+                  TagList(
+                    tags: steamTags,
+                    theme: widget.theme,
+                    allSelected: true,
+                    maxHeight: 200,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -448,6 +414,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           visible: showTagMaintenance,
           builder: (position, isAlternate) => SectionGroupBox(
             title: TagsSection.maintenanceSearchGroup.title,
+            titleIcon: Icons.cleaning_services,
             theme: widget.theme,
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
@@ -475,8 +442,8 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                       vertical: 12,
                     ),
                   ),
-                  icon: const Icon(Icons.cleaning_services, size: 18),
-                  label: const Text('Remove old default tags (one-time)'),
+                  icon: const Icon(Icons.delete_sweep, size: 20),
+                  label: const Text('Remove legacy tags'),
                 ),
               ],
             ),

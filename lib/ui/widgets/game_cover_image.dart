@@ -14,12 +14,15 @@ class GameCoverImage extends StatelessWidget {
     required this.coverImage,
     this.fit = BoxFit.cover,
     this.placeholderIcon = Icons.videogame_asset_outlined,
+    this.onError,
   });
 
   final AppThemeData theme;
   final String? coverImage;
   final BoxFit fit;
   final IconData placeholderIcon;
+  /// Called once if the image fails to load (URL 404, missing file, etc.).
+  final VoidCallback? onError;
 
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
@@ -33,7 +36,10 @@ class GameCoverImage extends StatelessWidget {
         imageUrl: raw,
         fit: fit,
         placeholder: (context, url) => _buildPlaceholder(),
-        errorWidget: (context, url, error) => _buildPlaceholder(),
+        errorWidget: (context, url, error) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => onError?.call());
+          return _buildPlaceholder();
+        },
       );
     }
 
@@ -41,7 +47,10 @@ class GameCoverImage extends StatelessWidget {
       return Image.asset(
         raw,
         fit: fit,
-        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+        errorBuilder: (context, error, stackTrace) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => onError?.call());
+          return _buildPlaceholder();
+        },
       );
     }
 
@@ -53,7 +62,10 @@ class GameCoverImage extends StatelessWidget {
     return Image.file(
       file,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+      errorBuilder: (context, error, stackTrace) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => onError?.call());
+        return _buildPlaceholder();
+      },
     );
   }
 

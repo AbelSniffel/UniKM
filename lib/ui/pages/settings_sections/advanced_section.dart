@@ -4,7 +4,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/notification_system.dart';
@@ -27,13 +26,10 @@ class AdvancedSection extends ConsumerWidget {
   final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
-  static const SettingTextSpec fpsCounterSpec = SettingTextSpec(
-    label: 'Show FPS counter in title bar',
-    description: 'Display a live FPS value left of the window controls',
-  );
   static const SettingTextSpec devWindowSpec = SettingTextSpec(
     label: 'Developer Window',
-    description: 'Open a floating window with developer tools (Ctrl+Alt+D)',
+    description:
+        'Open a floating window with developer tools and FPS controls (Ctrl+Alt+D)',
   );
   static const SettingTextSpec resetSettingsSpec = SettingTextSpec(
     label: 'Reset settings',
@@ -42,7 +38,7 @@ class AdvancedSection extends ConsumerWidget {
 
   static const SettingsSearchGroup systemSearchGroup = SettingsSearchGroup(
     title: 'System',
-    settings: [fpsCounterSpec, devWindowSpec, resetSettingsSpec],
+    settings: [devWindowSpec, resetSettingsSpec],
   );
 
   static List<String> get sectionSearchTexts => [
@@ -52,13 +48,6 @@ class AdvancedSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final showFpsCounter = ref.watch(
-      settingsProvider.select(
-        (s) =>
-            (s[SettingsKeys.showFpsCounter] as bool?) ??
-            DefaultSettings.showFpsCounter,
-      ),
-    );
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
     final isSearching = searchQuery.trim().isNotEmpty;
@@ -72,72 +61,58 @@ class AdvancedSection extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (showSystem)
-          SearchableSectionGroupBox(
-            theme: theme,
-            group: systemSearchGroup,
-            titleIcon: Icons.settings,
-            searchQuery: searchQuery,
-            matchesSearch: matchesSearch,
-            attachesToAbove: attachesToAbove,
-            child: Column(
-              children: [
-                SpecToggleSettingRow(
-                  theme: theme,
-                  spec: fpsCounterSpec,
-                  value: showFpsCounter,
-                  showDividerBelow: true,
-                  onChanged: (value) => settingsNotifier.setSetting(
-                    SettingsKeys.showFpsCounter,
-                    value,
-                  ),
+    return SettingsSectionGroups(
+      attachesToAbove: attachesToAbove,
+      entries: [
+        buildSearchableSectionEntry(
+          visible: showSystem,
+          theme: theme,
+          group: systemSearchGroup,
+          titleIcon: Icons.settings,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          childBuilder: () => Column(
+            children: [
+              SpecSettingRow(
+                theme: theme,
+                spec: devWindowSpec,
+                child: OutlinedButton(
+                  onPressed: () {
+                    DevWindowOverlay.toggle(context);
+                  },
+                  child: const Text('Open'),
                 ),
+              ),
 
-                SpecSettingRow(
-                  theme: theme,
-                  spec: devWindowSpec,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      DevWindowOverlay.toggle(context);
-                    },
-                    child: const Text('Open'),
-                  ),
-                ),
-
-                SpecSettingRow(
-                  theme: theme,
-                  spec: resetSettingsSpec,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                    ),
-                    onPressed: () async {
-                      final confirmed = await showConfirmDialog(
-                        context: context,
-                        theme: theme,
-                        title: 'Reset Settings?',
-                        message:
-                            'This will reset all settings to their default values. '
-                            'Your games and data will not be affected.',
-                        confirmLabel: 'Reset',
-                        destructive: true,
+              SpecSettingRow(
+                theme: theme,
+                spec: resetSettingsSpec,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                  onPressed: () async {
+                    final confirmed = await showConfirmDialog(
+                      context: context,
+                      theme: theme,
+                      title: 'Reset Settings?',
+                      message:
+                          'This will reset all settings to their default values. '
+                          'Your games and data will not be affected.',
+                      confirmLabel: 'Reset',
+                      destructive: true,
+                    );
+                    if (confirmed) {
+                      await settingsNotifier.resetToDefaults();
+                      NotificationManager.instance.success(
+                        'Settings reset to defaults',
                       );
-                      if (confirmed) {
-                        await settingsNotifier.resetToDefaults();
-                        NotificationManager.instance.success(
-                          'Settings reset to defaults',
-                        );
-                      }
-                    },
-                    child: const Text('Reset'),
-                  ),
+                    }
+                  },
+                  child: const Text('Reset'),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
       ],
     );
   }

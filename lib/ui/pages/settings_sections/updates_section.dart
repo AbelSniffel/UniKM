@@ -10,6 +10,7 @@ import '../../../core/settings/settings_model.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
+import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
 
 /// Updates settings section
@@ -32,12 +33,9 @@ class UpdatesSection extends ConsumerStatefulWidget {
     description: 'Get beta updates before stable release',
   );
   static const SettingTextSpec autoCheckSpec = SettingTextSpec(
-    label: 'Automatically check for updates',
-    description: 'Periodically check for new versions in the background',
-  );
-  static const SettingTextSpec intervalSpec = SettingTextSpec(
-    label: 'Check interval (minutes)',
-    description: 'How often to check for updates',
+    label: 'Automatic Update Check',
+    description:
+        'Control background update checks and view the next scheduled run',
   );
   static const SettingTextSpec repositorySpec = SettingTextSpec(
     label: 'Repository',
@@ -51,7 +49,13 @@ class UpdatesSection extends ConsumerStatefulWidget {
   static const List<SettingsSearchGroup> searchGroups = [
     SettingsSearchGroup(
       title: 'Update Preferences',
-      settings: [autoCheckSpec, intervalSpec, includePrereleaseSpec],
+      settings: [autoCheckSpec, includePrereleaseSpec],
+      extraTexts: [
+        'Next check in',
+        'Automatic update check is disabled',
+        'Enable',
+        'Disable',
+      ],
     ),
     SettingsSearchGroup(
       title: 'GitHub Repository & API',
@@ -72,7 +76,6 @@ class UpdatesSection extends ConsumerStatefulWidget {
 class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
   final _repoController = TextEditingController();
   final _tokenController = TextEditingController();
-  final _intervalController = TextEditingController();
   Timer? _countdownTicker;
   DateTime _now = DateTime.now();
 
@@ -82,7 +85,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     final updates = ref.read(updatesSettingsProvider);
     _repoController.text = updates.updateRepo;
     _tokenController.text = updates.githubApiToken;
-    _intervalController.text = updates.autoCheckIntervalMinutes.toString();
     _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) {
         return;
@@ -99,7 +101,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     _countdownTicker?.cancel();
     _repoController.dispose();
     _tokenController.dispose();
-    _intervalController.dispose();
     super.dispose();
   }
 
@@ -131,6 +132,25 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     return 'In $hours hour${hours > 1 ? 's' : ''} $minutes min';
   }
 
+  String _automaticUpdateCheckDescription({
+    required bool autoCheckEnabled,
+    required DateTime? nextUpdateCheck,
+  }) {
+    if (!autoCheckEnabled) {
+      return 'Automatic update check is disabled';
+    }
+    if (nextUpdateCheck == null) {
+      return 'Next check is being scheduled';
+    }
+
+    final relativeLabel = _formatNextUpdateTime(nextUpdateCheck);
+    if (relativeLabel == 'Running now...') {
+      return 'Next check is running now';
+    }
+
+    return 'Next check ${relativeLabel[0].toLowerCase()}${relativeLabel.substring(1)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final updates = ref.watch(updatesSettingsProvider);
@@ -157,170 +177,109 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
-        SectionGroupEntry(
+        buildTitlelessSectionEntry(
           visible: showUpdatePreferences,
-          builder: (position, isAlternate) => SearchableSectionGroupBox(
+          theme: widget.theme,
+          searchQuery: widget.searchQuery,
+          isSearchMatch: isSearching,
+          childBuilder: () => SettingsStatusActionCard(
             theme: widget.theme,
-            group: UpdatesSection.searchGroups[0],
-            titleIcon: Icons.update,
-            searchQuery: widget.searchQuery,
-            matchesSearch: widget.matchesSearch,
-            groupPosition: position,
-            isAlternate: isAlternate,
-            child: Column(
-              children: [
-                SpecToggleSettingRow(
-                  theme: widget.theme,
-                  spec: UpdatesSection.autoCheckSpec,
-                  value: updates.autoCheckEnabled,
-                  onChanged: (value) => settingsNotifier.setSetting(
-                    SettingsKeys.autoUpdateCheck,
-                    value,
-                  ),
-                ),
-
-                SpecToggleSettingRow(
-                  theme: widget.theme,
-                  spec: UpdatesSection.includePrereleaseSpec,
-                  value: updates.includePrerelease,
-                  showDividerBelow: false,
-                  onChanged: (value) => settingsNotifier.setSetting(
-                    SettingsKeys.includePreReleases,
-                    value,
-                  ),
-                ),
-
-                SpecSettingRow(
-                  theme: widget.theme,
-                  spec: UpdatesSection.intervalSpec,
-                  child: ThemedTextField(
-                    theme: widget.theme,
-                    controller: _intervalController,
-                    keyboardType: TextInputType.number,
-                    width: 100,
-                    onChanged: (value) {
-                      final intValue = int.tryParse(value);
-                      if (intValue != null && intValue > 0) {
-                        settingsNotifier.setSetting(
-                          SettingsKeys.autoCheckIntervalMinutes,
-                          intValue,
-                        );
-                      }
-                    },
-                  ),
-                ),
-
-                if (updates.autoCheckEnabled && nextUpdateCheck != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: widget.theme.accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(
-                        widget.theme.cornerRadius,
-                      ),
-                      border: Border.all(
-                        color: widget.theme.accent.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.schedule,
-                          color: widget.theme.accent,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Next Scheduled Update Check',
-                                style: TextStyle(
-                                  color: widget.theme.textPrimary,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatNextUpdateTime(nextUpdateCheck),
-                                style: TextStyle(
-                                  color: widget.theme.textSecondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+            icon: Icons.schedule,
+            iconColor: widget.theme.accent,
+            title: UpdatesSection.autoCheckSpec.label,
+            subtitle: _automaticUpdateCheckDescription(
+              autoCheckEnabled: updates.autoCheckEnabled,
+              nextUpdateCheck: nextUpdateCheck,
             ),
+            titleColor: widget.theme.textPrimary,
+            stretchActionsWhenStacked: true,
+            actions: [
+              ElevatedButton(
+                onPressed: () => settingsNotifier.setSetting(
+                  SettingsKeys.autoUpdateCheck,
+                  !updates.autoCheckEnabled,
+                ),
+                child: Text(updates.autoCheckEnabled ? 'Disable' : 'Enable'),
+              ),
+            ],
           ),
         ),
-        SectionGroupEntry(
-          visible: showGithubGroup,
-          builder: (position, isAlternate) => SearchableSectionGroupBox(
+        buildSearchableSectionEntry(
+          visible: showUpdatePreferences,
+          theme: widget.theme,
+          group: UpdatesSection.searchGroups[0],
+          titleIcon: Icons.download_rounded,
+          searchQuery: widget.searchQuery,
+          matchesSearch: widget.matchesSearch,
+          childBuilder: () => buildSpecToggleSettingList(
             theme: widget.theme,
-            group: UpdatesSection.searchGroups[1],
-            titleIcon: Icons.code,
-            searchQuery: widget.searchQuery,
-            matchesSearch: widget.matchesSearch,
-            groupPosition: position,
-            isAlternate: isAlternate,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  UpdatesSection.repositorySpec.label,
-                  style: TextStyle(
-                    color: widget.theme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+            entries: [
+              (
+                spec: UpdatesSection.includePrereleaseSpec,
+                value: updates.includePrerelease,
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.includePreReleases,
+                  value,
                 ),
-                const SizedBox(height: 8),
-                ThemedTextField(
-                  theme: widget.theme,
-                  controller: _repoController,
-                  hintText: UpdatesSection.repositorySpec.description,
-                  onChanged: (value) {
-                    settingsNotifier.setSetting(SettingsKeys.updateRepo, value);
-                  },
+              ),
+            ],
+          ),
+        ),
+        buildSearchableSectionEntry(
+          visible: showGithubGroup,
+          theme: widget.theme,
+          group: UpdatesSection.searchGroups[1],
+          titleIcon: Icons.code,
+          searchQuery: widget.searchQuery,
+          matchesSearch: widget.matchesSearch,
+          childBuilder: () => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                UpdatesSection.repositorySpec.label,
+                style: TextStyle(
+                  color: widget.theme.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  UpdatesSection.githubTokenSpec.label,
-                  style: TextStyle(
-                    color: widget.theme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+              ),
+              const SizedBox(height: kElementVSpacing),
+              ThemedTextField(
+                theme: widget.theme,
+                controller: _repoController,
+                hintText: UpdatesSection.repositorySpec.description,
+                onChanged: (value) {
+                  settingsNotifier.setSetting(SettingsKeys.updateRepo, value);
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                UpdatesSection.githubTokenSpec.label,
+                style: TextStyle(
+                  color: widget.theme.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-                const SizedBox(height: 8),
-                ThemedTextField(
-                  theme: widget.theme,
-                  controller: _tokenController,
-                  obscureText: true,
-                  hintText: UpdatesSection.githubTokenSpec.description,
-                  onChanged: (value) {
-                    settingsNotifier.setSetting(
-                      SettingsKeys.githubApiToken,
-                      value,
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'A personal access token increases GitHub API rate limits.',
-                  style: TextStyle(color: widget.theme.textHint, fontSize: 12),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: kElementVSpacing),
+              ThemedTextField(
+                theme: widget.theme,
+                controller: _tokenController,
+                obscureText: true,
+                hintText: UpdatesSection.githubTokenSpec.description,
+                onChanged: (value) {
+                  settingsNotifier.setSetting(
+                    SettingsKeys.githubApiToken,
+                    value,
+                  );
+                },
+              ),
+              const SizedBox(height: kElementVSpacing),
+              Text(
+                'A personal access token increases GitHub API rate limits.',
+                style: TextStyle(color: widget.theme.textHint, fontSize: 12),
+              ),
+            ],
           ),
         ),
       ],

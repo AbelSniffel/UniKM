@@ -2,6 +2,8 @@
 /// Only animates once on initial build, then displays static content
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 class AnimatedGameCard extends StatefulWidget {
@@ -25,6 +27,7 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _transformAnimation;
+  Timer? _startTimer;
 
   @override
   void initState() {
@@ -35,25 +38,23 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _transformAnimation = widget.slideX
-        ? Tween<double>(begin: 0.05, end: 0.0).animate(
-            CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-          )
+        ? Tween<double>(begin: -0.05, end: 0.0).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeOut))
         : Tween<double>(begin: 0.9, end: 1.0).animate(
-            CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-          );
+            CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     // Start animation after delay
-    Future.delayed(widget.delay, () {
+    _startTimer = Timer(widget.delay, () {
       if (mounted) _controller.forward();
     });
   }
 
   @override
   void dispose() {
+    _startTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -64,8 +65,7 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     // animations don't re-subscribe to every MediaQuery change on each frame.
     // MediaQuery.sizeOf is also cheaper: it only rebuilds on size changes,
     // not on unrelated MediaQuery field changes (text scale, padding, etc.).
-    final slideWidth =
-        widget.slideX ? MediaQuery.sizeOf(context).width : 0.0;
+    final slideWidth = widget.slideX ? MediaQuery.sizeOf(context).width : 0.0;
 
     return AnimatedBuilder(
       animation: _controller,

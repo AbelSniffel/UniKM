@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/models/device_sync_models.dart';
 import '../core/services/device_sync_service.dart';
+import 'database_providers.dart';
 
 final deviceSyncServiceProvider = Provider<DeviceSyncService>((ref) {
   return DeviceSyncService(ref: ref);
@@ -159,6 +160,19 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
                 'Code was rejected by ${event.request.peer.name}. Try sending it again.',
           ),
         );
+      } else if (event is DbMismatchDetectedEvent) {
+        final nextMismatchIds = Set<String>.from(current.dbMismatchPeerIds)
+          ..add(event.peerId);
+        state = AsyncData(
+          current.copyWith(
+            status: DeviceSyncStatus.error,
+            dbMismatchPeerIds: nextMismatchIds,
+            statusMessage:
+                'DB mismatch: ${event.peerName} is using "${event.remoteDbName}" '
+                'but this device uses "${event.localDbName}". '
+                'Both devices must use the same active database file.',
+          ),
+        );
       }
     });
 
@@ -197,7 +211,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
             );
       state = AsyncData(next);
       _ensureBackgroundTimer(next);
-      if (value) {
+      if (value && ref.read(databaseProvider) != null) {
         unawaited(_runBackgroundCycle());
         unawaited(recheckWindowsFirewallAccess());
       }
@@ -262,6 +276,11 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
   /// Single coordinator cycle: runs peer discovery followed by sync-code
   /// polling. Both tasks are fire-and-forget so they do not block each other.
   Future<void> _runBackgroundCycle() async {
+    // Don't run any sync logic while the database is null — either still
+    // booting, switching databases, or the user cancelled a password prompt.
+    final db = ref.read(databaseProvider);
+    if (db == null) return;
+
     unawaited(_backgroundDiscover());
     final current = state.value;
     if (current != null && current.trustedPeers.isNotEmpty) {
@@ -300,6 +319,9 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
         !current.enabled ||
         current.trustedPeers.isEmpty ||
         _autoSyncInFlight ||
+        // Don't initiate sync while the database is null (mid-switch or
+        // still booting).
+        ref.read(databaseProvider) == null ||
         // If this device is currently acting as a receiver, suppress any
         // competing initiator sync.  Without this guard the background timer
         // could detect a revision mismatch mid-receive, launch a concurrent
@@ -764,6 +786,15 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     } finally {
       _autoSyncInFlight = false;
     }
+  }
+
+  /// Adds [peerId] to the in-memory mismatch set so the UI immediately
+  /// shows the mismatch badge, even before the background poll detects it.
+  void addDbMismatch(String peerId) {
+    final current = state.value;
+    if (current == null) return;
+    final next = Set<String>.from(current.dbMismatchPeerIds)..add(peerId);
+    state = AsyncData(current.copyWith(dbMismatchPeerIds: next));
   }
 }
 

@@ -1,6 +1,8 @@
 /// Application-wide constants matching the original UniKM Python app
 library;
 
+import 'package:flutter/animation.dart';
+
 /// AppConstants class wrapper for easy access
 class AppConstants {
   AppConstants._();
@@ -16,19 +18,30 @@ class AppConstants {
 // APP INFO
 // =============================================================================
 const String kAppName = 'UniKM';
-const String kAppVersion = '1.2.0';
+const String kAppVersion = '1.3.0';
 const String kGitHubRepo = 'AbelSniffel/UniKM';
 
 // =============================================================================
 // DIMENSIONS - UI ELEMENTS
 // =============================================================================
-const double kElementHeight = 28.0;
+const double kElementHeight = 36.0; // Standard height for buttons, input fields, and dropdowns
+const double kElementHSpacing = 5.0; // General spacing between elements, used by SizedBox widgets
+const double kElementVSpacing = 5.0; // General vertical spacing between elements, used by SizedBox widgets
+const double kElementPaddingVertical = 4.0;
 const double kPageNavButtonHeight = 34.0;
-const double kTagButtonHeight = 22.0;
+const double kButtonPaddingHorizontal = 14.0;
+const double kTagChipPaddingHorizontal = 10.0;
+const double kTagChipPaddingVertical = 5.5;
+const double kIconSize = 24.0;
+const double kIconSizeHeader = 28.0;
+const double kDeadlineSelectorWidth = 150.0;
 const double kPageTitleHeight = 40.0;
-const double kScrollbarWidth = 16.0;
-const double kWidgetSpacing = 5.0;
-const double kToggleSpacing = 12.0;
+const double kScrollbarWidth = 22.0;
+const double kDropdownMenuMaxHeight = 320.0;
+const double kVeryNarrowLayoutBreakpoint = 605.0;
+const double kSliderTrackHeight = 16.0;
+const double kSliderIndicatorOuterDiameter = 24.0;
+const double kSliderIndicatorInnerDiameter = 20.0;
 
 // =============================================================================
 // DIMENSIONS - GAME CARDS
@@ -43,6 +56,10 @@ const double kListCardHeight = 110.0;
 const double kListCardImageWidth = 220.0;
 const double kListCardSpacing = 6.0;
 
+// Slim List View
+const double kSlimListCardHeight = 44.0;
+const double kSlimListCardSpacing = 0.0;
+
 // =============================================================================
 // DIMENSIONS - TOOLTIPS
 // =============================================================================
@@ -55,17 +72,24 @@ const int kTooltipHideDelay = 50; // milliseconds
 // =============================================================================
 const double kDefaultWindowWidth = 1300.0;
 const double kDefaultWindowHeight = 900.0;
-const double kMinWindowWidth = 700.0;
-const double kMinWindowHeight = 600.0;
+const double kMinWindowWidth = 415.0;
+const double kMinWindowHeight = 560.0;
 
 // =============================================================================
 // ANIMATION DURATIONS
 // =============================================================================
+const Duration kHoverCardAnimation = Duration(milliseconds: 120);
 const Duration kVeryFastAnimation = Duration(milliseconds: 100);
 const Duration kFastAnimation = Duration(milliseconds: 160);
 const Duration kMediumAnimation = Duration(milliseconds: 250);
-const Duration kSlowAnimation = Duration(milliseconds: 350);
-const Duration kPageTransition = Duration(milliseconds: 250);
+const Duration kPageTransition = Duration(milliseconds: 200);
+const Curve kPageTransitionCurve = Curves.easeInOutCubic;
+const Duration kNavPanelMotionAnimation = Duration(milliseconds: 250);
+const Curve kNavPanelMotionCurve = Curves.easeInOutCubic;
+const Duration kNavButtonExpandAnimation = Duration(milliseconds: 200);
+const Curve kNavButtonExpandCurve = Curves.easeInOutCubic;
+const Duration kStandardNavPlacementAnimation = Duration(milliseconds: 250);
+const Curve kStandardNavPlacementCurve = Curves.easeInOutCubic;
 
 // =============================================================================
 // DATABASE
@@ -81,7 +105,20 @@ const int kDefaultAutoBackupIntervalMinutes = 5;
 const int kDefaultMaxBackupCount = 10;
 
 // =============================================================================
+// UPDATE
+// =============================================================================
+const int kDefaultAutoUpdateIntervalMinutes = 10;
+
+// =============================================================================
 // STEAM API
 // =============================================================================
-const String kSteamStoreApiBase = 'https://store.steampowered.com/api'; // Don't forget to use these
-const String kSteamCdnBase = 'https://steamcdn-a.akamaihd.net'; // Don't forget to use these
+const String kSteamStoreApiBase = 'https://store.steampowered.com/api';
+const String kSteamCdnBase = 'https://steamcdn-a.akamaihd.net';
+
+String get kSteamStoreBase => kSteamStoreApiBase.replaceFirst(RegExp(r'/api/?$'), '');
+String steamStoreApiUrl(String path) => '$kSteamStoreApiBase/$path';
+String steamStoreUrl(String path) => '$kSteamStoreBase/$path';
+String steamAppPageUrl(String appId) => steamStoreUrl('app/$appId');
+String steamSearchPageUrl(String term) => steamStoreUrl('search/?term=${Uri.encodeComponent(term)}');
+String steamRegisterKeyPageUrl(String key) => steamStoreUrl('account/registerkey?key=${Uri.encodeComponent(key)}');
+String steamCdnAppImageUrl(String appId, String assetName) => '$kSteamCdnBase/steam/apps/$appId/$assetName';

@@ -1,13 +1,15 @@
-﻿/// Update service for checking and downloading app updates from GitHub
+/// Update service for checking and downloading app updates from GitHub
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/format_utils.dart';
 
@@ -22,6 +24,8 @@ class DownloadCancelledException implements Exception {
 
 /// Platform-specific installer file extensions, ordered by preference.
 List<String> get _platformExtensions {
+  if (Platform.isAndroid) return ['.apk'];
+  if (Platform.isIOS) return ['.ipa', '.zip'];
   if (Platform.isWindows) return ['.exe', '.msi', '.zip'];
   if (Platform.isMacOS) return ['.dmg', '.pkg'];
   if (Platform.isLinux) return ['.AppImage', '.deb', '.rpm', '.tar.gz'];
@@ -122,11 +126,7 @@ class GitHubRelease {
 
 /// Result of an update check
 class UpdateCheckResult {
-  const UpdateCheckResult({
-    required this.hasUpdate,
-    this.release,
-    this.error,
-  });
+  const UpdateCheckResult({required this.hasUpdate, this.release, this.error});
 
   final bool hasUpdate;
   final GitHubRelease? release;
@@ -138,16 +138,31 @@ class UpdateCheckResult {
 /// Download progress callback
 typedef DownloadProgressCallback = void Function(int received, int total);
 
+class UpdateDownloadResult {
+  const UpdateDownloadResult.local(this.filePath)
+    : openedExternally = false;
+
+  const UpdateDownloadResult.external()
+    : filePath = null,
+      openedExternally = true;
+
+  final String? filePath;
+  final bool openedExternally;
+}
+
 /// Update service for checking and downloading GitHub releases
 class UpdateService {
   UpdateService({
     String? customRepo,
     String? githubToken,
-  })  : _repo = customRepo ?? kGitHubRepo,
-        _githubToken = githubToken;
+    http.Client? githubClient,
+  }) : _repo = customRepo ?? kGitHubRepo,
+       _githubToken = githubToken,
+       _githubClient = githubClient;
 
   final String _repo;
   final String? _githubToken;
+  final http.Client? _githubClient;
 
   // Cancellation state for the active download.
   http.Client? _activeDownloadClient;
@@ -180,6 +195,30 @@ class UpdateService {
       headers['Authorization'] = 'Bearer $token';
     }
     return headers;
+  }
+
+  String _formatCheckError(Object error) {
+    final message = error.toString();
+    final lowerMessage = message.toLowerCase();
+
+    if (error is SocketException || lowerMessage.contains('socketexception')) {
+      if (lowerMessage.contains('failed host lookup')) {
+        return 'Unable to reach GitHub right now. Check your internet connection and DNS settings, then try again.';
+      }
+      return 'Unable to reach GitHub right now. Check your internet connection and try again.';
+    }
+
+    if (error is HandshakeException) {
+      return 'The secure connection to GitHub failed. Check your device date, time, and network settings, then try again.';
+    }
+
+    if (lowerMessage.contains('connection refused') ||
+        lowerMessage.contains('network is unreachable') ||
+        lowerMessage.contains('timed out')) {
+      return 'GitHub could not be reached. Check your connection and try again.';
+    }
+
+    return 'Error checking for updates: $message';
   }
 
   // ---------------------------------------------------------------------------
@@ -231,7 +270,7 @@ class UpdateService {
   // ---------------------------------------------------------------------------
 
   /// Check for updates
-  /// 
+  ///
   /// [currentVersion] - Current app version to compare against
   /// [includePrerelease] - Whether to include prerelease versions
   /// [skippedVersions] - List of versions the user has chosen to skip
@@ -241,52 +280,21 @@ class UpdateService {
     List<String> skippedVersions = const [],
   }) async {
     try {
-      // Always fetch all releases so we can walk past skipped entries and
-      // correctly respect the pre-release filter regardless of what the
-      // "latest" stable release endpoint happens to return.
-      final response = await http.get(
-        Uri.parse(_allReleasesUrl),
-        headers: _headers,
-      );
-
-      if (response.statusCode != 200) {
-        return UpdateCheckResult(
-          hasUpdate: false,
-          error: 'Failed to check for updates: ${response.statusCode}',
-        );
-      }
-
-      final releases = jsonDecode(response.body) as List<dynamic>;
+      final releases = await _fetchReleases();
       if (releases.isEmpty) {
         return const UpdateCheckResult(hasUpdate: false);
       }
 
-      // Walk releases (newest first) to find the best candidate.
-      for (final raw in releases) {
-        final release = GitHubRelease.fromJson(raw as Map<String, dynamic>);
-
-        // Respect the pre-release filter: skip pre-releases when toggle is off.
-        if (release.isPrerelease && !includePrerelease) continue;
-
-        // Walk past versions the user has explicitly chosen to skip.
-        if (skippedVersions.contains(release.version) ||
-            skippedVersions.contains(release.tagName)) {
-          continue;
-        }
-
-        // Found the best candidate — check whether it is actually newer.
-        final hasUpdate = _isNewerVersion(release.version, currentVersion);
-        return UpdateCheckResult(hasUpdate: hasUpdate, release: release);
-      }
-
-      // Every release was filtered out (all skipped, or pre-release-only when
-      // the toggle is off).
-      return const UpdateCheckResult(hasUpdate: false);
-    } catch (e) {
-      return UpdateCheckResult(
-        hasUpdate: false,
-        error: 'Error checking for updates: $e',
+      final release = _selectBestUpdateRelease(
+        releases,
+        currentVersion: currentVersion,
+        includePrerelease: includePrerelease,
+        skippedVersions: skippedVersions,
       );
+
+      return UpdateCheckResult(hasUpdate: release != null, release: release);
+    } catch (e) {
+      return UpdateCheckResult(hasUpdate: false, error: _formatCheckError(e));
     }
   }
 
@@ -294,21 +302,84 @@ class UpdateService {
   /// Includes both stable and pre-release entries.
   Future<List<GitHubRelease>> fetchAllReleases() async {
     try {
-      final response = await http.get(
+      return await _fetchReleases();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<GitHubRelease>> _fetchReleases() async {
+    final client = _githubClient ?? http.Client();
+    try {
+      final response = await client.get(
         Uri.parse('$_allReleasesUrl?per_page=100'),
         headers: _headers,
       );
 
-      if (response.statusCode != 200) return [];
+      if (response.statusCode != 200) {
+        throw HttpException('Failed to fetch releases: ${response.statusCode}');
+      }
 
       final list = jsonDecode(response.body) as List<dynamic>;
       return list
           .cast<Map<String, dynamic>>()
           .map(GitHubRelease.fromJson)
           .toList();
-    } catch (_) {
-      return [];
+    } finally {
+      if (_githubClient == null) {
+        client.close();
+      }
     }
+  }
+
+  GitHubRelease? _selectBestUpdateRelease(
+    List<GitHubRelease> releases, {
+    required String currentVersion,
+    required bool includePrerelease,
+    required List<String> skippedVersions,
+  }) {
+    GitHubRelease? bestRelease;
+
+    for (final release in releases) {
+      if (release.isPrerelease && !includePrerelease) {
+        continue;
+      }
+
+      if (skippedVersions.contains(release.version) ||
+          skippedVersions.contains(release.tagName)) {
+        continue;
+      }
+
+      if (!_isNewerVersion(release.version, currentVersion)) {
+        continue;
+      }
+
+      if (bestRelease == null ||
+          _isBetterUpdateCandidate(release, bestRelease)) {
+        bestRelease = release;
+      }
+    }
+
+    return bestRelease;
+  }
+
+  bool _isBetterUpdateCandidate(
+    GitHubRelease candidate,
+    GitHubRelease currentBest,
+  ) {
+    final versionComparison = compareVersions(
+      candidate.version,
+      currentBest.version,
+    );
+    if (versionComparison != 0) {
+      return versionComparison > 0;
+    }
+
+    if (candidate.isPrerelease != currentBest.isPrerelease) {
+      return !candidate.isPrerelease;
+    }
+
+    return candidate.publishedAt.isAfter(currentBest.publishedAt);
   }
 
   // ---------------------------------------------------------------------------
@@ -316,15 +387,30 @@ class UpdateService {
   // ---------------------------------------------------------------------------
 
   /// Download an update to a temporary location
-  /// 
+  ///
   /// Returns the path to the downloaded file.
   /// Throws [DownloadCancelledException] if [cancelActiveDownload] is called.
-  Future<String> downloadUpdate(
+  Future<UpdateDownloadResult> downloadUpdate(
     GitHubRelease release, {
     DownloadProgressCallback? onProgress,
   }) async {
     if (release.downloadUrl == null) {
       throw StateError('No download URL available for this release');
+    }
+
+    // iOS cannot sideload IPAs; hand off to the browser.
+    // Android uses the in-app HTTP download path below so that the user gets
+    // live progress and avoids Chrome's Play-Protect scan stalling the
+    // download at 100%.
+    if (Platform.isIOS) {
+      final launched = await launchUrl(
+        Uri.parse(release.downloadUrl!),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        throw StateError('Unable to hand off the update download to the system downloader');
+      }
+      return const UpdateDownloadResult.external();
     }
 
     _downloadCancelled = false;
@@ -382,7 +468,7 @@ class UpdateService {
 
       await sink.close();
       sink = null;
-      return filePath;
+      return UpdateDownloadResult.local(filePath);
     } catch (e) {
       if (e is DownloadCancelledException) rethrow;
       // Unexpected error — clean up partial file.
@@ -402,6 +488,12 @@ class UpdateService {
   /// Get the downloads directory for the current platform.
   Future<Directory> _getDownloadsDirectory() async {
     String? downloadsPath;
+
+    if (Platform.isAndroid) {
+      // Use the app's cache directory so FileProvider can serve the APK
+      // to the system package installer without needing storage permissions.
+      return getTemporaryDirectory();
+    }
 
     if (Platform.isWindows) {
       final userProfile = Platform.environment['USERPROFILE'];
@@ -429,17 +521,103 @@ class UpdateService {
     return downloadsDir;
   }
 
-  /// Launch the downloaded installer for the current platform.
-  Future<void> launchInstaller(String filePath) async {
-    if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', filePath]);
-    } else if (Platform.isMacOS) {
-      await Process.run('open', [filePath]);
-    } else if (Platform.isLinux) {
-      await Process.run('xdg-open', [filePath]);
-    } else {
-      throw UnsupportedError('Automatic installer launch is not supported on this platform');
+  void _throwIfProcessResultFailed(
+    String executable,
+    List<String> args,
+    ProcessResult result,
+  ) {
+    if (result.exitCode == 0) return;
+
+    final stderr = '${result.stderr}'.trim();
+    final stdout = '${result.stdout}'.trim();
+    final details = stderr.isNotEmpty
+        ? stderr
+        : (stdout.isNotEmpty ? stdout : 'exit code ${result.exitCode}');
+
+    throw ProcessException(
+      executable,
+      args,
+      'Installer launch failed: $details',
+      result.exitCode,
+    );
+  }
+
+  Future<void> _throwIfProcessFailsQuickly(
+    String executable,
+    List<String> args, {
+    bool runInShell = false,
+  }) async {
+    final process = await Process.start(
+      executable,
+      args,
+      runInShell: runInShell,
+    );
+
+    final earlyExitCode = await Future.any<Object?>([
+      process.exitCode.then<Object?>((code) => code),
+      Future<Object?>.delayed(const Duration(seconds: 2), () => null),
+    ]);
+
+    if (earlyExitCode case final int code when code != 0) {
+      throw ProcessException(
+        executable,
+        args,
+        'Installer exited with an error before the app handoff completed.',
+        code,
+      );
     }
+  }
+
+  /// Launch the downloaded installer for the current platform.
+  ///
+  /// Returns `true` when the app should close after handing control to an
+  /// installer process. Returns `false` for manual packages that were only
+  /// opened in the OS shell.
+  Future<bool> launchInstaller(String filePath) async {
+    if (Platform.isWindows) {
+      final extension = p.extension(filePath).toLowerCase();
+
+      if (extension == '.exe') {
+        await _throwIfProcessFailsQuickly(filePath, const [], runInShell: true);
+        return true;
+      }
+
+      if (extension == '.msi') {
+        await _throwIfProcessFailsQuickly(
+          'msiexec',
+          ['/i', filePath],
+          runInShell: true,
+        );
+        return true;
+      }
+
+      final args = ['/c', 'start', '', filePath];
+      final result = await Process.run('cmd', args);
+      _throwIfProcessResultFailed('cmd', args, result);
+      return false;
+    }
+
+    if (Platform.isMacOS) {
+      final args = [filePath];
+      final result = await Process.run('open', args);
+      _throwIfProcessResultFailed('open', args, result);
+      return false;
+    }
+
+    if (Platform.isLinux) {
+      final args = [filePath];
+      final result = await Process.run('xdg-open', args);
+      _throwIfProcessResultFailed('xdg-open', args, result);
+      return false;
+    }
+
+    if (Platform.isAndroid) {
+      const channel = MethodChannel('com.example.unikm/installer');
+      await channel.invokeMethod<void>('installApk', {'filePath': filePath});
+      return false;
+    }
+
+    throw UnsupportedError('Automatic installer launch is not supported on this platform');
   }
 
   // ---------------------------------------------------------------------------
@@ -511,4 +689,3 @@ class NextAutoUpdateTimeNotifier extends Notifier<DateTime?> {
     state = value;
   }
 }
-

@@ -376,7 +376,7 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
       rethrow;
     }
   } finally {
-    db.dispose();
+    db.close();
   }
 }
 

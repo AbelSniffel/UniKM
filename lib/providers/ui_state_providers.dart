@@ -4,7 +4,10 @@ library;
 import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/services/steam_service.dart';
 import '../core/settings/settings_model.dart';
+import '../core/utils/batch_parser.dart';
+import '../models/game.dart';
 import 'settings_providers.dart';
 
 // =============================================================================
@@ -14,8 +17,8 @@ import 'settings_providers.dart';
 /// The top-level navigation destinations in the app.
 enum NavItem {
   home('Library', Icons.home, Icons.home_outlined),
-  addGames('New', Icons.add_circle, Icons.add_circle_outline),
-  updates('Updates', Icons.update, Icons.update_outlined),
+  addGames('Add', Icons.add_circle, Icons.add_circle_outline),
+  updates('Updates', Icons.download_rounded, Icons.download_rounded),
   settings('Settings', Icons.settings, Icons.settings_outlined);
 
   const NavItem(this.label, this.selectedIcon, this.unselectedIcon);
@@ -74,6 +77,157 @@ class GameLibraryScrollOffsetNotifier extends Notifier<double> {
   }
 }
 
+final homePageEntryAnimationsPlayedProvider =
+    NotifierProvider<HomePageEntryAnimationsPlayedNotifier, bool>(
+      HomePageEntryAnimationsPlayedNotifier.new,
+    );
+
+class HomePageEntryAnimationsPlayedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void markPlayed() {
+    state = true;
+  }
+}
+
+final settingsPageSelectedSectionProvider =
+    NotifierProvider<SettingsPageSelectedSectionNotifier, String>(
+      SettingsPageSelectedSectionNotifier.new,
+    );
+
+class SettingsPageSelectedSectionNotifier extends Notifier<String> {
+  @override
+  String build() => 'all';
+
+  void setSelectedSection(String sectionId) {
+    state = sectionId;
+  }
+}
+
+final settingsPageSearchQueryProvider =
+    NotifierProvider<SettingsPageSearchQueryNotifier, String>(
+      SettingsPageSearchQueryNotifier.new,
+    );
+
+class SettingsPageSearchQueryNotifier extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void setQuery(String query) {
+    state = query;
+  }
+}
+
+const String kAutoDetectPlatformValue = '__auto__';
+
+final addGamesSelectedTabProvider =
+    NotifierProvider<AddGamesSelectedTabNotifier, int>(
+      AddGamesSelectedTabNotifier.new,
+    );
+
+class AddGamesSelectedTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void setIndex(int index) {
+    state = index.clamp(0, 1);
+  }
+}
+
+class AddGamesSingleEntryDraft {
+  const AddGamesSingleEntryDraft({
+    this.title = '',
+    this.gameKey = '',
+    this.notes = '',
+    this.coverImage = '',
+    this.platform = kAutoDetectPlatformValue,
+    this.hasDeadline = false,
+    this.deadlineDate,
+    this.isDlc = false,
+    this.selectedTagIds = const <int>{},
+    this.fetchedSteamTags = const <Tag>[],
+    this.fetchedSteamTitle,
+    this.fetchedAppId,
+    this.fetchedCoverImagePath,
+    this.fetchedReviewScore,
+    this.fetchedReviewCount,
+    this.singleSteamCacheAt,
+  });
+
+  final String title;
+  final String gameKey;
+  final String notes;
+  final String coverImage;
+  final String platform;
+  final bool hasDeadline;
+  final DateTime? deadlineDate;
+  final bool isDlc;
+  final Set<int> selectedTagIds;
+  final List<Tag> fetchedSteamTags;
+  final String? fetchedSteamTitle;
+  final String? fetchedAppId;
+  final String? fetchedCoverImagePath;
+  final int? fetchedReviewScore;
+  final int? fetchedReviewCount;
+  final DateTime? singleSteamCacheAt;
+}
+
+final addGamesSingleEntryDraftProvider = NotifierProvider<
+    AddGamesSingleEntryDraftNotifier,
+    AddGamesSingleEntryDraft>(AddGamesSingleEntryDraftNotifier.new);
+
+class AddGamesSingleEntryDraftNotifier
+    extends Notifier<AddGamesSingleEntryDraft> {
+  @override
+  AddGamesSingleEntryDraft build() => const AddGamesSingleEntryDraft();
+
+  void replace(AddGamesSingleEntryDraft draft) {
+    state = draft;
+  }
+
+  void clear() {
+    state = const AddGamesSingleEntryDraft();
+  }
+}
+
+class AddGamesBatchDraft {
+  const AddGamesBatchDraft({
+    this.text = '',
+    this.platform = kAutoDetectPlatformValue,
+    this.hasDeadline = false,
+    this.deadlineDate,
+    this.parsedGames = const <ParsedBatchEntry>[],
+    this.steamResults = const <String, SteamSearchResult?>{},
+    this.steamErrors = const <String, String?>{},
+  });
+
+  final String text;
+  final String platform;
+  final bool hasDeadline;
+  final DateTime? deadlineDate;
+  final List<ParsedBatchEntry> parsedGames;
+  final Map<String, SteamSearchResult?> steamResults;
+  final Map<String, String?> steamErrors;
+}
+
+final addGamesBatchDraftProvider = NotifierProvider<
+    AddGamesBatchDraftNotifier,
+    AddGamesBatchDraft>(AddGamesBatchDraftNotifier.new);
+
+class AddGamesBatchDraftNotifier extends Notifier<AddGamesBatchDraft> {
+  @override
+  AddGamesBatchDraft build() => const AddGamesBatchDraft();
+
+  void replace(AddGamesBatchDraft draft) {
+    state = draft;
+  }
+
+  void clear() {
+    state = const AddGamesBatchDraft();
+  }
+}
+
 // =============================================================================
 // VIEW MODE
 // =============================================================================
@@ -87,13 +241,17 @@ class ViewModeNotifier extends Notifier<GameListViewMode> {
 
   Future<void> setViewMode(GameListViewMode mode) async {
     state = mode;
-    await ref.read(settingsProvider.notifier).set(SettingsKeys.gameListViewMode, mode);
+    await ref
+        .read(settingsProvider.notifier)
+        .set(SettingsKeys.gameListViewMode, mode);
   }
 }
 
-final viewModeProvider = NotifierProvider<ViewModeNotifier, GameListViewMode>(() {
-  return ViewModeNotifier();
-});
+final viewModeProvider = NotifierProvider<ViewModeNotifier, GameListViewMode>(
+  () {
+    return ViewModeNotifier();
+  },
+);
 
 /// Health monitor visibility provider
 final healthMonitorVisibleProvider =
@@ -125,12 +283,31 @@ class LastSelectedGameIdNotifier extends Notifier<int?> {
   }
 }
 
+final selectionMultiSelectModeProvider =
+    NotifierProvider<SelectionMultiSelectModeNotifier, bool>(
+      SelectionMultiSelectModeNotifier.new,
+    );
+
+class SelectionMultiSelectModeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setEnabled(bool enabled) {
+    state = enabled;
+  }
+
+  void toggle() {
+    state = !state;
+  }
+}
+
 // =============================================================================
-// PAGE NOTIFICATIONS (pulsating nav icons)
+// PAGE NOTIFICATIONS
 // =============================================================================
 
 /// Tracks which nav pages currently have an active notification (unread alert).
-/// When a page is in this set, its nav icon pulsates to draw attention.
+/// When a page is in this set, the shell can render an attention state for its
+/// nav button.
 final pageNotificationsProvider =
     NotifierProvider<PageNotificationsNotifier, Set<NavItem>>(
       PageNotificationsNotifier.new,
@@ -151,10 +328,7 @@ class PageNotificationsNotifier extends Notifier<Set<NavItem>> {
 // DRAG SELECTION
 // =============================================================================
 
-enum DragSelectionMode {
-  select,
-  deselect,
-}
+enum DragSelectionMode { select, deselect }
 
 class DragSelectionState {
   const DragSelectionState({
@@ -209,8 +383,15 @@ class DragSelectionNotifier extends Notifier<DragSelectionState> {
     if (state.visitedIds.contains(id)) return;
     state = state.copyWith(visitedIds: {...state.visitedIds, id});
   }
+
+  void unmarkVisited(int id) {
+    if (!state.visitedIds.contains(id)) return;
+    final nextVisited = Set<int>.from(state.visitedIds)..remove(id);
+    state = state.copyWith(visitedIds: nextVisited);
+  }
 }
 
-final dragSelectionProvider = NotifierProvider<DragSelectionNotifier, DragSelectionState>(() {
-  return DragSelectionNotifier();
-});
+final dragSelectionProvider =
+    NotifierProvider<DragSelectionNotifier, DragSelectionState>(() {
+      return DragSelectionNotifier();
+    });

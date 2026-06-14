@@ -1,10 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../providers/app_providers.dart';
 import '../pages/update_page.dart';
+import '../../core/constants/app_constants.dart';
+import 'app_fps_counter.dart';
 import 'notification_system.dart';
 
 class DevWindowOverlay extends ConsumerStatefulWidget {
@@ -104,14 +107,72 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     }
   }
 
+  Future<void> _clearSelectedSteamData() async {
+    final selectedGames = ref.read(selectedGamesProvider);
+    if (selectedGames.isEmpty) {
+      NotificationManager.instance.info('No games selected');
+      return;
+    }
+
+    final cleared = await ref
+        .read(gamesProvider.notifier)
+        .clearSteamMetadata(
+          selectedGames.map((game) => game.id).toList(growable: false),
+        );
+
+    if (cleared == 0) {
+      NotificationManager.instance.warning(
+        'No selected games were updated',
+      );
+      return;
+    }
+
+    NotificationManager.instance.success(
+      'Cleared Steam data on $cleared selected game${cleared == 1 ? '' : 's'}',
+    );
+  }
+
+  Future<void> _openWindowsFirewallAllowedApps() async {
+    final launched =
+        await ref.read(deviceSyncProvider.notifier).openWindowsFirewallAllowedApps();
+    if (!launched && mounted) {
+      NotificationManager.instance.error(
+        'Could not open Windows Firewall Allowed Apps.',
+      );
+    }
+  }
+
+  Future<void> _openWindowsFirewallAdvancedRules() async {
+    final launched = await ref
+        .read(deviceSyncProvider.notifier)
+        .openWindowsFirewallAdvancedSettings();
+    if (!launched && mounted) {
+      NotificationManager.instance.error(
+        'Could not open Windows Firewall Advanced Settings.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
+    final isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    final selectedGames = ref.watch(selectedGamesProvider);
+    final batchFetchActive = ref.watch(
+      batchFetchProvider.select((state) => state.isActive),
+    );
     final showFpsCounter = ref.watch(
       settingsProvider.select(
         (s) =>
             (s[SettingsKeys.showFpsCounter] as bool?) ??
             DefaultSettings.showFpsCounter,
+      ),
+    );
+    final showGameDetailsSkmId = ref.watch(
+      settingsProvider.select(
+        (s) =>
+            (s[SettingsKeys.showGameDetailsSkmId] as bool?) ??
+            DefaultSettings.showGameDetailsSkmId,
       ),
     );
 
@@ -120,13 +181,19 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       top: position.dy,
       child: Material(
         color: Colors.transparent,
-        elevation: 8,
         child: Container(
-          width: 380,
+          width: 365,
           decoration: BoxDecoration(
-            color: theme.surface.withValues(alpha: 0.96),
+            color: theme.surface.withValues(alpha: 0.98),
             borderRadius: BorderRadius.circular(theme.cornerRadius),
-            border: Border.all(color: theme.accent, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: theme.accent.withValues(alpha: 0.30),
+                blurRadius: 8,
+                spreadRadius: 3,
+                offset: const Offset(0, 0),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -143,13 +210,13 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                   decoration: BoxDecoration(
                     color: theme.accent.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(theme.cornerRadius - 5),
+                      top: Radius.circular(theme.cornerRadius),
                     ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.developer_mode, size: 16, color: theme.accent),
-                      const SizedBox(width: 8),
+                      Icon(Icons.developer_mode, size: 18, color: theme.accent),
+                      const SizedBox(width: kElementHSpacing),
                       Text(
                         'Dev Tools',
                         style: TextStyle(
@@ -159,6 +226,17 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                         ),
                       ),
                       const Spacer(),
+                      if (showFpsCounter) ...[
+                        AppFpsCounter(
+                          theme: theme,
+                          style: TextStyle(
+                            color: theme.textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: kElementHSpacing),
+                      ],
                       _CloseButton(onPressed: widget.onClose, theme: theme),
                     ],
                   ),
@@ -299,12 +377,34 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    _DevButton(
-                      label: 'Deadline Check + Restart Timer',
-                      icon: Icons.timer_outlined,
-                      theme: theme,
-                      onPressed: () => DeadlineNotificationService.instance
-                          .triggerAndRestart(ref),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DevButton(
+                            label: 'Run Deadline Check',
+                            icon: Icons.timer_outlined,
+                            theme: theme,
+                            onPressed: () => DeadlineNotificationService
+                                .instance
+                                .triggerAndRestart(ref),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _DevButton(
+                            label: 'Deadline Sim',
+                            icon: Icons.timelapse,
+                            theme: theme,
+                            onPressed: () async {
+                              await DeadlineNotificationService.instance
+                                  .simulateDeadlineNotifications(ref);
+                              NotificationManager.instance.info(
+                                'Deadline notifications simulated',
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Row(
@@ -322,6 +422,59 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                       ],
                     ),
 
+                    if (isWindows) ...[
+                      const SizedBox(height: 12),
+
+                      //  SYNC
+                      _SectionHeader(
+                        label: 'Firewall',
+                        icon: Icons.shield_outlined,
+                        theme: theme,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DevButton(
+                              label: 'Allowed Apps',
+                              icon: Icons.shield_outlined,
+                              theme: theme,
+                              onPressed: _openWindowsFirewallAllowedApps,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _DevButton(
+                              label: 'Advanced Rules',
+                              icon: Icons.admin_panel_settings_outlined,
+                              theme: theme,
+                              onPressed: _openWindowsFirewallAdvancedRules,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    //  LIBRARY
+                    _SectionHeader(
+                      label: 'Library',
+                      icon: Icons.video_library_outlined,
+                      theme: theme,
+                    ),
+                    const SizedBox(height: 6),
+                    _DevButton(
+                      label: selectedGames.isEmpty
+                          ? 'Clear Selected Steam Data'
+                          : 'Clear Steam Data (${selectedGames.length})',
+                      icon: Icons.delete_outline,
+                      theme: theme,
+                      onPressed: selectedGames.isEmpty || batchFetchActive
+                          ? null
+                          : _clearSelectedSteamData,
+                    ),
+
                     const SizedBox(height: 12),
 
                     //  DISPLAY
@@ -331,20 +484,48 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                       theme: theme,
                     ),
                     const SizedBox(height: 6),
-                    _DevButton(
-                      label: showFpsCounter
-                          ? 'Hide FPS Counter'
-                          : 'Show FPS Counter',
-                      icon: showFpsCounter ? Icons.speed : Icons.speed_outlined,
-                      theme: theme,
-                      onPressed: () {
-                        ref
-                            .read(settingsProvider.notifier)
-                            .setSetting(
-                              SettingsKeys.showFpsCounter,
-                              !showFpsCounter,
-                            );
-                      },
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DevButton(
+                            label: showFpsCounter
+                                ? 'Hide FPS'
+                                : 'Show FPS',
+                            icon: showFpsCounter
+                                ? Icons.speed
+                                : Icons.speed_outlined,
+                            theme: theme,
+                            onPressed: () {
+                              ref
+                                  .read(settingsProvider.notifier)
+                                  .setSetting(
+                                    SettingsKeys.showFpsCounter,
+                                    !showFpsCounter,
+                                  );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _DevButton(
+                            label: showGameDetailsSkmId
+                                ? 'Hide SKM-ID'
+                                : 'Show SKM-ID',
+                            icon: showGameDetailsSkmId
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            theme: theme,
+                            onPressed: () {
+                              ref
+                                  .read(settingsProvider.notifier)
+                                  .setSetting(
+                                    SettingsKeys.showGameDetailsSkmId,
+                                    !showGameDetailsSkmId,
+                                  );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -382,7 +563,7 @@ class _SectionHeader extends StatelessWidget {
           label.toUpperCase(),
           style: TextStyle(
             color: theme.textSecondary,
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
           ),
@@ -409,13 +590,10 @@ class _DevButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 14),
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-      ),
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
     );
   }
 }
@@ -437,12 +615,10 @@ class _CompactDevButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 30),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         side: BorderSide(color: effectiveColor.withValues(alpha: 0.35)),
         foregroundColor: effectiveColor,
         backgroundColor: effectiveColor.withValues(alpha: 0.05),
-        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
       child: Text(label),
     );
@@ -487,7 +663,7 @@ class _CloseButtonState extends State<_CloseButton> {
             color: bgColor,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(Icons.close, size: 18, color: widget.theme.textPrimary),
+          child: Icon(Icons.close, size: 20, color: widget.theme.textPrimary),
         ),
       ),
     );

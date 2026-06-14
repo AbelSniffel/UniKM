@@ -157,7 +157,7 @@ class BackupService {
         try {
           sourceDb.execute("VACUUM INTO '${_escapeSqlString(backupPath)}'");
         } finally {
-          sourceDb.dispose();
+          sourceDb.close();
         }
       }
       
@@ -270,7 +270,8 @@ class BackupService {
   /// [createBackupFirst] - Whether to create a backup of current database before restoring
   /// 
   /// Returns a RestoreResult indicating success or failure.
-  /// Note: After a successful restore, the app should be restarted to use the new database.
+  /// Note: After a successful restore, the active database connection should
+  /// be reloaded so the restored file is used immediately.
   Future<RestoreResult> restoreBackup({
     required String backupPath,
     String? password,
@@ -392,7 +393,7 @@ class BackupService {
       
       return const RestoreResult(
         success: true,
-        requiresRestart: true,
+        requiresRestart: false,
       );
     } catch (e) {
       return RestoreResult(

@@ -74,15 +74,16 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     return a.id == b.id &&
         a.name == b.name &&
         a.baseBackground == b.baseBackground &&
-        a.basePrimary == b.basePrimary &&
+        a.baseSecondary == b.baseSecondary &&
         a.baseAccent == b.baseAccent &&
+        a.navPanelOverlayStyle == b.navPanelOverlayStyle &&
         a.iconData?.codePoint == b.iconData?.codePoint &&
         a.cornerRadius == b.cornerRadius &&
+        a.useThemeToggleRadius == b.useThemeToggleRadius &&
         a.scrollbarRadius == b.scrollbarRadius &&
-        a.controlPaddingHorizontal == b.controlPaddingHorizontal &&
-        a.controlPaddingVertical == b.controlPaddingVertical &&
         a.inputPaddingHorizontal == b.inputPaddingHorizontal &&
-        a.inputPaddingVertical == b.inputPaddingVertical;
+        a.inputPaddingVertical == b.inputPaddingVertical &&
+        a.progressIndicatorStrokeWidth == b.progressIndicatorStrokeWidth;
   }
 
   /// Cancel preview and restore the original theme
@@ -336,6 +337,36 @@ final themeProvider = NotifierProvider<ThemeNotifier, AppThemeData>(() {
   return ThemeNotifier();
 });
 
+final builtInThemeIdsProvider = Provider<Set<String>>((ref) {
+  return AppThemeData.builtInThemes.map((theme) => theme.id).toSet();
+});
+
+final currentThemeIsBuiltInProvider = Provider<bool>((ref) {
+  final activeThemeId = ref.watch(themeProvider.select((theme) => theme.id));
+  final builtInIds = ref.watch(builtInThemeIdsProvider);
+  return builtInIds.contains(activeThemeId);
+});
+
+final effectiveNavPanelOverlayStyleProvider = Provider<NavPanelOverlayStyle>((
+  ref,
+) {
+  final theme = ref.watch(themeProvider);
+  final isBuiltIn = ref.watch(currentThemeIsBuiltInProvider);
+  if (isBuiltIn) {
+    return ref.watch(navPanelOverlayStyleSettingProvider);
+  }
+  return theme.navPanelOverlayStyle;
+});
+
+final effectiveThemeProvider = Provider<AppThemeData>((ref) {
+  final theme = ref.watch(themeProvider);
+  final overlayStyle = ref.watch(effectiveNavPanelOverlayStyleProvider);
+  if (overlayStyle == theme.navPanelOverlayStyle) {
+    return theme;
+  }
+  return theme.copyWith(navPanelOverlayStyle: overlayStyle);
+});
+
 final Map<String, ThemeData> _themeDataCache = <String, ThemeData>{};
 
 String _themeDataCacheKey(AppThemeData theme) {
@@ -343,13 +374,11 @@ String _themeDataCacheKey(AppThemeData theme) {
     theme.id,
     theme.name,
     theme.baseBackground.toARGB32().toString(),
-    theme.basePrimary.toARGB32().toString(),
+    theme.baseSecondary.toARGB32().toString(),
     theme.baseAccent.toARGB32().toString(),
     theme.iconData?.codePoint.toString() ?? '',
     theme.cornerRadius.toString(),
     theme.scrollbarRadius.toString(),
-    theme.controlPaddingHorizontal.toString(),
-    theme.controlPaddingVertical.toString(),
     theme.inputPaddingHorizontal.toString(),
     theme.inputPaddingVertical.toString(),
   ].join('|');

@@ -1,11 +1,14 @@
 /// Common setting row widgets used across settings sections
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/toggle_switch.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../../core/constants/app_constants.dart';
 
 const double kSectionGroupSpacing = 8.0;
 
@@ -147,6 +150,62 @@ class SectionGroupEntry {
   builder;
 }
 
+/// Builds a [SectionGroupEntry] for the common searchable section pattern.
+///
+/// The [childBuilder] is evaluated lazily so hidden groups do not build their
+/// content until the connected strip decides they are visible.
+SectionGroupEntry buildSearchableSectionEntry({
+  required bool visible,
+  required AppThemeData theme,
+  required SettingsSearchGroup group,
+  required String searchQuery,
+  required bool Function(String) matchesSearch,
+  required Widget Function() childBuilder,
+  IconData? titleIcon,
+  bool Function()? extraMatch,
+  bool attachesToAbove = false,
+}) {
+  return SectionGroupEntry(
+    visible: visible,
+    builder: (position, isAlternate) => SearchableSectionGroupBox(
+      theme: theme,
+      group: group,
+      searchQuery: searchQuery,
+      matchesSearch: matchesSearch,
+      titleIcon: titleIcon,
+      extraMatch: extraMatch,
+      groupPosition: position,
+      isAlternate: isAlternate,
+      attachesToAbove: attachesToAbove,
+      child: childBuilder(),
+    ),
+  );
+}
+
+/// Builds a titleless [SectionGroupEntry] that still participates in the
+/// connected strip styling.
+SectionGroupEntry buildTitlelessSectionEntry({
+  required bool visible,
+  required AppThemeData theme,
+  required Widget Function() childBuilder,
+  String searchQuery = '',
+  bool isSearchMatch = false,
+}) {
+  return SectionGroupEntry(
+    visible: visible,
+    builder: (position, isAlternate) => SectionGroupBox(
+      title: '',
+      theme: theme,
+      searchQuery: searchQuery,
+      isSearchMatch: isSearchMatch,
+      groupPosition: position,
+      alternateBackground: isAlternate,
+      showTitle: false,
+      child: childBuilder(),
+    ),
+  );
+}
+
 /// Renders a list of [SectionGroupEntry] items as a seamlessly connected
 /// strip with zero gap and alternating backgrounds.
 ///
@@ -237,16 +296,6 @@ class ThemedTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(color: theme.textHint),
-        filled: true,
-        fillColor: theme.inputBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          borderSide: BorderSide(color: theme.border),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
       ),
       onChanged: onChanged,
     );
@@ -358,6 +407,215 @@ class SpecToggleSettingRow extends StatelessWidget {
   }
 }
 
+typedef SpecToggleSettingEntry = ({
+  SettingTextSpec spec,
+  bool value,
+  ValueChanged<bool> onChanged,
+});
+
+Widget buildSpecToggleSettingList({
+  required AppThemeData theme,
+  required List<SpecToggleSettingEntry> entries,
+  Set<int> dividerAfterIndices = const <int>{},
+}) {
+  if (entries.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
+  return Column(
+    children: [
+      for (var index = 0; index < entries.length; index++)
+        SpecToggleSettingRow(
+          theme: theme,
+          spec: entries[index].spec,
+          value: entries[index].value,
+          onChanged: entries[index].onChanged,
+          showDividerBelow: dividerAfterIndices.contains(index),
+        ),
+    ],
+  );
+}
+
+typedef SettingsStatusActionCardColumnsBuilder =
+    int Function(double maxWidth, int buttonCount);
+
+class SettingsStatusActionCard extends StatelessWidget {
+  const SettingsStatusActionCard({
+    super.key,
+    required this.theme,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.titleColor,
+    required this.actions,
+    this.subtitle,
+    this.stackedBreakpoint = 500,
+    this.stretchActionsWhenStacked = false,
+    this.stackedColumnsForWidth,
+  });
+
+  final AppThemeData theme;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String? subtitle;
+  final Color titleColor;
+  final List<Widget> actions;
+  final double stackedBreakpoint;
+  final bool stretchActionsWhenStacked;
+  final SettingsStatusActionCardColumnsBuilder? stackedColumnsForWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        border: Border.all(color: theme.accent.withValues(alpha: 0.3)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked = constraints.maxWidth < stackedBreakpoint;
+          final info = Row(
+            children: [
+              Icon(icon, color: iconColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          );
+
+          if (actions.isEmpty) {
+            return info;
+          }
+
+          final stackedColumns = stackedColumnsForWidth?.call(
+            constraints.maxWidth,
+            actions.length,
+          );
+          final actionGroup = stacked && stackedColumns != null
+              ? _buildEqualWidthActionGrid(
+                  buttons: actions,
+                  maxWidth: constraints.maxWidth,
+                  columns: stackedColumns,
+                )
+              : _buildAdaptiveActionGroup(
+                  buttons: actions,
+                  stacked: stacked,
+                  stretchWhenStacked: stretchActionsWhenStacked,
+                );
+
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                info,
+                const SizedBox(height: 12),
+                if (stretchActionsWhenStacked)
+                  actionGroup
+                else
+                  Align(alignment: Alignment.centerRight, child: actionGroup),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: info),
+              const SizedBox(width: 12),
+              actionGroup,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+Widget _buildAdaptiveActionGroup({
+  required List<Widget> buttons,
+  required bool stacked,
+  bool stretchWhenStacked = false,
+}) {
+  if (buttons.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
+  if (stacked && stretchWhenStacked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < buttons.length; index++) ...[
+          if (index > 0) const SizedBox(height: kElementVSpacing),
+          buttons[index],
+        ],
+      ],
+    );
+  }
+
+  return Wrap(
+    spacing: kElementHSpacing,
+    runSpacing: kElementVSpacing,
+    alignment: WrapAlignment.end,
+    children: buttons,
+  );
+}
+
+Widget _buildEqualWidthActionGrid({
+  required List<Widget> buttons,
+  required double maxWidth,
+  required int columns,
+}) {
+  if (buttons.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
+  const spacing = kElementHSpacing;
+  const minButtonWidth = 175.0;
+  var effectiveColumns = math.max(1, math.min(columns, buttons.length));
+  var buttonWidth =
+      (maxWidth - spacing * (effectiveColumns - 1)) / effectiveColumns;
+
+  // Reduce columns until buttons are wide enough, allowing extra rows
+  while (buttonWidth < minButtonWidth && effectiveColumns > 1) {
+    effectiveColumns--;
+    buttonWidth =
+        (maxWidth - spacing * (effectiveColumns - 1)) / effectiveColumns;
+  }
+
+  return Wrap(
+    spacing: spacing,
+    runSpacing: spacing,
+    children: [
+      for (final button in buttons) SizedBox(width: buttonWidth, child: button),
+    ],
+  );
+}
+
 /// Setting row helper widget with label, optional description, and child content.
 class SettingRow extends StatelessWidget {
   const SettingRow({
@@ -367,6 +625,8 @@ class SettingRow extends StatelessWidget {
     required this.child,
     this.description,
     this.labelColor,
+    this.onLabelTap,
+    this.stackedBreakpoint,
   });
 
   final AppThemeData theme;
@@ -375,36 +635,71 @@ class SettingRow extends StatelessWidget {
   final Color? labelColor;
   final Widget child;
 
+  /// Optional callback invoked when the user taps the label/description area
+  final VoidCallback? onLabelTap;
+
+  /// When set, stacks the trailing child under the label once the available
+  /// width drops below this breakpoint.
+  final double? stackedBreakpoint;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: labelColor ?? theme.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (description != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    description!,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-                ],
-              ],
-            ),
+    final labelColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: labelColor ?? theme.textPrimary,
+            fontWeight: FontWeight.w500,
           ),
-          child,
+        ),
+        if (description != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            description!,
+            style: TextStyle(color: theme.textSecondary, fontSize: 12),
+          ),
         ],
-      ),
+      ],
+    );
+
+    final expandedLabel = onLabelTap != null
+        ? MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onLabelTap,
+              child: labelColumn,
+            ),
+          )
+        : labelColumn;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            stackedBreakpoint != null &&
+            constraints.maxWidth < stackedBreakpoint!;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    expandedLabel,
+                    const SizedBox(height: kElementVSpacing),
+                    Align(alignment: Alignment.centerLeft, child: child),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: expandedLabel),
+                    child,
+                  ],
+                ),
+        );
+      },
     );
   }
 }
@@ -418,6 +713,7 @@ class ToggleSettingRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.description,
+    this.trailing,
     this.showDividerBelow = false,
   });
 
@@ -425,7 +721,8 @@ class ToggleSettingRow extends StatelessWidget {
   final String label;
   final String? description;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
+  final Widget? trailing;
   final bool showDividerBelow;
 
   @override
@@ -437,10 +734,13 @@ class ToggleSettingRow extends StatelessWidget {
           theme: theme,
           label: label,
           description: description,
-          child: AppToggleSwitch(
-            value: value,
-            onChanged: onChanged,
-            theme: theme,
+          onLabelTap: onChanged != null ? () => onChanged!(!value) : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (trailing != null) ...[trailing!, const SizedBox(width: kElementHSpacing)],
+              AppToggleSwitch(value: value, onChanged: onChanged, theme: theme),
+            ],
           ),
         ),
         if (showDividerBelow) const Divider(),

@@ -5,12 +5,12 @@ library;
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import '../constants/app_constants.dart';
 import '../database/database.dart';
 
 import 'logging.dart';
@@ -20,19 +20,16 @@ export '../utils/title_similarity.dart' show cleanTitleForSearch, weightedSimila
 
 /// Steam API URLs
 class SteamApi {
-  static const storeSearch = 'https://store.steampowered.com/api/storesearch/';
-  static const communitySearch =
-      'https://steamcommunity.com/actions/SearchApps/';
-  static const appDetails = 'https://store.steampowered.com/api/appdetails';
+  static final storeSearch = steamStoreApiUrl('storesearch/');
+  static const communitySearch = 'https://steamcommunity.com/actions/SearchApps/';
+  static final appDetails = steamStoreApiUrl('appdetails');
   static const steamSpy = 'https://steamspy.com/api.php';
 
   /// CDN URLs for images
-  static String headerImage(String appId) =>
-      'https://steamcdn-a.akamaihd.net/steam/apps/$appId/header.jpg';
-  static String libraryImage(String appId) =>
-      'https://steamcdn-a.akamaihd.net/steam/apps/$appId/library_600x900.jpg';
-  static String capsuleImage(String appId) =>
-      'https://steamcdn-a.akamaihd.net/steam/apps/$appId/capsule_231x87.jpg';
+  static String headerImage(String appId) => steamCdnAppImageUrl(appId, 'header.jpg');
+  static String libraryImage(String appId) => steamCdnAppImageUrl(appId, 'library_600x900.jpg');
+  static String capsuleImage(String appId) => steamCdnAppImageUrl(appId, 'capsule_231x87.jpg');
+  static String appReviews(String appId) => steamStoreUrl('appreviews/$appId');
 }
 
 // cleanTitleForSearch and weightedSimilarity are now in
@@ -66,32 +63,39 @@ Future<String> _getCacheFilePath() async {
 class _DiskCache {
   static _DiskCache? _instance;
   static _DiskCache get instance => _instance ??= _DiskCache._();
-  
+
   _DiskCache._();
-  
+
   Map<String, dynamic>? _cache;
-  bool _isLoading = false;
-  
+
+  // Single shared Future used by all concurrent callers so we only read the
+  // file once even when multiple async operations call _ensureLoaded at the
+  // same time.  After the load completes, _cache is non-null and the Future
+  // is kept around (the null check below makes it a no-op on re-entry).
+  Future<void>? _loadFuture;
+
   /// Load cache from disk into memory (call once at app startup or first access)
-  Future<void> _ensureLoaded() async {
-    if (_cache != null || _isLoading) return;
-    _isLoading = true;
+  Future<void> _ensureLoaded() {
+    if (_cache != null) return Future.value();
+    // All concurrent callers share the same Future so disk is only read once.
+    return _loadFuture ??= _loadFromDisk();
+  }
+
+  Future<void> _loadFromDisk() async {
     try {
       final path = await _getCacheFilePath();
       final file = File(path);
       if (await file.exists()) {
         final text = await file.readAsString();
         _cache = json.decode(text) as Map<String, dynamic>;
-      } else {
-        _cache = {};
+        return;
       }
+      _cache = {};
     } catch (_) {
       _cache = {};
-    } finally {
-      _isLoading = false;
     }
   }
-  
+
   /// Get cached result (memory-first)
   Future<SteamSearchResult?> getCachedResult(String title) async {
     await _ensureLoaded();
@@ -102,15 +106,18 @@ class _DiskCache {
       appId: entry['app_id']?.toString() ?? '',
       name: entry['name']?.toString() ?? title,
       imageUrl: entry['image_url']?.toString(),
-      tags: (entry['tags'] as List<dynamic>?)
+      tags:
+          (entry['tags'] as List<dynamic>?)
               ?.map((e) => e.toString())
-              .toList() ?? [],
+              .toList() ??
+          [],
       reviewScore: entry['review_score'] as int?,
       reviewCount: entry['review_count'] as int?,
       isDlc: entry['is_dlc'] as bool? ?? false,
+      developer: entry['developer']?.toString(),
     );
   }
-  
+
   /// Get cached timestamp
   Future<DateTime?> getCachedAt(String title) async {
     await _ensureLoaded();
@@ -124,7 +131,7 @@ class _DiskCache {
         : int.tryParse(cachedAt.toString()) ?? 0;
     return DateTime.fromMillisecondsSinceEpoch(ms);
   }
-  
+
   /// Write-through: update memory and persist to disk
   Future<void> writeEntry(String key, SteamSearchResult r) async {
     await _ensureLoaded();
@@ -136,20 +143,73 @@ class _DiskCache {
       'review_score': r.reviewScore,
       'is_dlc': r.isDlc,
       'image_url': r.imageUrl,
+      'developer': r.developer,
       'cached_at': DateTime.now().millisecondsSinceEpoch / 1000.0,
     };
-    
+
     _cache ??= {};
     _cache![key] = entry;
-    
+
     // Also write under normalized result name key
     final keyFromName = _normalizeCacheKey(r.name);
     if (keyFromName != key) _cache![keyFromName] = entry;
-    
+
     // Persist to disk
     try {
+      final jsonStr = json.encode(_cache);
       final path = await _getCacheFilePath();
-      await File(path).writeAsString(json.encode(_cache));
+      await File(path).writeAsString(jsonStr);
+    } catch (_) {
+      // Ignore cache write failures
+    }
+  }
+
+  Future<Map<String, dynamic>> exportForSync() async {
+    await _ensureLoaded();
+    final source = _cache ?? const <String, dynamic>{};
+    final out = <String, dynamic>{};
+    for (final entry in source.entries) {
+      final value = entry.value;
+      if (value is Map) {
+        out[entry.key] = Map<String, dynamic>.from(value);
+      }
+    }
+    return out;
+  }
+
+  Future<void> mergeFromSync(Map<String, dynamic> incoming) async {
+    await _ensureLoaded();
+    _cache ??= <String, dynamic>{};
+
+    for (final entry in incoming.entries) {
+      final key = entry.key;
+      final remote = entry.value;
+      if (remote is! Map) continue;
+
+      final remoteMap = Map<String, dynamic>.from(remote);
+      final localExisting = _cache![key];
+      final localMap = localExisting is Map
+          ? Map<String, dynamic>.from(localExisting)
+          : <String, dynamic>{};
+
+      // Preserve this device's image_url while overwriting other fields.
+      final localImageUrl = localMap['image_url'];
+      final merged = <String, dynamic>{
+        ...remoteMap,
+      };
+      if (localImageUrl != null) {
+        merged['image_url'] = localImageUrl;
+      } else {
+        merged.remove('image_url');
+      }
+
+      _cache![key] = merged;
+    }
+
+    try {
+      final jsonStr = json.encode(_cache);
+      final path = await _getCacheFilePath();
+      await File(path).writeAsString(jsonStr);
     } catch (_) {
       // Ignore cache write failures
     }
@@ -166,6 +226,14 @@ Future<DateTime?> getCachedAtForTitle(String title) async {
 
 Future<SteamSearchResult?> getCachedResultForTitle(String title) async {
   return _DiskCache.instance.getCachedResult(title);
+}
+
+Future<Map<String, dynamic>> exportSteamCacheSnapshotForSync() async {
+  return _DiskCache.instance.exportForSync();
+}
+
+Future<void> mergeSteamCacheSnapshotFromSync(Map<String, dynamic> incoming) async {
+  await _DiskCache.instance.mergeFromSync(incoming);
 }
 
 /// Tags to ignore - Steam platform features, not gameplay descriptors
@@ -280,6 +348,7 @@ class SteamSearchResult {
   final int? reviewScore;
   final int? reviewCount;
   final bool isDlc;
+  final String? developer;
 
   const SteamSearchResult({
     required this.appId,
@@ -289,6 +358,7 @@ class SteamSearchResult {
     this.reviewScore,
     this.reviewCount,
     this.isDlc = false,
+    this.developer,
   });
 
   @override
@@ -338,6 +408,7 @@ class _LruCache<K, V> {
 /// Steam integration service
 class SteamService {
   final Dio _dio;
+
   /// LRU cache with 500 entry limit to prevent unbounded memory growth
   final _LruCache<String, SteamSearchResult> _cache = _LruCache(500);
   Directory? _imagesDir;
@@ -395,6 +466,17 @@ class SteamService {
         statusCode == 504;
   }
 
+  bool _shouldRetryError(DioException error) {
+    if (_shouldRetryStatus(error.response?.statusCode)) {
+      return true;
+    }
+
+    return error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError;
+  }
+
   Future<void> _backoff(int attempt) async {
     final ms = 400 * (1 << attempt);
     await Future.delayed(Duration(milliseconds: ms.clamp(400, 2400)));
@@ -421,8 +503,10 @@ class SteamService {
           continue;
         }
         return response;
-      } on DioException catch (_) {
-        if (attempt >= retries) rethrow;
+      } on DioException catch (error) {
+        if (!_shouldRetryError(error) || attempt >= retries) {
+          rethrow;
+        }
         await _backoff(attempt);
         attempt++;
       }
@@ -444,6 +528,17 @@ class SteamService {
     if (!forceRefresh) {
       final cached = _cache.get(normalizedTitle);
       if (cached != null) return cached;
+
+      // Fall back to the persistent disk cache so that results from previous
+      // sessions (or earlier in the same batch) are reused without another
+      // network round-trip.
+      final diskCached = await getCachedResultForTitle(title);
+      if (diskCached != null) {
+        // Warm the LRU cache so subsequent calls for the same title are
+        // instant without touching the disk again.
+        _cache.put(normalizedTitle, diskCached);
+        return diskCached;
+      }
     }
 
     // Generate search variants
@@ -491,12 +586,75 @@ class SteamService {
     final match = _findBestMatch(title, items);
     if (match == null) return null;
 
-    return _fetchGameDetails(
+    final primaryResult = await _fetchGameDetails(
       match['id'].toString(),
       match['name'] as String,
       fetchTags: fetchTags,
       fetchReviews: fetchReviews,
     );
+    if (primaryResult == null || !primaryResult.isDlc) {
+      return primaryResult;
+    }
+
+    // If the query itself doesn't look like DLC content, attempt a non-DLC
+    // fallback from the remaining candidates before accepting the DLC result.
+    if (_searchLooksLikeDlc(title)) {
+      return primaryResult;
+    }
+
+    final alternatives = items
+        .where((item) => item['id'].toString() != primaryResult.appId)
+        .toList();
+    if (alternatives.isEmpty) {
+      return primaryResult;
+    }
+
+    final cleanSearch = cleanTitleForSearch(title).toLowerCase();
+    alternatives.sort(
+      (a, b) => _scoreCandidate(cleanSearch, b).compareTo(
+        _scoreCandidate(cleanSearch, a),
+      ),
+    );
+
+    for (final candidate in alternatives.take(8)) {
+      final altResult = await _fetchGameDetails(
+        candidate['id'].toString(),
+        candidate['name'] as String?,
+        fetchTags: fetchTags,
+        fetchReviews: fetchReviews,
+      );
+      if (altResult != null && !altResult.isDlc) {
+        return altResult;
+      }
+    }
+
+    return primaryResult;
+  }
+
+  bool _searchLooksLikeDlc(String title) {
+    return _looksLikeAddonTitle(title.toLowerCase());
+  }
+
+  bool _looksLikeAddonTitle(String titleLower) {
+    final addonPattern = RegExp(
+      r'\b(dlc|expansion|expansions|season\s*pass|soundtrack|artbook|booster|bonus|pack|skin\s*pack|supporter\s*pack)\b',
+    );
+    return addonPattern.hasMatch(titleLower);
+  }
+
+  double _scoreCandidate(String cleanSearch, Map<String, dynamic> item) {
+    final name = item['name'] as String? ?? '';
+    final itemLower = name.toLowerCase().trim();
+    final itemClean = _cleanTitleForSearch(name).toLowerCase();
+
+    var score = weightedSimilarity(cleanSearch, itemClean);
+    if (itemLower == cleanSearch || itemClean == cleanSearch) {
+      score += 0.4;
+    }
+    if (_looksLikeAddonTitle(itemLower)) {
+      score -= 0.2;
+    }
+    return score;
   }
 
   Future<void> _cacheResultSafely(String key, SteamSearchResult result) async {
@@ -530,12 +688,21 @@ class SteamService {
 
       final response = await _getWithRetry<List<int>>(
         url,
-        options: Options(responseType: ResponseType.bytes),
+        retries: 1,
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 8),
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
 
       if (response.statusCode == 200 && response.data != null) {
         await File(localPath).writeAsBytes(response.data!);
         return localPath;
+      }
+
+      if (!useLibraryImage) {
+        return downloadImage(appId, useLibraryImage: true);
       }
     } catch (e) {
       developer.log(
@@ -567,11 +734,13 @@ class SteamService {
   /// Normalize and map Steam tag names. Returns null if tag should be ignored.
   String? _normalizeTag(String tag) {
     if (tag.trim().isEmpty) return null;
-    final t = tag.trim().toLowerCase();
+    final trimmed = tag.trim();
+    final t = trimmed.toLowerCase();
     if (_ignoredTags.contains(t)) return null;
     if (_tagMapping.containsKey(t)) return _tagMapping[t];
-    // Title-case remaining tags (e.g., 'action adventure' -> 'Action Adventure')
-    return t
+    // Title-case using the original trimmed text so that acronyms and mixed-case
+    // words (e.g. "VR", "6DOF", "Online PvP") are preserved as-is.
+    return trimmed
         .split(' ')
         .map(
           (w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '',
@@ -820,6 +989,7 @@ class SteamService {
 
       String gameName = name ?? 'Unknown';
       bool isDlc = false;
+      String? developer;
       int? reviewScore;
       int? reviewCount;
 
@@ -831,6 +1001,13 @@ class SteamService {
           final details = appData['data'] as Map<String, dynamic>;
           gameName = details['name'] as String? ?? gameName;
           isDlc = (details['type'] == 'dlc');
+          final developers = (details['developers'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          developer = developers != null && developers.isNotEmpty
+              ? developers.join(', ')
+              : null;
 
           reviewCount = (details['recommendations'] != null)
               ? (details['recommendations']['total'] as int?)
@@ -859,7 +1036,7 @@ class SteamService {
         // Attempt to fetch review summary from the Steam "appreviews" endpoint
         try {
           final reviewsResp = await _getWithRetry(
-            'https://store.steampowered.com/appreviews/$appId',
+            SteamApi.appReviews(appId),
             queryParameters: {
               'json': '1',
               'language': 'all',
@@ -896,6 +1073,7 @@ class SteamService {
         reviewScore: reviewScore,
         reviewCount: reviewCount,
         isDlc: isDlc,
+        developer: developer,
       );
       final key = _normalizeTitle(result.name);
       await _cacheResultSafely(key, result);
@@ -926,16 +1104,14 @@ class SteamService {
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data as Map<String, dynamic>;
-        final tagsMap = data['tags'] as Map<String, dynamic>?;
+        final tagEntries = _parseSteamSpyTags(data['tags']);
 
-        if (tagsMap != null && tagsMap.isNotEmpty) {
-          final entries = tagsMap.entries.toList()
-            ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+        if (tagEntries.isNotEmpty) {
+          tagEntries.sort((a, b) => b.score.compareTo(a.score));
 
           final tags = <String>[];
-          for (final e in entries) {
-            final raw = e.key;
-            final normalized = _normalizeTag(raw);
+          for (final entry in tagEntries) {
+            final normalized = _normalizeTag(entry.tag);
             if (normalized != null && !tags.contains(normalized)) {
               tags.add(normalized);
               if (tags.length >= 30) break;
@@ -951,6 +1127,50 @@ class SteamService {
       );
     }
     return [];
+  }
+
+  List<({String tag, int score})> _parseSteamSpyTags(dynamic rawTags) {
+    final entries = <({String tag, int score})>[];
+
+    if (rawTags is Map) {
+      rawTags.forEach((key, value) {
+        final tag = key.toString().trim();
+        if (tag.isEmpty) return;
+        entries.add((tag: tag, score: _coerceTagScore(value)));
+      });
+      return entries;
+    }
+
+    if (rawTags is List) {
+      for (final item in rawTags) {
+        if (item is String) {
+          final tag = item.trim();
+          if (tag.isNotEmpty) {
+            entries.add((tag: tag, score: 0));
+          }
+          continue;
+        }
+
+        if (item is Map) {
+          final dynamic rawTag =
+              item['tag'] ?? item['name'] ?? item['label'] ?? item['id'];
+          final tag = rawTag?.toString().trim() ?? '';
+          if (tag.isEmpty) continue;
+          final score = _coerceTagScore(
+            item['score'] ?? item['votes'] ?? item['count'] ?? item['weight'],
+          );
+          entries.add((tag: tag, score: score));
+        }
+      }
+    }
+
+    return entries;
+  }
+
+  int _coerceTagScore(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   /// Clear the in-memory cache

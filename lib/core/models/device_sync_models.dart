@@ -164,6 +164,19 @@ class PairRequestCodeRejectedEvent extends SyncEvent {
   final String? reason;
 }
 
+class DbMismatchDetectedEvent extends SyncEvent {
+  const DbMismatchDetectedEvent({
+    required this.peerId,
+    required this.peerName,
+    required this.localDbName,
+    required this.remoteDbName,
+  });
+  final String peerId;
+  final String peerName;
+  final String localDbName;
+  final String remoteDbName;
+}
+
 // ---------------------------------------------------------------------------
 
 enum DeviceSyncStatus {

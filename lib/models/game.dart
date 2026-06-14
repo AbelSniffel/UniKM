@@ -24,6 +24,7 @@ class Game {
     this.deadlineDate,
     this.isDlc = false,
     this.steamAppId = '',
+    this.developer = '',
     this.reviewScore = 0,
     this.reviewCount = 0,
     this.tags = const [],
@@ -42,6 +43,7 @@ class Game {
   final DateTime? deadlineDate;
   final bool isDlc;
   final String steamAppId;
+  final String developer;
   final int reviewScore;
   final int reviewCount;
   final List<Tag> tags;
@@ -64,6 +66,7 @@ class Game {
       steamAppId: entry.steamAppId,
       reviewScore: entry.reviewScore,
       reviewCount: entry.reviewCount,
+      developer: entry.developer,
       tags: tags,
     );
   }
@@ -71,37 +74,49 @@ class Game {
   /// Get platform enum
   GamePlatform get platformEnum => GamePlatform.fromDisplayName(platform);
 
-  /// Check if the deadline has passed
-  bool get isExpired {
-    if (!hasDeadline || deadlineDate == null) return false;
-    return DateTime.now().isAfter(deadlineDate!);
-  }
-
-  /// Check if deadline is within 7 days
-  bool get isDeadlineSoon {
-    if (!hasDeadline || deadlineDate == null) return false;
-    final daysUntil = deadlineDate!.difference(DateTime.now()).inDays;
-    return daysUntil >= 0 && daysUntil <= 7;
-  }
-
-  /// Get days until deadline
-  int? get daysUntilDeadline {
+  DateTime? get _deadlineDateOnly {
     if (!hasDeadline || deadlineDate == null) return null;
-    return deadlineDate!.difference(DateTime.now()).inDays;
+    return DateUtils.dateOnly(deadlineDate!);
+  }
+
+  /// Get days until deadline using date-only values.
+  int? get daysUntilDeadline {
+    final normalizedDeadline = _deadlineDateOnly;
+    if (normalizedDeadline == null) return null;
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    return normalizedDeadline.difference(today).inDays;
+  }
+
+  /// Check if the deadline has passed.
+  bool get isExpired {
+    final daysUntil = daysUntilDeadline;
+    return daysUntil != null && daysUntil < 0;
+  }
+
+  /// Check if deadline is within 7 days.
+  bool get isDeadlineSoon {
+    final daysUntil = daysUntilDeadline;
+    return daysUntil != null && daysUntil >= 0 && daysUntil <= 7;
   }
 
   /// Check if game has a cover image
   bool get hasCoverImage => coverImage.isNotEmpty;
 
+  /// Get review rating for a given score (static helper for external use)
+  static String reviewRatingFor(int score) {
+    if (score >= 95) return 'Overwhelmingly Positive';
+    if (score >= 80) return 'Very Positive';
+    if (score >= 70) return 'Mostly Positive';
+    if (score >= 40) return 'Mixed';
+    if (score >= 20) return 'Mostly Negative';
+    return 'Very Negative';
+  }
+
   /// Get review rating as a string (e.g., "Very Positive")
   String get reviewRating {
     if (reviewCount == 0) return 'No Reviews';
-    if (reviewScore >= 95) return 'Overwhelmingly Positive';
-    if (reviewScore >= 80) return 'Very Positive';
-    if (reviewScore >= 70) return 'Mostly Positive';
-    if (reviewScore >= 40) return 'Mixed';
-    if (reviewScore >= 20) return 'Mostly Negative';
-    return 'Very Negative';
+    return reviewRatingFor(reviewScore);
   }
 
   /// Get review rating color
@@ -136,6 +151,7 @@ class Game {
     DateTime? deadlineDate,
     bool? isDlc,
     String? steamAppId,
+    String? developer,
     int? reviewScore,
     int? reviewCount,
     List<Tag>? tags,
@@ -154,6 +170,7 @@ class Game {
       deadlineDate: deadlineDate ?? this.deadlineDate,
       isDlc: isDlc ?? this.isDlc,
       steamAppId: steamAppId ?? this.steamAppId,
+      developer: developer ?? this.developer,
       reviewScore: reviewScore ?? this.reviewScore,
       reviewCount: reviewCount ?? this.reviewCount,
       tags: tags ?? this.tags,

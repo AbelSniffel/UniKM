@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,11 +16,11 @@ import '../../core/constants/app_constants.dart';
 import '../../core/services/update_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/app_version_resolver.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
-import '../widgets/section_groupbox.dart';
+import '../widgets/app_progress_indicator.dart';
 import '../widgets/page_header_title.dart';
+import '../widgets/dialog_helpers.dart';
 
 /// Update state
 class UpdateState {
@@ -28,33 +29,24 @@ class UpdateState {
     this.hasChecked = false,
     this.isDownloading = false,
     this.hasUpdate = false,
-    this.latestVersion,
-    this.releaseNotes,
-    this.downloadUrl,
-    this.releaseHtmlUrl,
+    this.release,
     this.downloadProgress = 0,
     this.downloadedBytes = 0,
     this.totalBytes = 0,
-    this.downloadSize,
     this.error,
     this.downloadedFilePath,
     this.allReleases = const [],
     this.switchingToVersion,
-    this.isPrerelease = false,
   });
 
   final bool isChecking;
   final bool hasChecked;
   final bool isDownloading;
   final bool hasUpdate;
-  final String? latestVersion;
-  final String? releaseNotes;
-  final String? downloadUrl;
-  final String? releaseHtmlUrl;
+  final GitHubRelease? release;
   final double downloadProgress;
   final int downloadedBytes;
   final int totalBytes;
-  final String? downloadSize;
   final String? error;
   final String? downloadedFilePath;
 
@@ -64,48 +56,44 @@ class UpdateState {
   /// Version being installed via the version switcher (null = none in progress).
   final String? switchingToVersion;
 
-  /// Whether the available update is a pre-release version.
-  final bool isPrerelease;
+  String? get latestVersion => release?.version;
+  String? get releaseNotes => release?.body;
+  String? get downloadUrl => release?.downloadUrl;
+  String? get releaseHtmlUrl => release?.htmlUrl;
+  String? get downloadSize => release?.formattedSize;
+  bool get isPrerelease => release?.isPrerelease ?? false;
 
   UpdateState copyWith({
     bool? isChecking,
     bool? hasChecked,
     bool? isDownloading,
     bool? hasUpdate,
-    String? latestVersion,
-    String? releaseNotes,
-    String? downloadUrl,
-    String? releaseHtmlUrl,
+    Object? release = _unset,
     double? downloadProgress,
     int? downloadedBytes,
     int? totalBytes,
-    String? downloadSize,
     String? error,
-    String? downloadedFilePath,
+    Object? downloadedFilePath = _unset,
     List<GitHubRelease>? allReleases,
     Object? switchingToVersion = _unset,
-    bool? isPrerelease,
   }) {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
       hasChecked: hasChecked ?? this.hasChecked,
       isDownloading: isDownloading ?? this.isDownloading,
       hasUpdate: hasUpdate ?? this.hasUpdate,
-      latestVersion: latestVersion ?? this.latestVersion,
-      releaseNotes: releaseNotes ?? this.releaseNotes,
-      downloadUrl: downloadUrl ?? this.downloadUrl,
-      releaseHtmlUrl: releaseHtmlUrl ?? this.releaseHtmlUrl,
+      release: release == _unset ? this.release : release as GitHubRelease?,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
       totalBytes: totalBytes ?? this.totalBytes,
-      downloadSize: downloadSize ?? this.downloadSize,
       error: error,
-      downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
+      downloadedFilePath: downloadedFilePath == _unset
+          ? this.downloadedFilePath
+          : downloadedFilePath as String?,
       allReleases: allReleases ?? this.allReleases,
       switchingToVersion: switchingToVersion == _unset
           ? this.switchingToVersion
           : switchingToVersion as String?,
-      isPrerelease: isPrerelease ?? this.isPrerelease,
     );
   }
 }
@@ -141,6 +129,16 @@ String _downloadNotificationMessage({
     return 'Downloaded ${_formatMegabytes(downloadedBytes)} / ${_formatMegabytes(totalBytes)}';
   }
   return 'Downloaded ${_formatMegabytes(downloadedBytes)}';
+}
+
+bool canRunAutomaticUpdateCheck(UpdateState state) {
+  return !state.isChecking &&
+      !state.isDownloading &&
+      state.downloadedFilePath == null;
+}
+
+bool canShowUpdateAvailableNotification(UpdateState state) {
+  return !state.isDownloading && state.downloadedFilePath == null;
 }
 
 /// Update notifier using real GitHub API
@@ -191,35 +189,13 @@ class UpdateNotifier extends Notifier<UpdateState> {
       } else if (prev == NavItem.updates) {
         // User navigated away from the updates page.
         if (state.isDownloading) {
-          // Re-show download progress notification off-page.
-          _downloadNotificationHandle?.dismiss();
-          _downloadNotificationHandle = NotificationManager.instance.showHandle(
-            message: _downloadNotificationMessage(
-              downloadedBytes: state.downloadedBytes,
-              totalBytes: state.totalBytes,
-            ),
-            type: NotificationType.download,
-            title: 'Update Download',
+          _showOrUpdateDownloadNotification(
+            downloadedBytes: state.downloadedBytes,
+            totalBytes: state.totalBytes,
             progress: state.downloadProgress,
-            actionLabel: 'Cancel',
-            onAction: cancelDownload,
-            persistent: true,
-            dedupe: false,
           );
-          ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
         } else if (state.downloadedFilePath != null) {
-          // Download complete but not yet installed — show install notification.
-          _downloadNotificationHandle?.dismiss();
-          _downloadNotificationHandle = NotificationManager.instance.showHandle(
-            message: 'Update ready to install.',
-            type: NotificationType.success,
-            title: 'Download Complete',
-            actionLabel: 'Install',
-            onAction: () => launchInstaller(),
-            persistent: true,
-            dedupe: false,
-          );
-          ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
+          _showDownloadReadyNotification();
         }
       }
     });
@@ -232,6 +208,70 @@ class UpdateNotifier extends Notifier<UpdateState> {
     if (cached.isNotEmpty) {
       state = state.copyWith(allReleases: cached);
     }
+  }
+
+  NotificationHandle _showOrUpdateDownloadNotification({
+    required int downloadedBytes,
+    required int totalBytes,
+    required double progress,
+  }) {
+    final message = _downloadNotificationMessage(
+      downloadedBytes: downloadedBytes,
+      totalBytes: totalBytes,
+    );
+    final handle = _downloadNotificationHandle;
+
+    if (handle == null) {
+      _downloadNotificationHandle = NotificationManager.instance.showHandle(
+        message: message,
+        type: NotificationType.download,
+        title: 'Update Download',
+        progress: progress,
+        actionLabel: 'Cancel',
+        onAction: cancelDownload,
+        persistent: true,
+        dedupe: false,
+      );
+    } else {
+      handle.update(
+        message: message,
+        type: NotificationType.download,
+        title: 'Update Download',
+        progress: progress,
+        actionLabel: 'Cancel',
+        onAction: cancelDownload,
+      );
+    }
+
+    ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
+    return _downloadNotificationHandle!;
+  }
+
+  void _showDownloadReadyNotification() {
+    final handle = _downloadNotificationHandle;
+
+    if (handle == null) {
+      _downloadNotificationHandle = NotificationManager.instance.showHandle(
+        message: 'Update ready to install.',
+        type: NotificationType.success,
+        title: 'Download Complete',
+        actionLabel: 'Install',
+        onAction: () => launchInstaller(),
+        persistent: true,
+        dedupe: false,
+      );
+    } else {
+      handle.update(
+        message: 'Update ready to install.',
+        type: NotificationType.success,
+        title: 'Download Complete',
+        clearProgress: true,
+        actionLabel: 'Install',
+        onAction: () => launchInstaller(),
+      );
+    }
+
+    ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
   }
 
   /// Get the releases page URL
@@ -268,12 +308,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         state = UpdateState(
           hasChecked: true,
           hasUpdate: true,
-          latestVersion: _devPreviewRelease.version,
-          releaseNotes: _devPreviewRelease.body,
-          downloadUrl: _devPreviewRelease.downloadUrl,
-          releaseHtmlUrl: _devPreviewRelease.htmlUrl,
-          downloadSize: _devPreviewRelease.formattedSize,
-          isPrerelease: _devPreviewRelease.isPrerelease,
+          release: _devPreviewRelease,
           allReleases: cachedReleases,
         );
         break;
@@ -283,15 +318,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
           hasChecked: true,
           hasUpdate: true,
           isDownloading: true,
-          latestVersion: _devPreviewRelease.version,
-          releaseNotes: _devPreviewRelease.body,
-          downloadUrl: _devPreviewRelease.downloadUrl,
-          releaseHtmlUrl: _devPreviewRelease.htmlUrl,
-          downloadSize: _devPreviewRelease.formattedSize,
+          release: _devPreviewRelease,
           downloadProgress: 0.64,
           downloadedBytes: 30870077,
           totalBytes: _devPreviewRelease.downloadSize ?? 48234496,
-          isPrerelease: _devPreviewRelease.isPrerelease,
           allReleases: cachedReleases,
         );
         break;
@@ -315,7 +345,14 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> checkForUpdates() async {
-    state = state.copyWith(isChecking: true, error: null);
+    final notificationState = state;
+    _currentRelease = null;
+    state = state.copyWith(
+      isChecking: true,
+      hasUpdate: false,
+      release: null,
+      error: null,
+    );
 
     try {
       final updatesSettings = ref.read(updatesSettingsProvider);
@@ -327,7 +364,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
             ? updatesSettings.githubApiToken
             : null,
       );
-      final currentVersion = await AppVersionResolver.currentVersion();
+      final currentVersion = kAppVersion;
 
       // Run update check and full release list fetch in parallel.
       final results = await Future.wait([
@@ -363,17 +400,22 @@ class UpdateNotifier extends Notifier<UpdateState> {
         isChecking: false,
         hasChecked: true,
         hasUpdate: result.hasUpdate,
-        latestVersion: result.release?.version,
-        releaseNotes: result.release?.body,
-        downloadUrl: result.release?.downloadUrl,
-        releaseHtmlUrl: result.release?.htmlUrl,
-        downloadSize: result.release?.formattedSize,
-        isPrerelease: result.release?.isPrerelease ?? false,
+        release: result.release,
         allReleases: allReleases.isNotEmpty ? allReleases : state.allReleases,
       );
 
+      if (!result.hasUpdate || result.release == null) {
+        _updateNotificationHandle?.dismiss();
+        _updateNotificationHandle = null;
+        if (!state.isDownloading && state.downloadedFilePath == null) {
+          ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        }
+      }
+
       // Fire "update available" notification when allowed by settings.
-      if (result.hasUpdate && result.release != null) {
+      if (result.hasUpdate &&
+          result.release != null &&
+          canShowUpdateAvailableNotification(notificationState)) {
         final notifSettings = ref.read(notificationsSettingsProvider);
         if (notifSettings.updateNotifications) {
           final version = result.release!.version;
@@ -382,14 +424,21 @@ class UpdateNotifier extends Notifier<UpdateState> {
             message: 'Version $version is available.',
             type: NotificationType.update,
             title: 'Update Available',
-            actionLabel: 'View Update',
+            onTap: () {
+              ref.read(currentNavProvider.notifier).setNav(NavItem.updates);
+            },
+            actionLabel: 'View',
             onAction: () {
               ref.read(currentNavProvider.notifier).setNav(NavItem.updates);
+            },
+            secondaryActionLabel: 'Skip',
+            onSecondaryAction: () {
+              skipVersion();
             },
             persistent: true,
             dedupe: false,
           );
-          // Pulsate only when Updates page is not currently selected.
+          // Mark the Updates destination when the user is not already there.
           if (ref.read(currentNavProvider) != NavItem.updates) {
             ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
           }
@@ -407,35 +456,46 @@ class UpdateNotifier extends Notifier<UpdateState> {
   Future<void> downloadUpdate() async {
     if (_currentRelease == null) return;
 
+    await _downloadRelease(
+      release: _currentRelease!,
+      completionMessage: 'Update downloaded — ready to install.',
+    );
+  }
+
+  Future<void> _downloadRelease({
+    required GitHubRelease release,
+    required String completionMessage,
+    String? switchingToVersion,
+  }) async {
+    final isOnUpdatesPage = ref.read(currentNavProvider) == NavItem.updates;
+
     state = state.copyWith(
+      switchingToVersion: switchingToVersion,
+      release: release,
       isDownloading: true,
       downloadProgress: 0,
+      downloadedBytes: 0,
+      totalBytes: 0,
+      downloadedFilePath: null,
       error: null,
     );
+    _currentRelease = release;
 
-    // Show a progress notification when the user is not already on the updates page.
-    final isOnUpdatesPage = ref.read(currentNavProvider) == NavItem.updates;
-    if (!isOnUpdatesPage) {
+    if (isOnUpdatesPage) {
       _downloadNotificationHandle?.dismiss();
-      _downloadNotificationHandle = NotificationManager.instance.showHandle(
-        message: _downloadNotificationMessage(
-          downloadedBytes: state.downloadedBytes,
-          totalBytes: state.totalBytes,
-        ),
-        type: NotificationType.download,
-        title: 'Update Download',
-        progress: 0.0,
-        actionLabel: 'Cancel',
-        onAction: cancelDownload,
-        persistent: true,
-        dedupe: false,
+      _downloadNotificationHandle = null;
+      ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+    } else {
+      _showOrUpdateDownloadNotification(
+        downloadedBytes: 0,
+        totalBytes: 0,
+        progress: 0,
       );
-      ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
     }
 
     try {
-      final filePath = await _updateService.downloadUpdate(
-        _currentRelease!,
+      final downloadResult = await _updateService.downloadUpdate(
+        release,
         onProgress: (received, total) {
           final progress = total > 0 ? received / total : 0.0;
           state = state.copyWith(
@@ -443,36 +503,50 @@ class UpdateNotifier extends Notifier<UpdateState> {
             downloadedBytes: received,
             totalBytes: total,
           );
-          // Update off-page notification progress.
-          _downloadNotificationHandle?.update(
-            message: _downloadNotificationMessage(
+          if (ref.read(currentNavProvider) != NavItem.updates) {
+            _showOrUpdateDownloadNotification(
               downloadedBytes: received,
               totalBytes: total,
-            ),
-            progress: progress,
-          );
+              progress: progress,
+            );
+          }
         },
       );
+
+      if (downloadResult.openedExternally) {
+        _downloadNotificationHandle?.dismiss();
+        _downloadNotificationHandle = null;
+        ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        state = state.copyWith(
+          isDownloading: false,
+          switchingToVersion: null,
+        );
+        NotificationManager.instance.info(
+          switchingToVersion == null
+              ? 'Update download opened in your device downloader.'
+              : 'Version ${release.version} was handed off to your device downloader.',
+        );
+        return;
+      }
+
+      final filePath = downloadResult.filePath;
+      if (filePath == null || filePath.isEmpty) {
+        throw StateError('Download completed without a local installer file');
+      }
 
       state = state.copyWith(
         isDownloading: false,
         downloadedFilePath: filePath,
+        switchingToVersion: null,
       );
 
-      // Convert the progress notification into an Install action notification.
-      _downloadNotificationHandle?.update(
-        message: 'Update ready to install.',
-        type: NotificationType.success,
-        title: 'Download Complete',
-        clearProgress: true,
-        actionLabel: 'Install',
-        onAction: () => launchInstaller(),
-      );
-      // If no off-page notification was shown, fire a plain success toast.
-      if (isOnUpdatesPage) {
-        NotificationManager.instance.success(
-          'Update downloaded — ready to install.',
-        );
+      if (ref.read(currentNavProvider) != NavItem.updates) {
+        _showDownloadReadyNotification();
+      } else {
+        _downloadNotificationHandle?.dismiss();
+        _downloadNotificationHandle = null;
+        ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        NotificationManager.instance.success(completionMessage);
       }
     } on DownloadCancelledException {
       // User cancelled — notification already dismissed in cancelDownload().
@@ -483,6 +557,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       state = state.copyWith(
         isDownloading: false,
         error: 'Download failed: $e',
+        switchingToVersion: null,
       );
     }
   }
@@ -491,7 +566,17 @@ class UpdateNotifier extends Notifier<UpdateState> {
     if (state.downloadedFilePath == null) return;
 
     try {
-      await _updateService.launchInstaller(state.downloadedFilePath!);
+      final shouldCloseApp = await _updateService.launchInstaller(
+        state.downloadedFilePath!,
+      );
+
+      if (!shouldCloseApp) {
+        NotificationManager.instance.info(
+          'Update package opened. Finish the install manually if needed.',
+        );
+        return;
+      }
+
       NotificationManager.instance.info(
         'Installer launched. The app will close shortly.',
       );
@@ -518,7 +603,12 @@ class UpdateNotifier extends Notifier<UpdateState> {
             .setSetting(SettingsKeys.skippedVersions, updatedSkipped);
       }
 
-      state = state.copyWith(hasUpdate: false, hasChecked: false);
+      _currentRelease = null;
+      state = state.copyWith(
+        hasUpdate: false,
+        hasChecked: false,
+        release: null,
+      );
       _updateNotificationHandle?.dismiss();
       _updateNotificationHandle = null;
       ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
@@ -548,15 +638,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Download and install a specific release (update or downgrade).
   Future<void> switchToVersion(GitHubRelease release) async {
-    state = state.copyWith(
-      switchingToVersion: release.version,
-      latestVersion: release.version,
-      isDownloading: true,
-      downloadProgress: 0,
-      error: null,
-    );
-    _currentRelease = release;
-
     // If downgrading to 1.1.0 or below, reset the toggle style to regular
     if (compareVersions(release.version, '1.1.0') <= 0) {
       ref
@@ -564,37 +645,12 @@ class UpdateNotifier extends Notifier<UpdateState> {
           .setSetting(SettingsKeys.toggleStyle, ToggleStyle.regular);
     }
 
-    try {
-      final filePath = await _updateService.downloadUpdate(
-        release,
-        onProgress: (received, total) {
-          final progress = total > 0 ? received / total : 0.0;
-          state = state.copyWith(
-            downloadProgress: progress,
-            downloadedBytes: received,
-            totalBytes: total,
-          );
-        },
-      );
-
-      state = state.copyWith(
-        isDownloading: false,
-        downloadedFilePath: filePath,
-        switchingToVersion: null,
-      );
-
-      NotificationManager.instance.success(
-        'Version ${release.version} downloaded. Click Install to apply.',
-      );
-    } on DownloadCancelledException {
-      // User cancelled — state was already reset by cancelDownload().
-    } catch (e) {
-      state = state.copyWith(
-        isDownloading: false,
-        error: 'Download failed: $e',
-        switchingToVersion: null,
-      );
-    }
+    await _downloadRelease(
+      release: release,
+      switchingToVersion: release.version,
+      completionMessage:
+          'Version ${release.version} downloaded. Click Install to apply.',
+    );
   }
 
   /// Cancel any in-progress download and reset download state.
@@ -647,6 +703,7 @@ class _UpdatePageState extends ConsumerState<UpdatePage> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final updateState = ref.watch(updateProvider);
+    final updateNotifier = ref.read(updateProvider.notifier);
     final showInlineStatus =
         !updateState.isChecking &&
         updateState.error == null &&
@@ -654,158 +711,125 @@ class _UpdatePageState extends ConsumerState<UpdatePage> {
         !updateState.hasUpdate &&
         updateState.switchingToVersion == null;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header
-          Row(
-            children: [
-              PageHeaderTitle(
-                title: 'Software Updates',
-                icon: Icons.update,
-                theme: theme,
-              ),
-              const Spacer(),
-              _SkippedVersionsButton(theme: theme),
-            ],
-          ),
+    void openReleasePage() async {
+      final htmlUrl = updateState.releaseHtmlUrl;
+      final releasesUrl = updateNotifier.releasesPageUrl;
+      final url = htmlUrl ?? releasesUrl;
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
 
-          const SizedBox(height: 16),
+    Widget? buildStatusCard() {
+      if (updateState.error != null) {
+        return _ErrorCard(
+          theme: theme,
+          error: updateState.error!,
+          onRecheck: () => updateNotifier.checkForUpdates(),
+        );
+      }
 
-          if (showInlineStatus)
-            _UpdateStatusCard(
-              theme: theme,
-              isChecking: updateState.isChecking,
-              hasChecked: updateState.hasChecked,
-            ),
+      if (updateState.downloadedFilePath != null) {
+        return _DownloadCompleteCard(
+          theme: theme,
+          filePath: updateState.downloadedFilePath!,
+          onInstall: () => updateNotifier.launchInstaller(),
+        );
+      }
 
-          // Update status
-          if (updateState.error != null)
-            _ErrorCard(
-              theme: theme,
-              error: updateState.error!,
-              onRecheck: () =>
-                  ref.read(updateProvider.notifier).checkForUpdates(),
-            )
-          else if (updateState.downloadedFilePath != null)
-            _DownloadCompleteCard(
-              theme: theme,
-              filePath: updateState.downloadedFilePath!,
-              onInstall: () =>
-                  ref.read(updateProvider.notifier).launchInstaller(),
-            )
-          else if (updateState.isChecking)
-            _UpdateStatusCard(
-              theme: theme,
-              isChecking: true,
-              hasChecked: updateState.hasChecked,
-            )
-          else if (updateState.switchingToVersion != null)
-            _UpdateAvailableCard(
-              theme: theme,
-              updateState: updateState,
-              onDownload: () =>
-                  ref.read(updateProvider.notifier).downloadUpdate(),
-              onSkip: () => ref.read(updateProvider.notifier).skipVersion(),
-              onViewOnGithub: () async {
-                final htmlUrl = updateState.releaseHtmlUrl;
-                final releasesUrl = ref
-                    .read(updateProvider.notifier)
-                    .releasesPageUrl;
-                final url = htmlUrl ?? releasesUrl;
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                }
-              },
-            )
-          else if (updateState.hasUpdate)
-            _UpdateAvailableCard(
-              theme: theme,
-              updateState: updateState,
-              onDownload: () =>
-                  ref.read(updateProvider.notifier).downloadUpdate(),
-              onSkip: () => ref.read(updateProvider.notifier).skipVersion(),
-              onViewOnGithub: () async {
-                final htmlUrl = updateState.releaseHtmlUrl;
-                final releasesUrl = ref
-                    .read(updateProvider.notifier)
-                    .releasesPageUrl;
-                final url = htmlUrl ?? releasesUrl;
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                }
-              },
-            )
-          else if (!showInlineStatus &&
-              !updateState.isChecking &&
-              !updateState.hasUpdate)
-            _UpdateStatusCard(
-              theme: theme,
-              isChecking: false,
-              hasChecked: updateState.hasChecked,
-            ),
+      if (updateState.isChecking) {
+        return _UpdateStatusCard(
+          theme: theme,
+          isChecking: true,
+          hasChecked: updateState.hasChecked,
+        );
+      }
 
-          // Release notes (only shown when there's an active update to display notes for,
-          // and no full changelog is loaded yet)
-          if (updateState.releaseNotes != null &&
-              updateState.hasUpdate &&
-              updateState.allReleases.isEmpty)
-            SectionGroupBox(
-              title: 'Release Notes',
-              theme: theme,
-              titleIcon: Icons.description,
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: SingleChildScrollView(
-                  child: MarkdownBody(
-                    data: updateState.releaseNotes!,
-                    styleSheet: MarkdownStyleSheet(
-                      p: TextStyle(color: theme.textPrimary, fontSize: 13),
-                      h1: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+      if (updateState.switchingToVersion != null || updateState.hasUpdate) {
+        return _UpdateAvailableCard(
+          theme: theme,
+          updateState: updateState,
+          onDownload: () => updateNotifier.downloadUpdate(),
+          onSkip: () => updateNotifier.skipVersion(),
+          onViewOnGithub: openReleasePage,
+        );
+      }
+
+      if (!showInlineStatus && !updateState.isChecking && !updateState.hasUpdate) {
+        return _UpdateStatusCard(
+          theme: theme,
+          isChecking: false,
+          hasChecked: updateState.hasChecked,
+        );
+      }
+
+      return null;
+    }
+
+    final statusCard = buildStatusCard();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minHeight = constraints.hasBoundedHeight
+            ? math.max(0.0, constraints.maxHeight - 40)
+            : 0.0;
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            if (!canRunAutomaticUpdateCheck(updateState)) {
+              return;
+            }
+            await ref.read(updateProvider.notifier).checkForUpdates();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      PageHeaderTitle(
+                        title: 'Software Updates',
+                        icon: Icons.download_rounded,
+                        theme: theme,
                       ),
-                      h2: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      h3: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      code: TextStyle(
-                        color: theme.accent,
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      ),
-                      blockquote: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 13,
-                      ),
-                      listBullet: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 13,
-                      ),
-                    ),
+                      const Spacer(),
+                      _SkippedVersionsButton(theme: theme),
+                    ],
                   ),
-                ),
+
+                  const SizedBox(height: 16),
+
+                  if (showInlineStatus)
+                    _UpdateStatusCard(
+                      theme: theme,
+                      isChecking: updateState.isChecking,
+                      hasChecked: updateState.hasChecked,
+                    ),
+
+                  // Update status
+                  ...<Widget?>[statusCard].whereType<Widget>(),
+
+                  const SizedBox(height: 28),
+
+                  // Changelog (always visible when releases are available)
+                  if (updateState.allReleases.isNotEmpty)
+                    _ChangelogSection(
+                      key: ValueKey<String>(
+                        'changelog-${updateState.isChecking}-${updateState.hasChecked}-${updateState.release?.tagName ?? 'none'}-${updateState.allReleases.length}',
+                      ),
+                      theme: theme,
+                      releases: updateState.allReleases,
+                    ),
+                ],
               ),
             ),
-
-          const SizedBox(height: 28),
-
-          // Changelog (always visible when releases are available)
-          if (updateState.allReleases.isNotEmpty)
-            _ChangelogSection(theme: theme, releases: updateState.allReleases),
-        ],
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -825,13 +849,9 @@ class _UpdateStateCardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+    return _UpdateStateCardFrame(
+      theme: theme,
+      color: color,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -839,7 +859,7 @@ class _UpdateStateCardShell extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
             ),
             child: SizedBox(
               width: 32,
@@ -851,6 +871,31 @@ class _UpdateStateCardShell extends StatelessWidget {
           Expanded(child: child),
         ],
       ),
+    );
+  }
+}
+
+class _UpdateStateCardFrame extends StatelessWidget {
+  const _UpdateStateCardFrame({
+    required this.theme,
+    required this.color,
+    required this.child,
+  });
+
+  final AppThemeData theme;
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: child,
     );
   }
 }
@@ -872,12 +917,9 @@ class _UpdateStatusCard extends ConsumerWidget {
     final statusColor = theme.accent;
 
     final leadingIcon = isChecking
-        ? Padding(
-            padding: const EdgeInsets.all(4),
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: theme.accent,
-            ),
+        ? const Padding(
+            padding: EdgeInsets.all(4),
+            child: AppCircularProgressIndicator(),
           )
         : Icon(
             hasChecked ? Icons.check_circle : Icons.pending_outlined,
@@ -885,29 +927,12 @@ class _UpdateStatusCard extends ConsumerWidget {
             size: 32,
           );
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-      ),
+    return _UpdateStateCardShell(
+      theme: theme,
+      color: statusColor,
+      leading: leadingIcon,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(theme.cornerRadius * 2),
-            ),
-            child: SizedBox(
-              width: 32,
-              height: 32,
-              child: Center(child: leadingIcon),
-            ),
-          ),
-          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -925,26 +950,23 @@ class _UpdateStatusCard extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                FutureBuilder<String>(
-                  future: AppVersionResolver.currentVersion(),
-                  builder: (context, snapshot) {
-                    final version = snapshot.data ?? AppConstants.appVersion;
-                    return Text(
-                      'Current version $version',
-                      style: TextStyle(color: theme.textSecondary),
-                    );
-                  },
+                Text(
+                  'Current version $kAppVersion',
+                  style: TextStyle(color: theme.textSecondary),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
+          IconButton(
+            tooltip: 'Check for Updates',
             onPressed: isChecking
                 ? null
                 : () => ref.read(updateProvider.notifier).checkForUpdates(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Check'),
+            icon: Icon(
+              Icons.refresh,
+              color: isChecking ? theme.textHint : theme.textPrimary,
+            ),
           ),
         ],
       ),
@@ -970,13 +992,12 @@ class _UpdateAvailableCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.3)),
-      ),
+    final release = updateState.release;
+    final releaseNotes = updateState.releaseNotes?.trim() ?? '';
+
+    return _UpdateStateCardFrame(
+      theme: theme,
+      color: theme.accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -988,7 +1009,7 @@ class _UpdateAvailableCard extends ConsumerWidget {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: theme.accent.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
                 ),
                 child: SizedBox(
                   width: 32,
@@ -1007,32 +1028,41 @@ class _UpdateAvailableCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      updateState.isDownloading
-                          ? 'Downloading Update'
-                          : 'Update Available!',
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: kElementHSpacing,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          updateState.isDownloading
+                              ? 'Downloading Update'
+                              : 'Update Available!',
+                          style: TextStyle(
+                            color: theme.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (updateState.isPrerelease)
+                          Tooltip(
+                            message: 'Pre-release',
+                            child: const Icon(
+                              Icons.science,
+                              color: Colors.orange,
+                              size: 22,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        FutureBuilder<String>(
-                          future: AppVersionResolver.currentVersion(),
-                          builder: (context, snapshot) {
-                            final version =
-                                snapshot.data ?? AppConstants.appVersion;
-                            return Text(
-                              version,
-                              style: TextStyle(color: theme.textSecondary),
-                            );
-                          },
+                        Text(
+                          kAppVersion,
+                          style: TextStyle(color: theme.textSecondary),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
                           child: Icon(
                             Icons.arrow_forward,
                             size: 16,
@@ -1040,38 +1070,12 @@ class _UpdateAvailableCard extends ConsumerWidget {
                           ),
                         ),
                         Text(
-                          updateState.latestVersion ?? '',
+                          release?.version ?? '',
                           style: TextStyle(
                             color: theme.accent,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (updateState.isPrerelease) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(
-                                theme.cornerRadius,
-                              ),
-                              border: Border.all(
-                                color: Colors.orange.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            child: const Text(
-                              'PRE-RELEASE',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -1079,14 +1083,17 @@ class _UpdateAvailableCard extends ConsumerWidget {
               ),
               if (!updateState.isDownloading) ...[
                 const SizedBox(width: 12),
-                // moved skip button up here (previously below)
-                OutlinedButton(onPressed: onSkip, child: const Text('Skip')),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
+                IconButton(
+                  tooltip: 'Skip Update',
+                  onPressed: onSkip,
+                  icon: Icon(Icons.block, color: theme.textPrimary),
+                ),
+                const SizedBox(width: kElementHSpacing),
+                IconButton(
+                  tooltip: 'Recheck Updates',
                   onPressed: () =>
                       ref.read(updateProvider.notifier).checkForUpdates(),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Recheck'),
+                  icon: Icon(Icons.refresh, color: theme.textPrimary),
                 ),
               ],
               if (updateState.isDownloading &&
@@ -1121,8 +1128,7 @@ class _UpdateAvailableCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // GitHub link moved here instead of skip
+                const SizedBox(width: kElementHSpacing),
                 TextButton.icon(
                   onPressed: onViewOnGithub,
                   icon: const Icon(Icons.open_in_new),
@@ -1137,7 +1143,7 @@ class _UpdateAvailableCard extends ConsumerWidget {
                   child: AppLinearProgressBar(
                     theme: theme,
                     value: updateState.downloadProgress,
-                    minHeight: 32,
+                    minHeight: kElementHeight,
                     label:
                         '${(updateState.downloadProgress.clamp(0.0, 1.0) * 100).round()}%',
                     labelStyle: TextStyle(
@@ -1146,7 +1152,7 @@ class _UpdateAvailableCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: kElementHSpacing),
                 TextButton(
                   onPressed: () =>
                       ref.read(updateProvider.notifier).cancelDownload(),
@@ -1155,8 +1161,83 @@ class _UpdateAvailableCard extends ConsumerWidget {
               ],
             ),
           ],
+          if (release != null && releaseNotes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ReleaseNotesPanel(
+              theme: theme,
+              data: releaseNotes,
+              scrollable: true,
+              maxHeight: 220,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) {
+  return MarkdownStyleSheet(
+    p: TextStyle(color: theme.textPrimary, fontSize: 13),
+    h1: TextStyle(
+      color: theme.textPrimary,
+      fontSize: 16,
+      fontWeight: FontWeight.bold,
+    ),
+    h2: TextStyle(
+      color: theme.textPrimary,
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+    ),
+    h3: TextStyle(
+      color: theme.textPrimary,
+      fontSize: 13,
+      fontWeight: FontWeight.bold,
+    ),
+    code: TextStyle(
+      color: theme.accent,
+      fontFamily: 'monospace',
+      fontSize: 12,
+    ),
+    blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
+    listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
+  );
+}
+
+class _ReleaseNotesPanel extends StatelessWidget {
+  const _ReleaseNotesPanel({
+    required this.theme,
+    required this.data,
+    this.scrollable = false,
+    this.maxHeight = 220,
+  });
+
+  final AppThemeData theme;
+  final String data;
+  final bool scrollable;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final markdown = MarkdownBody(
+      data: data,
+      styleSheet: _releaseMarkdownStyleSheet(theme),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.background.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        border: Border.all(color: theme.border),
+      ),
+      child: scrollable
+          ? ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: SingleChildScrollView(child: markdown),
+            )
+          : markdown,
     );
   }
 }
@@ -1177,13 +1258,9 @@ class _DownloadCompleteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final fileName = filePath.split(Platform.pathSeparator).last;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.3)),
-      ),
+    return _UpdateStateCardFrame(
+      theme: theme,
+      color: theme.accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1194,7 +1271,7 @@ class _DownloadCompleteCard extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: theme.accent.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
                 ),
                 child: SizedBox(
                   width: 32,
@@ -1241,24 +1318,26 @@ class _DownloadCompleteCard extends StatelessWidget {
                   label: const Text('Install & Restart'),
                 ),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  if (Platform.isWindows) {
-                    await Process.run('explorer', ['/select,', filePath]);
-                  } else if (Platform.isMacOS) {
-                    await Process.run('open', ['-R', filePath]);
-                  } else if (Platform.isLinux) {
-                    final dir = filePath.substring(
-                      0,
-                      filePath.lastIndexOf('/'),
-                    );
-                    await Process.run('xdg-open', [dir]);
-                  }
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Show in Folder'),
-              ),
+              if (!Platform.isAndroid && !Platform.isIOS) ...[
+                const SizedBox(width: kElementHSpacing),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    if (Platform.isWindows) {
+                      await Process.run('explorer', ['/select,', filePath]);
+                    } else if (Platform.isMacOS) {
+                      await Process.run('open', ['-R', filePath]);
+                    } else if (Platform.isLinux) {
+                      final dir = filePath.substring(
+                        0,
+                        filePath.lastIndexOf('/'),
+                      );
+                      await Process.run('xdg-open', [dir]);
+                    }
+                  },
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Show in Folder'),
+                ),
+              ],
             ],
           ),
         ],
@@ -1269,9 +1348,10 @@ class _DownloadCompleteCard extends StatelessWidget {
 
 /// Small releases button shown next to the page title.
 class _ReleasesLinkButton extends ConsumerWidget {
-  const _ReleasesLinkButton({required this.theme});
+  const _ReleasesLinkButton({required this.theme, required this.compact});
 
   final AppThemeData theme;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1279,16 +1359,29 @@ class _ReleasesLinkButton extends ConsumerWidget {
     final customRepo = updatesSettings.updateRepo;
     final repo = customRepo.isNotEmpty ? customRepo : kGitHubRepo;
     final releasesUrl = 'https://github.com/$repo/releases';
+    const label = 'GitHub Releases';
 
-    return TextButton.icon(
-      onPressed: () async {
-        final uri = Uri.parse(releasesUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri);
-        }
-      },
-      icon: Icon(Icons.open_in_new),
-      label: Text('https://github.com/$repo/releases'),
+    return Tooltip(
+      message: releasesUrl,
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 18),
+          visualDensity: VisualDensity.standard,
+        ),
+        onPressed: () async {
+          final uri = Uri.parse(releasesUrl);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
+        icon: const Icon(Icons.open_in_new),
+        label: const Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.fade,
+          softWrap: false,
+        ),
+      ),
     );
   }
 }
@@ -1331,10 +1424,10 @@ class _ErrorCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
+          IconButton(
             onPressed: onRecheck,
             icon: const Icon(Icons.refresh),
-            label: const Text('Recheck'),
+            tooltip: 'Recheck',
           ),
         ],
       ),
@@ -1386,18 +1479,16 @@ class _SkippedVersionsDialog extends ConsumerWidget {
     );
     final notifier = ref.read(updateProvider.notifier);
 
-    return AlertDialog(
-      backgroundColor: theme.surface,
+    return ThemedAlertDialog(
+      theme: theme,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(theme.cornerRadius),
         side: BorderSide(color: theme.border),
       ),
-      title: Row(
-        children: [
-          Icon(Icons.block, color: theme.accent),
-          const SizedBox(width: 12),
-          Text('Skipped Versions', style: TextStyle(color: theme.textPrimary)),
-        ],
+      title: DialogHeader(
+        icon: Icons.block,
+        title: 'Skipped Versions',
+        theme: theme,
       ),
       content: SizedBox(
         width: 380,
@@ -1440,20 +1531,15 @@ class _SkippedVersionsDialog extends ConsumerWidget {
       ),
       actions: [
         if (skipped.isNotEmpty)
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               await notifier.clearAllSkippedVersions();
               if (context.mounted) Navigator.of(context).pop();
             },
             child: Text(
               'Clear All',
-              style: TextStyle(color: Colors.red.shade400),
             ),
           ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Close', style: TextStyle(color: theme.textSecondary)),
-        ),
       ],
     );
   }
@@ -1465,53 +1551,73 @@ class _SkippedVersionsDialog extends ConsumerWidget {
 
 /// Always-visible changelog section listing all GitHub releases.
 class _ChangelogSection extends ConsumerWidget {
-  const _ChangelogSection({required this.theme, required this.releases});
+  const _ChangelogSection({
+    super.key,
+    required this.theme,
+    required this.releases,
+  });
 
   final AppThemeData theme;
   final List<GitHubRelease> releases;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final sortedReleases = [...releases]
+      ..sort(
+        (a, b) => ref
+            .read(updateProvider.notifier)
+            .compareVersions(b.version, a.version),
+      );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useCompactReleasesLink = constraints.maxWidth < 780;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.article, size: 20, color: theme.accent),
-            const SizedBox(width: 6),
-            Text(
-              'Changelog',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            _ReleasesLinkButton(theme: theme),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: theme.surface,
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            border: Border.all(color: theme.border),
-          ),
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            child: Column(
+            Row(
               children: [
-                for (int i = 0; i < releases.length; i++) ...[
-                  if (i > 0) Divider(height: 1, color: theme.border),
-                  _ReleaseEntryCard(
-                    theme: theme,
-                    release: releases[i],
-                    isFirst: i == 0,
+                Icon(Icons.article, color: theme.accent),
+                const SizedBox(width: 6),
+                Text(
+                  'Changelog',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _ReleasesLinkButton(
+                      theme: theme,
+                      compact: useCompactReleasesLink,
+                    ),
                   ),
-                ],
+                ),
               ],
             ),
-          ),
-        ),
-      ],
+            const SizedBox(height: kElementVSpacing),
+            Container(
+              decoration: BoxDecoration(
+                color: theme.surface,
+                borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
+                border: Border.all(color: theme.border),
+              ),
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(theme.cornerRadius),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < sortedReleases.length; i++) ...[
+                      if (i > 0) Divider(height: 1, color: theme.border),
+                      _ReleaseEntryCard(theme: theme, release: sortedReleases[i]),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1522,12 +1628,10 @@ class _ReleaseEntryCard extends ConsumerStatefulWidget {
   const _ReleaseEntryCard({
     required this.theme,
     required this.release,
-    required this.isFirst,
   });
 
   final AppThemeData theme;
   final GitHubRelease release;
-  final bool isFirst;
 
   @override
   ConsumerState<_ReleaseEntryCard> createState() => _ReleaseEntryCardState();
@@ -1535,26 +1639,6 @@ class _ReleaseEntryCard extends ConsumerStatefulWidget {
 
 class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
   bool _expanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Auto-expand is deferred to didChangeDependencies so it only fires once
-    // the UpdatePage is actually visible (TickerMode enabled).  Building
-    // MarkdownBody while the page is hidden in the IndexedStack causes a
-    // noticeable main-thread freeze on boot.
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Auto-expand the first (most recent) entry only when the page is visible.
-    // TickerMode is false for pages hidden by IndexedStack, so this defers the
-    // expensive MarkdownBody render until the user actually opens Updates.
-    if (widget.isFirst && TickerMode.valuesOf(context).enabled && !_expanded) {
-      _expanded = true;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1566,8 +1650,7 @@ class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
     );
     final notifier = ref.read(updateProvider.notifier);
 
-    // Determine the current running version asynchronously — we compare eagerly
-    // to kAppVersion as a heuristic since AppVersionResolver just returns the constant.
+    // Determine the current running version from the single source of truth.
     const currentVersion = kAppVersion;
     final cmp = notifier.compareVersions(release.version, currentVersion);
     final isCurrent = cmp == 0;
@@ -1600,7 +1683,7 @@ class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
                 children: [
                   // Version label
                   Text(
-                    'v${release.version}',
+                    'UniKM V${release.version}',
                     style: TextStyle(
                       color: isCurrent
                           ? theme.accent
@@ -1611,71 +1694,58 @@ class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: kElementHSpacing),
 
-                  // Pre-release badge
+                  // Pre-release indicator
                   if (release.isPrerelease) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                        border: Border.all(
-                          color: Colors.orange.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: const Text(
-                        'PRE-RELEASE',
-                        style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Tooltip(
+                      message: 'Pre-release',
+                      child: Icon(
+                        Icons.science,
+                        color: Colors.orange,
+                        size: 18,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: kElementHSpacing),
                   ],
 
-                  if (isSkipped) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.textSecondary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                        border: Border.all(
-                          color: theme.textSecondary.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Text(
-                        'SKIPPED',
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
+                  const Spacer(),
 
-                  // Release name
-                  Expanded(
-                    child: Text(
-                      release.name.isNotEmpty
-                          ? release.name
-                          : 'v${release.version}',
-                      style: TextStyle(color: theme.textPrimary),
-                      overflow: TextOverflow.ellipsis,
+                  // Action button
+                  if (isCurrent)
+                    IconButton(
+                      icon: Icon(Icons.check_circle, color: theme.accent),
+                      onPressed: null,
+                      tooltip: 'Current version',
+                    )
+                  else if (isSkipped)
+                    IconButton(
+                      icon: Icon(Icons.block, color: theme.textSecondary),
+                      onPressed: null,
+                      tooltip: 'Skipped version',
+                    )
+                  else if (isDownloading)
+                    IconButton(
+                      icon: const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: AppCircularProgressIndicator(),
+                      ),
+                      onPressed: null,
+                      tooltip: 'Downloading...',
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.download),
+                      onPressed: canInstallRelease
+                          ? () => notifier.switchToVersion(release)
+                          : null,
+                      tooltip: release.downloadUrl == null
+                          ? 'Installer file not found'
+                          : 'Download',
                     ),
-                  ),
 
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
 
                   // Date
                   Text(
@@ -1683,50 +1753,7 @@ class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
                     style: TextStyle(color: theme.textSecondary, fontSize: 11),
                   ),
 
-                  const SizedBox(width: 12),
-
-                  // Action button
-                  if (isCurrent)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.accent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      child: Text(
-                        'Current',
-                        style: TextStyle(color: theme.accent),
-                      ),
-                    )
-                  else if (isDownloading)
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.accent,
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      height: 28,
-                      child: Tooltip(
-                        message: release.downloadUrl == null
-                            ? 'Installer file not found'
-                            : '',
-                        child: OutlinedButton(
-                          onPressed: canInstallRelease
-                              ? () => notifier.switchToVersion(release)
-                              : null,
-                          child: Text(isNewer ? 'Install' : 'Downgrade'),
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(width: 8),
+                  const SizedBox(width: kElementHSpacing),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     color: theme.textSecondary,
@@ -1739,45 +1766,9 @@ class _ReleaseEntryCardState extends ConsumerState<_ReleaseEntryCard> {
 
           // Expanded release notes
           if (_expanded && release.body.trim().isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: theme.background.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(theme.cornerRadius / 1.5),
-                border: Border.all(color: theme.border),
-              ),
-              child: MarkdownBody(
-                data: release.body,
-                styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(color: theme.textPrimary, fontSize: 13),
-                  h1: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  h2: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  h3: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  code: TextStyle(
-                    color: theme.accent,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
-                  blockquote: TextStyle(
-                    color: theme.textSecondary,
-                    fontSize: 13,
-                  ),
-                  listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
-                ),
-              ),
+            _ReleaseNotesPanel(
+              theme: theme,
+              data: release.body,
             ),
         ],
       ),

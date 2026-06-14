@@ -2,7 +2,7 @@
 ///
 /// Replaces 3 duplicate search TextField blocks in:
 /// - home_page.dart
-/// - flow_tag_selector.dart
+/// - tag_list.dart
 /// - settings_page.dart
 library;
 
@@ -35,6 +35,7 @@ class AppSearchField extends StatefulWidget {
     this.backgroundColor,
     this.onSubmitted,
     this.prefixIcon,
+    this.showTopBorder = false,
   });
 
   final AppThemeData theme;
@@ -63,6 +64,9 @@ class AppSearchField extends StatefulWidget {
 
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon;
+
+  /// Whether the themed animated top border should be shown for this field.
+  final bool showTopBorder;
 
   @override
   State<AppSearchField> createState() => _AppSearchFieldState();
@@ -127,23 +131,21 @@ class _AppSearchFieldState extends State<AppSearchField> {
         prefixIcon: Icon(
           widget.prefixIcon ?? Icons.search,
           color: widget.theme.textHint,
-          size: 18,
         ),
         prefixIconConstraints: const BoxConstraints(
-          minWidth: 34,
-          minHeight: 32,
+          minWidth: 38,
+          minHeight: 36,
         ),
         suffixIconConstraints: const BoxConstraints(
-          minWidth: 34,
-          minHeight: 32,
+          minWidth: 38,
+          minHeight: 36,
         ),
         suffixIcon: showClear
             ? IconButton(
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 38, minHeight: 36),
                 visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                icon: Icon(Icons.clear, color: widget.theme.textHint, size: 16),
+                icon: Icon(Icons.clear, color: widget.theme.textHint),
                 onPressed: () {
                   controller.clear();
                   widget.onChanged('');
@@ -152,10 +154,9 @@ class _AppSearchFieldState extends State<AppSearchField> {
               )
             : null,
         filled: true,
-        fillColor: widget.backgroundColor ?? widget.theme.inputBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
-          borderSide: BorderSide(color: widget.theme.border),
+        fillColor: widget.backgroundColor,
+        border: widget.theme.resolveInputBorder(
+          showTopBorder: widget.showTopBorder,
         ),
         contentPadding: effectiveContentPadding,
       ),

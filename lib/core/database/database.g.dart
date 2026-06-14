@@ -171,6 +171,18 @@ class $GamesTable extends Games with TableInfo<$GamesTable, GameEntry> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _developerMeta = const VerificationMeta(
+    'developer',
+  );
+  @override
+  late final GeneratedColumn<String> developer = GeneratedColumn<String>(
+    'developer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _reviewScoreMeta = const VerificationMeta(
     'reviewScore',
   );
@@ -210,6 +222,7 @@ class $GamesTable extends Games with TableInfo<$GamesTable, GameEntry> {
     deadlineDate,
     isDlc,
     steamAppId,
+    developer,
     reviewScore,
     reviewCount,
   ];
@@ -313,6 +326,15 @@ class $GamesTable extends Games with TableInfo<$GamesTable, GameEntry> {
         ),
       );
     }
+    if (data.containsKey('developer')) {
+      context.handle(
+        _developerMeta,
+        developer.isAcceptableOrUnknown(
+          data['developer']!,
+          _developerMeta,
+        ),
+      );
+    }
     if (data.containsKey('review_score')) {
       context.handle(
         _reviewScoreMeta,
@@ -392,6 +414,10 @@ class $GamesTable extends Games with TableInfo<$GamesTable, GameEntry> {
         DriftSqlType.string,
         data['${effectivePrefix}steam_app_id'],
       )!,
+      developer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}developer'],
+      )!,
       reviewScore: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}review_score'],
@@ -449,6 +475,9 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
   /// Steam AppID for API integration
   final String steamAppId;
 
+  /// Steam developer/publisher
+  final String developer;
+
   /// Review score from Steam (0-100)
   final int reviewScore;
 
@@ -468,6 +497,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
     this.deadlineDate,
     required this.isDlc,
     required this.steamAppId,
+    required this.developer,
     required this.reviewScore,
     required this.reviewCount,
   });
@@ -489,6 +519,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
     }
     map['is_dlc'] = Variable<bool>(isDlc);
     map['steam_app_id'] = Variable<String>(steamAppId);
+    map['developer'] = Variable<String>(developer);
     map['review_score'] = Variable<int>(reviewScore);
     map['review_count'] = Variable<int>(reviewCount);
     return map;
@@ -511,6 +542,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
           : Value(deadlineDate),
       isDlc: Value(isDlc),
       steamAppId: Value(steamAppId),
+      developer: Value(developer),
       reviewScore: Value(reviewScore),
       reviewCount: Value(reviewCount),
     );
@@ -535,6 +567,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
       deadlineDate: serializer.fromJson<DateTime?>(json['deadlineDate']),
       isDlc: serializer.fromJson<bool>(json['isDlc']),
       steamAppId: serializer.fromJson<String>(json['steamAppId']),
+      developer: serializer.fromJson<String>(json['developer']),
       reviewScore: serializer.fromJson<int>(json['reviewScore']),
       reviewCount: serializer.fromJson<int>(json['reviewCount']),
     );
@@ -556,6 +589,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
       'deadlineDate': serializer.toJson<DateTime?>(deadlineDate),
       'isDlc': serializer.toJson<bool>(isDlc),
       'steamAppId': serializer.toJson<String>(steamAppId),
+      'developer': serializer.toJson<String>(developer),
       'reviewScore': serializer.toJson<int>(reviewScore),
       'reviewCount': serializer.toJson<int>(reviewCount),
     };
@@ -575,6 +609,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
     Value<DateTime?> deadlineDate = const Value.absent(),
     bool? isDlc,
     String? steamAppId,
+    String? developer,
     int? reviewScore,
     int? reviewCount,
   }) => GameEntry(
@@ -591,6 +626,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
     deadlineDate: deadlineDate.present ? deadlineDate.value : this.deadlineDate,
     isDlc: isDlc ?? this.isDlc,
     steamAppId: steamAppId ?? this.steamAppId,
+    developer: developer ?? this.developer,
     reviewScore: reviewScore ?? this.reviewScore,
     reviewCount: reviewCount ?? this.reviewCount,
   );
@@ -617,6 +653,9 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
       steamAppId: data.steamAppId.present
           ? data.steamAppId.value
           : this.steamAppId,
+      developer: data.developer.present
+          ? data.developer.value
+          : this.developer,
       reviewScore: data.reviewScore.present
           ? data.reviewScore.value
           : this.reviewScore,
@@ -642,6 +681,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
           ..write('deadlineDate: $deadlineDate, ')
           ..write('isDlc: $isDlc, ')
           ..write('steamAppId: $steamAppId, ')
+          ..write('developer: $developer, ')
           ..write('reviewScore: $reviewScore, ')
           ..write('reviewCount: $reviewCount')
           ..write(')'))
@@ -663,6 +703,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
     deadlineDate,
     isDlc,
     steamAppId,
+    developer,
     reviewScore,
     reviewCount,
   );
@@ -683,6 +724,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
           other.deadlineDate == this.deadlineDate &&
           other.isDlc == this.isDlc &&
           other.steamAppId == this.steamAppId &&
+          other.developer == this.developer &&
           other.reviewScore == this.reviewScore &&
           other.reviewCount == this.reviewCount);
 }
@@ -701,6 +743,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
   final Value<DateTime?> deadlineDate;
   final Value<bool> isDlc;
   final Value<String> steamAppId;
+  final Value<String> developer;
   final Value<int> reviewScore;
   final Value<int> reviewCount;
   const GamesCompanion({
@@ -717,6 +760,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
     this.deadlineDate = const Value.absent(),
     this.isDlc = const Value.absent(),
     this.steamAppId = const Value.absent(),
+    this.developer = const Value.absent(),
     this.reviewScore = const Value.absent(),
     this.reviewCount = const Value.absent(),
   });
@@ -734,6 +778,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
     this.deadlineDate = const Value.absent(),
     this.isDlc = const Value.absent(),
     this.steamAppId = const Value.absent(),
+    this.developer = const Value.absent(),
     this.reviewScore = const Value.absent(),
     this.reviewCount = const Value.absent(),
   }) : title = Value(title),
@@ -752,6 +797,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
     Expression<DateTime>? deadlineDate,
     Expression<bool>? isDlc,
     Expression<String>? steamAppId,
+    Expression<String>? developer,
     Expression<int>? reviewScore,
     Expression<int>? reviewCount,
   }) {
@@ -769,6 +815,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
       if (deadlineDate != null) 'deadline_date': deadlineDate,
       if (isDlc != null) 'is_dlc': isDlc,
       if (steamAppId != null) 'steam_app_id': steamAppId,
+      if (developer != null) 'developer': developer,
       if (reviewScore != null) 'review_score': reviewScore,
       if (reviewCount != null) 'review_count': reviewCount,
     });
@@ -788,6 +835,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
     Value<DateTime?>? deadlineDate,
     Value<bool>? isDlc,
     Value<String>? steamAppId,
+    Value<String>? developer,
     Value<int>? reviewScore,
     Value<int>? reviewCount,
   }) {
@@ -805,6 +853,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
       deadlineDate: deadlineDate ?? this.deadlineDate,
       isDlc: isDlc ?? this.isDlc,
       steamAppId: steamAppId ?? this.steamAppId,
+      developer: developer ?? this.developer,
       reviewScore: reviewScore ?? this.reviewScore,
       reviewCount: reviewCount ?? this.reviewCount,
     );

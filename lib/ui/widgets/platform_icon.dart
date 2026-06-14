@@ -7,7 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/constants/platform_patterns.dart';
 
-IconData platformIconFor(GamePlatform platform) {
+FaIconData platformIconFor(GamePlatform platform) {
   return switch (platform) {
     GamePlatform.steam => FontAwesomeIcons.steamSymbol,
     GamePlatform.epicGames => FontAwesomeIcons.store,

@@ -11,6 +11,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/constants/app_constants.dart';
+import 'app_progress_indicator.dart';
+
+/// Global padding applied to all dialog content containers.
+///
+/// Defines a consistent inner spacing for both [Dialog]-based and
+/// [AlertDialog]-based dialogs, replacing the per-dialog hardcoded values that
+/// previously varied across the codebase.
+const EdgeInsets kDialogContentPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 12);
+
+/// Standard vertical gap between elements within a dialog window.
+///
+/// Replaces all per-dialog [SizedBox] heights. Update this value to change
+/// spacing uniformly across all dialogs.
+const double kDialogSpacing = 12.0;
 
 ButtonStyle themedFilledButtonStyle(
   AppThemeData theme, {
@@ -129,17 +144,19 @@ class DialogInteractionScope extends StatelessWidget {
 class DialogHeader extends StatelessWidget {
   const DialogHeader({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     required this.theme,
     this.iconColor,
     this.iconSize,
-    this.spacing = 12,
+    this.spacing = 8,
     this.showCloseButton = false,
     this.titleStyle,
+    this.trailing,
   });
 
-  final IconData icon;
+  /// Optional leading icon. When null no icon or spacing is rendered.
+  final IconData? icon;
   final String title;
   final AppThemeData theme;
 
@@ -149,16 +166,19 @@ class DialogHeader extends StatelessWidget {
   /// Defaults to 28 when [showCloseButton] is true, else platform default.
   final double? iconSize;
 
-  /// Gap between icon and title. Defaults to 12.
+  /// Gap between icon and title. Defaults to 8.
   final double spacing;
 
   /// If true, adds a themed close `IconButton` at the trailing edge.
   final bool showCloseButton;
 
   /// Override title text style. When null a sensible default is chosen:
-  /// - With close button: 20 px bold, [theme.textPrimary].
-  /// - Without: inherits from context (AlertDialog title style).
+  /// - With close button: 20 px, w500, [theme.textPrimary].
+  /// - Without: 28 px, w600, [theme.textPrimary].
   final TextStyle? titleStyle;
+
+  /// Optional widget rendered between the title and the close button.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -167,22 +187,30 @@ class DialogHeader extends StatelessWidget {
 
     final textWidget = Text(
       title,
-      style: titleStyle ??
+      style:
+          titleStyle ??
           (showCloseButton
               ? TextStyle(
                   color: theme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 )
-              : TextStyle(color: theme.textPrimary)),
+              : TextStyle(
+                  color: theme.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                )),
       overflow: TextOverflow.ellipsis,
     );
 
     return Row(
       children: [
-        Icon(icon, color: effectiveColor, size: effectiveSize),
-        SizedBox(width: spacing),
+        if (icon != null) ...[
+          Icon(icon!, color: effectiveColor, size: effectiveSize),
+          SizedBox(width: spacing),
+        ],
         Expanded(child: textWidget),
+        ?trailing,
         if (showCloseButton)
           IconButton(
             icon: Icon(Icons.close, color: theme.textSecondary),
@@ -353,12 +381,16 @@ class _InfoBanner extends DialogBanner {
     super.key,
     required super.theme,
     required super.message,
-    super.iconSize = 16,
+    super.iconSize,
     super.textColor,
     super.fontSize = 11,
     super.padding = const EdgeInsets.all(8),
     super.spacing = 8,
-  }) : super(color: const Color(0xFF2196F3), icon: Icons.info_outline, showBorder: false);
+  }) : super(
+         color: const Color(0xFF2196F3),
+         icon: Icons.info_outline,
+         showBorder: false,
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -392,14 +424,13 @@ class _InfoBanner extends DialogBanner {
 // DialogActionBar
 // ---------------------------------------------------------------------------
 
-/// A Cancel + Primary action button pair with optional loading spinner.
+/// A primary action button with an optional secondary dismiss action.
 ///
 /// Works both as `AlertDialog.actions` children and as a standalone `Row`.
 ///
 /// ```dart
 /// DialogActionBar(
 ///   theme: theme,
-///   onCancel: () => Navigator.pop(context),
 ///   onConfirm: _submit,
 ///   confirmIcon: Icons.lock,
 ///   confirmLabel: 'Enable Encryption',
@@ -412,7 +443,7 @@ class DialogActionBar extends StatelessWidget {
     required this.theme,
     required this.onConfirm,
     this.onCancel,
-    this.showCancel = true,
+    this.showCancel = false,
     this.cancelLabel = 'Cancel',
     this.confirmIcon,
     this.confirmLabel = 'Confirm',
@@ -458,6 +489,7 @@ class DialogActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveShowCancel = showCancel || onCancel != null;
     final cancelButton = TextButton(
       onPressed: isLoading ? null : (onCancel ?? () => Navigator.pop(context)),
       child: Text(cancelLabel),
@@ -468,9 +500,9 @@ class DialogActionBar extends StatelessWidget {
     final Widget spinnerWidget = SizedBox(
       width: spinnerSize,
       height: spinnerSize,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
+      child: AppCircularProgressIndicator(
         color: destructive ? Colors.white : null,
+        strokeWidth: theme.progressIndicatorStrokeWidth,
       ),
     );
 
@@ -498,16 +530,238 @@ class DialogActionBar extends StatelessWidget {
             ),
           );
 
-    final children = !showCancel
-      ? <Widget>[primaryButton]
-      : cancelOnRight
-        ? <Widget>[primaryButton, const SizedBox(width: 8), cancelButton]
-        : <Widget>[cancelButton, const SizedBox(width: 8), primaryButton];
+    if (!effectiveShowCancel) {
+      return SizedBox(width: double.infinity, child: primaryButton);
+    }
+
+    final orderedButtons = cancelOnRight
+        ? <Widget>[primaryButton, cancelButton]
+        : <Widget>[cancelButton, primaryButton];
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      mainAxisSize: MainAxisSize.min,
-      children: children,
+      children: [
+        for (int index = 0; index < orderedButtons.length; index++) ...[
+          if (index > 0) const SizedBox(width: kElementHSpacing),
+          Expanded(child: orderedButtons[index]),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ThemedAlertDialog
+// ---------------------------------------------------------------------------
+
+/// A themed [Dialog] that lays out title / content / actions as a manual
+/// [Column] separated by [SizedBox] gaps.
+///
+/// A single [padding] governs all four sides of the dialog's inner area, so
+/// spacing can be adjusted in one place. Vertical gaps between the three rows
+/// are controlled by [spacing].
+///
+/// The dialog is constrained to [maxWidth] (default 600) and [maxHeight]
+/// (default 85 % of the screen height). When content exceeds the max height the
+/// content area becomes scrollable automatically.
+///
+/// Defaults:
+/// - `backgroundColor` → [AppThemeData.surface]
+/// - `padding` → [kDialogContentPadding]
+/// - `spacing` → `12.0`
+/// - `maxWidth` → `600.0`
+/// - `maxHeight` → 85 % of screen height
+/// - `shape` → [RoundedRectangleBorder] using [AppThemeData.cornerRadius]
+///
+/// Override [backgroundColor] when a dialog intentionally uses the page
+/// background colour instead of the elevated surface colour.
+class ThemedAlertDialog extends StatelessWidget {
+  const ThemedAlertDialog({
+    super.key,
+    required this.theme,
+    this.title,
+    this.content,
+    this.body,
+    this.actions,
+    this.below,
+    this.showCloseButton = true,
+    this.titleActions,
+    this.backgroundColor,
+    this.padding = kDialogContentPadding,
+    this.spacing = 8.0,
+    this.maxWidth = 600.0,
+    this.maxHeight,
+    this.shape,
+    this.insetPadding = const EdgeInsets.symmetric(horizontal: 14.0, vertical: 16.0),
+  });
+
+  final AppThemeData theme;
+
+  /// The dialog background colour. Defaults to [AppThemeData.surface].
+  final Color? backgroundColor;
+
+  final Widget? title;
+  final Widget? content;
+
+  /// A non-scrollable flexible widget placed below [content] and above [actions].
+  /// Expands to fill the remaining height. Use this for widgets such as [TabBarView]
+  /// that manage their own scrolling. When provided, the dialog fills [maxHeight].
+  final Widget? body;
+
+  final List<Widget>? actions;
+
+  /// An optional widget rendered below the dialog box (outside the Material
+  /// surface). When provided the outer dialog becomes transparent so the
+  /// dialog box and this widget can sit in a Column together.
+  final Widget? below;
+
+  final bool showCloseButton;
+
+  /// Optional icon buttons inserted between the title and the close button.
+  final List<Widget>? titleActions;
+
+  /// Uniform padding applied to all four sides of the dialog content area.
+  /// Defaults to [kDialogContentPadding].
+  final EdgeInsetsGeometry padding;
+
+  /// Vertical gap inserted between title → content and content → actions rows.
+  final double spacing;
+
+  /// Maximum dialog width. Defaults to 600.
+  final double maxWidth;
+
+  /// Maximum dialog height. When null defaults to 85 % of the screen height.
+  final double? maxHeight;
+
+  final ShapeBorder? shape;
+  final EdgeInsets insetPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final effectiveMaxHeight = maxHeight ?? (screenHeight * 0.85);
+
+    final rows = <Widget>[];
+
+    if (title != null) {
+      rows.add(
+        Container(
+          padding: EdgeInsets.only(left: 6, right: 0),
+          decoration: BoxDecoration(),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: title!),
+              if (titleActions != null) ...titleActions!,
+              if (showCloseButton) ...[
+                IconButton(
+                  icon: Icon(Icons.close),
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (content != null) {
+      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
+      rows.add(Flexible(child: SingleChildScrollView(child: content!)));
+    }
+
+    if (body != null) {
+      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
+      rows.add(Expanded(child: body!));
+    }
+
+    if (actions != null && actions!.isNotEmpty) {
+      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
+      if (actions!.length == 1) {
+        rows.add(SizedBox(width: double.infinity, child: actions!.first));
+      } else if (actions!.length == 2) {
+        rows.add(
+          Row(
+            children: [
+              Expanded(child: actions![0]),
+              const SizedBox(width: kElementHSpacing),
+              Expanded(child: actions![1]),
+            ],
+          ),
+        );
+      } else {
+        rows.add(
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < actions!.length; i++) ...[
+                  if (i > 0) const SizedBox(width: kElementHSpacing),
+                  actions![i],
+                ],
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    final effectiveShape =
+        shape ??
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        );
+
+    final dialogBox = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: maxWidth,
+        maxHeight: effectiveMaxHeight,
+      ),
+      child: Padding(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: body != null ? MainAxisSize.max : MainAxisSize.min,
+          children: rows,
+        ),
+      ),
+    );
+
+    // When a `below` widget is provided, render a transparent outer Dialog
+    // that holds both the styled dialog box and the below widget in a Column,
+    // so the below widget appears outside (beneath) the dialog surface.
+    if (below != null) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: insetPadding,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Material(
+                color: backgroundColor ?? theme.background,
+                shape: effectiveShape,
+                elevation: 6,
+                clipBehavior: Clip.antiAlias,
+                child: dialogBox,
+              ),
+            ),
+            const SizedBox(height: 8),
+            below!,
+          ],
+        ),
+      );
+    }
+
+    return Dialog(
+      backgroundColor: backgroundColor ?? theme.background,
+      shape: effectiveShape,
+      insetPadding: insetPadding,
+      child: dialogBox,
     );
   }
 }
@@ -544,23 +798,22 @@ Future<bool> showConfirmDialog({
     builder: (ctx) => DialogInteractionScope(
       onPrimaryAction: () => Navigator.pop(ctx, true),
       onDismiss: () => Navigator.pop(ctx, false),
-      child: AlertDialog(
-        backgroundColor: theme.background,
-        title: Text(title, style: TextStyle(color: theme.textPrimary)),
-        content: Text(message, style: TextStyle(color: theme.textSecondary)),
-        actions: [
-          DialogActionBar(
-            theme: theme,
-            onCancel: () => Navigator.pop(ctx, false),
-            onConfirm: () => Navigator.pop(ctx, true),
-            cancelLabel: cancelLabel,
-            confirmLabel: confirmLabel,
-            confirmIcon: confirmIcon,
-            destructive: destructive,
-          ),
-        ],
+      child: ThemedAlertDialog(
+      theme: theme,
+
+      title: DialogHeader(title: title, theme: theme),
+      content: Text(message, style: TextStyle(color: theme.textSecondary)),
+      actions: [
+        DialogActionBar(
+          theme: theme,
+          onConfirm: () => Navigator.pop(ctx, true),
+          confirmLabel: confirmLabel,
+          confirmIcon: confirmIcon,
+          destructive: destructive,
+        ),
+      ],
       ),
-    ),
+  ),
   );
   return result ?? false;
 }

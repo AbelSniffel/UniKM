@@ -10,7 +10,10 @@ import 'package:flutter/material.dart';
 import 'screen_color_picker_service.dart';
 
 const _vkLButton = 0x01;
-const _vkEscape = 0x1B;
+const _vkRButton = 0x02;
+const _vkSpace = 0x20;
+const _vkReturn = 0x0D;
+const _vkC = 0x43;
 const _mousePressedMask = 0x8000;
 const _clrInvalid = 0xFFFFFFFF;
 const _idcCross = 32515;
@@ -122,7 +125,9 @@ base class _Point extends ffi.Struct {
 }
 
 Future<ScreenColorPickResult> pickColor({
-  Duration timeout = const Duration(seconds: 15),
+  Duration timeout = const Duration(seconds: 30),
+  void Function(Color color)? onCursorColor,
+  PickerCancelToken? cancelToken,
 }) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
     return const ScreenColorPickResult();
@@ -132,41 +137,57 @@ Future<ScreenColorPickResult> pickColor({
   final crossCursor = _loadCursor(0, ffi.Pointer<ffi.Uint16>.fromAddress(_idcCross));
   final cursorApplied = crossCursor != 0 && _setSystemCursor(crossCursor, _ocrNormal) != 0;
   final appWindow = _getForegroundWindow();
-  final captureActive = appWindow != 0 && _setCapture(appWindow) != 0;
+  // SetCapture returns the previous capture window (0 when there is none),
+  // so we must NOT use its return value as a success indicator.
+  final captureActive = appWindow != 0;
+  if (captureActive) _setCapture(appWindow);
 
   try {
-    var wasPressed = (_getAsyncKeyState(_vkLButton) & _mousePressedMask) != 0;
-    var wasEscapePressed = (_getAsyncKeyState(_vkEscape) & _mousePressedMask) != 0;
+    var wasLPressed = (_getAsyncKeyState(_vkLButton) & _mousePressedMask) != 0;
+    var wasRPressed = (_getAsyncKeyState(_vkRButton) & _mousePressedMask) != 0;
+    var wasSpacePressed = (_getAsyncKeyState(_vkSpace) & _mousePressedMask) != 0;
+    var wasEnterPressed = (_getAsyncKeyState(_vkReturn) & _mousePressedMask) != 0;
+    var wasCPressed = (_getAsyncKeyState(_vkC) & _mousePressedMask) != 0;
     final endTime = DateTime.now().add(timeout);
 
     while (DateTime.now().isBefore(endTime)) {
-      final isPressed = (_getAsyncKeyState(_vkLButton) & _mousePressedMask) != 0;
-      final isEscapePressed = (_getAsyncKeyState(_vkEscape) & _mousePressedMask) != 0;
+      final isLPressed = (_getAsyncKeyState(_vkLButton) & _mousePressedMask) != 0;
+      final isRPressed = (_getAsyncKeyState(_vkRButton) & _mousePressedMask) != 0;
+      final isSpacePressed = (_getAsyncKeyState(_vkSpace) & _mousePressedMask) != 0;
+      final isEnterPressed = (_getAsyncKeyState(_vkReturn) & _mousePressedMask) != 0;
+      final isCPressed = (_getAsyncKeyState(_vkC) & _mousePressedMask) != 0;
 
-      if (!wasEscapePressed && isEscapePressed) {
+      // Right-click or C cancels
+      if ((!wasRPressed && isRPressed) || (!wasCPressed && isCPressed)) {
         return const ScreenColorPickResult(wasCancelled: true);
       }
 
-      if (!wasPressed && isPressed) {
+      // External cancellation (e.g. parent dialog closed)
+      if (cancelToken?.isCancelled == true) {
+        return const ScreenColorPickResult(wasCancelled: true);
+      }
+
+      // Left-click, Space, or Enter picks the color
+      final pickTriggered = (!wasLPressed && isLPressed) ||
+          (!wasSpacePressed && isSpacePressed) ||
+          (!wasEnterPressed && isEnterPressed);
+
+      if (pickTriggered) {
         final success = _getCursorPos(point) != 0;
-        if (!success) {
-          return const ScreenColorPickResult();
-        }
+        if (!success) return const ScreenColorPickResult();
 
         final hDc = _getDc(0);
-        if (hDc == 0) {
-          return const ScreenColorPickResult();
-        }
+        if (hDc == 0) return const ScreenColorPickResult();
 
         try {
           final pixel = _getPixel(hDc, point.ref.x, point.ref.y);
-          if (pixel == _clrInvalid) {
-            return const ScreenColorPickResult();
-          }
+          if (pixel == _clrInvalid) return const ScreenColorPickResult();
 
           final red = pixel & 0xFF;
           final green = (pixel >> 8) & 0xFF;
           final blue = (pixel >> 16) & 0xFF;
+          // Refocus app immediately so it comes back to front after click
+          if (appWindow != 0) _setForegroundWindow(appWindow);
           return ScreenColorPickResult(
             color: Color.fromARGB(255, red, green, blue),
           );
@@ -175,19 +196,40 @@ Future<ScreenColorPickResult> pickColor({
         }
       }
 
-      wasPressed = isPressed;
-      wasEscapePressed = isEscapePressed;
+      // Live color update each frame
+      if (onCursorColor != null && _getCursorPos(point) != 0) {
+        final hDc = _getDc(0);
+        if (hDc != 0) {
+          try {
+            final pixel = _getPixel(hDc, point.ref.x, point.ref.y);
+            if (pixel != _clrInvalid) {
+              onCursorColor(
+                Color.fromARGB(
+                  255,
+                  pixel & 0xFF,
+                  (pixel >> 8) & 0xFF,
+                  (pixel >> 16) & 0xFF,
+                ),
+              );
+            }
+          } finally {
+            _releaseDc(0, hDc);
+          }
+        }
+      }
+
+      wasLPressed = isLPressed;
+      wasRPressed = isRPressed;
+      wasSpacePressed = isSpacePressed;
+      wasEnterPressed = isEnterPressed;
+      wasCPressed = isCPressed;
       await Future<void>.delayed(const Duration(milliseconds: 16));
     }
 
     return const ScreenColorPickResult();
   } finally {
-    if (captureActive) {
-      _releaseCapture();
-    }
-    if (appWindow != 0) {
-      _setForegroundWindow(appWindow);
-    }
+    if (captureActive) _releaseCapture();
+    if (appWindow != 0) _setForegroundWindow(appWindow);
     if (cursorApplied) {
       _systemParametersInfo(
         _spiSetCursors,

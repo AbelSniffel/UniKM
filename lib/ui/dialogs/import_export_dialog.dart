@@ -14,19 +14,73 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../../core/database/database.dart';
+import '../../core/settings/settings_model.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/services/legacy_db_converter.dart';
 import '../../core/services/legacy_encrypted_import.dart';
+import '../../core/services/platform_file_actions.dart';
 import '../../core/services/steamkm1_import.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import '../pages/settings_sections/settings_common.dart';
 import 'database_unlock_dialog.dart';
+import '../widgets/app_progress_indicator.dart';
+import '../widgets/app_tag_chip.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
-import '../widgets/toggle_switch.dart';
+import '../../core/constants/app_constants.dart';
 
 enum _ImportFileKind { sqlite, encrypted, json, csv, txt, unsupported }
+
+typedef _DialogRadioOption = ({String value, String title, String subtitle});
+
+const _exportFormatOptions = <_DialogRadioOption>[
+  (
+    value: 'db',
+    title: 'SQLite (.db)',
+    subtitle: 'Full database file (recommended backup)',
+  ),
+  (value: 'json', title: 'JSON', subtitle: 'Full data with structure'),
+  (value: 'csv', title: 'CSV', subtitle: 'Spreadsheet compatible'),
+  (value: 'txt', title: 'Text', subtitle: 'Simple title | key format'),
+];
+
+const _encryptedExportFormatOption = (
+  value: 'enc',
+  title: 'Encrypted DB (.enc)',
+  subtitle: 'Encrypted database file (no password included)',
+);
+
+const _importModeOptions = <_DialogRadioOption>[
+  (value: 'merge', title: 'Merge', subtitle: 'Add new games, skip duplicates'),
+  (
+    value: 'replace',
+    title: 'Replace',
+    subtitle: 'Clear existing data and import',
+  ),
+  (value: 'update', title: 'Update', subtitle: 'Add new and update existing'),
+];
+
+Future<void> _markImportSyncDirty(WidgetRef ref, AppDatabase db) async {
+  await db.bumpLocalSyncRevision();
+  await ref.read(settingsProvider.notifier).setSetting(
+    SettingsKeys.syncDbRevisionId,
+    DateTime.now().millisecondsSinceEpoch.toString(),
+  );
+}
+
+Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) {
+  return RadioListTile<String>(
+    value: option.value,
+    activeColor: theme.accent,
+    title: Text(option.title, style: TextStyle(color: theme.textPrimary)),
+    subtitle: Text(
+      option.subtitle,
+      style: TextStyle(color: theme.textSecondary),
+    ),
+  );
+}
 
 /// Show export dialog
 Future<void> showExportDialog(BuildContext context) {
@@ -59,6 +113,20 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   bool _includeNotes = true;
   bool _isExporting = false;
 
+  Widget _buildExportOptionChip({
+    required AppThemeData theme,
+    required String label,
+    required bool value,
+    required VoidCallback onTap,
+  }) {
+    return AppOptionChip(
+      theme: theme,
+      label: label,
+      isSelected: value,
+      onTap: onTap,
+    );
+  }
+
   String _escapeSqlString(String value) {
     return value.replaceAll("'", "''");
   }
@@ -81,12 +149,8 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     try {
       sourceDb.execute("VACUUM INTO '${_escapeSqlString(destinationPath)}'");
     } finally {
-      sourceDb.dispose();
+      sourceDb.close();
     }
-
-    NotificationManager.instance.success(
-      'Exported database to ${p.basename(destinationPath)}',
-    );
   }
 
   Future<void> _exportEncryptedDatabase(String destinationPath) async {
@@ -100,45 +164,84 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
     final encPath = '${session.baseDbPath}.enc';
     await File(encPath).copy(destinationPath);
+  }
 
-    NotificationManager.instance.success(
-      'Exported encrypted database to ${p.basename(destinationPath)}',
+  Future<bool> _completeShareIfNeeded(
+    PlatformSaveTarget target, {
+    required String subject,
+  }) async {
+    if (!target.shouldShareAfterWrite) {
+      return true;
+    }
+
+    final shared = await PlatformFileActions.shareFile(
+      target.file,
+      subject: subject,
     );
+
+    if (shared) {
+      return true;
+    }
+
+    try {
+      if (await target.file.exists()) {
+        await target.file.delete();
+      }
+    } catch (_) {
+      // Best effort cleanup only.
+    }
+
+    return false;
   }
 
   Future<void> _export() async {
-    final ext = switch (_exportFormat) {
-      'db' => 'db',
-      'enc' => 'enc',
-      _ => _exportFormat,
-    };
+    final ext = _exportFormat;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final defaultName = (ext == 'db' || ext == 'enc')
+        ? 'UniKM_backup_$ts.$ext'
+        : 'UniKM_export_$ts.$ext';
 
-    final defaultName = switch (_exportFormat) {
-      'db' => 'UniKM_backup_${DateTime.now().millisecondsSinceEpoch}.$ext',
-      'enc' => 'UniKM_backup_${DateTime.now().millisecondsSinceEpoch}.$ext',
-      _ => 'UniKM_export_${DateTime.now().millisecondsSinceEpoch}.$ext',
-    };
-
-    final result = await FilePicker.platform.saveFile(
+    final target = await PlatformFileActions.prepareExportTarget(
       dialogTitle: 'Export Database',
       fileName: defaultName,
-      type: FileType.custom,
       allowedExtensions: [ext],
     );
 
-    if (result == null) return;
+    if (target == null) return;
+
+    final result = target.file.path;
 
     setState(() => _isExporting = true);
 
     try {
       if (_exportFormat == 'db') {
         await _exportSqliteBackup(result);
+        final completed = await _completeShareIfNeeded(
+          target,
+          subject: 'UniKM database export',
+        );
+        if (!completed) {
+          return;
+        }
+        NotificationManager.instance.success(
+          'Exported database to ${p.basename(result)}',
+        );
         if (mounted) Navigator.pop(context);
         return;
       }
 
       if (_exportFormat == 'enc') {
         await _exportEncryptedDatabase(result);
+        final completed = await _completeShareIfNeeded(
+          target,
+          subject: 'UniKM encrypted database export',
+        );
+        if (!completed) {
+          return;
+        }
+        NotificationManager.instance.success(
+          'Exported encrypted database to ${p.basename(result)}',
+        );
         if (mounted) Navigator.pop(context);
         return;
       }
@@ -165,6 +268,14 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
       // Write file
       await File(result).writeAsString(exportData);
+
+      final completed = await _completeShareIfNeeded(
+        target,
+        subject: 'UniKM database export',
+      );
+      if (!completed) {
+        return;
+      }
 
       NotificationManager.instance.success(
         'Exported ${filteredGames.length} games to ${p.basename(result)}',
@@ -215,58 +326,10 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       return map;
     }).toList();
 
-    // Simple JSON encoding without external package
-    return _encodeJson({
-      'games': gamesList,
+    return const JsonEncoder.withIndent('  ').convert({
       'exported_at': DateTime.now().toIso8601String(),
+      'games': gamesList,
     });
-  }
-
-  String _encodeJson(Map<String, dynamic> data) {
-    // Simple JSON encoding
-    final buffer = StringBuffer();
-    buffer.write('{\n');
-    buffer.write('  "exported_at": "${data['exported_at']}",\n');
-    buffer.write('  "games": [\n');
-
-    final games = data['games'] as List;
-    for (var i = 0; i < games.length; i++) {
-      buffer.write('    ${_encodeJsonMap(games[i] as Map<String, dynamic>)}');
-      if (i < games.length - 1) buffer.write(',');
-      buffer.write('\n');
-    }
-
-    buffer.write('  ]\n');
-    buffer.write('}');
-    return buffer.toString();
-  }
-
-  String _encodeJsonMap(Map<String, dynamic> map) {
-    final parts = <String>[];
-    map.forEach((key, value) {
-      if (value is String) {
-        parts.add('"$key": "${_escapeString(value)}"');
-      } else if (value is bool) {
-        parts.add('"$key": $value');
-      } else if (value is int) {
-        parts.add('"$key": $value');
-      } else if (value is List) {
-        final items = value
-            .map((v) => '"${_escapeString(v.toString())}"')
-            .join(', ');
-        parts.add('"$key": [$items]');
-      }
-    });
-    return '{${parts.join(', ')}}';
-  }
-
-  String _escapeString(String s) {
-    return s
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\t', '\\t');
   }
 
   String _buildCsvExport(List<dynamic> games, List<dynamic> tags) {
@@ -327,160 +390,99 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final hasEncryptedSession = ref.watch(encryptedDbSessionProvider) != null;
+    final showsAdditionalInfo = _exportFormat != 'db' && _exportFormat != 'enc';
 
-    return Dialog(
-      backgroundColor: theme.background,
-      child: Container(
-        width: 550,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DialogHeader(
-              icon: Icons.upload,
-              title: 'Export Database',
-              theme: theme,
-              showCloseButton: true,
-            ),
-            const SizedBox(height: 16),
-            // Format selection
-            SectionGroupBox(
-              title: 'Format',
-              titleIcon: Icons.format_align_center,
-              theme: theme,
-              child: RadioGroup<String>(
-                groupValue: _exportFormat,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _exportFormat = v);
-                },
-                child: Column(
-                  children: [
-                    RadioListTile<String>(
-                      title: Text(
-                        'SQLite (.db)',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Full database file (recommended backup)',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'db',
-                      activeColor: theme.accent,
-                    ),
-                    if (hasEncryptedSession)
-                      RadioListTile<String>(
-                        title: Text(
-                          'Encrypted DB (.enc)',
-                          style: TextStyle(color: theme.textPrimary),
-                        ),
-                        subtitle: Text(
-                          'Encrypted database file (no password included)',
-                          style: TextStyle(color: theme.textSecondary),
-                        ),
-                        value: 'enc',
-                        activeColor: theme.accent,
-                      ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'JSON',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Full data with structure',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'json',
-                      activeColor: theme.accent,
-                    ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'CSV',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Spreadsheet compatible',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'csv',
-                      activeColor: theme.accent,
-                    ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'Text',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                      subtitle: Text(
-                        'Simple title | key format',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                      value: 'txt',
-                      activeColor: theme.accent,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+    return ThemedAlertDialog(
+      theme: theme,
 
-            const SizedBox(height: 16),
-
-            // Options
-            if (_exportFormat != 'db' && _exportFormat != 'enc')
-              SectionGroupBox(
-                title: 'Include Additional Information',
-                titleIcon: Icons.info_outline,
-                theme: theme,
-                child: Column(
-                  children: [
-                    _OptionRow(
-                      theme: theme,
-                      label: 'Used Keys',
-                      value: _includeUsed,
-                      onChanged: (v) => setState(() => _includeUsed = v),
-                    ),
-                    if (_exportFormat != 'txt') ...[
-                      _OptionRow(
-                        theme: theme,
-                        label: 'Tags',
-                        value: _includeTags,
-                        onChanged: (v) => setState(() => _includeTags = v),
-                      ),
-                      _OptionRow(
-                        theme: theme,
-                        label: 'Notes',
-                        value: _includeNotes,
-                        onChanged: (v) => setState(() => _includeNotes = v),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _isExporting ? null : _export,
-                  icon: _isExporting
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.primaryButtonText,
-                          ),
-                        )
-                      : const Icon(Icons.upload),
-                  label: const Text('Export'),
-                ),
-              ],
-            ),
-          ],
-        ),
+      maxWidth: 550,
+      title: DialogHeader(
+        icon: Icons.upload,
+        title: 'Export Database',
+        theme: theme,
       ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Format selection
+          SectionGroupBox(
+            title: 'Format',
+            titleIcon: Icons.format_align_center,
+            theme: theme,
+            groupPosition: showsAdditionalInfo ? SectionGroupPosition.first : SectionGroupPosition.only,
+            child: RadioGroup<String>(
+              groupValue: _exportFormat,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => _exportFormat = v);
+              },
+              child: Column(
+                children: [
+                  _buildDialogRadioOption(theme, _exportFormatOptions[0]),
+                  if (hasEncryptedSession)
+                    _buildDialogRadioOption(
+                      theme,
+                      _encryptedExportFormatOption,
+                    ),
+                  for (final option in _exportFormatOptions.skip(1))
+                    _buildDialogRadioOption(theme, option),
+                ],
+              ),
+            ),
+          ),
+
+          // Options
+          if (showsAdditionalInfo)
+            SectionGroupBox(
+              title: 'Include Additional Information',
+              titleIcon: Icons.info_outline,
+              theme: theme,
+              groupPosition: SectionGroupPosition.last,
+              alternateBackground: true,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildExportOptionChip(
+                    theme: theme,
+                    label: 'Used Keys',
+                    value: _includeUsed,
+                    onTap: () => setState(() => _includeUsed = !_includeUsed),
+                  ),
+                  if (_exportFormat != 'txt') ...[
+                    _buildExportOptionChip(
+                      theme: theme,
+                      label: 'Tags',
+                      value: _includeTags,
+                      onTap: () => setState(() => _includeTags = !_includeTags),
+                    ),
+                    _buildExportOptionChip(
+                      theme: theme,
+                      label: 'Notes',
+                      value: _includeNotes,
+                      onTap: () =>
+                          setState(() => _includeNotes = !_includeNotes),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        ElevatedButton.icon(
+          onPressed: _isExporting ? null : _export,
+          icon: _isExporting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: AppCircularProgressIndicator(),
+                )
+              : const Icon(Icons.upload),
+          label: const Text('Export'),
+        ),
+      ],
     );
   }
 }
@@ -514,16 +516,26 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       context: context,
       theme: theme,
       title: 'Replace all data?',
-      message: 'This will delete all existing games, tags, and backups before importing.',
+      message:
+          'This will delete all existing games, tags, and backups before importing.',
       confirmLabel: 'Replace',
     );
   }
 
   Future<void> _selectFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: 'Select Database File',
       type: FileType.custom,
-      allowedExtensions: ['db', 'sqlite', 'sqlite3', 'enc', 'json', 'csv', 'txt', 'bak'],
+      allowedExtensions: [
+        'db',
+        'sqlite',
+        'sqlite3',
+        'enc',
+        'json',
+        'csv',
+        'txt',
+        'bak',
+      ],
     );
 
     if (result != null && result.files.isNotEmpty) {
@@ -592,7 +604,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           final result = sourceDb.select('SELECT COUNT(*) as count FROM games');
           count = result.first['count'] as int;
         } finally {
-          sourceDb.dispose();
+          sourceDb.close();
         }
       } else if (kind == _ImportFileKind.encrypted) {
         // Can't preview count without password.
@@ -691,7 +703,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         return _importEncryptedDatabase(
           file,
           title: 'Unlock UniKM Backup',
-          message: 'This UniKM backup is encrypted. Enter the password to import it.',
+          message:
+              'This UniKM backup is encrypted. Enter the password to import it.',
           task: task,
           decrypt: (password) => decryptUniKmDatabaseToTemp(file, password),
         );
@@ -699,7 +712,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         return _importEncryptedDatabase(
           file,
           title: 'Unlock SteamKM2 Backup',
-          message: 'This SteamKM2 backup is encrypted. Enter the password to import it.',
+          message:
+              'This SteamKM2 backup is encrypted. Enter the password to import it.',
           task: task,
           decrypt: (password) => decryptSteamKm2DatabaseToTemp(file, password),
         );
@@ -742,7 +756,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }) async {
     final decryptedJson = await _promptForEncryptedImport<String>(
       title: 'Unlock SteamKM1 Backup',
-      message: 'This SteamKM1 backup is encrypted. Enter the password to import it.',
+      message:
+          'This SteamKM1 backup is encrypted. Enter the password to import it.',
       task: task,
       action: (password) => decryptSteamKm1JsonExport(file, password),
     );
@@ -780,7 +795,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         return await action(password);
       } on InvalidPasswordException {
         task?.update(message: 'Incorrect password, try again...');
-        NotificationManager.instance.error('Incorrect password');
       }
     }
   }
@@ -793,11 +807,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => DatabaseUnlockDialog(
-        theme: theme,
-        title: title,
-        message: message,
-      ),
+      builder: (_) =>
+          DatabaseUnlockDialog(theme: theme, title: title, message: message),
     );
   }
 
@@ -808,7 +819,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     final prepared = await prepareDatabaseForImport(file.path);
     final conversion = prepared.conversion;
     if (conversion.converted && conversion.actions.isNotEmpty) {
-      task?.update(message: 'Normalized legacy layout (${conversion.actions.length} changes)...');
+      task?.update(
+        message:
+            'Normalized legacy layout (${conversion.actions.length} changes)...',
+      );
     }
 
     // Import from a normalized UniKM SQLite database
@@ -832,20 +846,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
       // Import tags first
       final tagIdMap = <int, int>{}; // old_id -> new_id
-      for (final row in tagResult) {
-        final name = row['name'] as String;
-        final color = row['color'] as String? ?? '#0078d4';
-        final isSteamTag = (row['is_steam_tag'] as int?) == 1;
 
-        final entry = await db.getOrCreateTag(
-          name,
-          color: color,
-          isSteamTag: isSteamTag,
-        );
-        tagIdMap[row['id'] as int] = entry.id;
-      }
-
-      // Build game -> tags map
+      // Build game -> tags map (pure in-memory, no DB)
       final gameTagsMap = <int, List<int>>{};
       for (final row in gameTagsResult) {
         final gameId = row['game_id'] as int;
@@ -853,35 +855,13 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         gameTagsMap.putIfAbsent(gameId, () => []).add(tagId);
       }
 
+      // Pre-normalize cover image paths before opening the transaction so that
+      // file I/O (copy, exists-check) stays outside the SQLite write path.
       final imagesDir = await _resolveManagedImagesDirectory();
       final importedCoverPathCache = <String, String>{};
       final copiedImagePaths = <String>{};
-
-      // Import games
-      int importedCount = 0;
-      int skippedCount = 0;
-      int updatedCount = 0;
+      final normalizedCoverImages = <int, String>{};
       for (final row in gameResult) {
-        // Check for duplicate keys
-        final key = row['game_key'] as String;
-        final existingId = await db.getGameIdByKey(key);
-        if (_isMerge && existingId != null && !_allowDuplicates) {
-          skippedCount++;
-          continue;
-        }
-
-        // Parse deadline date if present
-        DateTime? deadlineDate;
-        final rawDeadline = row['deadline_date'];
-        if (rawDeadline is int && rawDeadline > 0) {
-          deadlineDate = DateTime.fromMillisecondsSinceEpoch(rawDeadline * 1000);
-        } else if (rawDeadline is String && rawDeadline.isNotEmpty) {
-          final epoch = int.tryParse(rawDeadline);
-          if (epoch != null && epoch > 0) {
-            deadlineDate = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
-          }
-        }
-
         final oldGameId = row['id'] as int;
         final sourceCoverImage = row['cover_image'] as String? ?? '';
         final normalizedCoverImage = await _normalizeImportedCoverImagePath(
@@ -890,72 +870,123 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           targetImagesDir: imagesDir,
           cache: importedCoverPathCache,
         );
+        normalizedCoverImages[oldGameId] = normalizedCoverImage;
         if (sourceCoverImage.trim().isNotEmpty &&
             normalizedCoverImage != sourceCoverImage) {
           copiedImagePaths.add(normalizedCoverImage);
         }
+      }
 
-        int gameId;
-        if (_isUpdate && existingId != null) {
-          gameId = existingId;
-          await db.updateGameFields(
-            gameId,
-            title: row['title'] as String,
-            platform: row['platform'] as String? ?? 'Steam',
-            notes: row['notes'] as String? ?? '',
-            isUsed: (row['is_used'] as int?) == 1,
-            coverImage: normalizedCoverImage,
-            hasDeadline: (row['has_deadline'] as int?) == 1,
-            deadlineDate: deadlineDate,
-            isDlc: (row['is_dlc'] as int?) == 1,
-            steamAppId: row['steam_app_id'] as String? ?? '',
-            reviewScore: row['review_score'] as int? ?? 0,
-            reviewCount: row['review_count'] as int? ?? 0,
-            updatedAt: DateTime.now(),
+      // Wrap all DB writes in one transaction � the single biggest performance
+      // gain for large imports (avoids an implicit transaction per statement).
+      int importedCount = 0;
+      int skippedCount = 0;
+      int updatedCount = 0;
+      await db.transaction(() async {
+        // Import tags inside the transaction
+        for (final row in tagResult) {
+          final name = row['name'] as String;
+          final color = row['color'] as String? ?? '#0078d4';
+          final isSteamTag = (row['is_steam_tag'] as int?) == 1;
+
+          final entry = await db.getOrCreateTag(
+            name,
+            color: color,
+            isSteamTag: isSteamTag,
           );
-          updatedCount++;
-        } else {
-          gameId = await db.insertGame(
-            GamesCompanion.insert(
-              title: row['title'] as String,
-              gameKey: key,
-              platform: Value(row['platform'] as String? ?? 'Steam'),
-              notes: Value(row['notes'] as String? ?? ''),
-              isUsed: Value((row['is_used'] as int?) == 1),
-              coverImage: Value(normalizedCoverImage),
-              hasDeadline: Value((row['has_deadline'] as int?) == 1),
-              deadlineDate: Value(deadlineDate),
-              isDlc: Value((row['is_dlc'] as int?) == 1),
-              steamAppId: Value(row['steam_app_id'] as String? ?? ''),
-              reviewScore: Value(row['review_score'] as int? ?? 0),
-              reviewCount: Value(row['review_count'] as int? ?? 0),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-          importedCount++;
+          tagIdMap[row['id'] as int] = entry.id;
         }
 
-        // Link tags using the old->new id map
-        final oldTagIds = gameTagsMap[oldGameId] ?? [];
-        final newTagIds = <int>[];
-        for (final oldTagId in oldTagIds) {
-          final newTagId = tagIdMap[oldTagId];
-          if (newTagId != null) {
-            newTagIds.add(newTagId);
+        // Import games inside the same transaction
+        for (final row in gameResult) {
+          final key = row['game_key'] as String;
+          final notes = row['notes'] as String? ?? '';
+          final existingId = await db.getGameIdByKey(key);
+          if (_isMerge && existingId != null && !_allowDuplicates) {
+            skippedCount++;
+            continue;
+          }
+
+          // Parse deadline date if present
+          DateTime? deadlineDate;
+          final rawDeadline = row['deadline_date'];
+          if (rawDeadline is int && rawDeadline > 0) {
+            deadlineDate = DateTime.fromMillisecondsSinceEpoch(
+              rawDeadline * 1000,
+            );
+          } else if (rawDeadline is String && rawDeadline.isNotEmpty) {
+            final epoch = int.tryParse(rawDeadline);
+            if (epoch != null && epoch > 0) {
+              deadlineDate = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
+            }
+          }
+
+          final oldGameId = row['id'] as int;
+          final normalizedCoverImage = normalizedCoverImages[oldGameId] ?? '';
+
+          int gameId;
+          if (_isUpdate && existingId != null) {
+            gameId = existingId;
+            await db.updateGameFields(
+              gameId,
+              title: row['title'] as String,
+              platform: row['platform'] as String? ?? 'Steam',
+              notes: notes,
+              isUsed: (row['is_used'] as int?) == 1,
+              coverImage: normalizedCoverImage,
+              hasDeadline: (row['has_deadline'] as int?) == 1,
+              deadlineDate: deadlineDate,
+              isDlc: (row['is_dlc'] as int?) == 1,
+              steamAppId: row['steam_app_id'] as String? ?? '',
+              reviewScore: row['review_score'] as int? ?? 0,
+              reviewCount: row['review_count'] as int? ?? 0,
+              updatedAt: DateTime.now(),
+            );
+            updatedCount++;
+          } else {
+            gameId = await db.insertGame(
+              GamesCompanion.insert(
+                title: row['title'] as String,
+                gameKey: key,
+                platform: Value(row['platform'] as String? ?? 'Steam'),
+                notes: Value(notes),
+                isUsed: Value((row['is_used'] as int?) == 1),
+                coverImage: Value(normalizedCoverImage),
+                hasDeadline: Value((row['has_deadline'] as int?) == 1),
+                deadlineDate: Value(deadlineDate),
+                isDlc: Value((row['is_dlc'] as int?) == 1),
+                steamAppId: Value(row['steam_app_id'] as String? ?? ''),
+                reviewScore: Value(row['review_score'] as int? ?? 0),
+                reviewCount: Value(row['review_count'] as int? ?? 0),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+            importedCount++;
+          }
+
+          // Link tags using the old->new id map
+          final oldTagIds = gameTagsMap[oldGameId] ?? [];
+          final newTagIds = <int>[];
+          for (final oldTagId in oldTagIds) {
+            final newTagId = tagIdMap[oldTagId];
+            if (newTagId != null) {
+              newTagIds.add(newTagId);
+            }
+          }
+          await db.setTagsForGame(gameId, newTagIds);
+
+          if (task != null && importedCount + updatedCount + skippedCount > 0) {
+            final done = importedCount + updatedCount + skippedCount;
+            task.update(message: 'Imported $done...');
           }
         }
-        await db.setTagsForGame(gameId, newTagIds);
-
-        if (task != null && importedCount + updatedCount + skippedCount > 0) {
-          final done = importedCount + updatedCount + skippedCount;
-          task.update(message: 'Imported $done...');
-        }
-      }
+      });
 
       // Refresh games list
       await ref.read(gamesProvider.notifier).refresh();
       await ref.read(tagsProvider.notifier).refresh();
       await persistEncryptedDbIfNeeded(ref);
+      await _markImportSyncDirty(ref, db);
 
       // Evict only the overwritten image paths from Flutter's cache so game
       // cards immediately display fresh artwork without reloading every other
@@ -975,7 +1006,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       }
       NotificationManager.instance.success(message);
     } finally {
-      sourceDb.dispose();
+      sourceDb.close();
       await prepared.dispose();
     }
   }
@@ -1016,7 +1047,9 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     );
 
     final sourceCanonical = _normalizeForCompare(sourceFile.absolute.path);
-    final destinationCanonical = _normalizeForCompare(destinationFile.absolute.path);
+    final destinationCanonical = _normalizeForCompare(
+      destinationFile.absolute.path,
+    );
     if (sourceCanonical != destinationCanonical) {
       await sourceFile.copy(destinationFile.path);
     }
@@ -1089,10 +1122,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     final db = ref.read(requireDatabaseProvider);
 
     try {
-      // Parse JSON using simple approach (no external package)
-      final data = decoded is Map<String, dynamic>
-          ? decoded
-          : _parseJsonSimple(content);
+      final data = decoded is Map<String, dynamic> ? decoded : null;
 
       if (data == null || data['games'] == null) {
         throw Exception('Invalid JSON format - missing games array');
@@ -1130,6 +1160,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           skippedCount++;
           continue;
         }
+        final notes = (gameData['notes'] as String?) ?? '';
 
         // Parse deadline date if present
         DateTime? deadlineDate;
@@ -1147,7 +1178,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             gameId,
             title: (gameData['title'] as String?) ?? 'Unknown',
             platform: (gameData['platform'] as String?) ?? 'Steam',
-            notes: (gameData['notes'] as String?) ?? '',
+            notes: notes,
             isUsed: (gameData['is_used'] as bool?) ?? false,
             coverImage: (gameData['cover_image'] as String?) ?? '',
             hasDeadline: deadlineDate != null,
@@ -1164,7 +1195,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
               title: (gameData['title'] as String?) ?? 'Unknown',
               gameKey: key,
               platform: Value((gameData['platform'] as String?) ?? 'Steam'),
-              notes: Value((gameData['notes'] as String?) ?? ''),
+              notes: Value(notes),
               isUsed: Value((gameData['is_used'] as bool?) ?? false),
               coverImage: Value((gameData['cover_image'] as String?) ?? ''),
               hasDeadline: Value(deadlineDate != null),
@@ -1199,6 +1230,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       await ref.read(gamesProvider.notifier).refresh();
       await ref.read(tagsProvider.notifier).refresh();
       await persistEncryptedDbIfNeeded(ref);
+      await _markImportSyncDirty(ref, db);
 
       String message = 'Imported $importedCount games';
       if (updatedCount > 0) message += ', updated $updatedCount';
@@ -1261,9 +1293,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         copiedImagePaths.add(normalizedCoverImage);
       }
 
-      final notes = (record.developer != null && record.developer!.isNotEmpty)
-          ? 'Developer: ${record.developer!}'
-          : '';
+      final developer = record.developer?.trim();
       final reviewScore = record.reviewScore ?? 0;
       final reviewCount = record.reviewCount ?? 0;
 
@@ -1274,9 +1304,11 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           gameId,
           title: record.title,
           platform: 'Steam',
-          notes: notes,
           coverImage: normalizedCoverImage,
           steamAppId: record.appId ?? '',
+          developer: developer != null && developer.isNotEmpty
+              ? developer
+              : null,
           reviewScore: reviewScore,
           reviewCount: reviewCount,
           updatedAt: DateTime.now(),
@@ -1288,14 +1320,21 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             title: record.title,
             gameKey: record.key,
             platform: const Value('Steam'),
-            notes: Value(notes),
             coverImage: Value(normalizedCoverImage),
             steamAppId: Value(record.appId ?? ''),
+            developer: Value(developer ?? ''),
             reviewScore: Value(reviewScore),
             reviewCount: Value(reviewCount),
             updatedAt: Value(DateTime.now()),
           ),
         );
+        if (developer != null && developer.isNotEmpty) {
+          await db.updateGameFields(
+            gameId,
+            developer: developer,
+            updatedAt: DateTime.now(),
+          );
+        }
         importedCount++;
       }
 
@@ -1318,6 +1357,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     await ref.read(gamesProvider.notifier).refresh();
     await ref.read(tagsProvider.notifier).refresh();
     await persistEncryptedDbIfNeeded(ref);
+    await _markImportSyncDirty(ref, db);
 
     String message = 'Imported $importedCount games from $sourceLabel';
     if (updatedCount > 0) {
@@ -1333,18 +1373,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       message += ' (skipped $skippedCount duplicates)';
     }
     NotificationManager.instance.success(message);
-  }
-
-  Map<String, dynamic>? _parseJsonSimple(String content) {
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
   }
 
   Future<void> _importCsv(File file, {NotificationHandle? task}) async {
@@ -1389,7 +1417,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       if (key.isEmpty) continue;
 
       final existingId = await db.getGameIdByKey(key);
-      if (_isMerge && existingId != null) {
+      if (_isMerge && existingId != null && !_allowDuplicates) {
         skippedCount++;
         continue;
       }
@@ -1475,6 +1503,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     await ref.read(gamesProvider.notifier).refresh();
     await ref.read(tagsProvider.notifier).refresh();
     await persistEncryptedDbIfNeeded(ref);
+    await _markImportSyncDirty(ref, db);
 
     String message = 'Imported $importedCount games from CSV';
     if (updatedCount > 0) message += ', updated $updatedCount';
@@ -1514,271 +1543,207 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
+    final supportsDragAndDrop = PlatformFileActions.supportsDragAndDrop;
 
-    return Dialog(
-      backgroundColor: theme.background,
-      child: Container(
-        width: 550,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DialogHeader(
-              icon: Icons.download,
-              title: 'Import Database',
-              theme: theme,
-              showCloseButton: true,
-            ),
-            const SizedBox(height: 16),
-            // File selection
-            SectionGroupBox(
-              title: 'Source File',
-              titleIcon: Icons.upload_file,
-              theme: theme,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Focus(
-                    autofocus: false,
-                    child: MouseRegion(
-                      onEnter: (_) => setState(() => _isHovering = true),
-                      onExit: (_) => setState(() => _isHovering = false),
-                      child: DropTarget(
-                        enable: true,
-                        onDragDone: (details) async {
-                          if (details.files.isNotEmpty) {
-                            await _handleSelectedFilePath(details.files.first.path);
-                          }
-                        },
-                        onDragEntered: (_) => setState(() => _isDragging = true),
-                        onDragExited: (_) => setState(() => _isDragging = false),
-                        child: InkWell(
-                          onTap: _selectFile,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _isDragging
-                                  ? theme.accent.withValues(alpha: 0.1)
-                                  : _isHovering
-                                      ? theme.accent.withValues(alpha: 0.05)
-                                      : theme.inputBackground,
-                              borderRadius: BorderRadius.circular(theme.cornerRadius),
-                              border: Border.all(
-                                color: _isDragging
-                                    ? theme.accent
-                                    : _isHovering
-                                        ? theme.accent.withValues(alpha: 0.5)
-                                        : (_selectedFile != null ? theme.accent : theme.border),
-                                width: _isDragging ? 2 : 1,
-                              ),
+    return ThemedAlertDialog(
+      theme: theme,
+
+      maxWidth: 550,
+      title: DialogHeader(
+        icon: Icons.download,
+        title: 'Import Database',
+        theme: theme,
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // File selection
+          SectionGroupBox(
+            title: 'Source File',
+            titleIcon: Icons.upload_file,
+            theme: theme,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Focus(
+                  autofocus: false,
+                  child: MouseRegion(
+                    onEnter: (_) => setState(() => _isHovering = true),
+                    onExit: (_) => setState(() => _isHovering = false),
+                    child: DropTarget(
+                      enable: supportsDragAndDrop,
+                      onDragDone: (details) async {
+                        if (details.files.isNotEmpty) {
+                          await _handleSelectedFilePath(
+                            details.files.first.path,
+                          );
+                        }
+                      },
+                      onDragEntered: (_) => setState(() => _isDragging = true),
+                      onDragExited: (_) => setState(() => _isDragging = false),
+                      child: InkWell(
+                        onTap: _selectFile,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _isDragging
+                                ? theme.accent.withValues(alpha: 0.1)
+                                : _isHovering
+                                ? theme.accent.withValues(alpha: 0.05)
+                                : theme.inputBackground,
+                            borderRadius: BorderRadius.circular(
+                              theme.cornerRadius,
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _isDragging
-                                      ? Icons.file_download
-                                      : (_selectedFile != null
+                            border: Border.all(
+                              color: _isDragging
+                                  ? theme.accent
+                                  : _isHovering
+                                  ? theme.accent.withValues(alpha: 0.5)
+                                  : (_selectedFile != null
+                                        ? theme.accent
+                                        : theme.border),
+                              width: _isDragging ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _isDragging
+                                    ? Icons.file_download
+                                    : (_selectedFile != null
                                           ? Icons.check_circle
                                           : Icons.folder_open),
-                                  color: _isDragging
-                                      ? theme.accent
-                                      : (_selectedFile != null
+                                color: _isDragging
+                                    ? theme.accent
+                                    : (_selectedFile != null
                                           ? theme.accent
                                           : theme.textSecondary),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _selectedFile != null
-                                        ? p.basename(_selectedFile!)
-                                        : (_isDragging
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _selectedFile != null
+                                      ? p.basename(_selectedFile!)
+                                      : (_isDragging && supportsDragAndDrop
                                             ? 'Drop file here...'
-                                            : 'Click to select or drag file here...'),
-                                    style: TextStyle(
-                                      color: _isDragging
-                                          ? theme.accent
-                                          : (_selectedFile != null
+                                            : supportsDragAndDrop
+                                            ? 'Click to select or drag file here...'
+                                            : 'Tap to select a file...'),
+                                  style: TextStyle(
+                                    color: _isDragging
+                                        ? theme.accent
+                                        : (_selectedFile != null
                                               ? theme.textPrimary
                                               : theme.textHint),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Supported: .db, .sqlite, .enc, .json, .csv, .txt, and compatible .bak backups',
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-                  if (_selectedFile != null && _previewCount > 0) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: theme.accent,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$_previewCount games found in file',
-                            style: TextStyle(
-                              color: theme.accent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
+                ),
+                const SizedBox(height: kElementVSpacing),
+                Text(
+                  'Supported: .db, .sqlite, .enc, .json, .csv, .txt, and compatible .bak backups',
+                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                ),
+                if (_selectedFile != null && _previewCount > 0) ...[
+                  const SizedBox(height: kElementVSpacing),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Import settings and options in connected groupboxes
-            SectionGroupBox(
-              title: 'Import Settings',
-              titleIcon: Icons.swap_horiz,
-              theme: theme,
-              groupPosition: SectionGroupPosition.first,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  RadioGroup<String>(
-                    groupValue: _importMode,
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _importMode = v);
-                    },
-                    child: Column(
+                    decoration: BoxDecoration(
+                      color: theme.accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(theme.cornerRadius),
+                    ),
+                    child: Row(
                       children: [
-                        RadioListTile<String>(
-                          title: Text(
-                            'Merge',
-                            style: TextStyle(color: theme.textPrimary),
+                        Icon(Icons.info_outline, size: 16, color: theme.accent),
+                        const SizedBox(width: kElementHSpacing),
+                        Text(
+                          '$_previewCount games found in file',
+                          style: TextStyle(
+                            color: theme.accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
-                          subtitle: Text(
-                            'Add new games, skip duplicates',
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                          value: 'merge',
-                          activeColor: theme.accent,
-                        ),
-                        RadioListTile<String>(
-                          title: Text(
-                            'Replace',
-                            style: TextStyle(color: theme.textPrimary),
-                          ),
-                          subtitle: Text(
-                            'Clear existing data and import',
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                          value: 'replace',
-                          activeColor: theme.accent,
-                        ),
-                        RadioListTile<String>(
-                          title: Text(
-                            'Update',
-                            style: TextStyle(color: theme.textPrimary),
-                          ),
-                          subtitle: Text(
-                            'Add new and update existing',
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                          value: 'update',
-                          activeColor: theme.accent,
                         ),
                       ],
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            SectionGroupBox(
-              title: 'Options',
-              titleIcon: Icons.settings,
-              theme: theme,
-              groupPosition: SectionGroupPosition.last,
-              alternateBackground: true,
-              child: _OptionRow(
-                theme: theme,
-                label: 'Allow duplicate keys',
-                value: _allowDuplicates,
-                onChanged: (v) => setState(() => _allowDuplicates = v),
-              ),
+          ),
+
+          const SizedBox(height: kDialogSpacing),
+
+          // Import mode and options in connected groupboxes
+          SectionGroupBox(
+            title: 'Import Mode',
+            titleIcon: Icons.swap_horiz,
+            theme: theme,
+            groupPosition: SectionGroupPosition.first,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                RadioGroup<String>(
+                  groupValue: _importMode,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _importMode = v);
+                  },
+                  child: Column(
+                    children: [
+                      for (final option in _importModeOptions)
+                        _buildDialogRadioOption(theme, option),
+                    ],
+                  ),
+                ),
+              ],
             ),
-
-            if (_importMode == 'replace') ...[
-              const SizedBox(height: 12),
-              DialogBanner.caution(
-                theme: theme,
-                message: 'Replace mode will delete all existing data!',
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            DialogActionBar(
+          ),
+          SectionGroupBox(
+            title: 'Options',
+            titleIcon: Icons.settings,
+            theme: theme,
+            groupPosition: SectionGroupPosition.last,
+            alternateBackground: true,
+            child: ToggleSettingRow(
               theme: theme,
-              onConfirm: _import,
-              confirmIcon: Icons.download,
-              confirmLabel: 'Import',
-              isLoading: _isImporting,
-              isEnabled: _selectedFile != null,
-              spinnerSize: 18,
+              label: 'Allow duplicate keys',
+              value: _allowDuplicates,
+              onChanged: (value) => setState(() => _allowDuplicates = value),
+            ),
+          ),
+
+          if (_importMode == 'replace') ...[
+            const SizedBox(height: 12),
+            DialogBanner.caution(
+              theme: theme,
+              message: 'Replace mode will delete all existing data!',
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Option row helper
-class _OptionRow extends StatelessWidget {
-  const _OptionRow({
-    required this.theme,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final bool value;
-  final void Function(bool) onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label, style: TextStyle(color: theme.textPrimary)),
-          ),
-          AppToggleSwitch(value: value, onChanged: onChanged, theme: theme),
         ],
       ),
+      actions: [
+        DialogActionBar(
+          theme: theme,
+          onConfirm: _import,
+          confirmIcon: Icons.download,
+          confirmLabel: 'Import',
+          isLoading: _isImporting,
+          isEnabled: _selectedFile != null,
+          spinnerSize: 18,
+        ),
+      ],
     );
   }
 }

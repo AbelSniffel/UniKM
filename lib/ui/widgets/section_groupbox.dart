@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Controls how a group box is positioned within a connected group strip.
 /// - [only]: standalone box, full border, all corners rounded (default)
@@ -47,6 +48,7 @@ class SectionGroupBox extends ConsumerStatefulWidget {
     this.isSearchMatch = false,
     this.groupPosition = SectionGroupPosition.only,
     this.alternateBackground = false,
+    this.showTitle = true,
   });
 
   /// Whether the box should shrink to the size of its inner content instead of
@@ -74,6 +76,11 @@ class SectionGroupBox extends ConsumerStatefulWidget {
   /// When true, uses [AppThemeData.background] instead of [AppThemeData.surface]
   /// as the body background — creates the alternating-row visual effect.
   final bool alternateBackground;
+
+  /// When false, the title header (or left title panel) is not rendered — only
+  /// the bordered/background container is shown. Useful when you want the
+  /// groupbox strip visuals (borders, alternating colours) without labels.
+  final bool showTitle;
 
   @override
   ConsumerState<SectionGroupBox> createState() => _SectionGroupBoxState();
@@ -182,8 +189,20 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
             ),
           ),
           if (hasDescription)
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Icon(
+                  Icons.arrow_right,
+                  size: 18,
+                  color: widget.theme.secondary,
+                ),
+              ),
+            ),
+          if (hasDescription)
             TextSpan(
-              text: '  $description',
+              text: description,
               style: TextStyle(
                 color: widget.theme.textSecondary,
                 fontSize: 12,
@@ -254,60 +273,61 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
       mainAxisSize: widget.shrinkToChild ? MainAxisSize.min : MainAxisSize.max,
       children: [
         // Title panel
-        Container(
-          width: 150,
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            // no background color so title blends with box body
-            borderRadius: panelRadius,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.theme.accent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(
-                          widget.theme.cornerRadius,
+        if (widget.showTitle)
+          Container(
+            width: 150,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              // no background color so title blends with box body
+              borderRadius: panelRadius,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.theme.accent.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(
+                            widget.theme.cornerRadius,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (widget.titleIcon != null) ...[
+                              Icon(
+                                widget.titleIcon,
+                                size: 18,
+                                color: widget.theme.accent,
+                              ),
+                              const SizedBox(width: kElementHSpacing),
+                            ],
+                            Expanded(
+                              child: _buildHeaderText(
+                                titleColor: widget.theme.textPrimary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (widget.titleIcon != null) ...[
-                            Icon(
-                              widget.titleIcon,
-                              size: 18,
-                              color: widget.theme.accent,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          Expanded(
-                            child: _buildHeaderText(
-                              titleColor: widget.theme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
+                  ],
+                ),
+                if (widget.trailing != null) ...[
+                  const SizedBox(height: 12),
+                  widget.trailing!,
                 ],
-              ),
-              if (widget.trailing != null) ...[
-                const SizedBox(height: 12),
-                widget.trailing!,
               ],
-            ],
+            ),
           ),
-        ),
         // Content area
         widget.shrinkToChild
             ? Padding(padding: widget.padding, child: widget.child)
@@ -412,11 +432,9 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
         widget.padding.left,
         12,
         widget.padding.right,
-        12,
+        8,
       ),
-      decoration: BoxDecoration(
-        borderRadius: titleHeaderRadius,
-      ),
+      decoration: BoxDecoration(borderRadius: titleHeaderRadius),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -425,16 +443,7 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
             children: [
               Expanded(
                 child: Container(
-                  //padding: const EdgeInsets.symmetric(
-                  //  horizontal: 12,
-                  //  vertical: 6,
-                  //),
-                  decoration: BoxDecoration(
-                    //color: widget.theme.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(
-                      widget.theme.cornerRadius,
-                    ),
-                  ),
+                  decoration: BoxDecoration(),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,10 +451,10 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
                       if (widget.titleIcon != null) ...[
                         Icon(
                           widget.titleIcon,
-                          size: 18,
+                          size: 20,
                           color: widget.theme.accent,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: kElementHSpacing),
                       ],
                       Expanded(
                         child: _buildHeaderText(
@@ -476,11 +485,13 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
         final fitToHeight =
             !widget.shrinkToChild && constraints.hasBoundedHeight;
         final contentWidget = Padding(
-          padding: EdgeInsets.only(
-            left: widget.padding.left,
-            right: widget.padding.right,
-            bottom: widget.padding.bottom,
-          ),
+          padding: widget.showTitle
+              ? EdgeInsets.only(
+                  left: widget.padding.left,
+                  right: widget.padding.right,
+                  bottom: widget.padding.bottom,
+                )
+              : widget.padding,
           child: widget.shrinkToChild
               ? Align(alignment: Alignment.centerLeft, child: widget.child)
               : widget.child,
@@ -490,7 +501,7 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
               ? CrossAxisAlignment.start
               : CrossAxisAlignment.stretch,
           children: [
-            titleHeader,
+            if (widget.showTitle) titleHeader,
             fitToHeight ? Expanded(child: contentWidget) : contentWidget,
           ],
         );

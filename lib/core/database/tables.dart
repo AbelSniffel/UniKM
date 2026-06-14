@@ -48,6 +48,9 @@ class Games extends Table {
   
   /// Steam AppID for API integration
   TextColumn get steamAppId => text().named('steam_app_id').withDefault(const Constant(''))();
+
+  /// Game developer/publisher (Steam metadata)
+  TextColumn get developer => text().named('developer').withDefault(const Constant(''))();
   
   /// Review score from Steam (0-100)
   IntColumn get reviewScore => integer().named('review_score').withDefault(const Constant(0))();

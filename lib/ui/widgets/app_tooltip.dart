@@ -68,11 +68,10 @@ class _AppTooltipState extends ConsumerState<AppTooltip> {
 
   void _hide() {
     _showTimer?.cancel();
-    _hideTimer = Timer(const Duration(milliseconds: kTooltipHideDelay), () {
-      if (mounted) {
-        _overlayController.hide();
-      }
-    });
+    _hideTimer?.cancel();
+    if (mounted) {
+      _overlayController.hide();
+    }
   }
 
   @override
@@ -141,13 +140,7 @@ class _AppTooltipState extends ConsumerState<AppTooltip> {
       targetAnchor: widget.preferBelow ? Alignment.bottomCenter : Alignment.topCenter,
       followerAnchor: widget.preferBelow ? Alignment.topCenter : Alignment.bottomCenter,
       offset: Offset(0, widget.preferBelow ? kTooltipOffset : -kTooltipOffset),
-      child: MouseRegion(
-        onEnter: (_) {
-          _hideTimer?.cancel();
-        },
-        onExit: (_) => _hide(),
-        child: animatedTooltip,
-      ),
+      child: IgnorePointer(child: animatedTooltip),
     );
   }
 }

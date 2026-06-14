@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/constants/app_constants.dart';
 
 class PageHeaderTitle extends StatelessWidget {
   const PageHeaderTitle({
@@ -25,8 +26,8 @@ class PageHeaderTitle extends StatelessWidget {
   final Color? iconColor;
   final Color? textColor;
 
-  static const double _iconSize = 29;
-  static const double _spacing = 8;
+  static const double _iconSize = kIconSizeHeader;
+  static const double _spacing = kElementHSpacing;
   static const double _fontSize = 20;
 
   @override

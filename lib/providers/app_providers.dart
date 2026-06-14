@@ -8,6 +8,7 @@ export 'batch_fetch_providers.dart';
 export 'database_providers.dart';
 export 'games_providers.dart';
 export 'settings_providers.dart';
+export 'sync_providers.dart';
 export 'tags_providers.dart';
 export 'theme_providers.dart';
 export 'ui_state_providers.dart';

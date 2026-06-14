@@ -1,21 +1,26 @@
 /// Steam lookup dialog - search and apply Steam data to games
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/database/database.dart';
+import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../widgets/app_tag_chip.dart';
+import '../pages/settings_sections/settings_common.dart';
+import '../../core/constants/app_constants.dart';
+import '../widgets/app_progress_indicator.dart';
+import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
-import '../widgets/toggle_switch.dart';
 import '../../core/services/logging.dart';
 
 /// Show Steam lookup dialog for a game
@@ -41,18 +46,21 @@ class SteamApplyOptions {
     required this.applyTags,
     required this.applyImage,
     required this.applyReviews,
+    required this.applyDeveloper,
   });
 
   final bool applyAppId;
   final bool applyTags;
   final bool applyImage;
   final bool applyReviews;
+  final bool applyDeveloper;
 
   static const defaults = SteamApplyOptions(
     applyAppId: true,
     applyTags: true,
     applyImage: true,
     applyReviews: true,
+    applyDeveloper: true,
   );
 
   SteamApplyOptions copyWith({
@@ -60,12 +68,14 @@ class SteamApplyOptions {
     bool? applyTags,
     bool? applyImage,
     bool? applyReviews,
+    bool? applyDeveloper,
   }) {
     return SteamApplyOptions(
       applyAppId: applyAppId ?? this.applyAppId,
       applyTags: applyTags ?? this.applyTags,
       applyImage: applyImage ?? this.applyImage,
       applyReviews: applyReviews ?? this.applyReviews,
+      applyDeveloper: applyDeveloper ?? this.applyDeveloper,
     );
   }
 }
@@ -89,47 +99,13 @@ class _SteamOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              AppToggleSwitch(
-                value: value,
-                onChanged: onChanged,
-                theme: theme,
-              ),
-            ],
-          ),
-        ),
-        if (showDividerBelow)
-          Divider(color: theme.border.withValues(alpha: 0.45), height: 1),
-      ],
+    return ToggleSettingRow(
+      theme: theme,
+      label: label,
+      description: description,
+      value: value,
+      onChanged: onChanged,
+      showDividerBelow: showDividerBelow,
     );
   }
 }
@@ -154,13 +130,7 @@ Future<String?> applySteamResultToGame(
   SteamSearchResult result,
   SteamApplyOptions options,
 ) async {
-  return _applySteamResultToGameWithRead(
-    ref.read,
-    ref,
-    game,
-    result,
-    options,
-  );
+  return _applySteamResultToGameWithRead(ref.read, ref, game, result, options);
 }
 
 /// Apply a SteamSearchResult using a ProviderContainer reader.
@@ -187,10 +157,16 @@ Future<String?> _applySteamResultToGameWithRead(
   SteamApplyOptions options,
 ) async {
   try {
-    AppLog.d('[applySteamResultToGame] Starting for game: "${game.title}" (ID: ${game.id})');
-    AppLog.d('[applySteamResultToGame]   Steam result: AppID=${result.appId}, Tags=[${result.tags.join(", ")}]');
-    AppLog.d('[applySteamResultToGame]   Options: applyTags=${options.applyTags}');
-    
+    AppLog.d(
+      '[applySteamResultToGame] Starting for game: "${game.title}" (ID: ${game.id})',
+    );
+    AppLog.d(
+      '[applySteamResultToGame]   Steam result: AppID=${result.appId}, Tags=[${result.tags.join(", ")}]',
+    );
+    AppLog.d(
+      '[applySteamResultToGame]   Options: applyTags=${options.applyTags}',
+    );
+
     final db = read(requireDatabaseProvider) as AppDatabase;
     final steamService = read(steamServiceProvider);
 
@@ -206,22 +182,30 @@ Future<String?> _applySteamResultToGameWithRead(
 
     // Build tag IDs: keep custom tags, replace Steam tags with fetched ones
     final existingTagEntries = await db.getTagsForGame(game.id);
-    AppLog.d('[applySteamResultToGame]   Existing tags from DB: ${existingTagEntries.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}');
-    
+    AppLog.d(
+      '[applySteamResultToGame]   Existing tags from DB: ${existingTagEntries.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
+    );
+
     // Keep only custom (non-Steam) tags
     final customTagIds = existingTagEntries
         .where((t) => !t.isSteamTag)
         .map((t) => t.id)
         .toList();
-    AppLog.d('[applySteamResultToGame]   Custom tag IDs to keep: $customTagIds');
+    AppLog.d(
+      '[applySteamResultToGame]   Custom tag IDs to keep: $customTagIds',
+    );
     final newTagIds = <int>{...customTagIds};
 
     if (options.applyTags && result.tags.isNotEmpty) {
       // Add the newly fetched Steam tags (replacing old Steam tags)
-      AppLog.d('[applySteamResultToGame]   Applying NEW Steam tags: ${result.tags.join(", ")}');
+      AppLog.d(
+        '[applySteamResultToGame]   Applying NEW Steam tags: ${result.tags.join(", ")}',
+      );
       for (final tagName in result.tags) {
         final tag = await db.getOrCreateTag(tagName, isSteamTag: true);
-        AppLog.d('[applySteamResultToGame]     Created/got tag: ${tag.name} (ID: ${tag.id})');
+        AppLog.d(
+          '[applySteamResultToGame]     Created/got tag: ${tag.name} (ID: ${tag.id})',
+        );
         newTagIds.add(tag.id);
       }
     } else {
@@ -229,15 +213,22 @@ Future<String?> _applySteamResultToGameWithRead(
       final existingSteamTagIds = existingTagEntries
           .where((t) => t.isSteamTag)
           .map((t) => t.id);
-      AppLog.d('[applySteamResultToGame]   NOT applying tags, keeping existing Steam tag IDs: $existingSteamTagIds');
+      AppLog.d(
+        '[applySteamResultToGame]   NOT applying tags, keeping existing Steam tag IDs: $existingSteamTagIds',
+      );
       newTagIds.addAll(existingSteamTagIds);
     }
-    
-    AppLog.d('[applySteamResultToGame]   Final tag IDs to save: ${newTagIds.toList()}');
+
+    AppLog.d(
+      '[applySteamResultToGame]   Final tag IDs to save: ${newTagIds.toList()}',
+    );
 
     final updatedGame = game.copyWith(
       isDlc: result.isDlc,
       steamAppId: options.applyAppId ? result.appId : game.steamAppId,
+      developer: options.applyDeveloper
+          ? (result.developer ?? game.developer)
+          : game.developer,
       reviewScore: options.applyReviews
           ? (result.reviewScore ?? game.reviewScore)
           : game.reviewScore,
@@ -249,8 +240,9 @@ Future<String?> _applySteamResultToGameWithRead(
           : game.coverImage,
     );
 
-    final success = await read(gamesProvider.notifier)
-      .updateGame(updatedGame, tagIds: newTagIds.toList());
+    final success = await read(
+      gamesProvider.notifier,
+    ).updateGame(updatedGame, tagIds: newTagIds.toList());
 
     if (!success) {
       AppLog.w('[applySteamResultToGame]   FAILED to update game');
@@ -259,11 +251,13 @@ Future<String?> _applySteamResultToGameWithRead(
 
     await read(tagsProvider.notifier).refresh();
     await read(gamesProvider.notifier).refreshGame(game.id);
-    
+
     // Verify what was actually saved
     final verifyTags = await db.getTagsForGame(game.id);
-    AppLog.i('[applySteamResultToGame]   VERIFIED tags after save: ${verifyTags.map((t) => '${t.name}(ID:${t.id},${t.isSteamTag ? "steam" : "custom"})').join(", ")}');
-    
+    AppLog.i(
+      '[applySteamResultToGame]   VERIFIED tags after save: ${verifyTags.map((t) => '${t.name}(ID:${t.id},${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
+    );
+
     await persistEncryptedDbIfNeeded(refLike);
 
     return null;
@@ -316,6 +310,7 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
   bool applyAppId = true;
   bool applyTags = true;
   bool applyImage = true;
+  bool applyDeveloper = true;
   bool applyReviews = true;
   final choice = await showDialog<String>(
     context: context,
@@ -323,17 +318,13 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
     builder: (ctx) {
       return StatefulBuilder(
         builder: (ctx2, setState2) {
-          return AlertDialog(
-            backgroundColor: theme.background,
-            title: Row(
-              children: [
-                Icon(Icons.cloud_download, color: theme.accent),
-                const SizedBox(width: 12),
-                Text(
-                  cached != null ? 'Steam Data Cache' : 'Steam Data Options',
-                  style: TextStyle(color: theme.textPrimary),
-                ),
-              ],
+          return ThemedAlertDialog(
+            theme: theme,
+
+            title: DialogHeader(
+              icon: Icons.cloud_download,
+              title: cached != null ? 'Steam Data Cache' : 'Steam Data Options',
+              theme: theme,
             ),
             content: SizedBox(
               width: 400,
@@ -343,7 +334,7 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                 children: [
                   if (cached != null) ...[
                     Text('Cached data found for "$title"'),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: kElementVSpacing),
                     Text(
                       'Cached at: ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'Unknown'}',
                       style: TextStyle(color: theme.textSecondary),
@@ -360,7 +351,7 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                     ),
                   ],
                   if (showApplyOptions) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: kDialogSpacing),
                     SectionGroupBox(
                       title: 'Apply Options',
                       theme: theme,
@@ -396,11 +387,19 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                           ),
                           _SteamOptionRow(
                             theme: theme,
+                            label: 'Developer',
+                            description: 'Add game developer name',
+                            value: applyDeveloper,
+                            onChanged: (v) =>
+                                setState2(() => applyDeveloper = v),
+                            showDividerBelow: false,
+                          ),
+                          _SteamOptionRow(
+                            theme: theme,
                             label: 'Reviews',
                             description: 'Score and review count',
                             value: applyReviews,
-                            onChanged: (v) =>
-                                setState2(() => applyReviews = v),
+                            onChanged: (v) => setState2(() => applyReviews = v),
                           ),
                         ],
                       ),
@@ -417,11 +416,12 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                       alternateBackground: true,
                       child: _SteamOptionRow(
                         theme: theme,
-                        label: 'Apply to all',
+                        label: 'Apply to all remaining',
                         description:
-                            'Do this for all remaining selected games',
+                            'Reuse this choice and these apply options for the rest of the batch',
                         value: applyToAll,
-                        onChanged: (v) => setState2(() => applyToAll = v),
+                        onChanged: (value) =>
+                            setState2(() => applyToAll = value),
                       ),
                     ),
                   ],
@@ -429,10 +429,6 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, 'cancel'),
-                child: const Text('Cancel'),
-              ),
               if (cached != null)
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, 'cache'),
@@ -462,6 +458,7 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
     applyAppId: applyAppId,
     applyTags: applyTags,
     applyImage: applyImage,
+    applyDeveloper: applyDeveloper,
     applyReviews: applyReviews,
   );
 
@@ -493,6 +490,10 @@ class SteamFetchResolution {
   final SteamSearchResult? result;
   final bool usedCache;
   final DateTime? cachedAt;
+}
+
+String _normalizeBatchFetchTitleKey(String title) {
+  return cleanTitleForSearch(title).replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 Future<SteamFetchResolution> resolveSteamResultForTitle(
@@ -546,6 +547,40 @@ Future<SteamFetchResolution> resolveSteamResultForTitle(
   );
 }
 
+Future<void> performSingleSteamLookup(
+  BuildContext context,
+  WidgetRef ref,
+  Game game,
+) async {
+  final batchNotifier = ref.read(batchFetchProvider.notifier);
+  batchNotifier.startBatch([game.id]);
+  batchNotifier.setProcessing(game.id);
+
+  final steamService = ref.read(steamServiceProvider);
+  try {
+    final resolution = await resolveSteamResultForTitle(
+      context,
+      title: game.title,
+      steamService: steamService,
+    );
+    if (!context.mounted || resolution.cancelled) {
+      return;
+    }
+
+    final result = resolution.result;
+    if (result == null) {
+      NotificationManager.instance.info(
+        'No Steam data found for "${game.title}"',
+      );
+      return;
+    }
+
+    await showSteamLookupDialog(context, game, initialResult: result);
+  } finally {
+    batchNotifier.endBatch();
+  }
+}
+
 /// Perform a batch Steam lookup for the given games.
 ///
 /// This central helper is used by individual game cards and by the
@@ -565,7 +600,9 @@ Future<void> performSteamBatchLookup(
     return;
   }
 
-  final gameSnapshots = steamTargets.map((g) => {'id': g.id, 'title': g.title}).toList();
+  final gameSnapshots = steamTargets
+      .map((g) => {'id': g.id, 'title': g.title})
+      .toList();
   final total = gameSnapshots.length;
 
   // Start batch fetch tracking
@@ -587,6 +624,7 @@ Future<void> performSteamBatchLookup(
   int updated = 0;
   int notFound = 0;
   int failed = 0;
+  final freshResultCache = <String, SteamSearchResult>{};
 
   bool applyToAll = false;
   String? choiceForAll;
@@ -617,6 +655,13 @@ Future<void> performSteamBatchLookup(
       message: 'Fetching Steam data (${i + 1}/$total)',
       title: gameTitle,
       progress: total == 0 ? 0 : (i / total).clamp(0.0, 1.0),
+    );
+    unawaited(
+      DeadlineNotificationService.instance.showFetchProgressNotification(
+        completed: i,
+        total: total,
+        currentTitle: gameTitle,
+      ),
     );
 
     String choice;
@@ -650,7 +695,9 @@ Future<void> performSteamBatchLookup(
           break;
         }
         cached = selection['cached'] as SteamSearchResult?;
-        options = (selection['options'] as SteamApplyOptions?) ?? SteamApplyOptions.defaults;
+        options =
+            (selection['options'] as SteamApplyOptions?) ??
+            SteamApplyOptions.defaults;
 
         final pickedApplyToAll = selection['applyToAll'] == true;
         if (pickedApplyToAll) {
@@ -673,18 +720,35 @@ Future<void> performSteamBatchLookup(
 
     // Fetch the current game state from provider just before applying
     final games = container.read(gamesProvider).games;
-    final game = games.firstWhere((g) => g.id == gameId, orElse: () => steamTargets.firstWhere((g) => g.id == gameId));
+    final game = games.firstWhere(
+      (g) => g.id == gameId,
+      orElse: () => steamTargets.firstWhere((g) => g.id == gameId),
+    );
 
-    AppLog.d('[SteamBatchFetch] Processing game ${i + 1}/$total: "${game.title}" (ID: ${game.id})');
-    AppLog.d('[SteamBatchFetch]   Current tags: ${game.tags.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}');
+    AppLog.d(
+      '[SteamBatchFetch] Processing game ${i + 1}/$total: "${game.title}" (ID: ${game.id})',
+    );
+    AppLog.d(
+      '[SteamBatchFetch]   Current tags: ${game.tags.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
+    );
 
     // Resolve result for the chosen option
     SteamSearchResult? result;
+    final batchCacheKey = _normalizeBatchFetchTitleKey(game.title);
     if (choice == 'cache' && cached != null) {
       result = cached;
+      // Populate freshResultCache so that a later game with the same title
+      // that ends up on the 'fresh' path can skip the network call.
+      freshResultCache[batchCacheKey] = cached;
     } else {
-      final steamService = container.read(steamServiceProvider);
-      result = await steamService.searchGame(game.title, forceRefresh: true);
+      result = freshResultCache[batchCacheKey];
+      if (result == null) {
+        final steamService = container.read(steamServiceProvider);
+        result = await steamService.searchGame(game.title, forceRefresh: true);
+        if (result != null) {
+          freshResultCache[batchCacheKey] = result;
+        }
+      }
     }
 
     // Check cancellation after fetch
@@ -698,6 +762,8 @@ Future<void> performSteamBatchLookup(
     }
 
     // Apply the fetched result via the container-friendly API
+    // Check cancellation before the DB write to avoid a pointless write.
+    if (batchNotifier.isCancelled) break;
     try {
       final applyError = await applySteamResultToGameWithContainer(
         container,
@@ -725,13 +791,21 @@ Future<void> performSteamBatchLookup(
     if (batchNotifier.isCancelled) break;
   }
 
-  AppLog.i('[SteamBatchFetch] Batch complete: updated=$updated, notFound=$notFound, failed=$failed');
+  AppLog.i(
+    '[SteamBatchFetch] Batch complete: updated=$updated, notFound=$notFound, failed=$failed',
+  );
 
   handle.setProgress(1);
-  // End batch fetch after a short delay to show completion status
-  Future.delayed(const Duration(seconds: 2), () {
+  unawaited(DeadlineNotificationService.instance.clearFetchProgressNotification());
+  if (batchNotifier.isCancelled) {
+    // Cancelled: clear state immediately so overlays disappear without delay.
     batchNotifier.endBatch();
-  });
+  } else {
+    // Normal completion: keep done/error status visible briefly then clear.
+    Future.delayed(const Duration(seconds: 2), () {
+      batchNotifier.endBatch();
+    });
+  }
 
   if (failed > 0) {
     final errorMessage = StringBuffer('Updated $updated, failed $failed');
@@ -774,6 +848,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   bool _applyAppId = true;
   bool _applyTags = true;
   bool _applyImage = true;
+  bool _applyDeveloper = true;
   bool _applyReviews = true;
 
   @override
@@ -830,6 +905,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         applyAppId: _applyAppId,
         applyTags: _applyTags,
         applyImage: _applyImage,
+        applyDeveloper: _applyDeveloper,
         applyReviews: _applyReviews,
       );
 
@@ -841,7 +917,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       );
 
       if (error != null) {
-        NotificationManager.instance.error('Failed to apply Steam data: $error');
+        NotificationManager.instance.error(
+          'Failed to apply Steam data: $error',
+        );
         if (mounted) setState(() => _isApplying = false);
         return;
       }
@@ -862,8 +940,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
 
-    return AlertDialog(
-      backgroundColor: theme.background,
+    return ThemedAlertDialog(
+      theme: theme,
+
       title: DialogHeader(
         icon: Icons.cloud_download,
         title: 'Steam Lookup',
@@ -904,10 +983,6 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _isApplying ? null : () => Navigator.pop(context, false),
-          child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-        ),
         if (_result != null && !_isSearching)
           ElevatedButton(
             onPressed: _isApplying ? null : _applyData,
@@ -919,12 +994,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
+                    child: AppCircularProgressIndicator(),
                   )
-                : const Text('Apply'),
+                : const Text('Save'),
           ),
       ],
     );
@@ -934,12 +1006,12 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     return SectionGroupBox(
       title: 'Searching Steam...',
       theme: theme,
-      titleIcon: FontAwesomeIcons.steam,
+      titleIcon: FontAwesomeIcons.steam.data,
       groupPosition: SectionGroupPosition.last,
       alternateBackground: true,
       child: const Padding(
         padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: AppCircularProgressIndicator()),
       ),
     );
   }
@@ -954,13 +1026,13 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       child: Column(
         children: [
           Icon(Icons.error_outline, color: theme.error, size: 48),
-          const SizedBox(height: 12),
+          const SizedBox(height: kDialogSpacing),
           Text(
             _error!,
             style: TextStyle(color: theme.textSecondary),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: kDialogSpacing),
           TextButton.icon(
             onPressed: _searchSteam,
             icon: const Icon(Icons.refresh),
@@ -981,7 +1053,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         SectionGroupBox(
           title: 'Found on Steam',
           theme: theme,
-          titleIcon: FontAwesomeIcons.steam,
+          titleIcon: FontAwesomeIcons.steam.data,
           groupPosition: SectionGroupPosition.middle,
           alternateBackground: true,
           child: Row(
@@ -1071,20 +1143,12 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           SectionGroupBox(
             title: 'Steam Tags (${_result!.tags.length})',
             theme: theme,
-            titleIcon: FontAwesomeIcons.steam,
+            titleIcon: FontAwesomeIcons.steam.data,
             groupPosition: SectionGroupPosition.middle,
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: _steamPreviewTags(_result!.tags)
-                  .map(
-                    (tag) => AppTagChip(
-                      tag: tag,
-                      theme: theme,
-                      isSelected: true,
-                    ),
-                  )
-                  .toList(),
+            child: TagList(
+              tags: _steamPreviewTags(_result!.tags),
+              theme: theme,
+              allSelected: true,
             ),
           ),
         ],
@@ -1119,6 +1183,13 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
                 'Download Steam header image',
                 _applyImage,
                 (v) => setState(() => _applyImage = v),
+              ),
+              _buildOption(
+                theme,
+                'Developer',
+                'Save Steam developer name',
+                _applyDeveloper,
+                (v) => setState(() => _applyDeveloper = v),
               ),
               if (_result!.reviewScore != null)
                 _buildOption(

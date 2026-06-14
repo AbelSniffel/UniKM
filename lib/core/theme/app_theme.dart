@@ -2,9 +2,14 @@
 /// Implements the 3 base colors → computed palette system from the Python app
 library;
 
+import 'dart:math' as math;
+import 'dart:ui' show Size, lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../constants/app_constants.dart';
+import '../settings/settings_model.dart';
 import '../utils/color_utils.dart';
 
 /// App theme configuration with 3 base colors
@@ -13,33 +18,31 @@ class AppThemeData {
     this.id = '',
     required this.name,
     required this.baseBackground,
-    required this.basePrimary,
+    required this.baseSecondary,
     required this.baseAccent,
     this.iconData,
-    this.cornerRadius = 16.0,
+    this.cornerRadius = 8.0,
+    this.useThemeToggleRadius = false,
     this.scrollbarRadius = 8.0,
-    this.inputPaddingVertical = 12.0,
-    this.inputPaddingHorizontal = 10.0,
-    this.controlPaddingVertical = 10.0,
-    this.controlPaddingHorizontal = 10.0,
+    this.inputPaddingVertical = 10.0,
+    this.inputPaddingHorizontal = 12.0,
+    this.progressIndicatorStrokeWidth = 3.0,
+    this.navPanelOverlayStyle = NavPanelOverlayStyle.none,
   });
 
   final String id;
   final String name;
   final Color baseBackground;
-  final Color basePrimary;
+  final Color baseSecondary;
   final Color baseAccent;
   final IconData? iconData;
   final double cornerRadius;
+  final bool useThemeToggleRadius;
   final double scrollbarRadius;
-  final double controlPaddingHorizontal;
-  final double controlPaddingVertical;
   final double inputPaddingHorizontal;
   final double inputPaddingVertical;
-  EdgeInsets get controlPadding => EdgeInsets.symmetric(
-    horizontal: controlPaddingHorizontal,
-    vertical: controlPaddingVertical,
-  );
+  final double progressIndicatorStrokeWidth;
+  final NavPanelOverlayStyle navPanelOverlayStyle;
 
   /// Get the icon for this theme
   IconData get icon => iconData ?? Icons.palette;
@@ -49,7 +52,7 @@ class AppThemeData {
     final fallbackName = (json['name'] as String?) ?? 'Custom';
     final fallbackBackground =
         (json['base_background'] as String?) ?? '#141414';
-    final fallbackPrimary = (json['base_primary'] as String?) ?? '#3F5485';
+    final fallbackSecondary = (json['base_primary'] as String?) ?? '#3F5485';
     final fallbackAccent = (json['base_accent'] as String?) ?? '#5F92FF';
 
     final parsedId = (json['id'] as String?)?.trim();
@@ -58,7 +61,7 @@ class AppThemeData {
         : _legacyIdFromFields(
             name: fallbackName,
             baseBackgroundHex: fallbackBackground,
-            basePrimaryHex: fallbackPrimary,
+            baseSecondaryHex: fallbackSecondary,
             baseAccentHex: fallbackAccent,
           );
 
@@ -66,7 +69,7 @@ class AppThemeData {
       id: id,
       name: fallbackName,
       baseBackground: parseHexColor(fallbackBackground),
-      basePrimary: parseHexColor(fallbackPrimary),
+      baseSecondary: parseHexColor(fallbackSecondary),
       baseAccent: parseHexColor(fallbackAccent),
       iconData: json['icon_code_point'] != null
           ? IconData(
@@ -75,15 +78,13 @@ class AppThemeData {
             )
           : null,
       cornerRadius: (json['corner_radius'] as num?)?.toDouble() ?? 8.0,
+      useThemeToggleRadius: (json['use_theme_toggle_radius'] as bool?) ?? false,
       scrollbarRadius: (json['scrollbar_radius'] as num?)?.toDouble() ?? 8.0,
-      controlPaddingHorizontal:
-          (json['control_padding_horizontal'] as num?)?.toDouble() ?? 12.0,
-      controlPaddingVertical:
-          (json['control_padding_vertical'] as num?)?.toDouble() ?? 12.0,
-      inputPaddingHorizontal:
-          (json['input_padding_horizontal'] as num?)?.toDouble() ?? 12.0,
-      inputPaddingVertical:
-          (json['input_padding_vertical'] as num?)?.toDouble() ?? 12.0,
+      navPanelOverlayStyle: NavPanelOverlayStyle.values.firstWhere(
+        (style) =>
+            style.name == (json['nav_panel_overlay_style'] as String? ?? ''),
+        orElse: () => NavPanelOverlayStyle.none,
+      ),
     );
   }
 
@@ -93,15 +94,13 @@ class AppThemeData {
       'id': id,
       'name': name,
       'base_background': colorToHex(baseBackground),
-      'base_primary': colorToHex(basePrimary),
+      'base_primary': colorToHex(baseSecondary),
       'base_accent': colorToHex(baseAccent),
       if (iconData != null) 'icon_code_point': iconData!.codePoint,
       'corner_radius': cornerRadius,
+      'use_theme_toggle_radius': useThemeToggleRadius,
       'scrollbar_radius': scrollbarRadius,
-      'control_padding_horizontal': controlPaddingHorizontal,
-      'control_padding_vertical': controlPaddingVertical,
-      'input_padding_horizontal': inputPaddingHorizontal,
-      'input_padding_vertical': inputPaddingVertical,
+      'nav_panel_overlay_style': navPanelOverlayStyle.name,
     };
   }
 
@@ -110,33 +109,34 @@ class AppThemeData {
     String? id,
     String? name,
     Color? baseBackground,
-    Color? basePrimary,
+    Color? baseSecondary,
     Color? baseAccent,
     IconData? iconData,
     bool clearIcon = false,
     double? cornerRadius,
+    bool? useThemeToggleRadius,
     double? scrollbarRadius,
-    double? controlPaddingHorizontal,
-    double? controlPaddingVertical,
     double? inputPaddingHorizontal,
     double? inputPaddingVertical,
+    double? progressIndicatorStrokeWidth,
+    NavPanelOverlayStyle? navPanelOverlayStyle,
   }) {
     return AppThemeData(
       id: id ?? this.id,
       name: name ?? this.name,
       baseBackground: baseBackground ?? this.baseBackground,
-      basePrimary: basePrimary ?? this.basePrimary,
+      baseSecondary: baseSecondary ?? this.baseSecondary,
       baseAccent: baseAccent ?? this.baseAccent,
       iconData: clearIcon ? null : (iconData ?? this.iconData),
       cornerRadius: cornerRadius ?? this.cornerRadius,
+      useThemeToggleRadius: useThemeToggleRadius ?? this.useThemeToggleRadius,
       scrollbarRadius: scrollbarRadius ?? this.scrollbarRadius,
-      controlPaddingHorizontal:
-          controlPaddingHorizontal ?? this.controlPaddingHorizontal,
-      controlPaddingVertical:
-          controlPaddingVertical ?? this.controlPaddingVertical,
       inputPaddingHorizontal:
           inputPaddingHorizontal ?? this.inputPaddingHorizontal,
       inputPaddingVertical: inputPaddingVertical ?? this.inputPaddingVertical,
+      progressIndicatorStrokeWidth:
+          progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
+      navPanelOverlayStyle: navPanelOverlayStyle ?? this.navPanelOverlayStyle,
     );
   }
 
@@ -148,11 +148,11 @@ class AppThemeData {
   static String _legacyIdFromFields({
     required String name,
     required String baseBackgroundHex,
-    required String basePrimaryHex,
+    required String baseSecondaryHex,
     required String baseAccentHex,
   }) {
     String normalize(String value) => value.trim().toLowerCase();
-    return 'legacy:${normalize(name)}:${normalize(baseBackgroundHex)}:${normalize(basePrimaryHex)}:${normalize(baseAccentHex)}';
+    return 'legacy:${normalize(name)}:${normalize(baseBackgroundHex)}:${normalize(baseSecondaryHex)}:${normalize(baseAccentHex)}';
   }
 
   // ===========================================================================
@@ -201,8 +201,8 @@ class AppThemeData {
   /// Background color (alias for baseBackground)
   Color get background => baseBackground;
 
-  /// Primary color (alias for basePrimary)
-  Color get primary => basePrimary;
+  /// Secondary color (alias for baseSecondary)
+  Color get secondary => baseSecondary;
 
   /// Primary button background
   Color get primaryButton => baseAccent;
@@ -221,7 +221,7 @@ class AppThemeData {
       blendColors(baseAccent, surface, isDark ? 0.72 : 0.8);
 
   /// Primary button text
-  Color get primaryButtonText => contrastColor(basePrimary);
+  Color get primaryButtonText => contrastColor(baseSecondary);
 
   /// Primary button foreground when disabled.
   Color get primaryButtonDisabledText =>
@@ -237,29 +237,53 @@ class AppThemeData {
   Decoration get tabIndicator => FlaredTabIndicator(color: accent);
 
   /// Input field background
-  Color get inputBackground => surface;
+  Color get inputBackground => surface.withValues(alpha: 0.0);
 
   /// Input field focused border
   Color get inputFocusedBorder => baseAccent;
 
+  /// Input field hover border.
+  Color get inputHoverBorder => accent.withValues(alpha: 0.8);
+
+  /// Input field focus glow color.
+  Color get inputFocusGlow => accent.withValues(alpha: isDark ? 0.34 : 0.24);
+
+  /// Input field hover glow color.
+  Color get inputHoverGlow => accent.withValues(alpha: isDark ? 0.18 : 0.12);
+
+  /// Input field default wrap-around amount.
+  double get inputBorderWrapDefault => cornerRadius * 0.20;
+
+  /// Input field hover wrap-around amount.
+  double get inputBorderWrapHover => cornerRadius * 0.42;
+
+  /// Input field focus wrap-around amount.
+  double get inputBorderWrapFocus => cornerRadius * 0.62;
+
   /// Scrollbar color
-  Color get scrollbar => isDark
-      ? Colors.white.withValues(alpha: 0.3)
-      : Colors.black.withValues(alpha: 0.3);
+  Color get scrollbar => accent;
 
   /// Scrollbar hover color
-  Color get scrollbarHover => isDark
-      ? Colors.white.withValues(alpha: 0.5)
-      : Colors.black.withValues(alpha: 0.5);
+  Color get scrollbarHover => accentHover;
+
+  /// Scrollbar track color.
+  Color get scrollbarTrack => accent.withValues(alpha: isDark ? 0.05 : 0.05);
+
+  /// Scrollbar track hover color.
+  Color get scrollbarTrackHover =>
+      accent.withValues(alpha: isDark ? 0.28 : 0.22);
 
   /// Navigation panel background
   Color get navBackground => blendColors(baseBackground, baseAccent, 0.035);
 
   /// Navigation item hover
-  Color get navItemHover => baseAccent.withValues(alpha: 0.20);
+  Color get navItemHover => baseAccent.withValues(alpha: 0.30);
 
   /// Navigation item selected
-  Color get navItemSelected => baseAccent.withValues(alpha: 0.35);
+  Color get navItemSelected => baseAccent.withValues(alpha: 0.40);
+
+  /// Selected popup menu item background
+  Color get popupMenuItemSelected => baseAccent.withValues(alpha: 0.16);
 
   /// Game card background
   Color get cardBackground => surface;
@@ -307,16 +331,16 @@ class AppThemeData {
 
     return _AppThemeCache(
       listCardDefaultGradient: [
-        baseAccent.withValues(alpha: 0.3),
-        basePrimary.withValues(alpha: 0.25),
+        baseAccent.withValues(alpha: 0.40),
+        baseSecondary.withValues(alpha: 0.50),
       ],
       listCardHoverGradient: [
-        baseAccent.withValues(alpha: 0.55),
-        basePrimary.withValues(alpha: 0.45),
+        baseAccent.withValues(alpha: 0.80),
+        baseSecondary.withValues(alpha: 0.90),
       ],
       listCardSelectedGradient: [
-        baseAccent.withValues(alpha: 0.85),
-        basePrimary.withValues(alpha: 0.65),
+        baseAccent.withValues(alpha: 1),
+        baseSecondary.withValues(alpha: 1),
       ],
 
       tagChipDefaultColor: tagChipDefaultColor,
@@ -367,6 +391,8 @@ class AppThemeData {
 
   /// Generate Flutter ThemeData from this app theme
   ThemeData toThemeData() {
+    final inputBorder = resolveInputBorder(showTopBorder: false);
+
     return ThemeData(
       useMaterial3: true,
       brightness: isDark ? Brightness.dark : Brightness.light,
@@ -374,7 +400,7 @@ class AppThemeData {
       // Colors
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
-        primary: basePrimary,
+        primary: baseSecondary,
         onPrimary: primaryButtonText,
         secondary: baseAccent,
         onSecondary: contrastColor(baseAccent),
@@ -388,6 +414,7 @@ class AppThemeData {
       canvasColor: baseBackground,
       cardColor: cardBackground,
       dividerColor: divider,
+      highlightColor: popupMenuItemSelected,
 
       // AppBar
       appBarTheme: AppBarTheme(
@@ -420,9 +447,12 @@ class AppThemeData {
           ),
           elevation: 0,
           padding: EdgeInsets.symmetric(
-            horizontal: controlPaddingHorizontal,
-            vertical: controlPaddingVertical,
+            horizontal: kButtonPaddingHorizontal,
+            vertical: 0,
           ),
+          fixedSize: const Size.fromHeight(kElementHeight),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
 
@@ -434,9 +464,12 @@ class AppThemeData {
             borderRadius: BorderRadius.circular(cornerRadius),
           ),
           padding: EdgeInsets.symmetric(
-            horizontal: controlPaddingHorizontal,
-            vertical: controlPaddingVertical,
+            horizontal: kButtonPaddingHorizontal,
+            vertical: 0,
           ),
+          fixedSize: const Size.fromHeight(kElementHeight),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
 
@@ -447,32 +480,36 @@ class AppThemeData {
             borderRadius: BorderRadius.circular(cornerRadius),
           ),
           padding: EdgeInsets.symmetric(
-            horizontal: controlPaddingHorizontal,
-            vertical: controlPaddingVertical,
+            horizontal: kButtonPaddingHorizontal,
+            vertical: 0,
           ),
+          fixedSize: const Size.fromHeight(kElementHeight),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
 
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(padding: const EdgeInsets.all(6)),
+        style: IconButton.styleFrom(
+          iconSize: 26,
+          padding: const EdgeInsets.all(8),
+          minimumSize: const Size(kElementHeight, kElementHeight),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(cornerRadius),
+          ),
+        ),
       ),
 
       // Input fields
       inputDecorationTheme: InputDecorationTheme(
+        //constraints: const BoxConstraints(maxHeight: kElementHeight),
         isDense: true,
         filled: true,
         fillColor: inputBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-          borderSide: BorderSide(color: border, width: 0),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-          borderSide: BorderSide(color: border, width: 0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-          borderSide: BorderSide(color: inputFocusedBorder, width: 2),
+        border: inputBorder,
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 42,
+          minHeight: kElementHeight,
         ),
         contentPadding: EdgeInsets.symmetric(
           horizontal: inputPaddingHorizontal,
@@ -495,22 +532,45 @@ class AppThemeData {
           borderRadius: BorderRadius.circular(cornerRadius),
           border: Border.all(color: border),
         ),
-        textStyle: TextStyle(color: textPrimary),      ),
+        textStyle: TextStyle(color: textPrimary),
+        exitDuration: Duration.zero,
+      ),
 
       // Scrollbar
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.hovered)) {
+          if (states.contains(WidgetState.dragged) ||
+              states.contains(WidgetState.hovered)) {
             return scrollbarHover;
           }
           return scrollbar;
         }),
-        radius: Radius.circular(scrollbarRadius),
-        thickness: WidgetStateProperty.all(8),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.dragged) ||
+              states.contains(WidgetState.hovered)) {
+            return scrollbarTrackHover;
+          }
+          return scrollbarTrack;
+        }),
+        trackBorderColor: WidgetStateProperty.all(Colors.transparent),
+        radius: Radius.circular(cornerRadius),
+        thickness: WidgetStateProperty.all(10),
+        minThumbLength: 44,
+        mainAxisMargin: 2,
+        crossAxisMargin: 2,
+        thumbVisibility: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.dragged),
+        ),
+        trackVisibility: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.dragged) ||
+              states.contains(WidgetState.hovered),
+        ),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: primary,
+        color: accent,
+        circularTrackColor: accent.withValues(alpha: 0.15),
         linearTrackColor: surface,
       ),
 
@@ -526,12 +586,11 @@ class AppThemeData {
       // Dropdown
       dropdownMenuTheme: DropdownMenuThemeData(
         inputDecorationTheme: InputDecorationTheme(
-          isDense: true,
+          constraints: const BoxConstraints(maxHeight: kElementHeight),
+          //isDense: false,
           filled: true,
           fillColor: inputBackground,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(cornerRadius),
-          ),
+          border: inputBorder,
           contentPadding: EdgeInsets.symmetric(
             horizontal: inputPaddingHorizontal,
             vertical: inputPaddingVertical,
@@ -539,9 +598,38 @@ class AppThemeData {
         ),
       ),
 
+      popupMenuTheme: PopupMenuThemeData(
+        color: surface,
+        elevation: 12,
+        menuPadding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cornerRadius),
+          side: BorderSide(color: border),
+        ),
+      ),
+
       switchTheme: SwitchThemeData(
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         splashRadius: 14,
+      ),
+
+      sliderTheme: SliderThemeData(
+        activeTrackColor: accent,
+        inactiveTrackColor: border.withValues(alpha: 0.35),
+        thumbColor: accent,
+        overlayColor: accent.withValues(alpha: 0.18),
+        activeTickMarkColor: Colors.transparent,
+        inactiveTickMarkColor: Colors.transparent,
+        valueIndicatorColor: accent,
+        valueIndicatorTextStyle: TextStyle(
+          color: contrastColor(baseAccent),
+          fontWeight: FontWeight.w600,
+        ),
+        trackHeight: kSliderTrackHeight,
+        thumbShape: RoundSliderThumbShape(
+          enabledThumbRadius: kSliderIndicatorInnerDiameter / 2,
+          disabledThumbRadius: kSliderIndicatorInnerDiameter / 2,
+        ),
       ),
 
       // Text
@@ -563,6 +651,259 @@ class AppThemeData {
         labelSmall: TextStyle(color: textHint),
       ),
     );
+  }
+
+  WidgetStateInputBorder resolveInputBorder({bool showTopBorder = false}) {
+    return WidgetStateInputBorder.resolveWith(
+      (states) => buildInputBorder(states, showTopBorder: showTopBorder),
+    );
+  }
+
+  InputBorder buildInputBorder(
+    Set<WidgetState> states, {
+    bool showTopBorder = false,
+  }) {
+    final isFocused = states.contains(WidgetState.focused);
+    final isHovered = states.contains(WidgetState.hovered);
+
+    return BottomGlowInputBorder(
+      borderRadius: BorderRadius.circular(cornerRadius),
+      borderSide: BorderSide(
+        color: isFocused
+            ? inputFocusedBorder
+            : isHovered
+            ? inputHoverBorder
+            : border,
+        width: isFocused
+            ? 2.5
+            : isHovered
+            ? 1.5
+            : 1.0,
+      ),
+      glowColor: isFocused
+          ? inputFocusGlow
+          : isHovered
+          ? inputHoverGlow
+          : Colors.transparent,
+      glowExtent: isFocused
+          ? 18.0
+          : isHovered
+          ? 12.0
+          : 0.0,
+      wrapExtent: isFocused
+          ? inputBorderWrapFocus
+          : isHovered
+          ? inputBorderWrapHover
+          : inputBorderWrapDefault,
+      showTopBorder: showTopBorder,
+    );
+  }
+}
+
+class BottomGlowInputBorder extends OutlineInputBorder {
+  const BottomGlowInputBorder({
+    super.borderSide = const BorderSide(),
+    super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
+    super.gapPadding = 4.0,
+    required this.glowColor,
+    this.glowExtent = 0.0,
+    this.wrapExtent = 0.0,
+    this.showTopBorder = false,
+  });
+
+  final Color glowColor;
+  final double glowExtent;
+  final double wrapExtent;
+  final bool showTopBorder;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.only(
+    top: showTopBorder ? borderSide.width : 0.0,
+    bottom: borderSide.width,
+  );
+
+  @override
+  BottomGlowInputBorder copyWith({
+    BorderSide? borderSide,
+    BorderRadius? borderRadius,
+    double? gapPadding,
+    Color? glowColor,
+    double? glowExtent,
+    double? wrapExtent,
+    bool? showTopBorder,
+  }) {
+    return BottomGlowInputBorder(
+      borderSide: borderSide ?? this.borderSide,
+      borderRadius: borderRadius ?? this.borderRadius,
+      gapPadding: gapPadding ?? this.gapPadding,
+      glowColor: glowColor ?? this.glowColor,
+      glowExtent: glowExtent ?? this.glowExtent,
+      wrapExtent: wrapExtent ?? this.wrapExtent,
+      showTopBorder: showTopBorder ?? this.showTopBorder,
+    );
+  }
+
+  @override
+  BottomGlowInputBorder scale(double t) {
+    return BottomGlowInputBorder(
+      borderSide: borderSide.scale(t),
+      borderRadius: borderRadius * t,
+      gapPadding: gapPadding * t,
+      glowColor: glowColor.withValues(alpha: glowColor.a * t),
+      glowExtent: glowExtent * t,
+      wrapExtent: wrapExtent * t,
+      showTopBorder: showTopBorder,
+    );
+  }
+
+  @override
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
+    if (a is BottomGlowInputBorder) {
+      return BottomGlowInputBorder(
+        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
+        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
+        gapPadding: lerpDouble(a.gapPadding, gapPadding, t)!,
+        glowColor: Color.lerp(a.glowColor, glowColor, t)!,
+        glowExtent: lerpDouble(a.glowExtent, glowExtent, t)!,
+        wrapExtent: lerpDouble(a.wrapExtent, wrapExtent, t)!,
+        showTopBorder: t < 0.5 ? a.showTopBorder : showTopBorder,
+      );
+    }
+    if (a is OutlineInputBorder) {
+      return BottomGlowInputBorder(
+        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
+        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
+        gapPadding: lerpDouble(a.gapPadding, gapPadding, t)!,
+        glowColor: Color.lerp(Colors.transparent, glowColor, t)!,
+        glowExtent: lerpDouble(0.0, glowExtent, t)!,
+        wrapExtent: lerpDouble(0.0, wrapExtent, t)!,
+        showTopBorder: showTopBorder,
+      );
+    }
+    return super.lerpFrom(a, t);
+  }
+
+  @override
+  ShapeBorder? lerpTo(ShapeBorder? b, double t) {
+    if (b is BottomGlowInputBorder) {
+      return BottomGlowInputBorder(
+        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
+        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
+        gapPadding: lerpDouble(gapPadding, b.gapPadding, t)!,
+        glowColor: Color.lerp(glowColor, b.glowColor, t)!,
+        glowExtent: lerpDouble(glowExtent, b.glowExtent, t)!,
+        wrapExtent: lerpDouble(wrapExtent, b.wrapExtent, t)!,
+        showTopBorder: t < 0.5 ? showTopBorder : b.showTopBorder,
+      );
+    }
+    if (b is OutlineInputBorder) {
+      return BottomGlowInputBorder(
+        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
+        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
+        gapPadding: lerpDouble(gapPadding, b.gapPadding, t)!,
+        glowColor: Color.lerp(glowColor, Colors.transparent, t)!,
+        glowExtent: lerpDouble(glowExtent, 0.0, t)!,
+        wrapExtent: lerpDouble(wrapExtent, 0.0, t)!,
+        showTopBorder: showTopBorder,
+      );
+    }
+    return super.lerpTo(b, t);
+  }
+
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    final resolvedRadius = borderRadius.resolve(textDirection);
+    final outerRRect = resolvedRadius.toRRect(rect);
+    final effectiveWrapExtent = math.max(wrapExtent, borderSide.width);
+
+    final borderPaint = borderSide.toPaint();
+    final strokeInset = borderSide.width / 2;
+    final strokeRRect = outerRRect.deflate(strokeInset);
+    final clipTop = rect.bottom - effectiveWrapExtent - borderSide.width;
+
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTRB(
+        rect.left - borderSide.width,
+        clipTop,
+        rect.right + borderSide.width,
+        rect.bottom + borderSide.width,
+      ),
+    );
+    canvas.drawRRect(strokeRRect, borderPaint);
+    canvas.restore();
+
+    if (showTopBorder) {
+      final clipBottom = rect.top + effectiveWrapExtent + borderSide.width;
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTRB(
+          rect.left - borderSide.width,
+          rect.top - borderSide.width,
+          rect.right + borderSide.width,
+          clipBottom,
+        ),
+      );
+      canvas.drawRRect(strokeRRect, borderPaint);
+      canvas.restore();
+    }
+
+    if (glowExtent > 0.0 && glowColor.a > 0.0) {
+      final clampedGlowExtent = math.min(glowExtent, rect.height);
+      final glowRect = Rect.fromLTRB(
+        rect.left,
+        rect.bottom - clampedGlowExtent,
+        rect.right,
+        rect.bottom,
+      );
+      final glowPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            glowColor.withValues(alpha: 0.0),
+            glowColor.withValues(alpha: 0.15),
+            glowColor.withValues(alpha: 0.25),
+          ],
+          stops: const [0.0, 0.6, 1.0],
+        ).createShader(glowRect)
+        ..style = PaintingStyle.fill;
+
+      canvas.save();
+      canvas.clipRRect(outerRRect);
+      canvas.drawRect(glowRect, glowPaint);
+
+      if (showTopBorder) {
+        final topGlowRect = Rect.fromLTRB(
+          rect.left,
+          rect.top,
+          rect.right,
+          rect.top + clampedGlowExtent,
+        );
+        final topGlowPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              glowColor.withValues(alpha: 0.25),
+              glowColor.withValues(alpha: 0.15),
+              glowColor.withValues(alpha: 0.0),
+            ],
+            stops: const [0.0, 0.45, 1.0],
+          ).createShader(topGlowRect)
+          ..style = PaintingStyle.fill;
+        canvas.drawRect(topGlowRect, topGlowPaint);
+      }
+
+      canvas.restore();
+    }
   }
 }
 
@@ -646,10 +987,7 @@ class _FlaredTabIndicatorPainter extends BoxPainter {
   }
 }
 
-enum AppNavigationButtonVariant {
-  navigation,
-  settingsSection,
-}
+enum AppNavigationButtonVariant { navigation, settingsSection }
 
 class AppNavigationButton extends StatefulWidget {
   const AppNavigationButton({
@@ -669,14 +1007,15 @@ class AppNavigationButton extends StatefulWidget {
     this.selectedBackgroundColor,
     this.hoverBackgroundColor,
     this.disabledBackgroundColor,
-    this.minWidth = 45,
-    this.minHeight = 25,
-    this.horizontalSpacing = 8,
+    this.minWidth = 40,
+    this.minHeight = 26,
+    this.horizontalSpacing = 6,
     this.verticalSpacing = 0,
     this.horizontalMainAxisSize = MainAxisSize.min,
     this.horizontalMainAxisAlignment = MainAxisAlignment.center,
     this.duration = const Duration(milliseconds: 1000),
     this.variant = AppNavigationButtonVariant.navigation,
+    this.iconSize = kIconSize,
     this.labelVisible = true,
     this.reserveLabelSpace = true,
     this.labelFadeDuration = Duration.zero,
@@ -690,7 +1029,8 @@ class AppNavigationButton extends StatefulWidget {
   final VoidCallback? onTap;
   final IconData? iconData;
   final String? labelText;
-  final Widget Function(BuildContext context, Color color, double size)? iconBuilder;
+  final Widget Function(BuildContext context, Color color, double size)?
+  iconBuilder;
   final String? tooltipMessage;
   final EdgeInsetsGeometry? padding;
   final AlignmentGeometry alignment;
@@ -706,6 +1046,7 @@ class AppNavigationButton extends StatefulWidget {
   final MainAxisAlignment horizontalMainAxisAlignment;
   final Duration duration;
   final AppNavigationButtonVariant variant;
+  final double iconSize;
   final bool labelVisible;
   final bool reserveLabelSpace;
   final Duration labelFadeDuration;
@@ -715,37 +1056,118 @@ class AppNavigationButton extends StatefulWidget {
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
 }
 
-class _AppNavigationButtonState extends State<AppNavigationButton> {
-  bool _hovered = false;
+class _AppNavigationButtonState extends State<AppNavigationButton>
+    with TickerProviderStateMixin {
+  static const double _hoverIconBoost = 0.2;
 
-  static const double _iconSize = 24;
+  late final AnimationController _hoverController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 100),
+    reverseDuration: const Duration(milliseconds: 100),
+  );
+  late final AnimationController _selectionController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 100),
+    reverseDuration: const Duration(milliseconds: 100),
+    value: widget.isSelected ? 1.0 : 0.0,
+  );
+  late final AnimationController _labelVisibilityController =
+      AnimationController(
+        vsync: this,
+        duration: widget.labelFadeDuration,
+        value: widget.labelVisible ? 1.0 : 0.0,
+      );
 
-  Color get _iconColor => !widget.isEnabled
-      ? widget.theme.textSecondary.withValues(alpha: 0.5)
-      : (widget.isSelected ? widget.theme.accent : widget.theme.textSecondary);
-
-  TextStyle get _labelStyle {
-    return TextStyle(
-      color: !widget.isEnabled
-          ? widget.theme.textSecondary.withValues(alpha: 0.5)
-          : (widget.isSelected ? widget.theme.textPrimary : widget.theme.textSecondary),
-      fontSize: 13,
-      fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.normal,
-    );
+  @override
+  void didUpdateWidget(covariant AppNavigationButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isSelected != widget.isSelected) {
+      if (widget.isSelected) {
+        _selectionController.forward();
+      } else {
+        _selectionController.reverse();
+      }
+    }
+    if (oldWidget.isEnabled && !widget.isEnabled) {
+      _hoverController.reverse();
+    }
+    if (oldWidget.labelFadeDuration != widget.labelFadeDuration) {
+      _labelVisibilityController.duration = widget.labelFadeDuration;
+    }
+    if (oldWidget.labelVisible != widget.labelVisible ||
+        oldWidget.labelFadeDuration != widget.labelFadeDuration) {
+      if (widget.labelFadeDuration == Duration.zero) {
+        _labelVisibilityController.value = widget.labelVisible ? 1.0 : 0.0;
+      } else if (widget.labelVisible) {
+        _labelVisibilityController.forward();
+      } else {
+        _labelVisibilityController.reverse();
+      }
+    }
   }
 
-  Widget? _buildIcon() {
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    _selectionController.dispose();
+    _labelVisibilityController.dispose();
+    super.dispose();
+  }
+
+  Color _iconColor(double selectionT) {
+    if (!widget.isEnabled) {
+      return widget.theme.textSecondary.withValues(alpha: 0.5);
+    }
+    return Color.lerp(
+          widget.theme.textSecondary,
+          widget.theme.accent,
+          selectionT,
+        ) ??
+        widget.theme.textSecondary;
+  }
+
+  TextStyle _labelStyle(double selectionT) {
+    if (!widget.isEnabled) {
+      return TextStyle(
+        color: widget.theme.textSecondary.withValues(alpha: 0.5),
+        fontSize: 14,
+      );
+    }
+    return TextStyle.lerp(
+          TextStyle(color: widget.theme.textSecondary, fontSize: 14),
+          TextStyle(color: widget.theme.textPrimary, fontSize: 14),
+          selectionT,
+        ) ??
+        TextStyle(color: widget.theme.textSecondary, fontSize: 14);
+  }
+
+  double _labelVisibilityT() {
+    if (widget.labelText == null || !widget.reserveLabelSpace) {
+      return widget.labelVisible ? 1.0 : 0.0;
+    }
+    if (widget.labelFadeDuration == Duration.zero) {
+      return widget.labelVisible ? 1.0 : 0.0;
+    }
+    return widget.labelFadeCurve
+        .transform(_labelVisibilityController.value)
+        .clamp(0.0, 1.0);
+  }
+
+  Widget? _buildIcon({required Color iconColor, required double iconScale}) {
+    Widget? icon;
     if (widget.iconBuilder != null) {
-      return widget.iconBuilder!(context, _iconColor, _iconSize);
+      icon = widget.iconBuilder!(context, iconColor, widget.iconSize);
+    } else {
+      final iconData = widget.iconData;
+      if (iconData == null) {
+        return null;
+      }
+      icon = Icon(iconData, color: iconColor, size: widget.iconSize);
     }
-    final iconData = widget.iconData;
-    if (iconData == null) {
-      return null;
-    }
-    return Icon(iconData, color: _iconColor, size: _iconSize);
+    return Transform.scale(scale: iconScale, child: icon);
   }
 
-  Widget? _buildLabel() {
+  Widget? _buildLabel({required TextStyle labelStyle}) {
     final labelText = widget.labelText;
     if (labelText == null || !widget.reserveLabelSpace) {
       return null;
@@ -755,47 +1177,62 @@ class _AppNavigationButtonState extends State<AppNavigationButton> {
       labelText,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: _labelStyle,
+      style: labelStyle,
     );
 
     if (widget.labelFadeDuration == Duration.zero) {
       return widget.labelVisible ? label : null;
     }
 
+    final clampedFactor = _labelVisibilityT();
+
     return IgnorePointer(
-      ignoring: !widget.labelVisible,
-      child: AnimatedOpacity(
-        opacity: widget.labelVisible ? 1 : 0,
-        duration: widget.labelFadeDuration,
-        curve: widget.labelFadeCurve,
-        child: label,
+      ignoring: clampedFactor == 0,
+      child: ClipRect(
+        child: Align(
+          alignment: widget.isHorizontal
+              ? Alignment.centerLeft
+              : Alignment.topCenter,
+          widthFactor: widget.isHorizontal ? clampedFactor : 1,
+          heightFactor: widget.isHorizontal ? 1 : clampedFactor,
+          child: Opacity(opacity: clampedFactor, child: label),
+        ),
       ),
     );
   }
 
-  Widget _buildContent() {
-    final icon = _buildIcon();
-    final label = _buildLabel();
+  Widget _buildContent({
+    required Color iconColor,
+    required TextStyle labelStyle,
+    required double iconScale,
+    required double labelVisibilityT,
+  }) {
+    final icon = _buildIcon(iconColor: iconColor, iconScale: iconScale);
+    final label = _buildLabel(labelStyle: labelStyle);
     final iconChildren = icon == null ? null : <Widget>[icon];
+    final horizontalLabel = label == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.only(
+              left: icon == null
+                  ? 0
+                  : widget.horizontalSpacing * labelVisibilityT,
+            ),
+            child: label,
+          );
     final horizontalLabelChildren = label == null
         ? null
-        : <Widget>[
-            Flexible(
-              fit: FlexFit.loose,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: icon == null ? 0 : widget.horizontalSpacing,
-                ),
-                child: label,
-              ),
-            ),
-          ];
+        : widget.horizontalMainAxisSize == MainAxisSize.max
+        ? <Widget>[Flexible(fit: FlexFit.loose, child: horizontalLabel!)]
+        : <Widget>[horizontalLabel!];
     final verticalLabelChildren = label == null
         ? null
         : <Widget>[
             Padding(
               padding: EdgeInsets.only(
-                top: icon == null ? 0 : widget.verticalSpacing,
+                top: icon == null
+                    ? 0
+                    : widget.verticalSpacing * labelVisibilityT,
               ),
               child: label,
             ),
@@ -805,71 +1242,96 @@ class _AppNavigationButtonState extends State<AppNavigationButton> {
       return Row(
         mainAxisSize: widget.horizontalMainAxisSize,
         mainAxisAlignment: widget.horizontalMainAxisAlignment,
-        children: [
-          ...?iconChildren,
-          ...?horizontalLabelChildren,
-        ],
+        children: [...?iconChildren, ...?horizontalLabelChildren],
       );
     } else {
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          ...?iconChildren,
-          ...?verticalLabelChildren,
-        ],
+        children: [...?iconChildren, ...?verticalLabelChildren],
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final effectivePadding =
-        widget.padding ??
-        EdgeInsets.symmetric(
-          horizontal: widget.labelText == null ? 8 : 12,
-          vertical: 8,
-        );
-
-    final backgroundColor = !widget.isEnabled
-        ? (widget.disabledBackgroundColor ??
-              Colors.transparent)
-        : widget.isSelected
-        ? (widget.selectedBackgroundColor ?? widget.theme.navItemSelected)
-        : (_hovered
-              ? (widget.hoverBackgroundColor ?? widget.theme.navItemHover)
-              : Colors.transparent);
-
     final borderRadius = BorderRadius.circular(
       widget.theme.cornerRadius * widget.borderRadiusMultiplier,
     );
 
-    final button = MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Material(
-        color: backgroundColor,
-        animationDuration: widget.duration,
-        borderRadius: borderRadius,
-        child: InkWell(
-          onTap: widget.isEnabled ? widget.onTap : null,
-          borderRadius: borderRadius,
-          splashColor: widget.theme.navItemHover,
-          highlightColor: widget.theme.navItemSelected,
-          hoverColor: widget.theme.navItemHover,
-          child: Padding(
-            padding: effectivePadding,
-            child: Align(
-              alignment: widget.alignment,
+    final button = AnimatedBuilder(
+      animation: Listenable.merge([
+        _hoverController,
+        _selectionController,
+        _labelVisibilityController,
+      ]),
+      builder: (context, child) {
+        final selectionT = Curves.linear.transform(_selectionController.value);
+        final hoverT = Curves.linear.transform(_hoverController.value);
+        final labelVisibilityT = _labelVisibilityT();
+        final effectivePadding =
+            widget.padding ??
+            EdgeInsetsGeometry.lerp(
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              EdgeInsets.symmetric(
+                horizontal: widget.labelText == null ? 6 : 12,
+                vertical: 6,
+              ),
+              labelVisibilityT,
+            )!;
+        final backgroundColor = !widget.isEnabled
+            ? (widget.disabledBackgroundColor ?? Colors.transparent)
+            : Color.lerp(
+                    Color.lerp(
+                      Colors.transparent,
+                      widget.hoverBackgroundColor ?? widget.theme.navItemHover,
+                      hoverT,
+                    ),
+                    widget.selectedBackgroundColor ??
+                        widget.theme.navItemSelected,
+                    selectionT,
+                  ) ??
+                  Colors.transparent;
+        final iconColor = _iconColor(selectionT);
+        final labelStyle = _labelStyle(selectionT);
+        final iconScale = (1 + (math.max(selectionT, hoverT) * _hoverIconBoost))
+            .clamp(1.0, 1.20);
+
+        return MouseRegion(
+          onEnter: (_) => _hoverController.forward(),
+          onExit: (_) => _hoverController.reverse(),
+          child: Material(
+            color: backgroundColor,
+            animationDuration: widget.duration,
+            borderRadius: borderRadius,
+            child: InkWell(
+              onTap: widget.isEnabled ? widget.onTap : null,
+              borderRadius: borderRadius,
+              splashColor: widget.theme.navItemHover,
+              highlightColor: widget.theme.navItemSelected,
+              hoverColor: widget.theme.navItemHover,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
+                  minWidth: widget.minWidth,
+                  minHeight: widget.minHeight,
                 ),
-                child: _buildContent(),
+                child: Padding(
+                  padding: effectivePadding,
+                  child: Align(
+                    alignment: widget.alignment,
+                    child: _buildContent(
+                      iconColor: iconColor,
+                      labelStyle: labelStyle,
+                      iconScale: iconScale,
+                      labelVisibilityT: labelVisibilityT,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
     final tooltipMessage = widget.tooltipMessage;
@@ -887,7 +1349,7 @@ class AppLinearProgressBar extends StatelessWidget {
     required this.theme,
     required this.value,
     this.label,
-    this.minHeight = 20,
+    this.minHeight = 26,
     this.progressColor,
     this.trackColor,
     this.borderRadius,
@@ -928,7 +1390,8 @@ class AppLinearProgressBar extends StatelessWidget {
                   label!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: labelStyle ??
+                  style:
+                      labelStyle ??
                       TextStyle(
                         color: theme.textPrimary,
                         fontWeight: FontWeight.w600,
@@ -968,9 +1431,9 @@ class _AppThemeCache {
 const kDarkTheme = AppThemeData(
   id: 'builtin-dark',
   name: 'Dark',
-  baseBackground: Color(0xFF141414),
-  basePrimary: Color.fromARGB(255, 32, 79, 197),
-  baseAccent: Color(0xFF5F92FF),
+  baseBackground: Color(0xFF000000),
+  baseSecondary: Color(0xFF965EED),
+  baseAccent: Color(0xFFFF8964),
   iconData: Icons.dark_mode, // Icons.dark_mode
 );
 
@@ -979,7 +1442,7 @@ const kLightTheme = AppThemeData(
   id: 'builtin-light',
   name: 'Light',
   baseBackground: Color(0xFFF5F5F5),
-  basePrimary: Color.fromARGB(255, 103, 151, 255),
+  baseSecondary: Color(0xFF6797FF),
   baseAccent: Color(0xFF8B5CF6),
   iconData: Icons.light_mode, // Icons.light_mode
 );
@@ -989,7 +1452,7 @@ const kNebulaTheme = AppThemeData(
   id: 'builtin-nebula',
   name: 'Nebula',
   baseBackground: Color(0xFF0E0E29),
-  basePrimary: Color(0xFF7B61FF),
+  baseSecondary: Color(0xFF7B61FF),
   baseAccent: Color(0xFF3BF2FF),
   iconData: Icons.auto_awesome, // Icons.auto_awesome
 );
@@ -998,9 +1461,9 @@ const kNebulaTheme = AppThemeData(
 const kSunsetTheme = AppThemeData(
   id: 'builtin-sunset',
   name: 'Sunset',
-  baseBackground: Color(0xFF2A1208),
-  basePrimary: Color.fromARGB(255, 226, 121, 0),
-  baseAccent: Color.fromARGB(255, 255, 167, 14),
+  baseBackground: Color.fromARGB(255, 64, 28, 39), // convert this value 401C27 to ARGB
+  baseSecondary: Color.fromARGB(255, 184, 55, 20), // convert this value B83714 to ARGB
+  baseAccent: Color.fromARGB(255, 244, 164, 97), // convert this value F4A461 to ARGB
   iconData: Icons.wb_twilight, // Icons.wb_twilight
 );
 
@@ -1009,7 +1472,7 @@ const kOceanTheme = AppThemeData(
   id: 'builtin-ocean',
   name: 'Ocean',
   baseBackground: Color(0xFF00203C), // 00203C
-  basePrimary: Color(0xFF0891FF), // 0891FF
+  baseSecondary: Color(0xFF0891FF), // 0891FF
   baseAccent: Color(0xFF15FFF0), // 15FFF0
   iconData: Icons.water, // Icons.water
 );
@@ -1019,7 +1482,7 @@ const kForestTheme = AppThemeData(
   id: 'builtin-forest',
   name: 'Forest',
   baseBackground: Color(0xFF0D1F12),
-  basePrimary: Color.fromARGB(255, 31, 179, 50),
+  baseSecondary: Color.fromARGB(255, 31, 179, 50),
   baseAccent: Color(0xFF4ADE80),
   iconData: Icons.forest, // Icons.forest
 );
@@ -1029,7 +1492,7 @@ const kRoyalTheme = AppThemeData(
   id: 'builtin-royal',
   name: 'Royal',
   baseBackground: Color(0xFF111827),
-  basePrimary: Color(0xFF14B8A6),
+  baseSecondary: Color(0xFF14B8A6),
   baseAccent: Color(0xFFF4CBA7),
   iconData: Icons.diamond, // Icons.diamond
 );

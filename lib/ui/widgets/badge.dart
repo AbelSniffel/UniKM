@@ -33,6 +33,7 @@ class Badge extends StatelessWidget {
     this.position = BadgePosition.topRight,
     this.backgroundColor,
     this.textColor,
+    this.borderColor,
     this.showBadge = true,
     this.theme,
     this.fit = StackFit.loose,
@@ -58,7 +59,10 @@ class Badge extends StatelessWidget {
   
   /// Text color (uses contrasting color if not specified)
   final Color? textColor;
-  
+
+  /// Border color for the badge outline (uses theme surface if not specified)
+  final Color? borderColor;
+
   /// Whether to show the badge
   final bool showBadge;
   
@@ -148,6 +152,9 @@ class Badge extends StatelessWidget {
     final bgColor = backgroundColor ?? 
         theme?.accent ?? 
         Theme.of(context).colorScheme.primary;
+    final resolvedBorderColor = borderColor ??
+        theme?.surface ??
+        Theme.of(context).scaffoldBackgroundColor;
     
     final fgColor = textColor ?? 
         (bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white);
@@ -161,8 +168,8 @@ class Badge extends StatelessWidget {
             color: bgColor,
             shape: BoxShape.circle,
             border: Border.all(
-              color: theme?.surface ?? Theme.of(context).scaffoldBackgroundColor,
-              width: 1.5,
+              color: resolvedBorderColor,
+              width: 2,
             ),
           ),
         );
@@ -170,14 +177,14 @@ class Badge extends StatelessWidget {
       case BadgeType.count:
         final displayCount = count! > 99 ? '99+' : count.toString();
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           constraints: const BoxConstraints(minWidth: 12),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(theme?.cornerRadius ?? 12),
             border: Border.all(
-              color: theme?.surface ?? Theme.of(context).scaffoldBackgroundColor,
-              width: 1.5,
+              color: resolvedBorderColor,
+              width: 2,
             ),
           ),
           child: Text(
@@ -185,7 +192,7 @@ class Badge extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: fgColor,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -193,20 +200,20 @@ class Badge extends StatelessWidget {
         
       case BadgeType.text:
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(theme?.cornerRadius ?? 12),
             border: Border.all(
-              color: theme?.surface ?? Theme.of(context).scaffoldBackgroundColor,
-              width: 1.5,
+              color: resolvedBorderColor,
+              width: 2,
             ),
           ),
           child: Text(
             label ?? '',
             style: TextStyle(
               color: fgColor,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -244,6 +251,7 @@ extension BadgeExtension on Widget {
     BadgePosition position = BadgePosition.topRight,
     Color? backgroundColor,
     Color? textColor,
+    Color? borderColor,
     bool show = true,
     AppThemeData? theme,
     StackFit fit = StackFit.loose,
@@ -254,6 +262,7 @@ extension BadgeExtension on Widget {
       position: position,
       backgroundColor: backgroundColor,
       textColor: textColor,
+      borderColor: borderColor,
       showBadge: show,
       theme: theme,
       fit: fit,

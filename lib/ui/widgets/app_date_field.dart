@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 
 class AppDateField extends StatefulWidget {
@@ -13,7 +14,7 @@ class AppDateField extends StatefulWidget {
     this.date,
     this.placeholder = 'Select date',
     this.enabled = true,
-    this.maxWidth = 160,
+    this.maxWidth = kDeadlineSelectorWidth,
   });
 
   final AppThemeData theme;
@@ -28,60 +29,76 @@ class AppDateField extends StatefulWidget {
 }
 
 class _AppDateFieldState extends State<AppDateField> {
-  bool _isHovered = false;
-  bool _isPressed = false;
+  late final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _syncText();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppDateField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.date != widget.date ||
+        oldWidget.placeholder != widget.placeholder) {
+      _syncText();
+    }
+  }
+
+  void _syncText() {
+    _controller.text = widget.date == null
+        ? ''
+        : DateFormat('dd/MM/yyyy').format(widget.date!);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hasDate = widget.date != null;
-    final textColor = widget.enabled ? widget.theme.textPrimary : widget.theme.textHint;
-    final iconColor = widget.enabled ? widget.theme.textHint : widget.theme.textHint;
-
-    final borderColor = widget.enabled && _isPressed
-        ? widget.theme.inputFocusedBorder
-        : widget.theme.border;
-
-    final bgColor = widget.enabled && _isHovered
-        ? Color.alphaBlend(
-            widget.theme.inputFocusedBorder.withValues(alpha: 0.07),
-            widget.theme.inputBackground,
-          )
-        : widget.theme.inputBackground;
-
     return Opacity(
       opacity: widget.enabled ? 1.0 : 0.7,
-      child: MouseRegion(
-        onEnter: widget.enabled ? (_) => setState(() => _isHovered = true) : null,
-        onExit: widget.enabled ? (_) => setState(() {
-          _isHovered = false;
-          _isPressed = false;
-        }) : null,
-        child: GestureDetector(
-          onTapDown: widget.enabled ? (_) => setState(() => _isPressed = true) : null,
-          onTapUp: widget.enabled ? (_) => setState(() => _isPressed = false) : null,
-          onTapCancel: widget.enabled ? () => setState(() => _isPressed = false) : null,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: widget.maxWidth),
+        child: TextField(
+          controller: _controller,
+          enabled: widget.enabled,
+          readOnly: true,
+          showCursor: false,
+          enableInteractiveSelection: false,
+          mouseCursor: widget.enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           onTap: widget.enabled ? widget.onTap : null,
-          child: Container(
-            constraints: BoxConstraints(maxWidth: widget.maxWidth),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
-              border: Border.all(color: borderColor),
+          style: TextStyle(
+            color: widget.enabled
+                ? widget.theme.textPrimary
+                : widget.theme.textHint,
+            fontSize: 14,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: widget.placeholder,
+            hintStyle: TextStyle(color: widget.theme.textHint),
+            prefixIcon: Icon(
+              Icons.calendar_today,
+              color: widget.theme.textHint,
+              size: 18,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.calendar_today, color: iconColor, size: 18),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    hasDate ? DateFormat('dd/MM/yyyy').format(widget.date!) : widget.placeholder,
-                    style: TextStyle(color: textColor, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 42,
+              minHeight: 36,
+            ),
+            filled: true,
+            fillColor: widget.theme.inputBackground,
+            border: widget.theme.resolveInputBorder(),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: widget.theme.inputPaddingHorizontal,
+              vertical: widget.theme.inputPaddingVertical,
             ),
           ),
         ),

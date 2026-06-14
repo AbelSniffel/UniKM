@@ -4,8 +4,11 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/constants/app_constants.dart';
+import '../core/services/platform_file_actions.dart';
 import '../core/settings/settings_model.dart';
 import 'database_providers.dart';
+import '../ui/widgets/notification_system.dart';
 
 // =============================================================================
 // SETTINGS PROVIDERS
@@ -22,6 +25,50 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
   }
 
   Map<String, dynamic> _loadSettings() {
+    final navPanelGradientBar =
+        _prefs.getBool(SettingsKeys.navPanelGradientBar) ??
+        DefaultSettings.navPanelGradientBar;
+    final navBarButtonAlignmentName = _prefs.getString(
+      SettingsKeys.navBarButtonAlignment,
+    );
+    final legacyCenterButtons = _prefs.getBool(
+      SettingsKeys.navBarCenterButtons,
+    );
+    final navBarButtonAlignment = NavBarButtonAlignment.values.firstWhere(
+      (e) => e.name == navBarButtonAlignmentName,
+      orElse: () {
+        if (legacyCenterButtons != null) {
+          return legacyCenterButtons
+              ? NavBarButtonAlignment.center
+              : NavBarButtonAlignment.left;
+        }
+        return DefaultSettings.navBarButtonAlignment;
+      },
+    );
+    final legacyArrangementH = switch (navBarButtonAlignment) {
+      NavBarButtonAlignment.left => NavButtonArrangement.start,
+      NavBarButtonAlignment.center => NavButtonArrangement.center,
+      NavBarButtonAlignment.right => NavButtonArrangement.end,
+    };
+    final navButtonArrangementH = NavButtonArrangement.values.firstWhere(
+      (e) => e.name == _prefs.getString(SettingsKeys.navButtonArrangementH),
+      orElse: () => legacyArrangementH,
+    );
+    final navButtonArrangementV = NavButtonArrangement.values.firstWhere(
+      (e) => e.name == _prefs.getString(SettingsKeys.navButtonArrangementV),
+      orElse: () => DefaultSettings.navButtonArrangementV,
+    );
+    final gradientAnimation = normalizeGradientAnimation(
+      GradientAnimation.values.firstWhere(
+        (e) =>
+            e.name ==
+            (_prefs.getString(SettingsKeys.gradientAnimation) ??
+                DefaultSettings.gradientAnimation.name),
+        orElse: () => DefaultSettings.gradientAnimation,
+      ),
+      navPanelGradientBar: navPanelGradientBar,
+    );
+
     return {
       // Updates
       SettingsKeys.autoUpdateCheck:
@@ -33,9 +80,7 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       SettingsKeys.includePreReleases:
           _prefs.getBool(SettingsKeys.includePreReleases) ??
           DefaultSettings.includePreReleases,
-      SettingsKeys.autoCheckIntervalMinutes:
-          _prefs.getInt(SettingsKeys.autoCheckIntervalMinutes) ??
-          DefaultSettings.autoCheckIntervalMinutes,
+      SettingsKeys.autoCheckIntervalMinutes: kDefaultAutoUpdateIntervalMinutes,
       SettingsKeys.skippedVersions:
           _prefs.getStringList(SettingsKeys.skippedVersions) ?? [],
       SettingsKeys.githubApiToken:
@@ -74,21 +119,26 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       SettingsKeys.navBarCollapsed:
           _prefs.getBool(SettingsKeys.navBarCollapsed) ??
           DefaultSettings.navBarCollapsed,
-      SettingsKeys.navBarCenterButtons:
-          _prefs.getBool(SettingsKeys.navBarCenterButtons) ??
-          DefaultSettings.navBarCenterButtons,
-        SettingsKeys.settingsSectionPanelCollapsed:
+      SettingsKeys.navBarButtonAlignment: navBarButtonAlignment,
+      SettingsKeys.navPanelGradientBar: navPanelGradientBar,
+      SettingsKeys.navBarCombineButtons:
+          _prefs.getBool(SettingsKeys.navBarCombineButtons) ??
+          DefaultSettings.navBarCombineButtons,
+      SettingsKeys.navButtonArrangementH: navButtonArrangementH,
+      SettingsKeys.navButtonArrangementV: navButtonArrangementV,
+      SettingsKeys.navPanelOverlayStyle: NavPanelOverlayStyle.values.firstWhere(
+        (e) =>
+            e.name ==
+            (_prefs.getString(SettingsKeys.navPanelOverlayStyle) ??
+                DefaultSettings.navPanelOverlayStyle.name),
+        orElse: () => DefaultSettings.navPanelOverlayStyle,
+      ),
+      SettingsKeys.settingsSectionPanelCollapsed:
           _prefs.getBool(SettingsKeys.settingsSectionPanelCollapsed) ??
           DefaultSettings.settingsSectionPanelCollapsed,
 
       // Animations
-      SettingsKeys.gradientAnimation: GradientAnimation.values.firstWhere(
-        (e) =>
-            e.name ==
-            (_prefs.getString(SettingsKeys.gradientAnimation) ??
-                DefaultSettings.gradientAnimation.name),
-        orElse: () => DefaultSettings.gradientAnimation,
-      ),
+      SettingsKeys.gradientAnimation: gradientAnimation,
       SettingsKeys.tooltipAnimation: TooltipAnimation.values.firstWhere(
         (e) =>
             e.name ==
@@ -119,7 +169,7 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
                 DefaultSettings.gameSortMode.name),
         orElse: () => DefaultSettings.gameSortMode,
       ),
-        SettingsKeys.viewedNewGameIds:
+      SettingsKeys.viewedNewGameIds:
           _prefs.getStringList(SettingsKeys.viewedNewGameIds) ??
           const <String>[],
 
@@ -142,6 +192,9 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       SettingsKeys.showDeadlineChip:
           _prefs.getBool(SettingsKeys.showDeadlineChip) ??
           DefaultSettings.showDeadlineChip,
+      SettingsKeys.slimListView:
+          _prefs.getBool(SettingsKeys.slimListView) ??
+          DefaultSettings.slimListView,
 
       // SettingsPage Card Visual toggles
       SettingsKeys.showPlatformBadges:
@@ -166,6 +219,9 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
                 DefaultSettings.sectionTitleLocation.name),
         orElse: () => DefaultSettings.sectionTitleLocation,
       ),
+      SettingsKeys.useThemeToggleRadius:
+          _prefs.getBool(SettingsKeys.useThemeToggleRadius) ??
+          DefaultSettings.useThemeToggleRadius,
 
       // Backup
       SettingsKeys.autoBackupEnabled:
@@ -187,9 +243,39 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
           _prefs.getStringList(SettingsKeys.recentDatabasePaths) ??
           const <String>[],
 
+      // Device Sync
+      SettingsKeys.syncEnabled:
+          _prefs.getBool(SettingsKeys.syncEnabled) ??
+          DefaultSettings.syncEnabled,
+      SettingsKeys.syncAutoOnStartup:
+          _prefs.getBool(SettingsKeys.syncAutoOnStartup) ??
+          DefaultSettings.syncAutoOnStartup,
+      SettingsKeys.syncDeviceId:
+          _prefs.getString(SettingsKeys.syncDeviceId) ??
+          DefaultSettings.syncDeviceId,
+      SettingsKeys.syncTrustedPeersJson:
+          _prefs.getString(SettingsKeys.syncTrustedPeersJson) ??
+          DefaultSettings.syncTrustedPeersJson,
+      SettingsKeys.syncLastTrustedPeerId:
+          _prefs.getString(SettingsKeys.syncLastTrustedPeerId) ??
+          DefaultSettings.syncLastTrustedPeerId,
+      SettingsKeys.syncLastSyncAtIso:
+          _prefs.getString(SettingsKeys.syncLastSyncAtIso) ??
+          DefaultSettings.syncLastSyncAtIso,
+      SettingsKeys.syncDbRevisionId:
+          _prefs.getString(SettingsKeys.syncDbRevisionId) ??
+          DefaultSettings.syncDbRevisionId,
+      SettingsKeys.syncDbTimestampMillis:
+          _prefs.getInt(SettingsKeys.syncDbTimestampMillis) ??
+          DefaultSettings.syncDbTimestampMillis,
+      SettingsKeys.syncStaticPrivateKey:
+          _prefs.getString(SettingsKeys.syncStaticPrivateKey) ??
+          DefaultSettings.syncStaticPrivateKey,
+      SettingsKeys.syncStaticPublicKey:
+          _prefs.getString(SettingsKeys.syncStaticPublicKey) ??
+          DefaultSettings.syncStaticPublicKey,
+
       // Notifications
-      SettingsKeys.notificationsEnabled:
-          _prefs.getBool(SettingsKeys.notificationsEnabled) ?? true,
       SettingsKeys.deadlineReminders:
           _prefs.getBool(SettingsKeys.deadlineReminders) ?? true,
       SettingsKeys.updateNotifications:
@@ -212,6 +298,9 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       SettingsKeys.showFpsCounter:
           _prefs.getBool(SettingsKeys.showFpsCounter) ??
           DefaultSettings.showFpsCounter,
+      SettingsKeys.showGameDetailsSkmId:
+          _prefs.getBool(SettingsKeys.showGameDetailsSkmId) ??
+          DefaultSettings.showGameDetailsSkmId,
 
       // Window
       SettingsKeys.windowWidth:
@@ -235,11 +324,65 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
   /// Get a setting value
   T get<T>(String key) => state[key] as T;
 
+  Map<String, dynamic> _normalizeUpdates(Map<String, dynamic> updates) {
+    final normalized = Map<String, dynamic>.from(updates);
+    final nextNavPanelGradientBar =
+        (normalized[SettingsKeys.navPanelGradientBar] as bool?) ??
+        (state[SettingsKeys.navPanelGradientBar] as bool?) ??
+        DefaultSettings.navPanelGradientBar;
+    final rawGradientAnimation =
+        (normalized[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
+        (state[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
+        DefaultSettings.gradientAnimation;
+    final nextGradientAnimation = normalizeGradientAnimation(
+      rawGradientAnimation,
+      navPanelGradientBar: nextNavPanelGradientBar,
+    );
+
+    if (nextGradientAnimation != rawGradientAnimation ||
+        normalized.containsKey(SettingsKeys.gradientAnimation) ||
+        normalized.containsKey(SettingsKeys.navPanelGradientBar)) {
+      normalized[SettingsKeys.gradientAnimation] = nextGradientAnimation;
+    }
+
+    return normalized;
+  }
+
+  bool _shouldNotifyGradientFallback(
+    Map<String, dynamic> updates,
+    Map<String, dynamic> normalized,
+  ) {
+    if (updates[SettingsKeys.navPanelGradientBar] != false) {
+      return false;
+    }
+
+    final rawGradientAnimation =
+        (updates[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
+        (state[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
+        DefaultSettings.gradientAnimation;
+    final nextGradientAnimation =
+        (normalized[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
+        rawGradientAnimation;
+
+    return rawGradientAnimation == GradientAnimation.wave &&
+        nextGradientAnimation == GradientAnimation.scroll;
+  }
+
   /// Set a setting value
   Future<void> set<T>(String key, T value) async {
-    // Update state
-    state = {...state, key: value};
-    await _persistValue(key, value);
+    final normalized = _normalizeUpdates({key: value});
+    final shouldNotifyGradientFallback = _shouldNotifyGradientFallback({
+      key: value,
+    }, normalized);
+    state = {...state, ...normalized};
+    for (final entry in normalized.entries) {
+      await _persistValue(entry.key, entry.value);
+    }
+    if (shouldNotifyGradientFallback) {
+      NotificationManager.instance.info(
+        'Changed Gradient Bar effect to Scroll',
+      );
+    }
   }
 
   /// Set multiple settings in a single state update.
@@ -248,10 +391,21 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
       return;
     }
 
-    state = {...state, ...updates};
+    final normalized = _normalizeUpdates(updates);
+    final shouldNotifyGradientFallback = _shouldNotifyGradientFallback(
+      updates,
+      normalized,
+    );
 
-    for (final entry in updates.entries) {
+    state = {...state, ...normalized};
+
+    for (final entry in normalized.entries) {
       await _persistValue(entry.key, entry.value);
+    }
+    if (shouldNotifyGradientFallback) {
+      NotificationManager.instance.info(
+        'Changed Gradient Bar effect to Scroll',
+      );
     }
   }
 
@@ -286,6 +440,8 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
   Future<void> resetToDefaults() async {
     final preservedCustomThemes =
         _prefs.getStringList(SettingsKeys.customThemes) ?? [];
+    final preservedRecentDbs =
+        _prefs.getStringList(SettingsKeys.recentDatabasePaths) ?? [];
 
     await _prefs.clear();
 
@@ -295,6 +451,20 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
         preservedCustomThemes,
       );
     }
+
+    if (preservedRecentDbs.isNotEmpty) {
+      await _prefs.setStringList(
+        SettingsKeys.recentDatabasePaths,
+        preservedRecentDbs,
+      );
+    }
+
+    // Keep device-sync toggles explicitly reset to default-off values.
+    await _prefs.setBool(SettingsKeys.syncEnabled, DefaultSettings.syncEnabled);
+    await _prefs.setBool(
+      SettingsKeys.syncAutoOnStartup,
+      DefaultSettings.syncAutoOnStartup,
+    );
 
     state = _loadSettings();
   }
@@ -364,6 +534,16 @@ final toggleStyleProvider = Provider<ToggleStyle>((ref) {
   );
 });
 
+final useThemeToggleRadiusSettingProvider = Provider<bool>((ref) {
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.useThemeToggleRadius] as bool?) ??
+          DefaultSettings.useThemeToggleRadius,
+    ),
+  );
+});
+
 final sectionTitleLocationProvider = Provider<SectionTitleLocation>((ref) {
   return ref.watch(
     settingsProvider.select(
@@ -374,12 +554,67 @@ final sectionTitleLocationProvider = Provider<SectionTitleLocation>((ref) {
   );
 });
 
-final navBarCenterButtonsProvider = Provider<bool>((ref) {
+final navBarButtonAlignmentProvider = Provider<NavBarButtonAlignment>((ref) {
   return ref.watch(
     settingsProvider.select(
       (s) =>
-          (s[SettingsKeys.navBarCenterButtons] as bool?) ??
-          DefaultSettings.navBarCenterButtons,
+          (s[SettingsKeys.navBarButtonAlignment] as NavBarButtonAlignment?) ??
+          DefaultSettings.navBarButtonAlignment,
+    ),
+  );
+});
+
+final navPanelGradientBarProvider = Provider<bool>((ref) {
+  if (PlatformFileActions.isMobilePlatform) return true;
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.navPanelGradientBar] as bool?) ??
+          DefaultSettings.navPanelGradientBar,
+    ),
+  );
+});
+
+final navBarCombineButtonsProvider = Provider<bool>((ref) {
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.navBarCombineButtons] as bool?) ??
+          DefaultSettings.navBarCombineButtons,
+    ),
+  );
+});
+
+/// Arrangement for horizontal nav panel (top/bottom position).
+final navButtonArrangementHProvider = Provider<NavButtonArrangement>((ref) {
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.navButtonArrangementH] as NavButtonArrangement?) ??
+          DefaultSettings.navButtonArrangementH,
+    ),
+  );
+});
+
+/// Arrangement for vertical nav panel (left/right position).
+final navButtonArrangementVProvider = Provider<NavButtonArrangement>((ref) {
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.navButtonArrangementV] as NavButtonArrangement?) ??
+          DefaultSettings.navButtonArrangementV,
+    ),
+  );
+});
+
+final navPanelOverlayStyleSettingProvider = Provider<NavPanelOverlayStyle>((
+  ref,
+) {
+  return ref.watch(
+    settingsProvider.select(
+      (s) =>
+          (s[SettingsKeys.navPanelOverlayStyle] as NavPanelOverlayStyle?) ??
+          DefaultSettings.navPanelOverlayStyle,
     ),
   );
 });

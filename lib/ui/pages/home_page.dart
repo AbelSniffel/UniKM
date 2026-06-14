@@ -9,12 +9,18 @@ import '../../core/shortcuts/app_shortcuts.dart';
 import '../../core/utils/game_clipboard.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
+import '../widgets/dialog_helpers.dart';
 import 'home_sections/game_library_view.dart';
 import 'home_sections/home_header.dart';
 
 /// Home page with game library
 class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    this.isVeryNarrowLayout = false,
+  });
+
+  final bool isVeryNarrowLayout;
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -28,7 +34,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   // Only play the entry animations on the initial build to avoid re-running
   // them on small state updates.
-  bool _playEntryAnimations = true;
+  bool _playEntryAnimations = false;
 
   @override
   void dispose() {
@@ -48,17 +54,23 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    final initialSearchQuery = ref.read(gamesProvider).searchQuery;
+    _syncSearchController(initialSearchQuery);
     final initialOffset = ref.read(gameLibraryScrollOffsetProvider);
+    _playEntryAnimations = !ref.read(homePageEntryAnimationsPlayedProvider);
     _scrollController = ScrollController(
       initialScrollOffset: initialOffset,
       keepScrollOffset: true,
     );
     _scrollController.addListener(_saveScrollOffset);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _playEntryAnimations = false);
-    });
+    if (_playEntryAnimations) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(homePageEntryAnimationsPlayedProvider.notifier).markPlayed();
+        setState(() => _playEntryAnimations = false);
+      });
+    }
   }
 
   void _saveScrollOffset() {
@@ -73,8 +85,21 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
+  void _syncSearchController(String searchQuery) {
+    if (_searchController.text == searchQuery) return;
+    _searchController.value = TextEditingValue(
+      text: searchQuery,
+      selection: TextSelection.collapsed(offset: searchQuery.length),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(
+      gamesProvider.select((s) => s.searchQuery),
+      (_, next) => _syncSearchController(next),
+    );
+
     return Shortcuts(
       shortcuts: AppShortcuts.global,
       child: Actions(
@@ -100,6 +125,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             HomeHeader(
               searchController: _searchController,
               searchFocusNode: _searchFocusNode,
+              isVeryNarrowLayout: widget.isVeryNarrowLayout,
             ),
 
             // Game grid/list (internal state handling)
@@ -108,6 +134,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 scrollController: _scrollController,
                 playEntryAnimations: _playEntryAnimations,
                 gameListFocusNode: _gameListFocusNode,
+                isVeryNarrowLayout: widget.isVeryNarrowLayout,
                 onSelectAll: _handleSelectAll,
                 onDeleteSelection: () => _handleDeleteSelection(context),
                 onCopySelection: () => _handleCopySelection(context),
@@ -138,21 +165,20 @@ class _HomePageState extends ConsumerState<HomePage> {
     final theme = ref.read(themeProvider);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: theme.background,
-        title: Text(
-          'Delete ${selectedIds.length} game${selectedIds.length > 1 ? 's' : ''}?',
-          style: TextStyle(color: theme.textPrimary),
+      builder: (ctx) => ThemedAlertDialog(
+        theme: theme,
+
+        title: DialogHeader(
+          icon: Icons.delete_forever,
+          iconColor: theme.error,
+          title: 'Delete ${selectedIds.length} game${selectedIds.length > 1 ? "s" : ""}?',
+          theme: theme,
         ),
         content: Text(
           'This action cannot be undone.',
           style: TextStyle(color: theme.textSecondary),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: theme.error),
@@ -217,11 +243,13 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: theme.background,
-        title: Text(
-          'Copy $count game${count == 1 ? '' : 's'}',
-          style: TextStyle(color: theme.textPrimary),
+      builder: (ctx) => ThemedAlertDialog(
+        theme: theme,
+
+        title: DialogHeader(
+          icon: Icons.copy,
+          title: 'Copy $count game${count == 1 ? "" : "s"}',
+          theme: theme,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,

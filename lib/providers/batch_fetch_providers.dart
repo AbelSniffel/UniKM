@@ -89,9 +89,19 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
     );
   }
   
-  /// Cancel the batch fetch (user-initiated)
+  /// Cancel the batch fetch (user-initiated).
+  ///
+  /// If no game is currently being processed (i.e. the loop is idle between
+  /// awaits), clear the state immediately so the UI updates without delay.
   void cancelBatch() {
     _cancelled = true;
+    // If nothing is actively processing the loop will pick up the flag at the
+    // next iteration, but if the loop is between items the overlay would linger
+    // for that gap. Clearing state now gives an instant visual response while
+    // the flag still prevents any further DB writes.
+    if (state.currentGameId == null) {
+      state = const BatchFetchState();
+    }
   }
 
   /// Mark a game as currently processing

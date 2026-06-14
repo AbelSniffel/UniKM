@@ -10,18 +10,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/platform_patterns.dart';
+import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
+import '../widgets/app_progress_indicator.dart';
 import '../widgets/app_tag_chip.dart';
 import '../widgets/dialog_helpers.dart';
-import '../widgets/flow_tag_selector.dart';
+import '../widgets/tag_list.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
-import '../widgets/toggle_switch.dart';
 import '../widgets/platform_icon.dart';
 import '../widgets/app_date_field.dart';
+import 'deadline_picker_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/steam_service.dart';
 import '../dialogs/steam_lookup_dialog.dart';
@@ -100,6 +103,9 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
   // Local fetched review preview values (null == not available)
   int? _fetchedReviewScore;
   int? _fetchedReviewCount;
+
+  // Locally tracked Steam developer info (from fetched metadata)
+  String? _steamDeveloper;
 
   @override
   void initState() {
@@ -196,6 +202,7 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
     _isUsed = _currentGame.isUsed;
     _selectedTagIds = _currentGame.tagIds.toSet();
     _steamAppId = _currentGame.steamAppId; // initialize local AppID state
+    _steamDeveloper = _currentGame.developer;
     _fetchedReviewScore = _currentGame.reviewCount == 0
         ? null
         : _currentGame.reviewScore;
@@ -292,10 +299,8 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
     final confirmed = await showConfirmDialog(
       context: context,
       theme: theme,
-      title: 'Delete Game?',
-      message:
-          'Are you sure you want to delete "${_currentGame.title}"?\n'
-          'This action cannot be undone.',
+      title: 'Delete Game "${_currentGame.title}"?',
+      message: 'This action cannot be undone.',
       confirmLabel: 'Delete',
       destructive: true,
     );
@@ -378,6 +383,7 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
 
       setState(() {
         _steamAppId = updated.steamAppId;
+        _steamDeveloper = result.developer;
         _isDlc = updated.isDlc;
         _selectedTagIds = updated.tagIds.toSet();
         _coverImageController.text = updated.coverImage;
@@ -407,16 +413,22 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
 
   Future<void> _navigate(int delta) async {
     if (_hasChanges) {
+      final theme = ref.read(themeProvider);
       final shouldSave = await showDialog<String>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Unsaved Changes'),
-          content: Text('Save changes to "${_currentGame.title}"?'),
+        builder: (ctx) => ThemedAlertDialog(
+          theme: theme,
+
+          title: DialogHeader(
+            icon: Icons.edit_note,
+            title: 'Unsaved Changes',
+            theme: theme,
+          ),
+          content: Text(
+            'Save changes to "${_currentGame.title}"?',
+            style: TextStyle(color: theme.textSecondary),
+          ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'cancel'),
-              child: const Text('Cancel'),
-            ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'discard'),
               child: const Text('Discard'),
@@ -429,7 +441,7 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
         ),
       );
 
-      if (shouldSave == 'cancel') return;
+      if (shouldSave == null || shouldSave == 'cancel') return;
       if (shouldSave == 'save') {
         await _save(close: false);
         if (_hasChanges) return; // Save failed
@@ -464,31 +476,28 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final tags = ref.watch(tagsProvider);
-    final screenSize = MediaQuery.of(context).size;
-
-    final dialogWidth = (screenSize.width * 0.7).clamp(600.0, 900.0);
-    final dialogHeight = (screenSize.height * 0.8).clamp(500.0, 700.0);
-
+    final showGameDetailsSkmId = ref.watch(
+      settingsProvider.select(
+        (settings) =>
+            (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
+            DefaultSettings.showGameDetailsSkmId,
+      ),
+    );
     return DialogInteractionScope(
       onPrimaryAction: _hasChanges && !_isSaving ? _save : null,
       onDismiss: _dismissDialog,
-      child: Dialog(
-        backgroundColor: theme.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius * 2),
-        ),
-        child: Container(
-          width: dialogWidth,
-          height: dialogHeight,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              _buildHeader(theme),
-              const SizedBox(height: 16),
+      child: ThemedAlertDialog(
+        theme: theme,
+        showCloseButton: false,
+        title: _buildHeader(theme),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Chips
+            _buildChips(theme),
+            const SizedBox(height: kDialogSpacing),
 
-              // Tabs
+            // Tabs
               TabBar(
                 controller: _tabController,
                 labelColor: theme.accent,
@@ -510,6 +519,7 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
                     _DetailsTab(
                       theme: theme,
                       game: _currentGame,
+                      showGameDetailsSkmId: showGameDetailsSkmId,
                       titleController: _titleController,
                       keyController: _keyController,
                       coverImageController: _coverImageController,
@@ -521,6 +531,7 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
                       isKeyVisible: _isKeyVisible,
                       isEditing: _isEditing,
                       steamAppId: _steamAppId,
+                      steamDeveloper: _steamDeveloper,
                       steamCacheAt: _steamCacheAt,
                       lastUpdatedAt: _lastUpdatedAt,
                       steamReviewScore: _fetchedReviewScore,
@@ -590,13 +601,10 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
                 ),
               ),
 
-              const SizedBox(height: 16),
-
-              // Footer
-              _buildFooter(theme),
-            ],
-          ),
+          ],
         ),
+        actions: [_buildFooter(theme)],
+        below: _gameIds.length > 1 ? _buildNavigationBar(theme) : null,
       ),
     );
   }
@@ -616,8 +624,6 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
                 ? File.fromUri(Uri.parse(coverImage))
                 : File(coverImage),
           );
-
-    final platformEnum = GamePlatform.fromDisplayName(_platform);
 
     return Row(
       children: [
@@ -642,143 +648,19 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
         ),
         const SizedBox(width: 16),
 
-        // Title and platform — use live editing state so header updates immediately
+        // Title — use live editing state so header updates immediately
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _titleController.text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.accent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(theme.cornerRadius),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PlatformIcon(
-                          platform: platformEnum,
-                          color: theme.accent,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _platform,
-                          style: TextStyle(color: theme.accent, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Deadline chip (shows when deadline toggle is enabled)
-                  if (_hasDeadline)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      child: Text(
-                        _deadlineDate != null
-                            ? 'Deadline: ${DateFormat('dd/MM/yyyy').format(_deadlineDate!)}'
-                            : 'Deadline: -',
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-
-                  if (_isDlc)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      child: const Text(
-                        'DLC',
-                        style: TextStyle(color: Colors.purple, fontSize: 12),
-                      ),
-                    ),
-                  if (_isUsed)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      child: const Text(
-                        'USED',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ),
-                ],
-              ),
-            ],
+          child: Text(
+            _titleController.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-
-        // Navigation controls
-        if (_gameIds.isNotEmpty && _gameIds.length > 1) ...[
-          IconButton(
-            icon: Icon(
-              Icons.chevron_left,
-              color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
-            ),
-            tooltip: 'Previous Game',
-            onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              '${_currentIndex + 1}/${_gameIds.length}',
-              style: TextStyle(color: theme.textSecondary, fontSize: 13),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.chevron_right,
-              color: _currentIndex < _gameIds.length - 1
-                  ? theme.textPrimary
-                  : theme.textHint,
-            ),
-            tooltip: 'Next Game',
-            onPressed: _currentIndex < _gameIds.length - 1
-                ? () => _navigate(1)
-                : null,
-          ),
-          const SizedBox(width: 16),
-          Container(width: 1, height: 24, color: theme.border),
-          const SizedBox(width: 16),
-        ],
 
         // Close button
         IconButton(
@@ -789,13 +671,78 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
     );
   }
 
+  Widget _buildChips(AppThemeData theme) {
+    final platformEnum = GamePlatform.fromDisplayName(_platform);
+    final deadlineColor = Color.lerp(theme.accent, theme.secondary, 0.35) ??
+        theme.accent;
+
+    Widget buildQuickChip({
+      required String label,
+      required Color color,
+      Widget? leading,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (leading != null) ...[
+              leading,
+              const SizedBox(width: 4),
+            ],
+            Text(label, style: TextStyle(color: color, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        buildQuickChip(
+          label: _platform,
+          color: theme.accent,
+          leading: PlatformIcon(
+            platform: platformEnum,
+            color: theme.accent,
+            size: 16,
+          ),
+        ),
+
+        if (_isUsed)
+          buildQuickChip(
+            label: 'USED',
+            color: theme.textSecondary,
+          ),
+
+        if (_isDlc)
+          buildQuickChip(
+            label: 'DLC',
+            color: theme.secondary,
+          ),
+
+        // Deadline chip (shows when deadline toggle is enabled)
+        if (_hasDeadline)
+          buildQuickChip(
+            label: _deadlineDate != null
+                ? 'Deadline: ${DateFormat('dd/MM/yyyy').format(_deadlineDate!)}'
+                : 'Deadline: -',
+            color: deadlineColor,
+          ),
+      ],
+    );
+  }
+
   Future<void> _openSteamPage() async {
     final title = _titleController.text.trim();
     final Uri url = _steamAppId.isNotEmpty
-        ? Uri.parse('https://store.steampowered.com/app/$_steamAppId')
-        : Uri.parse(
-            'https://store.steampowered.com/search/?term=${Uri.encodeComponent(title)}',
-          );
+        ? Uri.parse(steamAppPageUrl(_steamAppId))
+        : Uri.parse(steamSearchPageUrl(title));
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -803,61 +750,98 @@ class _GameDetailsDialogState extends ConsumerState<GameDetailsDialog>
     }
   }
 
+  Widget _buildNavigationBar(AppThemeData theme) {
+    return Padding(
+      padding: EdgeInsets.zero,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.background,
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.chevron_left,
+                  color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
+                ),
+                tooltip: 'Previous Game',
+                onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  '${_currentIndex + 1}/${_gameIds.length}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.chevron_right,
+                  color: _currentIndex < _gameIds.length - 1
+                      ? theme.textPrimary
+                      : theme.textHint,
+                ),
+                tooltip: 'Next Game',
+                onPressed: _currentIndex < _gameIds.length - 1
+                    ? () => _navigate(1)
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFooter(AppThemeData theme) {
     return Row(
       children: [
-        // Delete button
-        OutlinedButton.icon(
+        // Delete icon button
+        IconButton(
+          tooltip: 'Delete',
           onPressed: _confirmDelete,
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
           icon: const Icon(Icons.delete),
-          label: const Text('Delete'),
+          color: Colors.red,
         ),
 
         if (_platform == 'Steam') ...[
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: _isFetching ? null : _fetchSteamData,
-            icon: _isFetching
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.primaryButtonText,
-                    ),
-                  )
-                : const Icon(Icons.cloud_download),
-            label: const Text('Fetch Steam Data'),
+          Tooltip(
+            message: 'Fetch Steam Data',
+            child: IconButton(
+              onPressed: _isFetching ? null : _fetchSteamData,
+              icon: _isFetching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: AppCircularProgressIndicator(),
+                    )
+                  : const Icon(Icons.cloud_download),
+            ),
           ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
+          IconButton(
+            tooltip: 'Steam Page',
             onPressed: _openSteamPage,
             icon: const Icon(Icons.open_in_new),
-            label: const Text('Steam Page'),
           ),
         ],
 
         const Spacer(),
 
-        // Cancel button
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        const SizedBox(width: 8),
-
         // Save button
         ElevatedButton.icon(
           onPressed: _hasChanges && !_isSaving ? _save : null,
           icon: _isSaving
-              ? SizedBox(
+              ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.primaryButtonText,
-                  ),
+                  child: AppCircularProgressIndicator(),
                 )
               : const Icon(Icons.save),
           label: const Text('Save'),
@@ -872,6 +856,7 @@ class _DetailsTab extends StatelessWidget {
   const _DetailsTab({
     required this.theme,
     required this.game,
+    required this.showGameDetailsSkmId,
     required this.titleController,
     required this.keyController,
     required this.coverImageController,
@@ -895,10 +880,12 @@ class _DetailsTab extends StatelessWidget {
     required this.onKeyVisibilityChanged,
     required this.onCopyKey,
     required this.onFieldChanged,
+    this.steamDeveloper,
   });
 
   final AppThemeData theme;
   final Game game;
+  final bool showGameDetailsSkmId;
   final TextEditingController titleController;
   final TextEditingController keyController;
   final TextEditingController coverImageController;
@@ -920,6 +907,7 @@ class _DetailsTab extends StatelessWidget {
 
   // Steam fetch props
   final String steamAppId;
+  final String? steamDeveloper;
 
   // Fetched review preview (may be null)
   final DateTime? steamCacheAt;
@@ -960,7 +948,7 @@ class _DetailsTab extends StatelessWidget {
                     onFieldChanged();
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: kDialogSpacing),
 
                 Row(
                   children: [
@@ -976,8 +964,6 @@ class _DetailsTab extends StatelessWidget {
                         ),
                         decoration: InputDecoration(
                           labelText: 'Game Key',
-                          border: const OutlineInputBorder(),
-                          // Use suffixIcon (like image picker) so layout/padding matches
                           suffixIcon: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -991,15 +977,11 @@ class _DetailsTab extends StatelessWidget {
                                 tooltip: isKeyVisible ? 'Hide key' : 'Show key',
                                 onPressed: () =>
                                     onKeyVisibilityChanged(!isKeyVisible),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
                               ),
                               IconButton(
                                 icon: Icon(Icons.copy, color: theme.accent),
                                 tooltip: 'Copy key',
                                 onPressed: onCopyKey,
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
                               ),
                             ],
                           ),
@@ -1009,12 +991,14 @@ class _DetailsTab extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: kDialogSpacing),
 
                 // Platform
                 DropdownButtonFormField<String>(
                   initialValue: platform,
                   isExpanded: true,
+                  menuMaxHeight: 320,
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
                   style: TextStyle(color: theme.textPrimary),
                   dropdownColor: theme.surface,
                   decoration: const InputDecoration(labelText: 'Platform'),
@@ -1028,7 +1012,7 @@ class _DetailsTab extends StatelessWidget {
                             color: theme.textPrimary,
                             size: 16,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: kElementHSpacing),
                           Text(p.displayName),
                         ],
                       ),
@@ -1040,7 +1024,7 @@ class _DetailsTab extends StatelessWidget {
                         }
                       : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: kDialogSpacing),
 
                 // Cover image URL
                 TextField(
@@ -1055,7 +1039,7 @@ class _DetailsTab extends StatelessWidget {
                       onPressed: isEditing
                           ? () async {
                               try {
-                                final result = await FilePicker.platform
+                                final result = await FilePicker
                                     .pickFiles(
                                       dialogTitle: 'Pick cover image',
                                       type: FileType.image,
@@ -1089,92 +1073,63 @@ class _DetailsTab extends StatelessWidget {
             titleIcon: Icons.flag,
             groupPosition: SectionGroupPosition.middle,
             alternateBackground: true,
-            child: Column(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                // Used toggle
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Key Used',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                    ),
-                    AppToggleSwitch(
-                      value: isUsed,
-                      onChanged: isEditing ? onIsUsedChanged : null,
-                      theme: theme,
-                    ),
-                  ],
+                AppOptionChip(
+                  label: 'Key Used',
+                  theme: theme,
+                  isSelected: isUsed,
+                  onTap: isEditing ? () => onIsUsedChanged(!isUsed) : null,
                 ),
-                const SizedBox(height: 12),
-
-                // DLC toggle
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'DLC',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                    ),
-                    AppToggleSwitch(
-                      value: isDlc,
-                      onChanged: isEditing ? onIsDlcChanged : null,
-                      theme: theme,
-                    ),
-                  ],
+                AppOptionChip(
+                  label: 'DLC',
+                  theme: theme,
+                  isSelected: isDlc,
+                  onTap: isEditing ? () => onIsDlcChanged(!isDlc) : null,
                 ),
-                const SizedBox(height: 12),
-
-                // Deadline toggle + inline date field
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Redemption deadline',
-                        style: TextStyle(color: theme.textPrimary),
-                      ),
-                    ),
-
-                    if (hasDeadline)
-                      AppDateField(
-                        theme: theme,
-                        date: deadlineDate,
-                        placeholder: 'No date set',
-                        enabled: isEditing,
-                        onTap: isEditing
-                            ? () async {
-                                final date = await showDatePicker(
-                                  context: context,
-                                  initialDate: deadlineDate ?? DateTime.now(),
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365 * 5),
-                                  ),
-                                  useRootNavigator: false,
-                                );
-                                onDeadlineDateChanged(date);
-                              }
-                            : null,
-                      ),
-
-                    const SizedBox(width: 12),
-
-                    AppToggleSwitch(
-                      value: hasDeadline,
-                      onChanged: isEditing ? onHasDeadlineChanged : null,
-                      theme: theme,
-                    ),
-                  ],
+                AppOptionChip(
+                  label: 'Deadline',
+                  theme: theme,
+                  isSelected: hasDeadline,
+                  onTap: isEditing
+                      ? () => onHasDeadlineChanged(!hasDeadline)
+                      : null,
                 ),
+                if (hasDeadline)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: kDeadlineSelectorWidth,
+                    ),
+                    child: AppDateField(
+                      theme: theme,
+                      date: deadlineDate,
+                      placeholder: 'No date set',
+                      enabled: isEditing,
+                      onTap: isEditing
+                          ? () async {
+                              final date = await showDeadlinePickerDialog(
+                                context: context,
+                                theme: theme,
+                                initialDate: deadlineDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                useRootNavigator: false,
+                              );
+                              onDeadlineDateChanged(date);
+                            }
+                          : null,
+                    ),
+                  ),
               ],
             ),
           ),
 
           // Metadata
           SectionGroupBox(
-            title: 'Metadata',
+            title: showGameDetailsSkmId
+                ? 'Metadata / SKM-ID ${game.id}'
+                : 'Metadata',
             theme: theme,
             titleIcon: Icons.schedule,
             groupPosition: SectionGroupPosition.last,
@@ -1194,11 +1149,6 @@ class _DetailsTab extends StatelessWidget {
                   ).format(lastUpdatedAt ?? game.updatedAt),
                   theme: theme,
                 ),
-                _MetadataRow(
-                  label: 'SKM-ID',
-                  value: game.id.toString(),
-                  theme: theme,
-                ),
                 if (platform == 'Steam')
                   _MetadataRow(
                     label: 'Cache',
@@ -1207,12 +1157,18 @@ class _DetailsTab extends StatelessWidget {
                         : 'No cached data',
                     theme: theme,
                   ),
+                if (steamDeveloper != null && steamDeveloper!.isNotEmpty)
+                  _MetadataRow(
+                    label: 'Developer',
+                    value: steamDeveloper!,
+                    theme: theme,
+                  ),
                 if (platform == 'Steam')
                   _MetadataRow(
                     label: 'Reviews',
                     value: (steamReviewCount == null || steamReviewCount == 0)
                         ? 'No reviews'
-                        : '${steamReviewScore ?? game.reviewScore}% · ${NumberFormat.compact().format(steamReviewCount)} reviews',
+                        : '${steamReviewScore ?? game.reviewScore}% · ${Game.reviewRatingFor(steamReviewScore ?? game.reviewScore)} · ${NumberFormat.compact().format(steamReviewCount)} reviews',
                     theme: theme,
                   ),
                 // Steam AppID (only shown for Steam platform)
@@ -1235,7 +1191,11 @@ class _DetailsTab extends StatelessWidget {
                           ),
                         ),
                         IconButton(
-                          icon: Icon(Icons.copy, color: theme.textSecondary, size: 20),
+                          icon: Icon(
+                            Icons.copy,
+                            color: theme.textSecondary,
+                            size: 20,
+                          ),
                           tooltip: 'Copy AppID',
                           iconSize: 20,
                           padding: const EdgeInsets.all(5),
@@ -1345,60 +1305,58 @@ class _TagsTabState extends ConsumerState<_TagsTab> {
         .where((id) => customTags.any((t) => t.id == id))
         .toSet();
 
-    return Padding(
+    return ListView(
       padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionGroupBox(
-            title: 'Custom Tags',
-            description: 'click to add/remove',
-            theme: theme,
-            titleIcon: Icons.label,
-            groupPosition: SectionGroupPosition.first,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 120),
-              child: FlowTagSelector(
-                tags: customTags,
-                selectedTagIds: selectedCustomIds,
-                onTagToggled: (tagId) => widget.onTagToggled(tagId),
-                theme: theme,
-              ),
-            ),
-          ),
-
-          Expanded(
-            child: SectionGroupBox(
-              title: 'Steam Tags',
-              description: 'auto-managed',
-              theme: theme,
-              titleIcon: FontAwesomeIcons.steam,
-              groupPosition: SectionGroupPosition.last,
-              alternateBackground: true,
-              child: _steamTagsForGame.isEmpty
-                  ? Text(
-                      'No Steam tags for this game',
-                      style: TextStyle(color: theme.textHint),
-                    )
-                  : SingleChildScrollView(
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _steamTagsForGame
-                            .map(
-                              (t) => AppTagChip(
-                                tag: t,
-                                theme: theme,
-                                isSelected: true,
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
+      children: [
+        SectionGroupBox(
+          title: 'Custom Tags',
+          description: 'click to add/remove',
+          theme: theme,
+          titleIcon: Icons.label,
+          groupPosition: SectionGroupPosition.first,
+          child: customTags.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'No custom tags created yet',
+                    style: TextStyle(color: theme.textHint),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 120),
+                  child: TagList(
+                    tags: customTags,
+                    theme: theme,
+                    selectedTagIds: selectedCustomIds,
+                    onTagToggled: (tagId) => widget.onTagToggled(tagId),
+                    showSearch: true,
+                  ),
+                ),
+        ),
+        SectionGroupBox(
+          title: 'Steam Tags',
+          description: 'auto-managed',
+          theme: theme,
+          titleIcon: FontAwesomeIcons.steam.data,
+          groupPosition: SectionGroupPosition.last,
+          alternateBackground: true,
+          child: _steamTagsForGame.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'No Steam tags imported yet',
+                    style: TextStyle(color: theme.textHint),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : TagList(
+                  tags: _steamTagsForGame,
+                  theme: theme,
+                  allSelected: true,
+                ),
+        ),
+      ],
     );
   }
 }
@@ -1421,21 +1379,27 @@ class _NotesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: TextField(
-        controller: controller,
-        enabled: isEditing,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        style: TextStyle(color: theme.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Add notes about this game...',
-          hintStyle: TextStyle(color: theme.textHint),
-          border: const OutlineInputBorder(),
-          filled: true,
-          fillColor: theme.inputBackground,
+      child: SectionGroupBox(
+        title: 'Notes',
+        theme: theme,
+        titleIcon: Icons.notes,
+        child: TextField(
+          controller: controller,
+          enabled: isEditing,
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          style: TextStyle(color: theme.textPrimary),
+          decoration: InputDecoration(
+            constraints: const BoxConstraints(minHeight: 0),
+            filled: true,
+            fillColor: theme.inputBackground,
+            hintText: 'Add notes about this game...',
+            hintStyle: TextStyle(color: theme.textHint),
+            border: theme.resolveInputBorder(showTopBorder: true),
+          ),
+          onChanged: (_) => onChanged(),
         ),
-        onChanged: (_) => onChanged(),
       ),
     );
   }

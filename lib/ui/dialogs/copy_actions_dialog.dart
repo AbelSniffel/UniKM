@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/game_clipboard.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
+import '../widgets/dialog_helpers.dart';
 
 class CopyActionsDialog extends ConsumerWidget {
   const CopyActionsDialog({super.key, required this.targets});
@@ -29,9 +30,10 @@ class CopyActionsDialog extends ConsumerWidget {
       );
     }
 
-    return AlertDialog(
-      backgroundColor: theme.background,
-      title: Text('Copy Options', style: TextStyle(color: theme.textPrimary)),
+    return ThemedAlertDialog(
+      theme: theme,
+
+      title: DialogHeader(icon: Icons.copy, title: 'Copy Options', theme: theme),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -67,12 +69,6 @@ class CopyActionsDialog extends ConsumerWidget {
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        )
-      ],
     );
   }
 }

@@ -670,7 +670,17 @@ class _SyncContent extends ConsumerWidget {
 
     if (row.trusted != null) {
       Future<void> runSync() async {
-        final hasMismatch = sync.dbMismatchPeerIds.contains(row.id);
+        // Actively check for DB name mismatch before showing the dialog so
+        // that freshly-paired devices (where the background poll hasn't run
+        // yet) are still caught.
+        final service = ref.read(deviceSyncServiceProvider);
+        final codeResult = await service.checkSyncCode(peerId: row.id);
+        final hasMismatch = codeResult.dbNameMismatch;
+        if (hasMismatch) {
+          // Update the in-memory mismatch set so the UI reflects it.
+          notifier.addDbMismatch(row.id);
+        }
+        if (!context.mounted) return;
         final bool? choice = await _showChooseSyncDirectionDialog(
           context: context,
           theme: theme,

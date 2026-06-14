@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_providers.dart';
+import '../database/database.dart';
 import '../models/device_sync_models.dart';
 import '../settings/settings_model.dart';
 import 'backup_service.dart';
@@ -1439,10 +1440,22 @@ class DeviceSyncService {
       );
     }
 
-    final targetBasePath = p.join(
-      p.dirname(currentBasePath),
-      normalizedRemoteName,
-    );
+    // Resolve the target path: check the default DB directory first so that
+    // well-known filenames (e.g. keys.db) are found in their canonical
+    // location rather than the current DB's directory.
+    final defaultDbPath = await AppDatabase.getDatabasePath();
+    final defaultDbDir = p.dirname(defaultDbPath);
+    var targetBasePath = p.join(defaultDbDir, normalizedRemoteName);
+    if (!File(targetBasePath).existsSync()) {
+      // Fallback: check the current DB's directory.
+      final altPath = p.join(
+        p.dirname(currentBasePath),
+        normalizedRemoteName,
+      );
+      if (File(altPath).existsSync()) {
+        targetBasePath = altPath;
+      }
+    }
 
     _eventController.add(
       SyncTransferActivityEvent(
@@ -1591,6 +1604,44 @@ class DeviceSyncService {
     final remoteKnownLocalRevision = ping.remoteKnownLocalRevision;
     final remoteKnownLocalSyncAtMillis = ping.remoteKnownLocalSyncAtMillis;
     final expectedReceiverDbName = (ping.remoteDbName ?? '').trim();
+
+    // ── Double-check: re-ping the peer to verify its active DB hasn't changed ──
+    _eventController.add(
+      SyncTransferActivityEvent(
+        active: true,
+        message:
+            '[${targetPeer.name}] Verifying remote database is still the same...',
+      ),
+    );
+    final recheckPing = await _pingPeer(targetPeer);
+      if (recheckPing.reachable) {
+        final recheckRemoteDbName = (recheckPing.remoteDbName ?? '').trim();
+        final currentLocalDbName = _currentDatabaseName();
+        if (recheckRemoteDbName.isNotEmpty &&
+            currentLocalDbName.isNotEmpty &&
+            recheckRemoteDbName != currentLocalDbName) {
+          _eventController.add(
+            DbMismatchDetectedEvent(
+              peerId: targetPeer.id,
+              peerName: targetPeer.name,
+              localDbName: currentLocalDbName,
+              remoteDbName: recheckRemoteDbName,
+            ),
+          );
+          // For pull operations, the mismatch blocks sync because the local
+          // DB must match the remote's.  For push operations the receiver
+          // side will create / switch to the sender's DB name, so the
+          // mismatch is expected and we continue.
+          if (isPull) {
+            throw DeviceSyncException(
+              '[${targetPeer.name}] Sync aborted: remote device is using '
+              '"$recheckRemoteDbName" but this device uses "$currentLocalDbName". '
+              'Both devices must use the same active database file. '
+              'Use the sync dialog to resolve the mismatch.',
+            );
+          }
+        }
+      }
 
     // ── Pull mode: ask the remote to send us their database ──────────────────
     if (isPull) {
@@ -1809,6 +1860,7 @@ class DeviceSyncService {
     if (expectedReceiverDbName.isNotEmpty) {
       builtPayload['expectedReceiverDbName'] = expectedReceiverDbName;
     }
+    builtPayload['senderDbName'] = _currentDatabaseName();
     builtPayload['requestingPeerId'] = localDeviceId;
     await _ensureExpectedRemoteDatabaseForPush(
       targetPeer: targetPeer,
@@ -1839,6 +1891,7 @@ class DeviceSyncService {
       if (expectedReceiverDbName.isNotEmpty) {
         followUpPayload['expectedReceiverDbName'] = expectedReceiverDbName;
       }
+      followUpPayload['senderDbName'] = _currentDatabaseName();
       followUpPayload['requestingPeerId'] = localDeviceId;
 
       _eventController.add(
@@ -1890,14 +1943,6 @@ class DeviceSyncService {
     required String expectedRevisionId,
     required int fallbackRemoteRevision,
   }) async {
-    // The local revision that was current when this payload was assembled.
-    // It is the value the receiver is going to (eventually) report back as
-    // its `peerKnownRevision` for us, so it is also the safe upper bound for
-    // pruning any tombstones we know we just delivered to this peer.
-    final localRevisionSent = await ref
-        .read(databaseProvider)
-        ?.getLocalSyncRevision() ??
-        fallbackRemoteRevision;
     final payload = jsonEncode(builtPayload);
     final gameCount = (builtPayload['games'] as List?)?.length ?? 0;
     final deletedCount = (builtPayload['tombstones'] as List?)?.length ?? 0;
@@ -2056,18 +2101,9 @@ class DeviceSyncService {
 
           final dbAfterPush = ref.read(databaseProvider);
           if (dbAfterPush != null) {
-            // Persist the peer's checkpoint using *our* local revision (the
-            // one we just transmitted), not the remote's `localRevision`.
-            // The checkpoint represents the last value WE sent that the peer
-            // has acknowledged receiving, so on the next sync we use it to
-            // compute `baseRevision` for delta payloads.  Saving the remote's
-            // revision here would mean future tombstones whose `local_revision`
-            // is below that value would be silently filtered out even though
-            // the peer never actually received them — and would also
-            // accumulate forever in our own tombstone table.
             await dbAfterPush.savePeerSyncCheckpoint(
               peerId: targetPeer.id,
-              lastRevision: localRevisionSent,
+              lastRevision: remoteLocalRevision,
               lastSyncAt: DateTime.fromMillisecondsSinceEpoch(
                 confirmedTimestampMillis > 0
                     ? confirmedTimestampMillis
@@ -2075,15 +2111,6 @@ class DeviceSyncService {
               ),
               remoteRevisionId: confirmedRevisionId,
             );
-
-            // Prune tombstones we have just successfully delivered to this
-            // peer.  Every tombstone with `local_revision <= localRevisionSent`
-            // is either inside the payload we just confirmed or was sent in
-            // a previous round, so the peer has had a chance to apply it.
-            // Leaving these rows around forever was the root cause of stale
-            // tombstones leaking into subsequent payloads and accidentally
-            // re-deleting already-converged games on the receiver.
-            await dbAfterPush.clearGameTombstonesUpToRevision(localRevisionSent);
           }
         }
       } catch (e) {
@@ -2346,29 +2373,88 @@ class DeviceSyncService {
           final responseDbTimestampMillis =
               (responsePayload['dbTimestampMillis'] as num?)?.toInt() ??
               DateTime.now().millisecondsSinceEpoch;
-          final localRevisionSent =
-              (peerState['localRevision'] as int?) ?? 0;
           await db.savePeerSyncCheckpoint(
             peerId: requesterPeerId,
-            lastRevision: localRevisionSent,
+            lastRevision: (peerState['localRevision'] as int?) ?? 0,
             lastSyncAt: DateTime.fromMillisecondsSinceEpoch(
               responseDbTimestampMillis,
             ),
             remoteRevisionId: currentRevisionId,
           );
-          // Mirror the push path: once we have flushed the response we know
-          // every tombstone up to our current local revision is now in the
-          // requester's hands, so prune them here too.
-          await db.clearGameTombstonesUpToRevision(localRevisionSent);
         }
         _eventController.add(const SyncTransferActivityEvent(active: false));
         return;
       }
 
       // ── Normal push: remote is sending their database to us ──
+      final senderDbName =
+          (payload['senderDbName'] as String?)?.trim() ?? '';
       final expectedReceiverDbName =
           (payload['expectedReceiverDbName'] as String?)?.trim() ?? '';
-      if (expectedReceiverDbName.isNotEmpty) {
+
+      // If the sender included its DB name and it differs from ours,
+      // switch to (or create) the sender's database file first.
+      var switchedBySenderDb = false;
+      if (senderDbName.isNotEmpty) {
+        final activeReceiverDbName = _currentDatabaseName();
+        if (activeReceiverDbName != senderDbName) {
+          final switchCallback = ref.read(databaseSwitchCallbackProvider);
+          if (switchCallback != null) {
+            // Resolve the target path using the default DB directory so that
+            // well-known filenames (e.g. keys.db) are found/created in their
+            // canonical location rather than the current DB's directory.
+            final defaultDbPath = await AppDatabase.getDatabasePath();
+            final defaultDbDir = p.dirname(defaultDbPath);
+            var targetBasePath = p.join(defaultDbDir, senderDbName);
+            if (!File(targetBasePath).existsSync()) {
+              // Also check the current DB's directory as a fallback.
+              final currentBasePath = ref
+                      .read(settingsProvider)[SettingsKeys.databasePath]
+                  as String? ??
+                  '';
+              if (currentBasePath.isNotEmpty) {
+                final altPath = p.join(
+                  p.dirname(currentBasePath),
+                  senderDbName,
+                );
+                if (File(altPath).existsSync()) {
+                  targetBasePath = altPath;
+                }
+              }
+            }
+            _eventController.add(
+              SyncTransferActivityEvent(
+                active: true,
+                message:
+                    '[$displayName] Switching database to "$senderDbName" '
+                    'to match sender...',
+              ),
+            );
+            final targetFile = File(targetBasePath);
+            if (targetFile.existsSync()) {
+              await switchCallback(OpenDatabaseRequest(targetBasePath));
+            } else {
+              await switchCallback(
+                CreateDatabaseRequest(
+                  path: targetBasePath,
+                  encrypted: false,
+                ),
+              );
+            }
+            switchedBySenderDb = true;
+            _eventController.add(
+              SyncTransferActivityEvent(
+                active: true,
+                message:
+                    '[$displayName] Database switched to "$senderDbName". '
+                    'Applying incoming data...',
+              ),
+            );
+          }
+        }
+      }
+
+      if (!switchedBySenderDb && expectedReceiverDbName.isNotEmpty) {
         final activeReceiverDbName = _currentDatabaseName();
         if (activeReceiverDbName != expectedReceiverDbName) {
           await sendLine({

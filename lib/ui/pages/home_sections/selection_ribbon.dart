@@ -6,17 +6,13 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
-import '../../dialogs/copy_actions_dialog.dart';
-import '../../dialogs/game_details_dialog.dart';
-import '../../dialogs/steam_lookup_dialog.dart';
-import '../../widgets/dialog_helpers.dart';
-import '../../widgets/notification_system.dart';
+import '../../widgets/app_progress_indicator.dart';
+import '../../widgets/game_selection_actions.dart';
 
 // ---------------------------------------------------------------------------
 // Provider selectors (file-private)
@@ -27,6 +23,7 @@ final _ribbonSelectedCountProvider = gamesProvider.select(
 final _ribbonSelectedGamesProvider = gamesProvider.select(
   (s) => s.selectedGames,
 );
+final _ribbonMultiSelectEnabledProvider = selectionMultiSelectModeProvider;
 
 const double kSelectionRibbonExpandedPanelMaxHeight = 204.0;
 
@@ -37,149 +34,54 @@ class SelectionRibbon extends ConsumerWidget {
     super.key,
     required this.isExpanded,
     required this.onToggleExpand,
+    this.isVeryNarrowLayout = false,
   });
 
   final bool isExpanded;
   final VoidCallback onToggleExpand;
+  final bool isVeryNarrowLayout;
 
   void _openDetails(BuildContext context, WidgetRef ref) {
-    final selectedGameIds = ref.read(
-      gamesProvider.select((s) => s.selectedGameIds),
-    );
-    final allGames = ref.read(gamesProvider.select((s) => s.filteredGames));
-    final selectedGames = allGames
-        .where((game) => selectedGameIds.contains(game.id))
-        .toList();
-    final ids = selectedGameIds.isNotEmpty
-        ? (selectedGameIds.length > 1
-              ? selectedGames.map((game) => game.id).toList()
-              : [selectedGameIds.first])
-        : <int>[];
-    if (ids.isEmpty) {
-      NotificationManager.instance.info('No games selected');
-      return;
-    }
-
-    final initialGame = selectedGames.isNotEmpty
-        ? selectedGames.first
-        : ref.read(gameByIdProvider(ids.first));
-    if (initialGame == null) {
-      NotificationManager.instance.error('Unable to open game details');
-      return;
-    }
-
-    showGameDetailsDialog(
+    final selectedGames = ref.read(selectedGamesProvider);
+    if (selectedGames.isEmpty) return;
+    GameSelectionActions.openDetails(
       context,
-      initialGame,
-      gameIds: ids,
-      onViewedGame: (gameId) => markGameAsViewed(ref, gameId),
+      ref,
+      targets: selectedGames,
+      initialGame: selectedGames.first,
     );
   }
 
   void _showCopyDialog(BuildContext context, WidgetRef ref) {
     final selectedGames = ref.read(selectedGamesProvider);
-    if (selectedGames.isEmpty) {
-      NotificationManager.instance.info('No games selected');
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => CopyActionsDialog(targets: selectedGames),
-    );
+    if (selectedGames.isEmpty) return;
+    GameSelectionActions.showCopyDialog(context, ref, selectedGames);
   }
 
-  Future<void> _openSteamPage(WidgetRef ref) async {
-    final selectedGames = ref.read(selectedSteamGamesProvider);
-    if (selectedGames.isEmpty) {
-      NotificationManager.instance.info('No Steam games selected');
-      return;
-    }
-
-    for (final game in selectedGames) {
-      final Uri url = game.steamAppId.isNotEmpty
-          ? Uri.parse('https://store.steampowered.com/app/${game.steamAppId}')
-          : Uri.parse(
-              'https://store.steampowered.com/search/?term=${Uri.encodeComponent(game.title)}',
-            );
-
-      try {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        NotificationManager.instance.error(
-          'Failed to open Steam page for ${game.title}',
-        );
-      }
-    }
-
-    if (selectedGames.length == 1) {
-      NotificationManager.instance.info(
-        'Opened Steam page for ${selectedGames.first.title}',
-      );
-    } else {
-      NotificationManager.instance.info(
-        'Opened Steam pages for ${selectedGames.length} games',
-      );
-    }
+  void _openSteamPage(WidgetRef ref) {
+    GameSelectionActions.openSteamPages(ref, ref.read(selectedSteamGamesProvider));
   }
 
-  Future<void> _toggleUsed(WidgetRef ref) async {
-    final selectedGameIds = ref.read(
-      gamesProvider.select((s) => s.selectedGameIds),
-    );
+  void _toggleUsed(WidgetRef ref) {
     final allUsed = ref.read(selectedGamesAllUsedProvider);
-    await ref
-        .read(gamesProvider.notifier)
-        .setGamesUsed(selectedGameIds.toList(), !allUsed);
-    NotificationManager.instance.success(
-      '${selectedGameIds.length} ${!allUsed ? 'marked as used' : 'marked as unused'}',
+    GameSelectionActions.toggleUsed(ref, ref.read(selectedGamesProvider), !allUsed);
+  }
+
+  void _fetchSelectedSteamGames(BuildContext context, WidgetRef ref) {
+    GameSelectionActions.fetchSteamData(
+      context,
+      ref,
+      ref.read(selectedSteamGamesProvider),
     );
   }
 
-  Future<void> _fetchSelectedSteamGames(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final selectedGames = ref.read(selectedSteamGamesProvider);
-    final batchFetchState = ref.read(batchFetchProvider);
-    if (selectedGames.isEmpty) {
-      NotificationManager.instance.info('No Steam games selected');
-      return;
-    }
-    if (batchFetchState.isActive) {
-      NotificationManager.instance.info('A fetch is already in progress');
-      return;
-    }
-
-    await performSteamBatchLookup(context, selectedGames);
-  }
-
-  Future<void> _deleteSelection(
-    BuildContext context,
-    WidgetRef ref,
-    AppThemeData theme,
-  ) async {
-    final selectedGameIds = ref.read(
-      gamesProvider.select((s) => s.selectedGameIds),
+  void _deleteSelection(BuildContext context, WidgetRef ref, AppThemeData theme) {
+    GameSelectionActions.deleteGames(
+      context,
+      ref,
+      theme,
+      ref.read(selectedGamesProvider),
     );
-    final confirmed = await showConfirmDialog(
-      context: context,
-      theme: theme,
-      title: 'Delete ${selectedGameIds.length} games?',
-      message: 'This action cannot be undone.',
-      confirmLabel: 'Delete',
-      confirmIcon: Icons.delete,
-      destructive: true,
-    );
-
-    if (confirmed) {
-      await ref
-          .read(gamesProvider.notifier)
-          .deleteGames(selectedGameIds.toList());
-      NotificationManager.instance.success(
-        'Deleted ${selectedGameIds.length} games',
-      );
-    }
   }
 
   @override
@@ -188,21 +90,28 @@ class SelectionRibbon extends ConsumerWidget {
     final theme = ref.watch(themeProvider);
     final notifier = ref.read(gamesProvider.notifier);
     final allUsed = ref.watch(selectedGamesAllUsedProvider);
+    final isMultiSelectEnabled = ref.watch(_ribbonMultiSelectEnabledProvider);
     final batchFetchState = ref.watch(batchFetchProvider);
     return _RibbonBar(
       theme: theme,
       selectedCount: selectedCount,
       isExpanded: isExpanded,
+      isVeryNarrowLayout: isVeryNarrowLayout,
+      isMultiSelectEnabled: isMultiSelectEnabled,
       allUsed: allUsed,
       isFetchActive: batchFetchState.isActive,
       onClearAll: notifier.clearSelection,
       onToggleExpand: onToggleExpand,
+      onToggleMultiSelect: () {
+        ref.read(selectionMultiSelectModeProvider.notifier).toggle();
+      },
       onOpenDetails: () => _openDetails(context, ref),
       onCopy: () => _showCopyDialog(context, ref),
       onOpenSteamPage: () => _openSteamPage(ref),
       onToggleUsed: () => _toggleUsed(ref),
       onFetch: () => _fetchSelectedSteamGames(context, ref),
       onDelete: () => _deleteSelection(context, ref, theme),
+      onSelectAll: notifier.selectAll,
     );
   }
 }
@@ -238,84 +147,156 @@ class _RibbonBar extends StatelessWidget {
     required this.theme,
     required this.selectedCount,
     required this.isExpanded,
+    required this.isVeryNarrowLayout,
+    required this.isMultiSelectEnabled,
     required this.allUsed,
     required this.isFetchActive,
     required this.onClearAll,
     required this.onToggleExpand,
+    required this.onToggleMultiSelect,
     required this.onOpenDetails,
     required this.onCopy,
     required this.onOpenSteamPage,
     required this.onToggleUsed,
     required this.onFetch,
     required this.onDelete,
+    required this.onSelectAll,
   });
 
   final AppThemeData theme;
   final int selectedCount;
   final bool isExpanded;
+  final bool isVeryNarrowLayout;
+  final bool isMultiSelectEnabled;
   final bool allUsed;
   final bool isFetchActive;
   final VoidCallback onClearAll;
   final VoidCallback onToggleExpand;
+  final VoidCallback onToggleMultiSelect;
   final VoidCallback onOpenDetails;
   final VoidCallback onCopy;
   final VoidCallback onOpenSteamPage;
   final VoidCallback onToggleUsed;
   final VoidCallback onFetch;
   final VoidCallback onDelete;
+  final VoidCallback onSelectAll;
+
+  Widget _buildSelectionSummaryChip() {
+    final counterColor = isExpanded ? theme.accent : theme.textPrimary;
+
+    return Tooltip(
+      message: isExpanded ? 'Close List' : 'Show List',
+      child: TextButton(
+        onPressed: onToggleExpand,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.checklist_rtl_rounded, color: theme.accent),
+            const SizedBox(width: 6),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$selectedCount',
+                    style: TextStyle(
+                      color: counterColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' selected',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNarrowLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildSelectionSummaryChip(),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: theme.border,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _ClearAllButton(theme: theme, onTap: onClearAll),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: _ActionButtonsRow(
+            theme: theme,
+            isExpanded: isExpanded,
+            isMultiSelectEnabled: isMultiSelectEnabled,
+            allUsed: allUsed,
+            isFetchActive: isFetchActive,
+            onToggleExpand: onToggleExpand,
+            onToggleMultiSelect: onToggleMultiSelect,
+            onOpenDetails: onOpenDetails,
+            onCopy: onCopy,
+            onOpenSteamPage: onOpenSteamPage,
+            onToggleUsed: onToggleUsed,
+            onFetch: onFetch,
+            onDelete: onDelete,
+            onSelectAll: onSelectAll,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDefaultLayout() {
+    return Row(
+      children: [
+        _buildSelectionSummaryChip(),
+        _VerticalDivider(theme: theme),
+        Expanded(
+          child: Center(
+            child: _ActionButtonsRow(
+              theme: theme,
+              isExpanded: isExpanded,
+              isMultiSelectEnabled: isMultiSelectEnabled,
+              allUsed: allUsed,
+              isFetchActive: isFetchActive,
+              onToggleExpand: onToggleExpand,
+              onToggleMultiSelect: onToggleMultiSelect,
+              onOpenDetails: onOpenDetails,
+              onCopy: onCopy,
+              onOpenSteamPage: onOpenSteamPage,
+              onToggleUsed: onToggleUsed,
+              onFetch: onFetch,
+              onDelete: onDelete,
+              onSelectAll: onSelectAll,
+            ),
+          ),
+        ),
+        _VerticalDivider(theme: theme),
+        _ClearAllButton(theme: theme, onTap: onClearAll),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ribbonBg = theme.accent.withValues(alpha: 0.40);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(color: ribbonBg),
-      child: Row(
-        children: [
-          Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Icon(Icons.checklist_rtl_rounded, size: 18, color: theme.accent),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '$selectedCount',
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    TextSpan(text: ' selected'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          _VerticalDivider(theme: theme),
-          Expanded(
-            child: Center(
-              child: _ActionButtonsRow(
-                theme: theme,
-                isExpanded: isExpanded,
-                allUsed: allUsed,
-                isFetchActive: isFetchActive,
-                onToggleExpand: onToggleExpand,
-                onOpenDetails: onOpenDetails,
-                onCopy: onCopy,
-                onOpenSteamPage: onOpenSteamPage,
-                onToggleUsed: onToggleUsed,
-                onFetch: onFetch,
-                onDelete: onDelete,
-              ),
-            ),
-          ),
-          _VerticalDivider(theme: theme),
-          _ClearAllButton(theme: theme, onTap: onClearAll),
-        ],
-      ),
+      child: isVeryNarrowLayout ? _buildNarrowLayout() : _buildDefaultLayout(),
     );
   }
 }
@@ -329,8 +310,8 @@ class _VerticalDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12),
-    child: Container(width: 1, height: 22, color: theme.border),
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Container(width: 1.5, height: 22, color: theme.border),
   );
 }
 
@@ -338,47 +319,60 @@ class _ActionButtonsRow extends StatelessWidget {
   const _ActionButtonsRow({
     required this.theme,
     required this.isExpanded,
+    required this.isMultiSelectEnabled,
     required this.allUsed,
     required this.isFetchActive,
     required this.onToggleExpand,
+    required this.onToggleMultiSelect,
     required this.onOpenDetails,
     required this.onCopy,
     required this.onOpenSteamPage,
     required this.onToggleUsed,
     required this.onFetch,
     required this.onDelete,
+    required this.onSelectAll,
   });
 
   final AppThemeData theme;
   final bool isExpanded;
+  final bool isMultiSelectEnabled;
   final bool allUsed;
   final bool isFetchActive;
   final VoidCallback onToggleExpand;
+  final VoidCallback onToggleMultiSelect;
   final VoidCallback onOpenDetails;
   final VoidCallback onCopy;
   final VoidCallback onOpenSteamPage;
   final VoidCallback onToggleUsed;
   final VoidCallback onFetch;
   final VoidCallback onDelete;
+  final VoidCallback onSelectAll;
 
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 6,
+      spacing: 2,
+      runSpacing: 2,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _RibbonActionButton(
           theme: theme,
-          icon: Icons.checklist_rtl_rounded,
-          tooltip: isExpanded ? 'Close List' : 'Show List',
-          onTap: onToggleExpand,
-          foreground: isExpanded ? theme.accent : null,
+          icon: Icons.add_box_outlined,
+          iconWidget: _MultiSelectIcon(
+            theme: theme,
+            enabled: isMultiSelectEnabled,
+          ),
+          tooltip: isMultiSelectEnabled
+              ? 'Disable Multi-Select'
+              : 'Enable Multi-Select',
+          onTap: onToggleMultiSelect,
+          foreground: isMultiSelectEnabled ? theme.accent : null,
         ),
         _RibbonActionButton(
           theme: theme,
-          icon: Icons.info_outline,
-          tooltip: 'View Details',
-          onTap: onOpenDetails,
+          icon: Icons.select_all,
+          tooltip: 'Select All',
+          onTap: onSelectAll,
         ),
         _RibbonActionButton(
           theme: theme,
@@ -388,19 +382,26 @@ class _ActionButtonsRow extends StatelessWidget {
         ),
         _RibbonActionButton(
           theme: theme,
-          icon: Icons.open_in_new,
-          tooltip: 'Open Steam Page',
-          onTap: onOpenSteamPage,
+          icon: allUsed ? Icons.check_box : Icons.check_box_outline_blank,
+          tooltip: allUsed ? 'Mark Unused' : 'Mark Used',
+          onTap: isFetchActive ? null : onToggleUsed,
         ),
         _RibbonActionButton(
           theme: theme,
-          icon: allUsed ? Icons.check_box : Icons.check_box_outline_blank,
-          tooltip: allUsed ? 'Mark Unused' : 'Mark Used',
-          onTap: onToggleUsed,
+          icon: Icons.info_outline,
+          tooltip: 'View Details',
+          onTap: isFetchActive ? null : onOpenDetails,
         ),
         _RibbonActionButton(
           theme: theme,
           icon: Icons.cloud_download,
+          iconWidget: isFetchActive
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: AppCircularProgressIndicator(),
+                )
+              : null,
           tooltip: 'Fetch',
           onTap: onFetch,
           foreground: isFetchActive
@@ -409,9 +410,15 @@ class _ActionButtonsRow extends StatelessWidget {
         ),
         _RibbonActionButton(
           theme: theme,
+          icon: Icons.open_in_new,
+          tooltip: 'Open Steam Page',
+          onTap: onOpenSteamPage,
+        ),
+        _RibbonActionButton(
+          theme: theme,
           icon: Icons.delete_outline,
           tooltip: 'Delete',
-          onTap: onDelete,
+          onTap: isFetchActive ? null : onDelete,
           isDestructive: true,
         ),
       ],
@@ -465,6 +472,7 @@ class _RibbonActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.iconWidget,
     this.foreground,
     this.isDestructive = false,
   });
@@ -472,32 +480,47 @@ class _RibbonActionButton extends StatelessWidget {
   final AppThemeData theme;
   final IconData icon;
   final String tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final Widget? iconWidget;
   final Color? foreground;
   final bool isDestructive;
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = foreground ?? theme.textPrimary;
-    final styleColor = theme.primaryButtonText;
-    final overlayColor = isDestructive
-        ? theme.error.withValues(alpha: 0.90)
-        : styleColor.withValues(alpha: 0.15);
+    final iconColor = onTap == null
+        ? theme.textSecondary.withValues(alpha: 0.4)
+        : (foreground ?? theme.textPrimary);
 
     return Tooltip(
       message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          highlightColor: overlayColor,
-          splashColor: overlayColor,
-          child: Container(
-            padding: const EdgeInsets.all(5),
-            child: Icon(icon, size: 22, color: iconColor),
-          ),
-        ),
+      child: IconButton(
+        onPressed: onTap,
+        icon: iconWidget ?? Icon(icon, color: iconColor),
+        color: iconColor,
+      ),
+    );
+  }
+}
+
+class _MultiSelectIcon extends StatelessWidget {
+  const _MultiSelectIcon({required this.theme, required this.enabled});
+
+  final AppThemeData theme;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled ? theme.accent : theme.textPrimary;
+    return AnimatedSwitcher(
+      duration: kVeryFastAnimation,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(scale: animation, child: child),
+      ),
+      child: Icon(
+        enabled ? Icons.library_add_check_rounded : Icons.add_box_outlined,
+        key: ValueKey<bool>(enabled),
+        color: color,
       ),
     );
   }
@@ -555,11 +578,14 @@ class _ClearAllButton extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       builder: (_, hovered) => _TapTarget(
         onTap: onTap,
-        child: Text(
-          'Deselect all',
-          style: TextStyle(
-            color: hovered ? theme.accent : theme.textPrimary,
-            fontWeight: FontWeight.w600,
+        child: TextButton(
+          onPressed: onTap,
+          child: Text(
+            'Deselect all',
+            style: TextStyle(
+              color: hovered ? theme.accent : theme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -627,7 +653,11 @@ class _ExpandedPanelRow extends StatelessWidget {
       builder: (_, hovered) => AnimatedContainer(
         duration: kVeryFastAnimation,
         color: hovered
-            ? Color.lerp(t.accent.withValues(alpha: 0.30), Colors.transparent, 0.0)
+            ? Color.lerp(
+                t.accent.withValues(alpha: 0.30),
+                Colors.transparent,
+                0.0,
+              )
             : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(

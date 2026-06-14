@@ -6,12 +6,14 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:path/path.dart' as p;
 
 import 'core/database/database.dart';
+import 'core/constants/app_constants.dart';
 import 'core/services/deadline_notification_service.dart';
 import 'core/services/encrypted_db_session.dart';
 import 'core/services/database_switching.dart';
@@ -21,11 +23,24 @@ import 'core/settings/settings_model.dart';
 import 'providers/app_providers.dart';
 import 'ui/app_scaffold.dart';
 import 'ui/dialogs/database_unlock_dialog.dart';
+import 'ui/dialogs/encryption_dialogs.dart';
+import 'ui/widgets/app_progress_indicator.dart';
+import 'ui/widgets/dialog_helpers.dart';
 import 'ui/widgets/notification_system.dart';
+
+Future<void> _configureSystemUiForMobile() async {
+  if (!Platform.isAndroid) {
+    return;
+  }
+
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+}
 
 void main() async {
   // Ensure Flutter bindings are initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  await _configureSystemUiForMobile();
 
   // Initialize window manager for desktop platforms
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -34,6 +49,7 @@ void main() async {
 
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(SettingsKeys.notificationsEnabled);
 
   // Initialize OS-level notification plugin.
   await DeadlineNotificationService.instance.initialize();
@@ -96,6 +112,30 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
     return DatabaseUnlockDialog.show(dialogContext, theme);
   }
 
+  Future<String?> _promptForNewDatabasePassword() async {
+    final dialogContext = await _materialContextCompleter.future;
+    if (!mounted) return null;
+    if (!dialogContext.mounted) return null;
+    final theme = ref.read(themeProvider);
+    return EnableEncryptionDialog.showForNewDatabase(dialogContext, theme);
+  }
+
+  Future<StartupDatabaseUnlockResult> _promptForStartupDatabasePassword(
+    String currentDatabasePath,
+  ) async {
+    final dialogContext = await _materialContextCompleter.future;
+    if (!mounted || !dialogContext.mounted) {
+      return const StartupDatabaseUnlockResult.cancelled();
+    }
+
+    final theme = ref.read(themeProvider);
+    return DatabaseUnlockDialog.showForStartup(
+      dialogContext,
+      theme,
+      currentDatabasePath: currentDatabasePath,
+    );
+  }
+
   Future<void> _showLegacyConversionReport(
     LegacyDbConversionResult conversion, {
     required String dbPath,
@@ -112,8 +152,9 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
     await showDialog<void>(
       context: dialogContext,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: theme.background,
+        return ThemedAlertDialog(
+          theme: theme,
+
           title: Row(
             children: [
               Icon(Icons.upgrade, color: theme.accent),
@@ -136,7 +177,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
                   'The selected database was upgraded to the current schema.',
                   style: TextStyle(color: theme.textPrimary),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: kElementVSpacing),
                 Text(
                   'File: ${p.basename(dbPath)}',
                   style: TextStyle(color: theme.textSecondary, fontSize: 12),
@@ -150,7 +191,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: kElementVSpacing),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 220),
                     child: SizedBox(
@@ -215,18 +256,43 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
         }
       }
 
-      final configuredPath = prefs.getString(SettingsKeys.databasePath) ?? '';
-      final baseDbPath = configuredPath.isNotEmpty
+        final configuredPath = prefs.getString(SettingsKeys.databasePath) ?? '';
+        final baseDbPath = configuredPath.isNotEmpty
           ? configuredPath
           : await AppDatabase.getDatabasePath();
 
-      final encryptionManager = EncryptionManager(baseDbPath);
+        final encryptionManager = EncryptionManager(baseDbPath);
 
       if (encryptionManager.isEncrypted) {
         while (true) {
-          final password = await _promptForDatabasePassword();
-          if (password == null) {
+          final unlockResult = await _promptForStartupDatabasePassword(
+            encryptionManager.encryptedPath,
+          );
+
+          if (unlockResult.cancelled) {
             exit(0);
+          }
+
+          final selectedDatabasePath = unlockResult.selectedDatabasePath;
+          if (selectedDatabasePath != null && selectedDatabasePath.isNotEmpty) {
+            final selectedBasePath = _toBaseDbPath(selectedDatabasePath);
+            await ref
+                .read(settingsProvider.notifier)
+                .setSetting(SettingsKeys.databasePath, selectedBasePath);
+
+            if (!mounted) return;
+            setState(() {
+              _booting = true;
+              _error = null;
+              _bootstrapStarted = false;
+            });
+            await _bootstrap();
+            return;
+          }
+
+          final password = unlockResult.password;
+          if (password == null) {
+            continue;
           }
 
           try {
@@ -285,7 +351,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
       // Start daily deadline reminders and run an initial check after a
       // short delay so the app has had time to fully load.
       DeadlineNotificationService.instance.startPeriodicCheck(ref);
-      Future.delayed(const Duration(seconds: 5), () {
+      Future.delayed(const Duration(seconds: 2), () {
         if (mounted) DeadlineNotificationService.instance.runCheck(ref);
       });
     } catch (e) {
@@ -384,9 +450,18 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
           await plainDb.initDefaults();
           await plainDb.close();
 
-          final password = await _promptForDatabasePassword();
+          final password = await _promptForNewDatabasePassword();
           if (password == null) {
-            // User cancelled; reopen the previous db by re-running bootstrap.
+            // User declined; clean up the newly created files and reopen
+            // the previous db by re-running bootstrap.
+            final plainFile = File(baseDbPath);
+            if (plainFile.existsSync()) {
+              try { await plainFile.delete(); } catch (_) {}
+            }
+            final encFile = File('$baseDbPath.enc');
+            if (encFile.existsSync()) {
+              try { await encFile.delete(); } catch (_) {}
+            }
             setState(() {
               _booting = true;
               _bootstrapStarted = false;
@@ -491,15 +566,20 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
         _error = null;
       });
 
-      // Reset search and filters so the new database starts with a clean view.
-      ref.read(gamesProvider.notifier).setSearchQuery('');
+      // Keep the current search query visible/active across database file
+      // switches while still clearing non-search filters.
+      final preservedSearchQuery = ref.read(gamesProvider).searchQuery;
       ref.read(gamesProvider.notifier).clearAllFilters();
+      if (preservedSearchQuery.isNotEmpty) {
+        ref.read(gamesProvider.notifier).setSearchQuery(preservedSearchQuery);
+      }
+      ref.read(gameLibraryScrollOffsetProvider.notifier).setOffset(0);
 
       // Reset session so old game IDs don't suppress notifications for the
       // new database, then restart the periodic check.
       DeadlineNotificationService.instance.resetSession();
       DeadlineNotificationService.instance.startPeriodicCheck(ref);
-      Future.delayed(const Duration(seconds: 5), () {
+      Future.delayed(const Duration(seconds: 2), () {
         if (mounted) DeadlineNotificationService.instance.runCheck(ref);
       });
     } catch (e) {
@@ -537,7 +617,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: theme.accent),
+                    const AppCircularProgressIndicator(),
                     const SizedBox(height: 16),
                     Text(
                       'Loading Database…',
@@ -568,7 +648,7 @@ class _UniKMBootstrapState extends ConsumerState<_UniKMBootstrap> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: kElementVSpacing),
                       Text(
                         _error?.toString() ?? 'Database not available',
                         style: TextStyle(color: theme.textSecondary),
@@ -616,7 +696,10 @@ class UniKMApp extends ConsumerWidget {
       data: MediaQuery.of(context).copyWith(
         textScaler: const TextScaler.linear(1.0),
       ),
-      child: const AppScaffold(),
+      child: ButtonTheme(
+        alignedDropdown: true,
+        child: AppScaffold(),
+      ),
     );
   }
 }

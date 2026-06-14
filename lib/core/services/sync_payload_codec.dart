@@ -132,109 +132,39 @@ class SyncPayloadCodec {
   /// A *conflict* occurs when both sides modified the same game after
   /// [lastSyncAt].  Conflicting games are kept as-is locally rather than being
   /// silently overwritten.
+  ///
+  /// Uses a two-pass batch approach:
+  /// 1. Classify — parse all incoming games and compare against local state.
+  /// 2. Execute — batch-insert, batch-update, and batch-set tags in bulk.
   Future<SyncImportResult> applyPayload(
     List<Map<String, dynamic>> gamesJson, {
     DateTime? lastSyncAt,
   }) async {
     final db = ref.read(databaseProvider);
-    if (db == null) return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
+    if (db == null) {
+      return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
+    }
 
+    // ── Phase 1: Pre-cache existing state (3 queries total) ──────────────
     final allExisting = await db.getAllGames();
+    final existingById = <int, GameEntry>{
+      for (final g in allExisting) g.id: g,
+    };
     final existingTagsMap = allExisting.isEmpty
-      ? <int, List<TagEntry>>{}
-      : await db.getTagsForGames(allExisting.map((g) => g.id).toList(growable: false));
-    final existingById = <int, GameEntry>{for (final g in allExisting) g.id: g};
-    final localEntrySyncIdById = <int, String>{};
+        ? <int, List<TagEntry>>{}
+        : await db.getTagsForGames(
+            allExisting.map((g) => g.id).toList(growable: false),
+          );
 
-    int inserted = 0;
-    int updated = 0;
-    int conflicts = 0;
+    // ── Phase 2: Parse & classify every incoming game ────────────────────
+    // Intermediate structs for the classify pass (no DB I/O).
+    final inserts = <_IncomingGame>[];
+    final updates = <_IncomingGame>[];
+    var conflicts = 0;
 
-    Future<void> syncIncomingTags(int gameId, List<dynamic> tagsRaw) async {
-      if (tagsRaw.isEmpty) {
-        existingTagsMap[gameId] = const <TagEntry>[];
-        localEntrySyncIdById.remove(gameId);
-        return;
-      }
-
-      final tagIds = <int>[];
-      for (final tagRaw in tagsRaw) {
-        if (tagRaw is! Map) continue;
-        final tagMap = Map<String, dynamic>.from(tagRaw);
-        final tagName = (tagMap['name'] as String?)?.trim() ?? '';
-        if (tagName.isEmpty) continue;
-        final colorHex = (tagMap['colorHex'] as String?) ?? '#0078d4';
-        final isSteamTag = (tagMap['isSteamTag'] as bool?) ?? false;
-        final tagEntry = await db.getOrCreateTag(
-          tagName,
-          color: colorHex,
-          isSteamTag: isSteamTag,
-        );
-        tagIds.add(tagEntry.id);
-      }
-
-      await db.setTagsForGame(gameId, tagIds, touchGameUpdatedAt: false);
-      existingTagsMap[gameId] = await db.getTagsForGame(gameId);
-      localEntrySyncIdById.remove(gameId);
-    }
-
-    Future<String?> readLocalEntrySyncId(int gameId) async {
-      final localGame = await db.getGameById(gameId);
-      if (localGame == null) return null;
-
-      final localTags =
-          existingTagsMap[gameId] ?? await db.getTagsForGame(gameId);
-      existingTagsMap[gameId] = localTags;
-
-      final localEntrySyncId = await SyncEntryFingerprint.fromGameEntry(
-        localGame,
-        localTags,
-      );
-      localEntrySyncIdById[gameId] = localEntrySyncId;
-      return localEntrySyncId;
-    }
-
-    Future<void> writeIncomingGameState({
-      required int gameId,
-      required String title,
-      required String gameKey,
-      required String platform,
-      required DateTime dateAdded,
-      required DateTime updatedAt,
-      required String notes,
-      required bool isUsed,
-      required String resolvedCoverImage,
-      required bool hasDeadline,
-      required DateTime? deadlineDate,
-      required bool isDlc,
-      required String steamAppId,
-      required String developer,
-      required int reviewScore,
-      required int reviewCount,
-      required List<dynamic> tagsRaw,
-    }) async {
-      await db.updateGame(
-        GameEntry(
-          id: gameId,
-          title: title,
-          gameKey: gameKey,
-          platform: platform,
-          dateAdded: dateAdded,
-          updatedAt: updatedAt,
-          notes: notes,
-          isUsed: isUsed,
-          coverImage: resolvedCoverImage,
-          hasDeadline: hasDeadline,
-          deadlineDate: deadlineDate,
-          isDlc: isDlc,
-          steamAppId: steamAppId,
-          developer: developer,
-          reviewScore: reviewScore,
-          reviewCount: reviewCount,
-        ),
-      );
-      await syncIncomingTags(gameId, tagsRaw);
-    }
+    // Collect all unique tag specs from ALL games first, so we can
+    // resolve them in a single batch later.
+    final allTagSpecs = <({String name, String color, bool isSteamTag})>[];
 
     for (final data in gamesJson) {
       final incomingId = (data['id'] as num?)?.toInt();
@@ -243,10 +173,10 @@ class SyncPayloadCodec {
 
       final title = (data['title'] as String?) ?? '';
       final platform = (data['platform'] as String?) ?? 'Steam';
-      final dateAdded =
-          DateTime.tryParse(data['dateAdded'] as String? ?? '') ?? DateTime.now();
-      final updatedAt =
-          DateTime.tryParse(data['updatedAt'] as String? ?? '') ?? dateAdded;
+      final dateAdded = DateTime.tryParse(data['dateAdded'] as String? ?? '') ??
+          DateTime.now();
+      final updatedAt = DateTime.tryParse(data['updatedAt'] as String? ?? '') ??
+          dateAdded;
       final notes = (data['notes'] as String?) ?? '';
       final isUsed = (data['isUsed'] as bool?) ?? false;
       final hasCoverImage = (data['hasCoverImage'] as bool?) ?? false;
@@ -260,6 +190,20 @@ class SyncPayloadCodec {
       final reviewCount = (data['reviewCount'] as int?) ?? 0;
       final tagsRaw = (data['tags'] as List<dynamic>?) ?? const [];
 
+      // Collect tag specs for batch resolution.
+      for (final tagRaw in tagsRaw) {
+        if (tagRaw is! Map) continue;
+        final tagMap = Map<String, dynamic>.from(tagRaw);
+        final tagName = (tagMap['name'] as String?)?.trim() ?? '';
+        if (tagName.isEmpty) continue;
+        allTagSpecs.add((
+          name: tagName,
+          color: (tagMap['colorHex'] as String?) ?? '#0078d4',
+          isSteamTag: (tagMap['isSteamTag'] as bool?) ?? false,
+        ));
+      }
+
+      // Resolve cover image (file I/O — must stay per-entry).
       String? syncedCoverImagePath;
       final coverImageFile = data['coverImageFile'];
       if (coverImageFile is Map) {
@@ -270,197 +214,166 @@ class SyncPayloadCodec {
       }
       final incomingLegacyCoverPath = (data['coverImage'] as String?) ?? '';
 
-      final existing = incomingId != null ? existingById[incomingId] : null;
-
-      String localEntrySyncId = '';
-      if (existing != null) {
-        final cached = localEntrySyncIdById[existing.id];
-        if (cached != null && cached.isNotEmpty) {
-          localEntrySyncId = cached;
-        } else {
-          final existingTags = existingTagsMap[existing.id] ?? const <TagEntry>[];
-          localEntrySyncId = await SyncEntryFingerprint.fromGameEntry(
-            existing,
-            existingTags,
-          );
-          localEntrySyncIdById[existing.id] = localEntrySyncId;
-        }
-      }
-
       final resolvedCoverImage = await _resolveTranslatedCoverImagePath(
         gameKey: gameKey,
         hasCoverImage: hasCoverImage,
         syncedCoverImagePath: syncedCoverImagePath,
         incomingLegacyCoverPath: incomingLegacyCoverPath,
-        existingCoverImagePath: existing?.coverImage ?? '',
-      );
-      final expectedLocalEntrySyncId = await SyncEntryFingerprint.fromPayload(
-        <String, dynamic>{
-          ...data,
-          'coverImage': resolvedCoverImage,
-        },
+        existingCoverImagePath:
+            incomingId != null ? existingById[incomingId]?.coverImage ?? '' : '',
       );
 
-      int gameId;
-      var shouldVerifyIncomingState = false;
+      final game = _IncomingGame(
+        incomingId: incomingId,
+        gameKey: gameKey,
+        title: title,
+        platform: platform,
+        dateAdded: dateAdded,
+        updatedAt: updatedAt,
+        notes: notes,
+        isUsed: isUsed,
+        resolvedCoverImage: resolvedCoverImage,
+        hasDeadline: hasDeadline,
+        deadlineDate: deadlineDate,
+        isDlc: isDlc,
+        steamAppId: steamAppId,
+        developer: developer,
+        reviewScore: reviewScore,
+        reviewCount: reviewCount,
+        tagsRaw: tagsRaw,
+      );
+
+      final existing =
+          incomingId != null ? existingById[incomingId] : null;
 
       if (existing == null) {
-        // Brand-new game on this device — insert and preserve remote SKM-ID
-        // when available so future edits resolve by immutable identity.
-        gameId = incomingId != null
-            ? await db.into(db.games).insert(
-                GamesCompanion(
-                  id: Value(incomingId),
-                  title: Value(title),
-                  gameKey: Value(gameKey),
-                  platform: Value(platform),
-                  dateAdded: Value(dateAdded),
-                  updatedAt: Value(updatedAt),
-                  notes: Value(notes),
-                  isUsed: Value(isUsed),
-                  coverImage: Value(resolvedCoverImage),
-                  hasDeadline: Value(hasDeadline),
-                  deadlineDate: Value(deadlineDate),
-                  isDlc: Value(isDlc),
-                  steamAppId: Value(steamAppId),
-                  developer: Value(developer),
-                  reviewScore: Value(reviewScore),
-                  reviewCount: Value(reviewCount),
-                ),
-                mode: InsertMode.insertOrReplace,
-              )
-            : await db.insertGame(
-                GamesCompanion.insert(
-                  title: title,
-                  gameKey: gameKey,
-                  platform: Value(platform),
-                  dateAdded: Value(dateAdded),
-                  updatedAt: Value(updatedAt),
-                  notes: Value(notes),
-                  isUsed: Value(isUsed),
-                  coverImage: Value(resolvedCoverImage),
-                  hasDeadline: Value(hasDeadline),
-                  deadlineDate: Value(deadlineDate),
-                  isDlc: Value(isDlc),
-                  steamAppId: Value(steamAppId),
-                  developer: Value(developer),
-                  reviewScore: Value(reviewScore),
-                  reviewCount: Value(reviewCount),
-                ),
-              );
-        inserted++;
-        await syncIncomingTags(gameId, tagsRaw);
-        shouldVerifyIncomingState = true;
-      } else if (expectedLocalEntrySyncId == localEntrySyncId) {
-        // Identical content: skip DB writes to avoid unnecessary churn.
-        gameId = existing.id;
+        inserts.add(game);
+      } else if (_isIdentical(game, existing, existingTagsMap)) {
+        // Identical content — skip DB writes.
       } else if (updatedAt.isAfter(existing.updatedAt)) {
-        // Remote is newer than local copy.
-        // Check for a conflict: local was also edited since the last sync.
         final localEditedSinceLastSync =
             lastSyncAt != null && existing.updatedAt.isAfter(lastSyncAt);
-
         if (localEditedSinceLastSync) {
-          // Both devices changed this game — keep local to avoid data loss.
           conflicts++;
-          gameId = existing.id;
         } else {
-          await writeIncomingGameState(
-            gameId: existing.id,
-            title: title,
-            gameKey: gameKey,
-            platform: platform,
-            dateAdded: dateAdded,
-            updatedAt: updatedAt,
-            notes: notes,
-            isUsed: isUsed,
-            resolvedCoverImage: resolvedCoverImage,
-            hasDeadline: hasDeadline,
-            deadlineDate: deadlineDate,
-            isDlc: isDlc,
-            steamAppId: steamAppId,
-            developer: developer,
-            reviewScore: reviewScore,
-            reviewCount: reviewCount,
-            tagsRaw: tagsRaw,
-          );
-          updated++;
-          gameId = existing.id;
-          shouldVerifyIncomingState = true;
+          updates.add(game);
         }
-      } else if (updatedAt.isAtSameMomentAs(existing.updatedAt) &&
-          expectedLocalEntrySyncId.compareTo(localEntrySyncId) > 0) {
-        // Deterministic tie-breaker when timestamps are equal but content differs.
-        await writeIncomingGameState(
-          gameId: existing.id,
-          title: title,
-          gameKey: gameKey,
-          platform: platform,
-          dateAdded: dateAdded,
-          updatedAt: updatedAt,
-          notes: notes,
-          isUsed: isUsed,
-          resolvedCoverImage: resolvedCoverImage,
-          hasDeadline: hasDeadline,
-          deadlineDate: deadlineDate,
-          isDlc: isDlc,
-          steamAppId: steamAppId,
-          developer: developer,
-          reviewScore: reviewScore,
-          reviewCount: reviewCount,
-          tagsRaw: tagsRaw,
-        );
-        updated++;
-        gameId = existing.id;
-        shouldVerifyIncomingState = true;
       } else {
         // Local is equal or newer — keep it.
-        gameId = existing.id;
-      }
-
-      if (shouldVerifyIncomingState) {
-        final localEntrySyncIdAfterApply = await readLocalEntrySyncId(gameId);
-        if (localEntrySyncIdAfterApply != expectedLocalEntrySyncId) {
-          final debugLabel = gameKey.isNotEmpty ? gameKey : '$gameId';
-          debugPrint(
-            'Sync: entry mismatch detected after apply for $debugLabel. Retrying authoritative row.',
-          );
-          await writeIncomingGameState(
-            gameId: gameId,
-            title: title,
-            gameKey: gameKey,
-            platform: platform,
-            dateAdded: dateAdded,
-            updatedAt: updatedAt,
-            notes: notes,
-            isUsed: isUsed,
-            resolvedCoverImage: resolvedCoverImage,
-            hasDeadline: hasDeadline,
-            deadlineDate: deadlineDate,
-            isDlc: isDlc,
-            steamAppId: steamAppId,
-            developer: developer,
-            reviewScore: reviewScore,
-            reviewCount: reviewCount,
-            tagsRaw: tagsRaw,
-          );
-          final repairedEntrySyncId = await readLocalEntrySyncId(gameId);
-          if (repairedEntrySyncId != expectedLocalEntrySyncId) {
-            debugPrint(
-              'Sync: entry mismatch persisted after retry for $debugLabel.',
-            );
-          }
-        }
-      }
-
-      final refreshed = await db.getGameById(gameId);
-      if (refreshed != null) {
-        existingById[refreshed.id] = refreshed;
-        localEntrySyncIdById.remove(refreshed.id);
       }
     }
 
-    // Trigger games/tags providers to reload.
+    // ── Phase 3: Batch-resolve all tags (2 queries total) ────────────────
+    final uniqueTagSpecs = allTagSpecs
+        .fold<Map<String, ({String name, String color, bool isSteamTag})>>(
+          {},
+          (map, spec) => map..putIfAbsent(spec.name.toLowerCase(), () => spec),
+        )
+        .values
+        .toList(growable: false);
+    final tagEntries = await db.batchGetOrCreateTags(uniqueTagSpecs);
+
+    // ── Phase 4: Batch-insert new games ──────────────────────────────────
+    int inserted = 0;
+    final insertGameTagMap = <int, List<int>>{};
+    final insertsWithId = <GamesCompanion>[];
+    final insertsWithoutId = <GamesCompanion>[];
+
+    for (final game in inserts) {
+      final tagIds = _resolveTagIds(game.tagsRaw, tagEntries);
+      final companion = GamesCompanion(
+        id: game.incomingId != null ? Value(game.incomingId!) : const Value.absent(),
+        title: Value(game.title),
+        gameKey: Value(game.gameKey),
+        platform: Value(game.platform),
+        dateAdded: Value(game.dateAdded),
+        updatedAt: Value(game.updatedAt),
+        notes: Value(game.notes),
+        isUsed: Value(game.isUsed),
+        coverImage: Value(game.resolvedCoverImage),
+        hasDeadline: Value(game.hasDeadline),
+        deadlineDate: Value(game.deadlineDate),
+        isDlc: Value(game.isDlc),
+        steamAppId: Value(game.steamAppId),
+        developer: Value(game.developer),
+        reviewScore: Value(game.reviewScore),
+        reviewCount: Value(game.reviewCount),
+      );
+
+      if (game.incomingId != null) {
+        insertsWithId.add(companion);
+      } else {
+        insertsWithoutId.add(companion);
+      }
+
+      // Tag IDs will be set after we know the generated IDs.
+      // For ID-bearing inserts we know the ID already.
+      if (game.incomingId != null) {
+        insertGameTagMap[game.incomingId!] = tagIds;
+        inserted++;
+      }
+    }
+
+    // Batch insert games with known IDs (insertOrReplace).
+    if (insertsWithId.isNotEmpty) {
+      await db.batch((b) {
+        b.insertAll(db.games, insertsWithId, mode: InsertMode.insertOrReplace);
+      });
+    }
+
+    // Insert games without IDs one-by-one (need generated ID for tag map).
+    for (var i = 0; i < insertsWithoutId.length; i++) {
+      final gameId = await db.insertGame(insertsWithoutId[i]);
+      final tagIds = _resolveTagIds(inserts[insertsWithId.length + i].tagsRaw, tagEntries);
+      insertGameTagMap[gameId] = tagIds;
+      inserted++;
+    }
+
+    // Batch set tags for all inserts.
+    if (insertGameTagMap.isNotEmpty) {
+      await db.batchSetTagsForGames(insertGameTagMap);
+    }
+
+    // ── Phase 5: Batch-update existing games ─────────────────────────────
+    int updated = 0;
+    final updateEntries = <GameEntry>[];
+    final updateGameTagMap = <int, List<int>>{};
+
+    for (final game in updates) {
+      final existing = existingById[game.incomingId!]!;
+      updateEntries.add(GameEntry(
+        id: existing.id,
+        title: game.title,
+        gameKey: game.gameKey,
+        platform: game.platform,
+        dateAdded: game.dateAdded,
+        updatedAt: game.updatedAt,
+        notes: game.notes,
+        isUsed: game.isUsed,
+        coverImage: game.resolvedCoverImage,
+        hasDeadline: game.hasDeadline,
+        deadlineDate: game.deadlineDate,
+        isDlc: game.isDlc,
+        steamAppId: game.steamAppId,
+        developer: game.developer,
+        reviewScore: game.reviewScore,
+        reviewCount: game.reviewCount,
+      ));
+      updateGameTagMap[existing.id] = _resolveTagIds(game.tagsRaw, tagEntries);
+      updated++;
+    }
+
+    // Batch update games.
+    if (updateEntries.isNotEmpty) {
+      await db.batchUpdateGames(updateEntries);
+    }
+
+    // Batch set tags for all updates.
+    if (updateGameTagMap.isNotEmpty) {
+      await db.batchSetTagsForGames(updateGameTagMap);
+    }
+
+    // ── Phase 6: Trigger provider refresh and return ─────────────────────
     final currentDb = ref.read(databaseProvider);
     if (currentDb != null) {
       ref.read(databaseNotifierProvider.notifier).setDatabase(currentDb);
@@ -473,6 +386,63 @@ class SyncPayloadCodec {
     );
   }
 
+  /// Check if an incoming game is identical to an existing local game,
+  /// avoiding expensive SHA-256 fingerprinting when possible.
+  static bool _isIdentical(
+    _IncomingGame incoming,
+    GameEntry existing,
+    Map<int, List<TagEntry>> existingTagsMap,
+  ) {
+    if (incoming.title != existing.title) return false;
+    if (incoming.gameKey != existing.gameKey) return false;
+    if (incoming.platform != existing.platform) return false;
+    if (incoming.notes != existing.notes) return false;
+    if (incoming.isUsed != existing.isUsed) return false;
+    if (incoming.resolvedCoverImage != existing.coverImage) return false;
+    if (incoming.hasDeadline != existing.hasDeadline) return false;
+    if (incoming.isDlc != existing.isDlc) return false;
+    if (incoming.steamAppId != existing.steamAppId) return false;
+    if (incoming.developer != existing.developer) return false;
+    if (incoming.reviewScore != existing.reviewScore) return false;
+    if (incoming.reviewCount != existing.reviewCount) return false;
+
+    // Compare deadlines.
+    if (incoming.deadlineDate != existing.deadlineDate) return false;
+
+    // Compare tags as sorted name lists.
+    final incomingTagNames = incoming.tagsRaw
+        .whereType<Map>()
+        .map((t) => (t['name'] as String?)?.trim() ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList()
+      ..sort();
+    final localTags = existingTagsMap[existing.id] ?? const <TagEntry>[];
+    final localTagNames = localTags.map((t) => t.name).toList()..sort();
+    if (incomingTagNames.length != localTagNames.length) return false;
+    for (var i = 0; i < incomingTagNames.length; i++) {
+      if (incomingTagNames[i] != localTagNames[i]) return false;
+    }
+
+    return true;
+  }
+
+  /// Resolve tag names from raw JSON to tag IDs using pre-resolved map.
+  static List<int> _resolveTagIds(
+    List<dynamic> tagsRaw,
+    Map<String, TagEntry> tagEntries,
+  ) {
+    final ids = <int>[];
+    for (final tagRaw in tagsRaw) {
+      if (tagRaw is! Map) continue;
+      final tagMap = Map<String, dynamic>.from(tagRaw);
+      final name = (tagMap['name'] as String?)?.trim() ?? '';
+      if (name.isEmpty) continue;
+      final entry = tagEntries[name.toLowerCase()];
+      if (entry != null) ids.add(entry.id);
+    }
+    return ids;
+  }
+
   Future<SyncImportResult> applyDeltaPayload(
     List<Map<String, dynamic>> gamesJson, {
     List<Map<String, dynamic>> tombstones = const [],
@@ -483,107 +453,71 @@ class SyncPayloadCodec {
       return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
     }
 
-    final allExisting = await db.getAllGames();
-    final existingById = <int, GameEntry>{for (final g in allExisting) g.id: g};
-
-    int inserted = 0;
-    int updated = 0;
-    int conflicts = 0;
     int deleted = 0;
+    int conflicts = 0;
 
+    // ── Phase 1: Classify tombstones ────────────────────────────────────
     if (tombstones.isNotEmpty) {
-      // Bump the local revision up front so any *local* game writes triggered
-      // by the rest of the apply step (insertions, updates, conflict
-      // resolutions) get a revision strictly newer than every tombstone we
-      // are about to record.  This keeps the revision ordering monotonic
-      // even if a single sync round mixes incoming deletes with our own
-      // edits.
-      final incomingDeleteRevision = await db.bumpLocalSyncRevision();
-      final deletedIds = <int>{};
-      final deletedKeysById = <int, String>{};
-      var maxSenderLocalRevision = 0;
+      final allExisting = await db.getAllGames();
+      final existingById = <int, GameEntry>{
+        for (final g in allExisting) g.id: g,
+      };
+
+      final deletableIds = <int>[];
+
       for (final tombstone in tombstones) {
         final tombstoneId = (tombstone['id'] as num?)?.toInt();
-        final gameKey = (tombstone['gameKey'] as String?)?.trim() ?? '';
-        if (tombstoneId == null || tombstoneId <= 0) {
-          // Ignore legacy key-only tombstones to avoid deleting a wrong row
-          // when duplicate keys exist locally.
-          continue;
-        }
+        if (tombstoneId == null || tombstoneId <= 0) continue;
 
-        final deletedAtMillis = (tombstone['deletedAt'] as num?)?.toInt() ?? 0;
+        final deletedAtMillis =
+            (tombstone['deletedAt'] as num?)?.toInt() ?? 0;
         final deletedAt = deletedAtMillis <= 0
             ? DateTime.fromMillisecondsSinceEpoch(0)
             : DateTime.fromMillisecondsSinceEpoch(deletedAtMillis);
-        // Use the *sender's* `localRevision` (already in the payload) when
-        // recording the tombstone locally.  This is the value the sender used
-        // when it originally deleted the game, so both sides end up with the
-        // same `local_revision` for the same tombstone.  That consistency is
-        // what lets the sender safely prune its own table up to the revision
-        // it just transmitted, and lets any future peer filter tombstones
-        // using a peer-known revision that actually matches what the sender
-        // produced.
-        final tombstoneLocalRevision =
-            (tombstone['localRevision'] as num?)?.toInt() ?? 0;
-        if (tombstoneLocalRevision > maxSenderLocalRevision) {
-          maxSenderLocalRevision = tombstoneLocalRevision;
-        }
         final existing = existingById[tombstoneId];
         if (existing == null) {
-          deletedIds.add(tombstoneId);
-          if (gameKey.isNotEmpty) {
-            deletedKeysById[tombstoneId] = gameKey;
-          }
+          // Already gone locally — count as deleted.
+          deletableIds.add(tombstoneId);
+          deleted++;
           continue;
         }
 
         if (existing.updatedAt.isAfter(deletedAt)) {
+          // Local copy is newer — conflict, keep local.
           conflicts++;
           continue;
         }
 
-        await (db.delete(db.gameTags)..where((gt) => gt.gameId.equals(existing.id))).go();
-        await (db.delete(db.games)..where((g) => g.id.equals(existing.id))).go();
-        existingById.remove(existing.id);
-        deletedIds.add(existing.id);
-        if (existing.gameKey.trim().isNotEmpty) {
-          deletedKeysById[existing.id] = existing.gameKey;
-        }
+        deletableIds.add(tombstoneId);
         deleted++;
       }
-      if (deletedIds.isNotEmpty) {
-        // Record tombstones with the sender's `localRevision` (or, if the
-        // payload was missing it, fall back to the revision we just bumped
-        // so the row still has a sensible value).  Falling back to a value
-        // strictly greater than every other recent revision also guarantees
-        // it cannot accidentally subsume a future sender-side prune.
-        final recordRevision = maxSenderLocalRevision > 0
-            ? maxSenderLocalRevision
-            : incomingDeleteRevision;
-        await db.recordGameDeletionTombstones(
-          deletedIds.toList(growable: false),
-          gameKeysById: deletedKeysById,
-          localRevision: recordRevision,
-        );
+
+      // ── Phase 2: Batch-delete tombstoned games ──────────────────────
+      if (deletableIds.isNotEmpty) {
+        await db.transaction(() async {
+          await db.batchDeleteGameTags(deletableIds);
+          await (db.delete(db.games)
+                ..where((g) => g.id.isIn(deletableIds)))
+              .go();
+        });
       }
     }
 
+    // ── Phase 3: Batch-apply upserts ──────────────────────────────────
     final upsertResult = await applyPayload(gamesJson, lastSyncAt: lastSyncAt);
-    inserted += upsertResult.inserted;
-    updated += upsertResult.updated;
-    conflicts += upsertResult.conflicts;
 
     // When this device receives only upserts (no tombstones), the local
     // revision must still advance so other trusted peers can detect that this
     // database changed and pull the propagated updates.
-    if (tombstones.isEmpty && (upsertResult.inserted > 0 || upsertResult.updated > 0)) {
+    if (tombstones.isEmpty &&
+        (upsertResult.inserted > 0 || upsertResult.updated > 0)) {
       await db.markLocalDataChanged();
     }
 
     return SyncImportResult(
-      inserted: inserted + deleted,
-      updated: updated,
-      conflicts: conflicts,
+      inserted: upsertResult.inserted + deleted,
+      updated: upsertResult.updated,
+      conflicts: upsertResult.conflicts + conflicts,
     );
   }
 
@@ -774,4 +708,46 @@ class SyncPayloadCodec {
     if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
     return imagesDir;
   }
+}
+
+/// Intermediate struct for an incoming game during the classify pass.
+/// Avoids repeated JSON field extraction inside loops.
+class _IncomingGame {
+  const _IncomingGame({
+    required this.incomingId,
+    required this.gameKey,
+    required this.title,
+    required this.platform,
+    required this.dateAdded,
+    required this.updatedAt,
+    required this.notes,
+    required this.isUsed,
+    required this.resolvedCoverImage,
+    required this.hasDeadline,
+    required this.deadlineDate,
+    required this.isDlc,
+    required this.steamAppId,
+    required this.developer,
+    required this.reviewScore,
+    required this.reviewCount,
+    required this.tagsRaw,
+  });
+
+  final int? incomingId;
+  final String gameKey;
+  final String title;
+  final String platform;
+  final DateTime dateAdded;
+  final DateTime updatedAt;
+  final String notes;
+  final bool isUsed;
+  final String resolvedCoverImage;
+  final bool hasDeadline;
+  final DateTime? deadlineDate;
+  final bool isDlc;
+  final String steamAppId;
+  final String developer;
+  final int reviewScore;
+  final int reviewCount;
+  final List<dynamic> tagsRaw;
 }

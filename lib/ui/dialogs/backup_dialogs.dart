@@ -1,8 +1,6 @@
 /// Backup and restore dialogs for database management
 library;
 
-import 'dart:io';
-
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,10 +10,15 @@ import 'package:path/path.dart' as p;
 import '../../core/database/database.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/database_switching.dart';
+import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import '../pages/settings_sections/settings_common.dart';
+import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
+import '../widgets/password_field.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Show the backup management dialog
 Future<void> showBackupDialog(BuildContext context) {
@@ -65,7 +68,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
   bool _createBackupFirst = true;
   final _passwordController = TextEditingController();
   bool _isRestoring = false;
-  bool _showPassword = false;
   bool _isDragging = false;
   bool _isHovering = false;
 
@@ -145,8 +147,20 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
     try {
       final backupService = ref.read(backupServiceProvider);
       final backupsDir = await backupService.getBackupsDirectory();
-      if (Platform.isWindows) {
-        await Process.run('explorer', [backupsDir.path]);
+      final opened = await PlatformFileActions.openDirectory(backupsDir.path);
+      if (!opened && PlatformFileActions.isMobilePlatform) {
+        await PlatformFileActions.shareText(
+          'UniKM backups directory: ${backupsDir.path}',
+          subject: 'UniKM backups directory',
+        );
+        NotificationManager.instance.info(
+          'Shared the backups folder path because the platform could not open it directly',
+        );
+        return;
+      }
+
+      if (!opened) {
+        NotificationManager.instance.error('Failed to open backup folder');
       }
     } catch (e) {
       NotificationManager.instance.error('Failed to open backup folder: $e');
@@ -154,7 +168,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
   }
 
   Future<void> _selectBackupFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['db', 'enc'],
       dialogTitle: 'Select Backup File',
@@ -203,16 +217,13 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
 
       if (result.success) {
         if (!mounted) return;
-        final rootContext = Navigator.of(context, rootNavigator: true).context;
         final container = ProviderScope.containerOf(context, listen: false);
         Navigator.pop(context);
-        await Future.delayed(const Duration(milliseconds: 50));
-        if (!rootContext.mounted) return;
-        await _showReloadRequiredDialog(
-          rootContext,
-          container: container,
+        await _reloadDatabaseFromSettings(
+          container,
           password: _isEncryptedBackup ? _passwordController.text : null,
         );
+        NotificationManager.instance.success('Backup restored and reloaded');
       } else {
         NotificationManager.instance.error(result.error ?? 'Failed to restore backup');
       }
@@ -223,124 +234,76 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
     }
   }
 
-  Future<void> _showReloadRequiredDialog(
-    BuildContext dialogContext, {
-    required ProviderContainer container,
-    String? password,
-  }) async {
-    await showDialog(
-      context: dialogContext,
-      barrierDismissible: false,
-      builder: (context) {
-        final theme = container.read(themeProvider);
-        return AlertDialog(
-          backgroundColor: theme.background,
-          title: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 28),
-              const SizedBox(width: 12),
-              Text('Restore Complete', style: TextStyle(color: theme.textPrimary)),
-            ],
-          ),
-          content: Text(
-            'The backup has been restored successfully.\n\n'
-            'Reload the database to use the restored data.',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                await _reloadDatabaseFromSettings(container, password: password);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reload Now'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final backupSettings = ref.watch(backupSettingsProvider);
     final maxBackups = backupSettings.maxCount;
+    final supportsDragAndDrop = PlatformFileActions.supportsDragAndDrop;
 
-    return Dialog(
-      backgroundColor: theme.background,
-      child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 700),
-        padding: const EdgeInsets.all(20),
-        child: DefaultTabController(
-          length: 2,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DialogHeader(
-                icon: Icons.backup,
-                title: 'Backup Manager',
-                theme: theme,
-                showCloseButton: true,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted.',
-                style: TextStyle(color: theme.textSecondary, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
+    return DefaultTabController(
+      length: 2,
+      child: ThemedAlertDialog(
+        theme: theme,
+
+        maxWidth: 600,
+        maxHeight: 700,
+        title: DialogHeader(
+          icon: Icons.backup,
+          title: 'Backup Manager',
+          theme: theme,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted.',
+              style: TextStyle(color: theme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: kDialogSpacing),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
                       onPressed: _isCreatingBackup ? null : _createBackup,
                       icon: _isCreatingBackup
-                          ? SizedBox(
+                          ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: theme.textPrimary,
-                              ),
+                              child: AppCircularProgressIndicator(),
                             )
-                          : const Icon(Icons.add),
-                      label: Text(_isCreatingBackup ? 'Creating...' : 'Create Backup Now'),
+                          : const Icon(Icons.backup),
+                      label: Text(_isCreatingBackup ? 'Creating...' : 'Create Backup'),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _openBackupFolder,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Open Folder'),
-                  ),
+                  const SizedBox(width: kElementHSpacing),
+                  if (!PlatformFileActions.isMobilePlatform)
+                    OutlinedButton.icon(
+                      onPressed: _openBackupFolder,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Open Folder'),
+                    ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: kDialogSpacing),
               TabBar(
                 labelColor: theme.textPrimary,
                 unselectedLabelColor: theme.textSecondary,
                 indicator: theme.tabIndicator,
                 indicatorSize: TabBarIndicatorSize.tab,
                 tabs: [
-                  Tab(text: 'Existing Backups (${_backups.length}/$maxBackups)'),
+                  Tab(text: 'Backups (${_backups.length}/$maxBackups)'),
                   const Tab(text: 'Restore from File'),
                 ],
               ),
               const SizedBox(height: 12),
-              Expanded(
-                child: TabBarView(
+            SizedBox(
+              height: 350,
+              child: TabBarView(
                   children: [
                     _isLoading
-                        ? Center(child: CircularProgressIndicator(color: theme.accent))
+                        ? const Center(child: AppCircularProgressIndicator())
                         : _backups.isEmpty
                             ? Center(
                                 child: Column(
@@ -397,7 +360,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                               onEnter: (_) => setState(() => _isHovering = true),
                               onExit: (_) => setState(() => _isHovering = false),
                               child: DropTarget(
-                                enable: true,
+                                enable: supportsDragAndDrop,
                                 onDragDone: (details) {
                                   if (details.files.isNotEmpty) {
                                     _handleFilePath(details.files.first.path);
@@ -441,7 +404,11 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                                             children: [
                                               Text(
                                                 _selectedBackupName ??
-                                                    (_isDragging ? 'Drop file here...' : 'Click to select or drag file here...'),
+                                                    (_isDragging && supportsDragAndDrop
+                                                        ? 'Drop file here...'
+                                                        : supportsDragAndDrop
+                                                        ? 'Click to select or drag file here...'
+                                                        : 'Tap to select a backup file...'),
                                                 style: TextStyle(
                                                   color: _isDragging
                                                       ? theme.accent
@@ -470,43 +437,20 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                           ),
                           if (_isEncryptedBackup) ...[
                             const SizedBox(height: 12),
-                            TextField(
+                            PasswordField(
                               controller: _passwordController,
-                              obscureText: !_showPassword,
-                              decoration: InputDecoration(
-                                hintText: 'Enter backup password',
-                                filled: true,
-                                fillColor: theme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(theme.cornerRadius),
-                                  borderSide: BorderSide(color: theme.border),
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showPassword ? Icons.visibility_off : Icons.visibility,
-                                    color: theme.textSecondary,
-                                  ),
-                                  onPressed: () => setState(() => _showPassword = !_showPassword),
-                                ),
-                              ),
+                              labelText: 'Backup Password',
                             ),
                           ],
-                          const SizedBox(height: 8),
-                          CheckboxListTile(
+                          const SizedBox(height: kElementVSpacing),
+                          ToggleSettingRow(
+                            theme: theme,
+                            label: 'Backup current database',
+                            description: 'Recommended for safety',
                             value: _createBackupFirst,
-                            onChanged: (value) => setState(() => _createBackupFirst = value ?? true),
-                            title: Text(
-                              'Create backup of current database first',
-                              style: TextStyle(color: theme.textPrimary),
-                            ),
-                            subtitle: Text(
-                              'Recommended for safety',
-                              style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
+                            onChanged: (value) => setState(() => _createBackupFirst = value),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: kElementVSpacing),
                           DialogActionBar(
                             theme: theme,
                             onConfirm: _restoreFromSelectedFile,
@@ -523,9 +467,8 @@ class _BackupDialogState extends ConsumerState<_BackupDialog> {
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -584,7 +527,7 @@ class _BackupListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${backup.formattedSize} • ${backup.fileName}',
+                  '${backup.formattedSize} � ${backup.fileName}',
                   style: TextStyle(
                     color: theme.textSecondary,
                     fontSize: 12,
@@ -619,92 +562,68 @@ Future<bool> showRestoreConfirmDialog(
   
   String? password;
   bool createBackupFirst = true;
+  final passwordController = TextEditingController();
 
-  if (backup.isEncrypted) {
-    // Show password dialog first
-    password = await showDialog<String>(
+  try {
+    if (backup.isEncrypted) {
+      // Show password dialog first
+      password = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return ThemedAlertDialog(
+            theme: theme,
+
+            title: DialogHeader(
+              icon: Icons.lock,
+              iconColor: Colors.amber,
+              title: 'Encrypted Backup',
+              theme: theme,
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This backup is encrypted. Please enter the password to restore it.',
+                  style: TextStyle(color: theme.textSecondary),
+                ),
+                const SizedBox(height: kDialogSpacing),
+                PasswordField(
+                  controller: passwordController,
+                  labelText: 'Password',
+                  autofocus: true,
+                  onFieldSubmitted: (value) => Navigator.pop(context, value),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, passwordController.text),
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (password == null || password.isEmpty) return true;
+    }
+
+    // Show confirmation dialog
+    if (!context.mounted) return false;
+    
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        final passwordController = TextEditingController();
-        bool showPassword = false;
-        
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: theme.background,
-              title: Row(
-                children: [
-                  Icon(Icons.lock, color: Colors.amber),
-                  const SizedBox(width: 12),
-                  Text('Encrypted Backup', style: TextStyle(color: theme.textPrimary)),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'This backup is encrypted. Please enter the password to restore it.',
-                    style: TextStyle(color: theme.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: !showPassword,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      filled: true,
-                      fillColor: theme.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          showPassword ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () => setState(() => showPassword = !showPassword),
-                      ),
-                    ),
-                    onSubmitted: (value) => Navigator.pop(context, value),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, passwordController.text),
-                  child: const Text('Continue'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+            return ThemedAlertDialog(
+              theme: theme,
 
-    if (password == null || password.isEmpty) return true;
-  }
-
-  // Show confirmation dialog
-  if (!context.mounted) return false;
-  
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: theme.background,
-            title: Row(
-              children: [
-                Icon(Icons.restore, color: theme.accent),
-                const SizedBox(width: 12),
-                Text('Restore Backup', style: TextStyle(color: theme.textPrimary)),
-              ],
+            title: DialogHeader(
+              icon: Icons.restore,
+              title: 'Restore Backup',
+              theme: theme,
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -730,7 +649,7 @@ Future<bool> showRestoreConfirmDialog(
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: kDialogSpacing),
                 Text(
                   'Backup to restore:',
                   style: TextStyle(color: theme.textSecondary),
@@ -743,90 +662,51 @@ Future<bool> showRestoreConfirmDialog(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 16),
-                CheckboxListTile(
+                const SizedBox(height: kDialogSpacing),
+                ToggleSettingRow(
+                  theme: theme,
+                  label: 'Backup current database',
+                  description: 'Recommended for safety',
                   value: createBackupFirst,
-                  onChanged: (value) => setState(() => createBackupFirst = value ?? true),
-                  title: Text(
-                    'Create backup of current database first',
-                    style: TextStyle(color: theme.textPrimary, fontSize: 14),
-                  ),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
+                  onChanged: (value) => setState(() => createBackupFirst = value),
                 ),
               ],
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('Restore'),
               ),
             ],
-          );
-        },
-      );
-    },
-  );
-
-  if (!context.mounted) return false;
-
-  if (confirmed != true) return true;
-
-  // Perform the restore
-  final backupService = container.read(backupServiceProvider);
-  final result = await backupService.restoreBackup(
-    backupPath: backup.filePath,
-    password: password,
-    createBackupFirst: createBackupFirst,
-  );
-
-  if (!context.mounted) return false;
-
-  if (result.success) {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: theme.background,
-          title: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 28),
-              const SizedBox(width: 12),
-              Text('Restore Complete', style: TextStyle(color: theme.textPrimary)),
-            ],
-          ),
-          content: Text(
-            'The backup has been restored successfully.\n\n'
-            'Reload the database to use the restored data.',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                await _reloadDatabaseFromSettings(container, password: password);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reload Now'),
-            ),
-          ],
+            );
+          },
         );
       },
     );
-  } else {
-    NotificationManager.instance.error(result.error ?? 'Failed to restore backup');
-  }
 
-  return false;
+    if (!context.mounted) return false;
+
+    if (confirmed != true) return true;
+
+    // Perform the restore
+    final backupService = container.read(backupServiceProvider);
+    final result = await backupService.restoreBackup(
+      backupPath: backup.filePath,
+      password: password,
+      createBackupFirst: createBackupFirst,
+    );
+
+    if (!context.mounted) return false;
+
+    if (result.success) {
+      await _reloadDatabaseFromSettings(container, password: password);
+      NotificationManager.instance.success('Backup restored and reloaded');
+    } else {
+      NotificationManager.instance.error(result.error ?? 'Failed to restore backup');
+    }
+
+    return false;
+  } finally {
+    passwordController.dispose();
+  }
 }

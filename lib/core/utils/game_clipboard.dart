@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/services.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../models/game.dart';
 import '../../ui/widgets/notification_system.dart';
 
@@ -60,8 +61,7 @@ class GameClipboard {
 
     final lines = <String>[];
     for (final g in steamTargets) {
-      final url =
-          'https://store.steampowered.com/account/registerkey?key=${g.gameKey}';
+      final url = steamRegisterKeyPageUrl(g.gameKey);
       if (includeTitle) {
         lines.add('${g.title}: $url');
       } else {

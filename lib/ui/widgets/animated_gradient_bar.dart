@@ -30,6 +30,7 @@ class AnimatedGradientBar extends ConsumerStatefulWidget {
     this.autoPauseWhenNotVisible = false,
     this.optimizeForPreview = false,
     this.maxFps = 60.0,
+    this.flipWaveForLeftVertical = false,
   }) : assert(
          theme != null || colors != null,
          'Either theme or colors must be provided',
@@ -46,8 +47,9 @@ class AnimatedGradientBar extends ConsumerStatefulWidget {
   final bool autoPauseWhenNotVisible;
   final bool optimizeForPreview;
   final double maxFps;
+  final bool flipWaveForLeftVertical;
 
-  List<Color> get gradientColors => colors ?? [theme!.accent, theme!.primary];
+  List<Color> get gradientColors => colors ?? [theme!.accent, theme!.secondary];
 
   @override
   ConsumerState<AnimatedGradientBar> createState() =>
@@ -70,6 +72,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
     GradientAnimation.scanner: 0.25,
     GradientAnimation.heart: 0.4,
     GradientAnimation.aurora: 0.4,
+    GradientAnimation.wave: 0.35,
   };
 
   @override
@@ -205,6 +208,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
       bg,
       v,
       widget.optimizeForPreview,
+      widget.flipWaveForLeftVertical,
     ),
     isComplex: true,
     willChange: true,
@@ -220,6 +224,7 @@ class _GradientPainter extends CustomPainter {
     this.bg,
     this.vert,
     this.lightweight,
+    this.flipWaveForLeftVertical,
   );
 
   final double progress;
@@ -227,6 +232,7 @@ class _GradientPainter extends CustomPainter {
   final Color primary, accent, bg;
   final bool vert;
   final bool lightweight;
+  final bool flipWaveForLeftVertical;
 
   static final _paint = Paint()..isAntiAlias = false;
 
@@ -255,6 +261,8 @@ class _GradientPainter extends CustomPainter {
         _heart(canvas, rect);
       case GradientAnimation.aurora:
         _aurora(canvas, rect);
+      case GradientAnimation.wave:
+        _wave(canvas, rect);
     }
   }
 
@@ -593,6 +601,141 @@ class _GradientPainter extends CustomPainter {
     c.drawRect(r, _paint);
   }
 
+  void _wave(Canvas c, Rect r) {
+    _paintOriented(c, r, (canvas, size) {
+      if (vert && flipWaveForLeftVertical) {
+        canvas.translate(size.width, size.height);
+        canvas.rotate(math.pi);
+      }
+
+      final backgroundPaint = Paint()
+        ..isAntiAlias = true
+        ..color = bg.withValues(alpha: 0.52);
+      canvas.drawRect(Offset.zero & size, backgroundPaint);
+
+      final layerColors = <Color>[
+        accent.withValues(alpha: 0.72),
+        Color.lerp(primary, accent, 0.45)!.withValues(alpha: 0.62),
+        primary.withValues(alpha: 0.55),
+      ];
+      final baseHeights = <double>[0.48, 0.62, 0.78];
+      final xDrift = <double>[0.05, 0.09, 0.14];
+      final yDrift = <double>[0.05, 0.07, 0.10];
+      final frequencies = <double>[2.25, 1.85, 1.4];
+      final secondaryFrequencies = <double>[4.3, 3.6, 2.9];
+      final phases = <double>[3.4, 2.1, 0.9];
+
+      for (var layerIndex = 0; layerIndex < layerColors.length; layerIndex++) {
+        _drawWaveLayer(
+          canvas,
+          size,
+          color: layerColors[layerIndex],
+          baseHeightFactor: baseHeights[layerIndex],
+          amplitude: math.max(size.height * (0.24 - (layerIndex * 0.03)), 1.0),
+          secondaryAmplitude: math.max(
+            size.height * (0.08 - (layerIndex * 0.01)),
+            0.45,
+          ),
+          xDriftFactor: xDrift[layerIndex],
+          yDriftFactor: yDrift[layerIndex],
+          frequency: frequencies[layerIndex],
+          secondaryFrequency: secondaryFrequencies[layerIndex],
+          phase: phases[layerIndex],
+        );
+      }
+    });
+  }
+
+  void _paintOriented(
+    Canvas canvas,
+    Rect rect,
+    void Function(Canvas, Size) painter,
+  ) {
+    if (!vert) {
+      painter(canvas, rect.size);
+      return;
+    }
+
+    canvas.save();
+    canvas.translate(0, rect.height);
+    canvas.rotate(-math.pi / 2);
+    painter(canvas, Size(rect.height, rect.width));
+    canvas.restore();
+  }
+
+  void _drawWaveLayer(
+    Canvas canvas,
+    Size size, {
+    required Color color,
+    required double baseHeightFactor,
+    required double amplitude,
+    required double secondaryAmplitude,
+    required double xDriftFactor,
+    required double yDriftFactor,
+    required double frequency,
+    required double secondaryFrequency,
+    required double phase,
+  }) {
+    final path = Path();
+    final overscan = size.width * 0.18;
+    final xDrift =
+        math.sin((progress * 1.4) + phase) * (size.width * xDriftFactor);
+    final yDrift =
+        math.cos((progress * 1.1) + (phase * 1.7)) *
+        (size.height * yDriftFactor);
+    final baseY = (size.height * baseHeightFactor) + yDrift;
+    final step = math.max(size.width / (lightweight ? 18 : 28), 6.0);
+
+    path.moveTo(-overscan, size.height * 1.18);
+    for (double x = -overscan; x <= size.width + overscan; x += step) {
+      final t = (x + xDrift) / size.width;
+      final wave = math.sin(
+        (t * frequency * math.pi * 2) + (progress * 2.3) + phase,
+      );
+      final detail = math.sin(
+        (t * secondaryFrequency * math.pi * 2) -
+            (progress * 3.1) +
+            (phase * 0.65),
+      );
+      final y = baseY + (wave * amplitude) + (detail * secondaryAmplitude);
+      path.lineTo(x, y.clamp(-size.height * 0.35, size.height * 1.12));
+    }
+    path.lineTo(size.width + overscan, size.height * 1.18);
+    path.close();
+
+    final fillPaint = Paint()
+      ..isAntiAlias = true
+      ..color = color;
+    canvas.drawPath(path, fillPaint);
+
+    final crestPaint = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = color.withValues(alpha: color.a * 0.42);
+    final crestPath = Path();
+    var started = false;
+    for (double x = -overscan; x <= size.width + overscan; x += step) {
+      final t = (x + xDrift) / size.width;
+      final wave = math.sin(
+        (t * frequency * math.pi * 2) + (progress * 2.3) + phase,
+      );
+      final detail = math.sin(
+        (t * secondaryFrequency * math.pi * 2) -
+            (progress * 3.1) +
+            (phase * 0.65),
+      );
+      final y = baseY + (wave * amplitude) + (detail * secondaryAmplitude);
+      if (!started) {
+        crestPath.moveTo(x, y);
+        started = true;
+      } else {
+        crestPath.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(crestPath, crestPaint);
+  }
+
   Color _alpha(Color c, double a) => c.withValues(alpha: a.clamp(0.0, 1.0));
 
   @override
@@ -602,7 +745,8 @@ class _GradientPainter extends CustomPainter {
       old.vert != vert ||
       old.primary != primary ||
       old.accent != accent ||
-      old.lightweight != lightweight;
+      old.lightweight != lightweight ||
+      old.flipWaveForLeftVertical != flipWaveForLeftVertical;
 }
 
 /// Preview widget for gradient effects in settings

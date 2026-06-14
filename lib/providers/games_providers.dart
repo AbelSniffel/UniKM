@@ -1,6 +1,8 @@
 /// Riverpod providers for game list state, filtering, sorting, and selection.
 library;
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +16,27 @@ import 'tags_providers.dart';
 // =============================================================================
 // GAMES STATE
 // =============================================================================
+
+/// Bump the sync DB revision ID to signal that local data has changed.
+/// Call this after any add, update, or remove operation.
+Future<void> _bumpSyncDbRevision(Ref ref) async {
+  final id = DateTime.now().millisecondsSinceEpoch.toString();
+  try {
+    final db = ref.read(databaseProvider);
+    var dbTimestampMillis = DateTime.now().millisecondsSinceEpoch;
+    if (db != null) {
+      await db.markLocalDataChanged(timestampMillis: dbTimestampMillis);
+      dbTimestampMillis = await db.getSyncDbTimestampMillis();
+    }
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    await settingsNotifier.setMany({
+      SettingsKeys.syncDbRevisionId: id,
+      SettingsKeys.syncDbTimestampMillis: dbTimestampMillis,
+    });
+  } catch (_) {
+    // Non-critical – never block game operations for a revision bump failure.
+  }
+}
 
 /// State for the games list with filtering and sorting
 class GamesState {
@@ -30,6 +53,7 @@ class GamesState {
     this.showDlcOnly = false,
     this.showUsedOnly = false,
     this.showNoPicturesOnly = false,
+    this.showNoTagsOnly = false,
     this.sortMode = GameSortMode.deadlineFirst,
     this.selectedGameIds = const {},
     this.filteredGames = const [],
@@ -45,6 +69,7 @@ class GamesState {
   final bool showDlcOnly;
   final bool showUsedOnly;
   final bool showNoPicturesOnly;
+  final bool showNoTagsOnly;
   final GameSortMode sortMode;
   final Set<int> selectedGameIds;
   final List<Game> filteredGames;
@@ -64,24 +89,28 @@ class GamesState {
     required bool showDlcOnly,
     required bool showUsedOnly,
     required bool showNoPicturesOnly,
+    required bool showNoTagsOnly,
     required GameSortMode sortMode,
   }) {
     var result = List<Game>.from(games);
-    
+
     // Search filter
     if (searchQuery.isNotEmpty) {
       final query = searchQuery.toLowerCase();
-      result = result.where((g) => 
-        g.title.toLowerCase().contains(query) ||
-        g.gameKey.toLowerCase().contains(query)
-      ).toList();
+      result = result
+          .where(
+            (g) =>
+                g.title.toLowerCase().contains(query) ||
+                g.gameKey.toLowerCase().contains(query),
+          )
+          .toList();
     }
-    
+
     // Platform filter
     if (platformFilter != null && platformFilter.isNotEmpty) {
       result = result.where((g) => g.platform == platformFilter).toList();
     }
-    
+
     // Tag filters (AND logic - must have all selected tags)
     if (tagFilters.isNotEmpty) {
       result = result.where((g) {
@@ -89,7 +118,7 @@ class GamesState {
         return tagFilters.every((tagId) => gameTagIds.contains(tagId));
       }).toList();
     }
-    
+
     // Toggle filters
     if (showDeadlineOnly) {
       result = result.where((g) => g.hasDeadline).toList();
@@ -103,16 +132,19 @@ class GamesState {
     if (showNoPicturesOnly) {
       result = result.where((g) => !g.hasCoverImage).toList();
     }
-    
+    if (showNoTagsOnly) {
+      result = result.where((g) => g.tags.isEmpty).toList();
+    }
+
     // Sort
     result = _sortGames(result, sortMode);
-    
+
     return result;
   }
 
   static List<Game> _sortGames(List<Game> games, GameSortMode mode) {
     final sorted = List<Game>.from(games);
-    
+
     switch (mode) {
       case GameSortMode.deadlineFirst:
         sorted.sort((a, b) {
@@ -131,8 +163,9 @@ class GamesState {
             if (!aExpired && bExpired) return -1; // active -> earlier
 
             // Both active or both expired: fall back to chronological order
-            return (a.deadlineDate ?? DateTime.now())
-                .compareTo(b.deadlineDate ?? DateTime.now());
+            return (a.deadlineDate ?? DateTime.now()).compareTo(
+              b.deadlineDate ?? DateTime.now(),
+            );
           }
 
           return a.title.compareTo(b.title);
@@ -163,7 +196,7 @@ class GamesState {
         sorted.sort((a, b) => a.reviewScore.compareTo(b.reviewScore));
         break;
     }
-    
+
     return sorted;
   }
 
@@ -178,24 +211,27 @@ class GamesState {
     bool? showDlcOnly,
     bool? showUsedOnly,
     bool? showNoPicturesOnly,
+    bool? showNoTagsOnly,
     GameSortMode? sortMode,
     Set<int>? selectedGameIds,
   }) {
     final nextGames = games ?? this.games;
     final nextSearchQuery = searchQuery ?? this.searchQuery;
     final nextPlatformFilter = platformFilter == _unset
-          ? this.platformFilter
-          : platformFilter as String?;
+        ? this.platformFilter
+        : platformFilter as String?;
     final nextTagFilters = tagFilters ?? this.tagFilters;
     final nextShowDeadlineOnly = showDeadlineOnly ?? this.showDeadlineOnly;
     final nextShowDlcOnly = showDlcOnly ?? this.showDlcOnly;
     final nextShowUsedOnly = showUsedOnly ?? this.showUsedOnly;
-    final nextShowNoPicturesOnly = showNoPicturesOnly ?? this.showNoPicturesOnly;
+    final nextShowNoPicturesOnly =
+        showNoPicturesOnly ?? this.showNoPicturesOnly;
+    final nextShowNoTagsOnly = showNoTagsOnly ?? this.showNoTagsOnly;
     final nextSortMode = sortMode ?? this.sortMode;
 
     // Check if re-filtering is needed.
     // If only selectedGameIds or isLoading/error changed, we can reuse result.
-    final needsRefilter = 
+    final needsRefilter =
         games != null ||
         searchQuery != null ||
         platformFilter != _unset ||
@@ -204,9 +240,10 @@ class GamesState {
         showDlcOnly != null ||
         showUsedOnly != null ||
         showNoPicturesOnly != null ||
+        showNoTagsOnly != null ||
         sortMode != null;
 
-    final nextFilteredGames = needsRefilter 
+    final nextFilteredGames = needsRefilter
         ? _computeFilteredGames(
             games: nextGames,
             searchQuery: nextSearchQuery,
@@ -216,6 +253,7 @@ class GamesState {
             showDlcOnly: nextShowDlcOnly,
             showUsedOnly: nextShowUsedOnly,
             showNoPicturesOnly: nextShowNoPicturesOnly,
+            showNoTagsOnly: nextShowNoTagsOnly,
             sortMode: nextSortMode,
           )
         : filteredGames;
@@ -231,6 +269,7 @@ class GamesState {
       showDlcOnly: nextShowDlcOnly,
       showUsedOnly: nextShowUsedOnly,
       showNoPicturesOnly: nextShowNoPicturesOnly,
+      showNoTagsOnly: nextShowNoTagsOnly,
       sortMode: nextSortMode,
       selectedGameIds: selectedGameIds ?? this.selectedGameIds,
       filteredGames: nextFilteredGames,
@@ -255,7 +294,7 @@ class GamesNotifier extends Notifier<GamesState> {
 
   /// Tracks if a load is already in progress to prevent duplicate calls
   bool _isLoadingInProgress = false;
-  
+
   /// Tracks the last database revision to detect actual changes
   int _lastLoadedRevision = -1;
 
@@ -290,6 +329,7 @@ class GamesNotifier extends Notifier<GamesState> {
     required bool showDlcOnly,
     required bool showUsedOnly,
     required bool showNoPicturesOnly,
+    required bool showNoTagsOnly,
     required GameSortMode sortMode,
   }) async {
     if (games.isEmpty) return const [];
@@ -297,7 +337,8 @@ class GamesNotifier extends Notifier<GamesState> {
     final filtered = <Game>[];
     final normalizedQuery = searchQuery.trim().toLowerCase();
     final hasQuery = normalizedQuery.isNotEmpty;
-    final hasPlatformFilter = platformFilter != null && platformFilter.isNotEmpty;
+    final hasPlatformFilter =
+        platformFilter != null && platformFilter.isNotEmpty;
     final hasTagFilters = tagFilters.isNotEmpty;
 
     for (var i = 0; i < games.length; i++) {
@@ -306,7 +347,8 @@ class GamesNotifier extends Notifier<GamesState> {
       if (hasQuery) {
         final title = game.title.toLowerCase();
         final key = game.gameKey.toLowerCase();
-        if (!title.contains(normalizedQuery) && !key.contains(normalizedQuery)) {
+        if (!title.contains(normalizedQuery) &&
+            !key.contains(normalizedQuery)) {
           if (i != 0 && i % _loadChunkSize == 0) {
             await _yieldToUi();
           }
@@ -355,6 +397,12 @@ class GamesNotifier extends Notifier<GamesState> {
         }
         continue;
       }
+      if (showNoTagsOnly && game.tags.isNotEmpty) {
+        if (i != 0 && i % _loadChunkSize == 0) {
+          await _yieldToUi();
+        }
+        continue;
+      }
 
       filtered.add(game);
 
@@ -378,6 +426,7 @@ class GamesNotifier extends Notifier<GamesState> {
       showDlcOnly: previous.showDlcOnly,
       showUsedOnly: previous.showUsedOnly,
       showNoPicturesOnly: previous.showNoPicturesOnly,
+      showNoTagsOnly: previous.showNoTagsOnly,
       sortMode: previous.sortMode,
     );
 
@@ -397,6 +446,7 @@ class GamesNotifier extends Notifier<GamesState> {
       showDlcOnly: previous.showDlcOnly,
       showUsedOnly: previous.showUsedOnly,
       showNoPicturesOnly: previous.showNoPicturesOnly,
+      showNoTagsOnly: previous.showNoTagsOnly,
       sortMode: previous.sortMode,
       selectedGameIds: selectedIds,
       filteredGames: filteredGames,
@@ -407,7 +457,7 @@ class GamesNotifier extends Notifier<GamesState> {
   GamesState build() {
     // Watch the database state so we reload when the database changes
     final dbState = ref.watch(databaseNotifierProvider);
-    
+
     // Read initial sort mode from settings.
     final sortMode = ref.read(gameSortModeSettingProvider);
 
@@ -442,13 +492,13 @@ class GamesNotifier extends Notifier<GamesState> {
     // Prevent duplicate concurrent loads
     if (_isLoadingInProgress) return;
     _isLoadingInProgress = true;
-    
+
     try {
       state = state.copyWith(isLoading: true, error: null);
-      
+
       final db = ref.read(requireDatabaseProvider);
       final entries = await db.getAllGames();
-      
+
       // Batch fetch all tags in a single query (eliminates N+1)
       final gameIds = entries.map((e) => e.id).toList();
       final tagsByGame = await db.getTagsForGames(gameIds);
@@ -483,25 +533,27 @@ class GamesNotifier extends Notifier<GamesState> {
   }) async {
     try {
       final db = ref.read(requireDatabaseProvider);
-      
-      final id = await db.insertGame(GamesCompanion.insert(
-        title: title,
-        gameKey: gameKey,
-        platform: Value(platform),
-        notes: Value(notes),
-        coverImage: Value(coverImage),
-        hasDeadline: Value(hasDeadline),
-        deadlineDate: Value(deadlineDate),
-        isDlc: Value(isDlc),
-        steamAppId: Value(steamAppId),
-        updatedAt: Value(DateTime.now()),
-      ));
-      
+
+      final id = await db.insertGame(
+        GamesCompanion.insert(
+          title: title,
+          gameKey: gameKey,
+          platform: Value(platform),
+          notes: Value(notes),
+          coverImage: Value(coverImage),
+          hasDeadline: Value(hasDeadline),
+          deadlineDate: Value(deadlineDate),
+          isDlc: Value(isDlc),
+          steamAppId: Value(steamAppId),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
       // Add tags
       if (tagIds.isNotEmpty) {
         await db.setTagsForGame(id, tagIds);
       }
-      
+
       final entry = await db.getGameById(id);
       if (entry == null) return null;
 
@@ -514,6 +566,7 @@ class GamesNotifier extends Notifier<GamesState> {
         isLoading: false,
       );
       await persistEncryptedDbIfNeeded(ref);
+      unawaited(_bumpSyncDbRevision(ref));
       return newGame;
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -526,25 +579,28 @@ class GamesNotifier extends Notifier<GamesState> {
     try {
       final db = ref.read(requireDatabaseProvider);
       final updatedAt = DateTime.now();
-      
-      await db.updateGame(GameEntry(
-        id: game.id,
-        title: game.title,
-        gameKey: game.gameKey,
-        platform: game.platform,
-        dateAdded: game.dateAdded,
-        updatedAt: updatedAt,
-        notes: game.notes,
-        isUsed: game.isUsed,
-        coverImage: game.coverImage,
-        hasDeadline: game.hasDeadline,
-        deadlineDate: game.deadlineDate,
-        isDlc: game.isDlc,
-        steamAppId: game.steamAppId,
-        reviewScore: game.reviewScore,
-        reviewCount: game.reviewCount,
-      ));
-      
+
+      await db.updateGame(
+        GameEntry(
+          id: game.id,
+          title: game.title,
+          gameKey: game.gameKey,
+          platform: game.platform,
+          dateAdded: game.dateAdded,
+          updatedAt: updatedAt,
+          notes: game.notes,
+          isUsed: game.isUsed,
+          coverImage: game.coverImage,
+          hasDeadline: game.hasDeadline,
+          deadlineDate: game.deadlineDate,
+          isDlc: game.isDlc,
+          steamAppId: game.steamAppId,
+          developer: game.developer,
+          reviewScore: game.reviewScore,
+          reviewCount: game.reviewCount,
+        ),
+      );
+
       // Update tags if provided, otherwise use existing tags
       final tagsToSet = tagIds ?? game.tags.map((t) => t.id).toList();
       await db.setTagsForGame(game.id, tagsToSet);
@@ -565,6 +621,7 @@ class GamesNotifier extends Notifier<GamesState> {
 
       state = state.copyWith(games: updatedGames);
       await persistEncryptedDbIfNeeded(ref);
+      unawaited(_bumpSyncDbRevision(ref));
       return true;
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -585,8 +642,12 @@ class GamesNotifier extends Notifier<GamesState> {
       final remaining = state.games.where((g) => !ids.contains(g.id)).toList();
       final remainingSelection = Set<int>.from(state.selectedGameIds)
         ..removeAll(ids);
-      state = state.copyWith(games: remaining, selectedGameIds: remainingSelection);
+      state = state.copyWith(
+        games: remaining,
+        selectedGameIds: remainingSelection,
+      );
       await persistEncryptedDbIfNeeded(ref);
+      unawaited(_bumpSyncDbRevision(ref));
       return true;
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -595,7 +656,11 @@ class GamesNotifier extends Notifier<GamesState> {
   }
 
   /// Mark games as used/unused
-  Future<bool> setGamesUsed(List<int> ids, bool isUsed) async {
+  Future<bool> setGamesUsed(
+    List<int> ids,
+    bool isUsed, {
+    bool persistInBackground = false,
+  }) async {
     try {
       final db = ref.read(requireDatabaseProvider);
       await db.setGamesUsed(ids, isUsed);
@@ -606,11 +671,69 @@ class GamesNotifier extends Notifier<GamesState> {
         return g;
       }).toList();
       state = state.copyWith(games: updatedGames);
-      await persistEncryptedDbIfNeeded(ref);
+      if (persistInBackground) {
+        unawaited(
+          persistEncryptedDbIfNeeded(ref).catchError((error) {
+            state = state.copyWith(error: error.toString());
+          }),
+        );
+      } else {
+        await persistEncryptedDbIfNeeded(ref);
+      }
+      unawaited(_bumpSyncDbRevision(ref));
       return true;
     } catch (e) {
       state = state.copyWith(error: e.toString());
       return false;
+    }
+  }
+
+  /// Clear Steam-derived metadata and Steam tags for the given games.
+  ///
+  /// Keeps custom tags intact while removing:
+  /// - cover image
+  /// - Steam AppID
+  /// - developer
+  /// - review score/count
+  /// - DLC flag
+  /// - Steam tags
+  Future<int> clearSteamMetadata(List<int> ids) async {
+    if (ids.isEmpty) return 0;
+
+    try {
+      final db = ref.read(requireDatabaseProvider);
+      final now = DateTime.now();
+
+      await db.transaction(() async {
+        for (final id in ids) {
+          final tagEntries = await db.getTagsForGame(id);
+          final customTagIds = tagEntries
+              .where((tag) => !tag.isSteamTag)
+              .map((tag) => tag.id)
+              .toList(growable: false);
+
+          await db.updateGameFields(
+            id,
+            coverImage: '',
+            isDlc: false,
+            steamAppId: '',
+            developer: '',
+            reviewScore: 0,
+            reviewCount: 0,
+            updatedAt: now,
+          );
+          await db.setTagsForGame(id, customTagIds);
+        }
+      });
+
+      await refreshAllGames();
+      await persistEncryptedDbIfNeeded(ref);
+      await ref.read(tagsProvider.notifier).deleteUnusedNonUserTags();
+      unawaited(_bumpSyncDbRevision(ref));
+      return ids.length;
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+      return 0;
     }
   }
 
@@ -638,7 +761,7 @@ class GamesNotifier extends Notifier<GamesState> {
   Future<void> refreshAllGames() async {
     final db = ref.read(requireDatabaseProvider);
     final entries = await db.getAllGames();
-    
+
     // Batch fetch all tags in a single query (eliminates N+1)
     final gameIds = entries.map((e) => e.id).toList();
     final tagsByGame = await db.getTagsForGames(gameIds);
@@ -692,6 +815,10 @@ class GamesNotifier extends Notifier<GamesState> {
     state = state.copyWith(showNoPicturesOnly: value);
   }
 
+  void setShowNoTagsOnly(bool value) {
+    state = state.copyWith(showNoTagsOnly: value);
+  }
+
   void clearAllFilters() {
     state = state.copyWith(
       searchQuery: '',
@@ -701,6 +828,7 @@ class GamesNotifier extends Notifier<GamesState> {
       showDlcOnly: false,
       showUsedOnly: false,
       showNoPicturesOnly: false,
+      showNoTagsOnly: false,
     );
   }
 
@@ -710,7 +838,9 @@ class GamesNotifier extends Notifier<GamesState> {
 
   Future<void> setSortMode(GameSortMode mode) async {
     state = state.copyWith(sortMode: mode);
-    await ref.read(settingsProvider.notifier).set(SettingsKeys.gameSortMode, mode);
+    await ref
+        .read(settingsProvider.notifier)
+        .set(SettingsKeys.gameSortMode, mode);
   }
 
   // ===========================================================================
@@ -744,22 +874,28 @@ class GamesNotifier extends Notifier<GamesState> {
     state = state.copyWith(selectedGameIds: {});
   }
 
+  void setSelection(Iterable<int> ids) {
+    state = state.copyWith(selectedGameIds: ids.toSet());
+  }
+
   void selectRange(int startId, int endId) {
     final filtered = state.filteredGames;
     final startIndex = filtered.indexWhere((g) => g.id == startId);
     final endIndex = filtered.indexWhere((g) => g.id == endId);
-    
+
     if (startIndex == -1 || endIndex == -1) return;
-    
+
     final minIndex = startIndex < endIndex ? startIndex : endIndex;
     final maxIndex = startIndex > endIndex ? startIndex : endIndex;
-    
+
     final newSelection = <int>{};
     for (var i = minIndex; i <= maxIndex; i++) {
       newSelection.add(filtered[i].id);
     }
-    
-    state = state.copyWith(selectedGameIds: {...state.selectedGameIds, ...newSelection});
+
+    state = state.copyWith(
+      selectedGameIds: {...state.selectedGameIds, ...newSelection},
+    );
   }
 }
 
@@ -775,6 +911,7 @@ typedef ActiveFiltersState = ({
   bool showDlcOnly,
   bool showUsedOnly,
   bool showNoPicturesOnly,
+  bool showNoTagsOnly,
 });
 
 final activeFiltersProvider = Provider<ActiveFiltersState>((ref) {
@@ -787,6 +924,7 @@ final activeFiltersProvider = Provider<ActiveFiltersState>((ref) {
         showDlcOnly: s.showDlcOnly,
         showUsedOnly: s.showUsedOnly,
         showNoPicturesOnly: s.showNoPicturesOnly,
+        showNoTagsOnly: s.showNoTagsOnly,
       ),
     ),
   );
