@@ -80,8 +80,6 @@ UniKM keeps all your game keys in one place: organized, searchable, and secure. 
 | Windows  | ✅ Fully supported |
 | Linux    | ✅ Fully supported |
 | Android  | ✅ Fully supported |
-| macOS    | ⚠️ Experimental |
-| iOS      | ⚠️ Experimental |
 
 
 ### More Pictures
