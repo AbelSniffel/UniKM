@@ -3,15 +3,17 @@ library;
 
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/database.dart';
 import '../core/settings/settings_model.dart';
 import '../models/game.dart';
+import '../features/library/application/library_query.dart';
+import '../features/library/data/library_repository.dart';
 import 'database_providers.dart';
 import 'settings_providers.dart';
-import 'tags_providers.dart';
 
 // =============================================================================
 // GAMES STATE
@@ -19,22 +21,17 @@ import 'tags_providers.dart';
 
 /// Bump the sync DB revision ID to signal that local data has changed.
 /// Call this after any add, update, or remove operation.
-Future<void> _bumpSyncDbRevision(Ref ref) async {
-  final id = DateTime.now().millisecondsSinceEpoch.toString();
+Future<void> _bumpSyncDbRevision(Ref ref, AppDatabase db) async {
   try {
-    final db = ref.read(databaseProvider);
-    var dbTimestampMillis = DateTime.now().millisecondsSinceEpoch;
-    if (db != null) {
-      await db.markLocalDataChanged(timestampMillis: dbTimestampMillis);
-      dbTimestampMillis = await db.getSyncDbTimestampMillis();
-    }
-    final settingsNotifier = ref.read(settingsProvider.notifier);
-    await settingsNotifier.setMany({
-      SettingsKeys.syncDbRevisionId: id,
-      SettingsKeys.syncDbTimestampMillis: dbTimestampMillis,
+    final revision = await db.getLocalSyncRevision();
+    final timestamp = await db.getSyncDbTimestampMillis();
+    if (!ref.mounted || !identical(ref.read(databaseProvider), db)) return;
+    await ref.read(settingsProvider.notifier).setMany({
+      SettingsKeys.syncDbRevisionId: revision.toString(),
+      SettingsKeys.syncDbTimestampMillis: timestamp,
     });
   } catch (_) {
-    // Non-critical – never block game operations for a revision bump failure.
+    // The transactional database revision remains authoritative.
   }
 }
 
@@ -57,6 +54,7 @@ class GamesState {
     this.sortMode = GameSortMode.deadlineFirst,
     this.selectedGameIds = const {},
     this.filteredGames = const [],
+    this.queryIndex,
   });
 
   final List<Game> games;
@@ -73,131 +71,13 @@ class GamesState {
   final GameSortMode sortMode;
   final Set<int> selectedGameIds;
   final List<Game> filteredGames;
+  final LibraryQueryIndex? queryIndex;
 
   /// Get selected games in display order (matching filteredGames order)
   List<Game> get selectedGames {
+    if (selectedGameIds.isEmpty) return const [];
     // Use filteredGames to maintain display order for operations like Steam batch fetch
     return filteredGames.where((g) => selectedGameIds.contains(g.id)).toList();
-  }
-
-  static List<Game> _computeFilteredGames({
-    required List<Game> games,
-    required String searchQuery,
-    required String? platformFilter,
-    required List<int> tagFilters,
-    required bool showDeadlineOnly,
-    required bool showDlcOnly,
-    required bool showUsedOnly,
-    required bool showNoPicturesOnly,
-    required bool showNoTagsOnly,
-    required GameSortMode sortMode,
-  }) {
-    var result = List<Game>.from(games);
-
-    // Search filter
-    if (searchQuery.isNotEmpty) {
-      final query = searchQuery.toLowerCase();
-      result = result
-          .where(
-            (g) =>
-                g.title.toLowerCase().contains(query) ||
-                g.gameKey.toLowerCase().contains(query),
-          )
-          .toList();
-    }
-
-    // Platform filter
-    if (platformFilter != null && platformFilter.isNotEmpty) {
-      result = result.where((g) => g.platform == platformFilter).toList();
-    }
-
-    // Tag filters (AND logic - must have all selected tags)
-    if (tagFilters.isNotEmpty) {
-      result = result.where((g) {
-        final gameTagIds = g.tags.map((t) => t.id).toSet();
-        return tagFilters.every((tagId) => gameTagIds.contains(tagId));
-      }).toList();
-    }
-
-    // Toggle filters
-    if (showDeadlineOnly) {
-      result = result.where((g) => g.hasDeadline).toList();
-    }
-    if (showDlcOnly) {
-      result = result.where((g) => g.isDlc).toList();
-    }
-    if (showUsedOnly) {
-      result = result.where((g) => g.isUsed).toList();
-    }
-    if (showNoPicturesOnly) {
-      result = result.where((g) => !g.hasCoverImage).toList();
-    }
-    if (showNoTagsOnly) {
-      result = result.where((g) => g.tags.isEmpty).toList();
-    }
-
-    // Sort
-    result = _sortGames(result, sortMode);
-
-    return result;
-  }
-
-  static List<Game> _sortGames(List<Game> games, GameSortMode mode) {
-    final sorted = List<Game>.from(games);
-
-    switch (mode) {
-      case GameSortMode.deadlineFirst:
-        sorted.sort((a, b) {
-          // Games with deadlines come before games without deadlines
-          if (a.hasDeadline && !b.hasDeadline) return -1;
-          if (!a.hasDeadline && b.hasDeadline) return 1;
-
-          // If both have deadlines, prefer non-expired items first so
-          // "about to expire" games are pushed to the top. Expired
-          // games should appear after active deadlines but still before
-          // games without any deadline.
-          if (a.hasDeadline && b.hasDeadline) {
-            final aExpired = a.isExpired;
-            final bExpired = b.isExpired;
-            if (aExpired && !bExpired) return 1; // expired -> later
-            if (!aExpired && bExpired) return -1; // active -> earlier
-
-            // Both active or both expired: fall back to chronological order
-            return (a.deadlineDate ?? DateTime.now()).compareTo(
-              b.deadlineDate ?? DateTime.now(),
-            );
-          }
-
-          return a.title.compareTo(b.title);
-        });
-        break;
-      case GameSortMode.titleAZ:
-        sorted.sort((a, b) => a.title.compareTo(b.title));
-        break;
-      case GameSortMode.titleZA:
-        sorted.sort((a, b) => b.title.compareTo(a.title));
-        break;
-      case GameSortMode.platformAZ:
-        sorted.sort((a, b) => a.platform.compareTo(b.platform));
-        break;
-      case GameSortMode.platformZA:
-        sorted.sort((a, b) => b.platform.compareTo(a.platform));
-        break;
-      case GameSortMode.dateNewest:
-        sorted.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-        break;
-      case GameSortMode.dateOldest:
-        sorted.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
-        break;
-      case GameSortMode.ratingHigh:
-        sorted.sort((a, b) => b.reviewScore.compareTo(a.reviewScore));
-        break;
-      case GameSortMode.ratingLow:
-        sorted.sort((a, b) => a.reviewScore.compareTo(b.reviewScore));
-        break;
-    }
-
-    return sorted;
   }
 
   GamesState copyWith({
@@ -243,9 +123,11 @@ class GamesState {
         showNoTagsOnly != null ||
         sortMode != null;
 
+    final nextIndex = games != null || queryIndex == null
+        ? LibraryQueryIndex(nextGames, previous: queryIndex)
+        : queryIndex!;
     final nextFilteredGames = needsRefilter
-        ? _computeFilteredGames(
-            games: nextGames,
+        ? nextIndex.select(
             searchQuery: nextSearchQuery,
             platformFilter: nextPlatformFilter,
             tagFilters: nextTagFilters,
@@ -273,6 +155,7 @@ class GamesState {
       sortMode: nextSortMode,
       selectedGameIds: selectedGameIds ?? this.selectedGameIds,
       filteredGames: nextFilteredGames,
+      queryIndex: nextIndex,
     );
   }
 }
@@ -294,9 +177,23 @@ class GamesNotifier extends Notifier<GamesState> {
 
   /// Tracks if a load is already in progress to prevent duplicate calls
   bool _isLoadingInProgress = false;
+  int _loadGeneration = 0;
+  int _snapshotEpoch = 0;
+  AppDatabase? _activeDatabase;
+  StreamSubscription<List<Game>>? _snapshots;
+  Timer? _searchDebounce;
+  Timer? _midnightTimer;
 
-  /// Tracks the last database revision to detect actual changes
-  int _lastLoadedRevision = -1;
+  void _scheduleMidnight() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer = Timer(next.difference(now), () {
+      if (!ref.mounted) return;
+      state = state.copyWith(sortMode: state.sortMode);
+      _scheduleMidnight();
+    });
+  }
 
   Future<void> _yieldToUi() => Future<void>.delayed(Duration.zero);
 
@@ -320,136 +217,17 @@ class GamesNotifier extends Notifier<GamesState> {
     return games;
   }
 
-  Future<List<Game>> _computeFilteredGamesAsync({
-    required List<Game> games,
-    required String searchQuery,
-    required String? platformFilter,
-    required List<int> tagFilters,
-    required bool showDeadlineOnly,
-    required bool showDlcOnly,
-    required bool showUsedOnly,
-    required bool showNoPicturesOnly,
-    required bool showNoTagsOnly,
-    required GameSortMode sortMode,
-  }) async {
-    if (games.isEmpty) return const [];
-
-    final filtered = <Game>[];
-    final normalizedQuery = searchQuery.trim().toLowerCase();
-    final hasQuery = normalizedQuery.isNotEmpty;
-    final hasPlatformFilter =
-        platformFilter != null && platformFilter.isNotEmpty;
-    final hasTagFilters = tagFilters.isNotEmpty;
-
-    for (var i = 0; i < games.length; i++) {
-      final game = games[i];
-
-      if (hasQuery) {
-        final title = game.title.toLowerCase();
-        final key = game.gameKey.toLowerCase();
-        if (!title.contains(normalizedQuery) &&
-            !key.contains(normalizedQuery)) {
-          if (i != 0 && i % _loadChunkSize == 0) {
-            await _yieldToUi();
-          }
-          continue;
-        }
-      }
-
-      if (hasPlatformFilter && game.platform != platformFilter) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-
-      if (hasTagFilters) {
-        final gameTagIds = game.tags.map((t) => t.id).toSet();
-        if (!tagFilters.every((tagId) => gameTagIds.contains(tagId))) {
-          if (i != 0 && i % _loadChunkSize == 0) {
-            await _yieldToUi();
-          }
-          continue;
-        }
-      }
-
-      if (showDeadlineOnly && !game.hasDeadline) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-      if (showDlcOnly && !game.isDlc) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-      if (showUsedOnly && !game.isUsed) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-      if (showNoPicturesOnly && game.hasCoverImage) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-      if (showNoTagsOnly && game.tags.isNotEmpty) {
-        if (i != 0 && i % _loadChunkSize == 0) {
-          await _yieldToUi();
-        }
-        continue;
-      }
-
-      filtered.add(game);
-
-      if (i != 0 && i % _loadChunkSize == 0) {
-        await _yieldToUi();
-      }
+  void _setLoadedState(List<Game> games) {
+    var selection = state.selectedGameIds;
+    if (selection.isNotEmpty) {
+      final validIds = games.map((g) => g.id).toSet();
+      final remaining = selection.where(validIds.contains).toSet();
+      if (remaining.length != selection.length) selection = remaining;
     }
-
-    await _yieldToUi();
-    return GamesState._sortGames(filtered, sortMode);
-  }
-
-  Future<void> _setLoadedState(List<Game> games) async {
-    final previous = state;
-    final filteredGames = await _computeFilteredGamesAsync(
-      games: games,
-      searchQuery: previous.searchQuery,
-      platformFilter: previous.platformFilter,
-      tagFilters: previous.tagFilters,
-      showDeadlineOnly: previous.showDeadlineOnly,
-      showDlcOnly: previous.showDlcOnly,
-      showUsedOnly: previous.showUsedOnly,
-      showNoPicturesOnly: previous.showNoPicturesOnly,
-      showNoTagsOnly: previous.showNoTagsOnly,
-      sortMode: previous.sortMode,
-    );
-
-    final validIds = games.map((g) => g.id).toSet();
-    final selectedIds = previous.selectedGameIds
-        .where(validIds.contains)
-        .toSet();
-
-    state = GamesState(
+    state = state.copyWith(
       games: games,
       isLoading: false,
-      error: null,
-      searchQuery: previous.searchQuery,
-      platformFilter: previous.platformFilter,
-      tagFilters: previous.tagFilters,
-      showDeadlineOnly: previous.showDeadlineOnly,
-      showDlcOnly: previous.showDlcOnly,
-      showUsedOnly: previous.showUsedOnly,
-      showNoPicturesOnly: previous.showNoPicturesOnly,
-      showNoTagsOnly: previous.showNoTagsOnly,
-      sortMode: previous.sortMode,
-      selectedGameIds: selectedIds,
-      filteredGames: filteredGames,
+      selectedGameIds: selection,
     );
   }
 
@@ -457,6 +235,24 @@ class GamesNotifier extends Notifier<GamesState> {
   GamesState build() {
     // Watch the database state so we reload when the database changes
     final dbState = ref.watch(databaseNotifierProvider);
+    ref.onDispose(() {
+      _searchDebounce?.cancel();
+      _midnightTimer?.cancel();
+      _snapshots?.cancel();
+      _snapshots = null;
+    });
+    _scheduleMidnight();
+
+    if (!identical(_activeDatabase, dbState.database)) {
+      _activeDatabase = dbState.database;
+      _loadGeneration++;
+      _isLoadingInProgress = false;
+      _cachedState = _cachedState.copyWith(
+        games: const [],
+        selectedGameIds: {},
+        isLoading: true,
+      );
+    }
 
     // Read initial sort mode from settings.
     final sortMode = ref.read(gameSortModeSettingProvider);
@@ -468,12 +264,21 @@ class GamesNotifier extends Notifier<GamesState> {
       return next;
     }
 
-    // Only trigger load if database revision changed (prevents duplicate loads)
-    if (_lastLoadedRevision != dbState.revision) {
-      _lastLoadedRevision = dbState.revision;
-      // IMPORTANT: don't touch `state` before it is initialized (i.e., before build returns).
-      Future.microtask(_loadGames);
-    }
+    _snapshots = LibraryRepository(dbState.database!).watchSnapshot().listen(
+      (games) {
+        if (ref.mounted &&
+            identical(ref.read(databaseProvider), dbState.database)) {
+          _snapshotEpoch++;
+          _setLoadedState(games);
+        }
+      },
+      onError: (Object error) {
+        if (ref.mounted &&
+            identical(ref.read(databaseProvider), dbState.database)) {
+          state = state.copyWith(isLoading: false, error: error.toString());
+        }
+      },
+    );
 
     // Preserve existing loaded data across rebuilds to avoid loading flicker.
     if (_cachedState.games.isEmpty && !_isLoadingInProgress) {
@@ -489,14 +294,19 @@ class GamesNotifier extends Notifier<GamesState> {
 
   /// Load all games from database
   Future<void> _loadGames() async {
-    // Prevent duplicate concurrent loads
-    if (_isLoadingInProgress) return;
+    final generation = ++_loadGeneration;
+    final snapshotEpoch = _snapshotEpoch;
+    final db = ref.read(databaseProvider);
+    if (db == null) return;
+    bool isCurrent() =>
+        ref.mounted &&
+        generation == _loadGeneration &&
+        identical(ref.read(databaseProvider), db);
     _isLoadingInProgress = true;
 
     try {
       state = state.copyWith(isLoading: true, error: null);
 
-      final db = ref.read(requireDatabaseProvider);
       final entries = await db.getAllGames();
 
       // Batch fetch all tags in a single query (eliminates N+1)
@@ -504,11 +314,15 @@ class GamesNotifier extends Notifier<GamesState> {
       final tagsByGame = await db.getTagsForGames(gameIds);
 
       final games = await _buildGamesInChunks(entries, tagsByGame);
-      await _setLoadedState(games);
+      if (isCurrent() && snapshotEpoch == _snapshotEpoch) {
+        _setLoadedState(games);
+      }
     } catch (e) {
-      state = state.copyWith(error: e.toString(), isLoading: false);
+      if (isCurrent()) {
+        state = state.copyWith(error: e.toString(), isLoading: false);
+      }
     } finally {
-      _isLoadingInProgress = false;
+      if (isCurrent()) _isLoadingInProgress = false;
     }
   }
 
@@ -528,13 +342,18 @@ class GamesNotifier extends Notifier<GamesState> {
     bool hasDeadline = false,
     DateTime? deadlineDate,
     bool isDlc = false,
+    bool isUsed = false,
     String steamAppId = '',
+    int reviewScore = 0,
+    int reviewCount = 0,
     List<int> tagIds = const [],
+    int? replaceId,
   }) async {
+    final operationDatabase = _activeDatabase;
     try {
       final db = ref.read(requireDatabaseProvider);
 
-      final id = await db.insertGame(
+      final id = await LibraryRepository(db).saveNewGame(
         GamesCompanion.insert(
           title: title,
           gameKey: gameKey,
@@ -544,15 +363,15 @@ class GamesNotifier extends Notifier<GamesState> {
           hasDeadline: Value(hasDeadline),
           deadlineDate: Value(deadlineDate),
           isDlc: Value(isDlc),
+          isUsed: Value(isUsed),
           steamAppId: Value(steamAppId),
+          reviewScore: Value(reviewScore),
+          reviewCount: Value(reviewCount),
           updatedAt: Value(DateTime.now()),
         ),
+        tagIds: tagIds,
+        replaceId: replaceId,
       );
-
-      // Add tags
-      if (tagIds.isNotEmpty) {
-        await db.setTagsForGame(id, tagIds);
-      }
 
       final entry = await db.getGameById(id);
       if (entry == null) return null;
@@ -560,27 +379,52 @@ class GamesNotifier extends Notifier<GamesState> {
       final tagEntries = await db.getTagsForGame(id);
       final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
       final newGame = Game.fromEntry(entry, tags: tags);
+      if (!ref.mounted || !identical(ref.read(databaseProvider), db)) {
+        return newGame;
+      }
 
-      state = state.copyWith(
-        games: [...state.games, newGame],
-        isLoading: false,
-      );
-      await persistEncryptedDbIfNeeded(ref);
-      unawaited(_bumpSyncDbRevision(ref));
+      await persistEncryptedDbIfNeeded(ref, database: db);
+      unawaited(_bumpSyncDbRevision(ref, db));
       return newGame;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      if (ref.mounted &&
+          identical(ref.read(databaseProvider), operationDatabase)) {
+        state = state.copyWith(error: e.toString());
+      }
       return null;
+    }
+  }
+
+  /// Game edits share session checks, encrypted persistence, and error handling.
+  Future<T> _mutate<T>(
+    Future<T> Function(AppDatabase db) action, {
+    required T failure,
+  }) async {
+    final operationDatabase = _activeDatabase;
+    try {
+      final db = ref.read(requireDatabaseProvider);
+      final result = await action(db);
+      if (!ref.mounted || !identical(ref.read(databaseProvider), db)) {
+        return failure;
+      }
+      await persistEncryptedDbIfNeeded(ref, database: db);
+      unawaited(_bumpSyncDbRevision(ref, db));
+      return result;
+    } catch (e) {
+      if (ref.mounted &&
+          identical(ref.read(databaseProvider), operationDatabase)) {
+        state = state.copyWith(error: e.toString());
+      }
+      return failure;
     }
   }
 
   /// Update a game
   Future<bool> updateGame(Game game, {List<int>? tagIds}) async {
-    try {
-      final db = ref.read(requireDatabaseProvider);
+    return _mutate((db) async {
       final updatedAt = DateTime.now();
 
-      await db.updateGame(
+      await LibraryRepository(db).updateGame(
         GameEntry(
           id: game.id,
           title: game.title,
@@ -599,34 +443,11 @@ class GamesNotifier extends Notifier<GamesState> {
           reviewScore: game.reviewScore,
           reviewCount: game.reviewCount,
         ),
+        tagIds: tagIds,
       );
 
-      // Update tags if provided, otherwise use existing tags
-      final tagsToSet = tagIds ?? game.tags.map((t) => t.id).toList();
-      await db.setTagsForGame(game.id, tagsToSet);
-
-      final updatedEntry = await db.getGameById(game.id);
-      if (updatedEntry == null) return false;
-      final tagEntries = await db.getTagsForGame(game.id);
-      final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
-      final updatedGame = Game.fromEntry(updatedEntry, tags: tags);
-
-      final updatedGames = [...state.games];
-      final index = updatedGames.indexWhere((g) => g.id == game.id);
-      if (index != -1) {
-        updatedGames[index] = updatedGame;
-      } else {
-        updatedGames.add(updatedGame);
-      }
-
-      state = state.copyWith(games: updatedGames);
-      await persistEncryptedDbIfNeeded(ref);
-      unawaited(_bumpSyncDbRevision(ref));
       return true;
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return false;
-    }
+    }, failure: false);
   }
 
   /// Delete a single game
@@ -634,58 +455,26 @@ class GamesNotifier extends Notifier<GamesState> {
 
   /// Delete games
   Future<bool> deleteGames(List<int> ids) async {
-    try {
-      final db = ref.read(requireDatabaseProvider);
-      await db.deleteGames(ids);
-      // Clean up steam/auto tags no longer associated with any game.
-      await ref.read(tagsProvider.notifier).deleteUnusedNonUserTags();
-      final remaining = state.games.where((g) => !ids.contains(g.id)).toList();
-      final remainingSelection = Set<int>.from(state.selectedGameIds)
-        ..removeAll(ids);
-      state = state.copyWith(
-        games: remaining,
-        selectedGameIds: remainingSelection,
-      );
-      await persistEncryptedDbIfNeeded(ref);
-      unawaited(_bumpSyncDbRevision(ref));
+    return _mutate((db) async {
+      await db.transaction(() async {
+        await db.deleteGames(ids);
+        await db.deleteUnusedNonUserTags();
+      });
       return true;
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return false;
-    }
+    }, failure: false);
   }
 
-  /// Mark games as used/unused
+  /// Mark games as used/unused. Completion acknowledges persistence even for
+  /// callers using the legacy background-save option.
   Future<bool> setGamesUsed(
     List<int> ids,
     bool isUsed, {
     bool persistInBackground = false,
   }) async {
-    try {
-      final db = ref.read(requireDatabaseProvider);
+    return _mutate((db) async {
       await db.setGamesUsed(ids, isUsed);
-      final updatedGames = state.games.map((g) {
-        if (ids.contains(g.id)) {
-          return g.copyWith(isUsed: isUsed);
-        }
-        return g;
-      }).toList();
-      state = state.copyWith(games: updatedGames);
-      if (persistInBackground) {
-        unawaited(
-          persistEncryptedDbIfNeeded(ref).catchError((error) {
-            state = state.copyWith(error: error.toString());
-          }),
-        );
-      } else {
-        await persistEncryptedDbIfNeeded(ref);
-      }
-      unawaited(_bumpSyncDbRevision(ref));
       return true;
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return false;
-    }
+    }, failure: false);
   }
 
   /// Clear Steam-derived metadata and Steam tags for the given games.
@@ -700,8 +489,7 @@ class GamesNotifier extends Notifier<GamesState> {
   Future<int> clearSteamMetadata(List<int> ids) async {
     if (ids.isEmpty) return 0;
 
-    try {
-      final db = ref.read(requireDatabaseProvider);
+    return _mutate((db) async {
       final now = DateTime.now();
 
       await db.transaction(() async {
@@ -724,50 +512,60 @@ class GamesNotifier extends Notifier<GamesState> {
           );
           await db.setTagsForGame(id, customTagIds);
         }
+        await db.deleteUnusedNonUserTags();
       });
 
-      await refreshAllGames();
-      await persistEncryptedDbIfNeeded(ref);
-      await ref.read(tagsProvider.notifier).deleteUnusedNonUserTags();
-      unawaited(_bumpSyncDbRevision(ref));
       return ids.length;
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return 0;
-    }
+    }, failure: 0);
   }
 
   /// Refresh a single game entry (for partial updates)
   Future<void> refreshGame(int id) async {
-    final db = ref.read(requireDatabaseProvider);
-    final entry = await db.getGameById(id);
-    if (entry == null) return;
-    final tagEntries = await db.getTagsForGame(id);
-    final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
-    final refreshed = Game.fromEntry(entry, tags: tags);
-
-    final updatedGames = [...state.games];
-    final index = updatedGames.indexWhere((g) => g.id == id);
-    if (index != -1) {
-      updatedGames[index] = refreshed;
-    } else {
-      updatedGames.add(refreshed);
+    final db = _activeDatabase;
+    if (db == null) return;
+    final generation = _loadGeneration;
+    final epoch = _snapshotEpoch;
+    try {
+      final game = await db.transaction(() async {
+        final entry = await db.getGameById(id);
+        if (entry == null) return null;
+        return Game.fromEntry(
+          entry,
+          tags: [
+            for (final tag in await db.getTagsForGame(id)) Tag.fromEntry(tag),
+          ],
+        );
+      });
+      if (!ref.mounted ||
+          generation != _loadGeneration ||
+          !identical(_activeDatabase, db) ||
+          epoch != _snapshotEpoch) {
+        return;
+      }
+      final index = state.games.indexWhere((game) => game.id == id);
+      if (index < 0 && game == null ||
+          index >= 0 && state.games[index] == game) {
+        return;
+      }
+      final games = [...state.games];
+      if (index >= 0) {
+        if (game == null) {
+          games.removeAt(index);
+        } else {
+          games[index] = game;
+        }
+      } else {
+        games.add(game!);
+        games.sort((a, b) => a.id.compareTo(b.id));
+      }
+      _setLoadedState(games);
+    } catch (e) {
+      if (ref.mounted &&
+          generation == _loadGeneration &&
+          identical(_activeDatabase, db)) {
+        state = state.copyWith(error: e.toString());
+      }
     }
-
-    state = state.copyWith(games: updatedGames);
-  }
-
-  /// Refresh all games from database
-  Future<void> refreshAllGames() async {
-    final db = ref.read(requireDatabaseProvider);
-    final entries = await db.getAllGames();
-
-    // Batch fetch all tags in a single query (eliminates N+1)
-    final gameIds = entries.map((e) => e.id).toList();
-    final tagsByGame = await db.getTagsForGames(gameIds);
-
-    final games = await _buildGamesInChunks(entries, tagsByGame);
-    await _setLoadedState(games);
   }
 
   // ===========================================================================
@@ -775,7 +573,19 @@ class GamesNotifier extends Notifier<GamesState> {
   // ===========================================================================
 
   void setSearchQuery(String query) {
+    _searchDebounce?.cancel();
     state = state.copyWith(searchQuery: query);
+  }
+
+  void setSearchQueryDebounced(String query) {
+    _searchDebounce?.cancel();
+    if (query.isEmpty) {
+      setSearchQuery(query);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 40), () {
+      if (ref.mounted) setSearchQuery(query);
+    });
   }
 
   void setPlatformFilter(String? platform) {
@@ -820,6 +630,7 @@ class GamesNotifier extends Notifier<GamesState> {
   }
 
   void clearAllFilters() {
+    _searchDebounce?.cancel();
     state = state.copyWith(
       searchQuery: '',
       platformFilter: null,
@@ -848,10 +659,12 @@ class GamesNotifier extends Notifier<GamesState> {
   // ===========================================================================
 
   void selectGame(int id) {
+    if (state.selectedGameIds.contains(id)) return;
     state = state.copyWith(selectedGameIds: {...state.selectedGameIds, id});
   }
 
   void deselectGame(int id) {
+    if (!state.selectedGameIds.contains(id)) return;
     final newSelection = Set<int>.from(state.selectedGameIds)..remove(id);
     state = state.copyWith(selectedGameIds: newSelection);
   }
@@ -871,11 +684,14 @@ class GamesNotifier extends Notifier<GamesState> {
   }
 
   void clearSelection() {
+    if (state.selectedGameIds.isEmpty) return;
     state = state.copyWith(selectedGameIds: {});
   }
 
   void setSelection(Iterable<int> ids) {
-    state = state.copyWith(selectedGameIds: ids.toSet());
+    final next = ids.toSet();
+    if (const SetEquality<int>().equals(state.selectedGameIds, next)) return;
+    state = state.copyWith(selectedGameIds: next);
   }
 
   void selectRange(int startId, int endId) {
@@ -931,8 +747,39 @@ final activeFiltersProvider = Provider<ActiveFiltersState>((ref) {
 });
 
 final selectedGamesProvider = Provider<List<Game>>((ref) {
-  return ref.watch(gamesProvider.select((s) => s.selectedGames));
+  final (games, selectedIds) = ref.watch(
+    gamesProvider.select((s) => (s.filteredGames, s.selectedGameIds)),
+  );
+  if (selectedIds.isEmpty) return const [];
+  return games.where((game) => selectedIds.contains(game.id)).toList();
 });
+
+/// Metadata edits only update the affected cards. The scrollable view needs
+/// rebuilding only when the filtered membership or display order changes.
+final filteredGameIdsProvider =
+    NotifierProvider<_FilteredGameIdsNotifier, List<int>>(
+      _FilteredGameIdsNotifier.new,
+    );
+
+class _FilteredGameIdsNotifier extends Notifier<List<int>> {
+  List<int> _ids = const [];
+
+  @override
+  List<int> build() {
+    final games = ref.watch(gamesProvider.select((s) => s.filteredGames));
+    if (games.length == _ids.length) {
+      var unchanged = true;
+      for (var i = 0; i < games.length; i++) {
+        if (games[i].id != _ids[i]) {
+          unchanged = false;
+          break;
+        }
+      }
+      if (unchanged) return _ids;
+    }
+    return _ids = List.unmodifiable(games.map((game) => game.id));
+  }
+}
 
 final selectedSteamGamesProvider = Provider<List<Game>>((ref) {
   final selectedGames = ref.watch(selectedGamesProvider);
@@ -953,7 +800,6 @@ final gamesByIdProvider = Provider<Map<int, Game>>((ref) {
   return {for (final game in games) game.id: game};
 });
 
-final gameByIdProvider = Provider.family<Game?, int>((ref, gameId) {
-  final gamesById = ref.watch(gamesByIdProvider);
-  return gamesById[gameId];
+final gameByIdProvider = Provider.autoDispose.family<Game?, int>((ref, gameId) {
+  return ref.watch(gamesByIdProvider.select((games) => games[gameId]));
 });

@@ -2,15 +2,15 @@
 /// Matches the original Python SectionGroupBox with left/top title positions
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/surface_depth.dart';
 import '../../providers/app_providers.dart';
 import '../../core/constants/app_constants.dart';
+import 'search_highlight.dart';
 
 /// Controls how a group box is positioned within a connected group strip.
 /// - [only]: standalone box, full border, all corners rounded (default)
@@ -30,8 +30,20 @@ enum SectionGroupPosition {
   onlyAttached,
 }
 
+/// Settings layout uses separated groupboxes; visual styling is shared.
+class SpacedSettingsGroups extends InheritedWidget {
+  const SpacedSettingsGroups({super.key, required super.child});
+
+  static bool isEnabledOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SpacedSettingsGroups>() !=
+      null;
+
+  @override
+  bool updateShouldNotify(SpacedSettingsGroups oldWidget) => false;
+}
+
 /// Section groupbox with configurable title position
-class SectionGroupBox extends ConsumerStatefulWidget {
+class SectionGroupBox extends ConsumerWidget {
   const SectionGroupBox({
     super.key,
     required this.title,
@@ -42,8 +54,11 @@ class SectionGroupBox extends ConsumerStatefulWidget {
     this.description,
     this.titleIcon,
     this.trailing,
+    this.stackTrailingWhenCompact = false,
+    this.headerCrossAxisAlignment = CrossAxisAlignment.start,
+    this.headerBottomPadding = 12,
     this.borderColor,
-    this.shrinkToChild = false,
+    this.contentFit = FlexFit.tight,
     this.searchQuery = '',
     this.isSearchMatch = false,
     this.groupPosition = SectionGroupPosition.only,
@@ -51,10 +66,8 @@ class SectionGroupBox extends ConsumerStatefulWidget {
     this.showTitle = true,
   });
 
-  /// Whether the box should shrink to the size of its inner content instead of
-  /// expanding to fill available width. Use on specific instances (expensive
-  /// if used globally) when you want intrinsic sizing behavior.
-  final bool shrinkToChild;
+  /// Whether vertically bounded content fills its space or shrinks to its child.
+  final FlexFit contentFit;
 
   final String title;
   final AppThemeData theme;
@@ -66,6 +79,13 @@ class SectionGroupBox extends ConsumerStatefulWidget {
   final EdgeInsets padding;
   final IconData? titleIcon;
   final Widget? trailing;
+
+  /// Header action groups use the same breakpoint as full-width settings cards.
+  final bool stackTrailingWhenCompact;
+  final CrossAxisAlignment headerCrossAxisAlignment;
+
+  /// Gap below a top title, before the body content.
+  final double headerBottomPadding;
   final Color? borderColor;
   final String searchQuery;
   final bool isSearchMatch;
@@ -83,107 +103,39 @@ class SectionGroupBox extends ConsumerStatefulWidget {
   final bool showTitle;
 
   @override
-  ConsumerState<SectionGroupBox> createState() => _SectionGroupBoxState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final spaced = SpacedSettingsGroups.isEnabledOf(context);
+    final SectionTitleLocation effectiveTitleLocation =
+        titleLocation ?? ref.watch(sectionTitleLocationProvider);
 
-class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
-    with SingleTickerProviderStateMixin {
-  static const Duration _searchFadeDelay = Duration(seconds: 1);
-  static const Duration _searchFadeDuration = Duration(milliseconds: 650);
-
-  late final AnimationController _highlightController;
-  Timer? _fadeTimer;
-
-  bool get _shouldHighlight =>
-      widget.searchQuery.trim().isNotEmpty && widget.isSearchMatch;
-
-  @override
-  void initState() {
-    super.initState();
-    _highlightController = AnimationController(
-      vsync: this,
-      duration: _searchFadeDuration,
-      value: 0,
-    );
-    _syncHighlightWithSearch();
-  }
-
-  @override
-  void didUpdateWidget(covariant SectionGroupBox oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.searchQuery != widget.searchQuery ||
-        oldWidget.isSearchMatch != widget.isSearchMatch) {
-      _syncHighlightWithSearch();
-    }
-  }
-
-  void _syncHighlightWithSearch() {
-    _fadeTimer?.cancel();
-
-    if (!_shouldHighlight) {
-      _highlightController.animateTo(0);
-      return;
-    }
-
-    _highlightController.value = 1;
-    _fadeTimer = Timer(_searchFadeDelay, () {
-      if (!mounted) return;
-      _highlightController.animateTo(0);
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeTimer?.cancel();
-    _highlightController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveTitleLocation =
-        widget.titleLocation ?? ref.watch(sectionTitleLocationProvider);
-
-    return AnimatedBuilder(
-      animation: _highlightController,
-      builder: (context, _) {
-        final highlightValue = Curves.easeOutCubic.transform(
-          _highlightController.value,
+    return SearchHighlight(
+      query: searchQuery,
+      isMatch: isSearchMatch,
+      builder: (context, highlightValue) {
+        final built = _buildFrame(
+          context,
+          highlightValue,
+          effectiveTitleLocation,
+          spaced: spaced,
         );
-        final built = effectiveTitleLocation == SectionTitleLocation.left
-            ? _buildLeftTitle(highlightValue)
-            : _buildTopTitle(highlightValue);
-
-        if (widget.shrinkToChild) {
-          // Use Align + IntrinsicWidth to allow the box to size itself to its content
-          // instead of stretching to the available width. IntrinsicWidth is more
-          // expensive but appropriate for selective use where exact sizing is
-          // desired.
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: IntrinsicWidth(child: built),
-          );
-        }
 
         return built;
       },
     );
   }
 
-  Widget _buildHeaderText({required Color titleColor}) {
-    final description = widget.description?.trim();
+  Widget _buildHeaderText() {
+    final description = this.description?.trim();
     final hasDescription = description != null && description.isNotEmpty;
 
-    return RichText(
-      softWrap: true,
-      overflow: TextOverflow.visible,
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         children: [
           TextSpan(
-            text: widget.title,
+            text: title,
             style: TextStyle(
-              color: titleColor,
-              fontSize: 14,
+              color: theme.accent,
+              fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 1.35,
             ),
@@ -196,7 +148,7 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
                 child: Icon(
                   Icons.arrow_right,
                   size: 18,
-                  color: widget.theme.secondary,
+                  color: theme.secondary,
                 ),
               ),
             ),
@@ -204,7 +156,7 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
             TextSpan(
               text: description,
               style: TextStyle(
-                color: widget.theme.textSecondary,
+                color: theme.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
                 height: 1.35,
@@ -212,28 +164,33 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
             ),
         ],
       ),
+      softWrap: true,
+      overflow: TextOverflow.visible,
     );
   }
 
-  Widget _buildLeftTitle(double highlightValue) {
-    final baseBorderColor = widget.borderColor ?? widget.theme.border;
+  Widget _buildFrame(
+    BuildContext context,
+    double highlightValue,
+    SectionTitleLocation location, {
+    bool spaced = false,
+  }) {
+    final baseBorderColor = borderColor ?? theme.border;
     final effectiveBorderColor =
         Color.lerp(
           baseBorderColor,
-          widget.theme.accent,
+          theme.accent,
           highlightValue.clamp(0.0, 1.0),
         ) ??
         baseBorderColor;
-    final highlightBg = widget.theme.accent.withValues(
-      alpha: 0.10 * highlightValue,
-    );
-    final pos = widget.groupPosition;
+    final highlightBg = theme.accent.withValues(alpha: 0.10 * highlightValue);
+    final pos = spaced ? SectionGroupPosition.only : groupPosition;
 
     // Subtle alternating background: blend 40% toward the base background so
     // the difference is visible but not jarring.
-    final baseColor = widget.alternateBackground
-        ? Color.lerp(widget.theme.surface, widget.theme.background, 0.6)!
-        : widget.theme.surface;
+    final baseColor = alternateBackground && !spaced
+        ? Color.lerp(theme.surface, theme.background, 0.6)!
+        : theme.surface;
     final bgColor = Color.alphaBlend(highlightBg, baseColor);
 
     // Which sides carry a visible border.
@@ -249,12 +206,10 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
     // Whether corner radius is applied to top / bottom.  We keep the original
     // rounding rules so attached boxes still have flat top corners unless the
     // position is truly "first"/"only".
-    final roundTopCorners =
-        showTop &&
-        (pos == SectionGroupPosition.only || pos == SectionGroupPosition.first);
+    final roundTopCorners = showTop;
     final roundBottomCorners = showBottom;
 
-    final cr = widget.theme.cornerRadius;
+    final cr = theme.cornerRadius;
     final outerRadius = BorderRadius.only(
       topLeft: roundTopCorners ? Radius.circular(cr) : Radius.zero,
       topRight: roundTopCorners ? Radius.circular(cr) : Radius.zero,
@@ -262,21 +217,78 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
       bottomRight: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
     );
 
+    final content = location == SectionTitleLocation.left
+        ? _buildLeftTitle(outerRadius)
+        : _buildTopTitle(outerRadius);
+
+    // Paint the background on Material so child controls' ink stays visible.
+    final hasCorners = roundTopCorners || roundBottomCorners;
+    final surface = Material(
+      color: bgColor,
+      textStyle: DefaultTextStyle.of(context).style,
+      animationDuration: Duration.zero,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: SurfaceDepth.gradient(bgColor, highlight: 0.085),
+        ),
+        child: content,
+      ),
+    );
+    // Keep controls mounted when search filtering changes connected corners.
+    final bgLayer = ClipRRect(
+      borderRadius: outerRadius,
+      clipBehavior: hasCorners ? Clip.antiAlias : Clip.none,
+      child: surface,
+    );
+
+    // Overlay the selective border via CustomPainter so it is never clipped.
+    final body = CustomPaint(
+      foregroundPainter: _SelectiveBorderPainter(
+        color: effectiveBorderColor,
+        strokeWidth: 1.0,
+        cornerRadius: cr,
+        showTop: showTop,
+        showBottom: showBottom,
+        roundTopCorners: roundTopCorners,
+        roundBottomCorners: roundBottomCorners,
+      ),
+      child: bgLayer,
+    );
+
+    // Keep controls and anchored popups mounted when the search glow fades.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: outerRadius,
+        boxShadow: [
+          SurfaceDepth.shadow(isDark: theme.isDark),
+          if (highlightValue > 0)
+            BoxShadow(
+              color: theme.accent.withValues(alpha: 0.18 * highlightValue),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+        ],
+      ),
+      child: body,
+    );
+  }
+
+  Widget _buildLeftTitle(BorderRadius outerRadius) {
     // Inner left-panel decorative corners.
     final panelRadius = BorderRadius.only(
-      topLeft: roundTopCorners ? Radius.circular(cr) : Radius.zero,
-      bottomRight: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
+      topLeft: outerRadius.topLeft,
+      bottomRight: outerRadius.bottomRight,
     );
 
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: widget.shrinkToChild ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisSize: MainAxisSize.max,
       children: [
         // Title panel
-        if (widget.showTitle)
+        if (showTitle)
           Container(
             width: 150,
-            padding: widget.padding,
+            padding: padding,
             decoration: BoxDecoration(
               // no background color so title blends with box body
               borderRadius: panelRadius,
@@ -293,261 +305,130 @@ class _SectionGroupBoxState extends ConsumerState<SectionGroupBox>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: widget.theme.accent.withValues(alpha: 0.2),
+                          color: theme.accent.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(
-                            widget.theme.cornerRadius,
+                            theme.cornerRadius,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (widget.titleIcon != null) ...[
-                              Icon(
-                                widget.titleIcon,
-                                size: 18,
-                                color: widget.theme.accent,
-                              ),
+                            if (titleIcon != null) ...[
+                              Icon(titleIcon, size: 18, color: theme.accent),
                               const SizedBox(width: kElementHSpacing),
                             ],
-                            Expanded(
-                              child: _buildHeaderText(
-                                titleColor: widget.theme.textPrimary,
-                              ),
-                            ),
+                            Expanded(child: _buildHeaderText()),
                           ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                if (widget.trailing != null) ...[
+                if (trailing != null) ...[
                   const SizedBox(height: 12),
-                  widget.trailing!,
+                  trailing!,
                 ],
               ],
             ),
           ),
         // Content area
-        widget.shrinkToChild
-            ? Padding(padding: widget.padding, child: widget.child)
-            : Expanded(
-                child: Padding(padding: widget.padding, child: widget.child),
-              ),
+        Expanded(
+          child: Padding(padding: padding, child: child),
+        ),
       ],
     );
 
-    // Background clipped to rounded corners.
-    final hasCorners = roundTopCorners || roundBottomCorners;
-    final bgLayer = hasCorners
-        ? ClipRRect(
-            borderRadius: outerRadius,
-            child: ColoredBox(color: bgColor, child: content),
-          )
-        : ColoredBox(color: bgColor, child: content);
-
-    // Overlay the selective border via CustomPainter so it is never clipped.
-    Widget body = CustomPaint(
-      foregroundPainter: _SelectiveBorderPainter(
-        color: effectiveBorderColor,
-        strokeWidth: 1.0,
-        cornerRadius: cr,
-        showTop: showTop,
-        showBottom: showBottom,
-        roundTopCorners: roundTopCorners,
-        roundBottomCorners: roundBottomCorners,
-      ),
-      child: bgLayer,
-    );
-
-    if (highlightValue > 0) {
-      body = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: outerRadius,
-          boxShadow: [
-            BoxShadow(
-              color: widget.theme.accent.withValues(
-                alpha: 0.18 * highlightValue,
-              ),
-              blurRadius: 12,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: body,
-      );
-    }
-
-    return body;
+    return content;
   }
 
-  Widget _buildTopTitle(double highlightValue) {
-    final baseBorderColor = widget.borderColor ?? widget.theme.border;
-    final effectiveBorderColor =
-        Color.lerp(
-          baseBorderColor,
-          widget.theme.accent,
-          highlightValue.clamp(0.0, 1.0),
-        ) ??
-        baseBorderColor;
-    final highlightBg = widget.theme.accent.withValues(
-      alpha: 0.10 * highlightValue,
-    );
-    final pos = widget.groupPosition;
-
-    final baseColor = widget.alternateBackground
-        ? Color.lerp(widget.theme.surface, widget.theme.background, 0.6)!
-        : widget.theme.surface;
-    final bgColor = Color.alphaBlend(highlightBg, baseColor);
-
-    // Similar to the left-title case: attached variants omit their top edge
-    // because the section header renders that top border.
-    final showTop =
-        pos == SectionGroupPosition.only || pos == SectionGroupPosition.first;
-    final showBottom =
-        pos == SectionGroupPosition.only ||
-        pos == SectionGroupPosition.last ||
-        pos == SectionGroupPosition.onlyAttached;
-
-    final roundTopCorners =
-        showTop &&
-        (pos == SectionGroupPosition.only || pos == SectionGroupPosition.first);
-    final roundBottomCorners = showBottom;
-
-    final cr = widget.theme.cornerRadius;
-    final outerRadius = BorderRadius.only(
-      topLeft: roundTopCorners ? Radius.circular(cr) : Radius.zero,
-      topRight: roundTopCorners ? Radius.circular(cr) : Radius.zero,
-      bottomLeft: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
-      bottomRight: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
-    );
-
+  Widget _buildTopTitle(BorderRadius outerRadius) {
     // Title header rounds only its own top corners (clipped by outer layer).
-    final titleHeaderRadius = roundTopCorners
-        ? BorderRadius.vertical(top: Radius.circular(cr))
-        : BorderRadius.zero;
+    final titleHeaderRadius = BorderRadius.only(
+      topLeft: outerRadius.topLeft,
+      topRight: outerRadius.topRight,
+    );
 
     final titleHeader = Container(
       padding: EdgeInsets.fromLTRB(
-        widget.padding.left,
-        12,
-        widget.padding.right,
-        8,
+        padding.left,
+        padding.top,
+        padding.right,
+        headerBottomPadding,
       ),
       decoration: BoxDecoration(borderRadius: titleHeaderRadius),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              stackTrailingWhenCompact &&
+              trailing != null &&
+              constraints.maxWidth <= kSettingsCompactLayoutBreakpoint;
+          final title = Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: headerCrossAxisAlignment,
             children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.titleIcon != null) ...[
-                        Icon(
-                          widget.titleIcon,
-                          size: 20,
-                          color: widget.theme.accent,
-                        ),
-                        const SizedBox(width: kElementHSpacing),
-                      ],
-                      Expanded(
-                        child: _buildHeaderText(
-                          titleColor: widget.theme.accent,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              if (titleIcon != null) ...[
+                Icon(titleIcon, size: 20, color: theme.accent),
+                const SizedBox(width: kElementHSpacing),
+              ],
+              Expanded(child: _buildHeaderText()),
+            ],
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: headerCrossAxisAlignment,
+                children: [
+                  Expanded(child: title),
+                  if (!stacked && trailing != null) ...[
+                    const SizedBox(width: 12),
+                    trailing!,
+                  ],
+                ],
               ),
-              if (widget.trailing != null) ...[
-                const SizedBox(width: 12),
-                widget.trailing!,
+              if (stacked) ...[
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: trailing!),
               ],
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
 
-    // When this box is placed inside an Expanded (tight height constraint),
-    // wrap the content in Expanded so the child receives a bounded height
-    // and a SingleChildScrollView can scroll instead of overflowing.
-    // When placed inside a scrollable (unbounded height), use plain Padding
-    // so the box sizes naturally to its content.
+    // Bounded sections give their content the space remaining below the title.
+    // The selected fit either fills that space or shrinks around short content.
+    // Unbounded sections size naturally inside their surrounding scroll view.
     final content = LayoutBuilder(
       builder: (context, constraints) {
-        final fitToHeight =
-            !widget.shrinkToChild && constraints.hasBoundedHeight;
+        final fitToHeight = constraints.hasBoundedHeight;
         final contentWidget = Padding(
-          padding: widget.showTitle
+          padding: showTitle
               ? EdgeInsets.only(
-                  left: widget.padding.left,
-                  right: widget.padding.right,
-                  bottom: widget.padding.bottom,
+                  left: padding.left,
+                  right: padding.right,
+                  bottom: padding.bottom,
                 )
-              : widget.padding,
-          child: widget.shrinkToChild
-              ? Align(alignment: Alignment.centerLeft, child: widget.child)
-              : widget.child,
+              : padding,
+          child: child,
         );
         return Column(
-          crossAxisAlignment: widget.shrinkToChild
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.stretch,
+          mainAxisSize: contentFit == FlexFit.loose
+              ? MainAxisSize.min
+              : MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.showTitle) titleHeader,
-            fitToHeight ? Expanded(child: contentWidget) : contentWidget,
+            if (showTitle) titleHeader,
+            fitToHeight
+                ? Flexible(fit: contentFit, child: contentWidget)
+                : contentWidget,
           ],
         );
       },
     );
 
-    final hasCorners = roundTopCorners || roundBottomCorners;
-    final bgLayer = hasCorners
-        ? ClipRRect(
-            borderRadius: outerRadius,
-            child: ColoredBox(color: bgColor, child: content),
-          )
-        : ColoredBox(color: bgColor, child: content);
-
-    Widget body = CustomPaint(
-      foregroundPainter: _SelectiveBorderPainter(
-        color: effectiveBorderColor,
-        strokeWidth: 1.0,
-        cornerRadius: cr,
-        showTop: showTop,
-        showBottom: showBottom,
-        roundTopCorners: roundTopCorners,
-        roundBottomCorners: roundBottomCorners,
-      ),
-      child: bgLayer,
-    );
-
-    if (highlightValue > 0) {
-      body = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: outerRadius,
-          boxShadow: [
-            BoxShadow(
-              color: widget.theme.accent.withValues(
-                alpha: 0.18 * highlightValue,
-              ),
-              blurRadius: 12,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: body,
-      );
-    }
-
-    return body;
+    return content;
   }
 }
 
@@ -732,7 +613,7 @@ class InnerGroupBox extends StatelessWidget {
                 title!,
                 style: TextStyle(
                   color: theme.textSecondary,
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),

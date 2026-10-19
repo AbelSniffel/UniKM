@@ -4,6 +4,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../shared/state/session_value.dart';
 import '../core/database/database.dart';
 import '../core/services/encrypted_db_session.dart';
 import '../core/services/database_switching.dart';
@@ -23,7 +24,7 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 
 /// Holds the currently active database and revision number.
 ///
-/// This is managed by the bootstrap process in main.dart.
+/// This is managed by the application bootstrap.
 /// The revision number is incremented each time the database is switched,
 /// allowing dependent providers to invalidate themselves.
 class DatabaseState {
@@ -52,7 +53,7 @@ class DatabaseNotifier extends Notifier<DatabaseState> {
 
   /// Clears the current database (call before switching).
   void clearDatabase() {
-    state = DatabaseState(database: null, revision: state.revision);
+    state = DatabaseState(database: null, revision: state.revision + 1);
   }
 
   /// Gets the current revision number.
@@ -88,54 +89,27 @@ final requireDatabaseProvider = Provider<AppDatabase>((ref) {
 /// In-memory session for encrypted databases (decrypted temp file + password).
 ///
 /// Null when the active database is not encrypted.
-final encryptedDbSessionProvider =
-    NotifierProvider<EncryptedDbSessionNotifier, EncryptedDbSession?>(
-      EncryptedDbSessionNotifier.new,
-    );
-
-class EncryptedDbSessionNotifier extends Notifier<EncryptedDbSession?> {
-  @override
-  EncryptedDbSession? build() => null;
-
-  void setSession(EncryptedDbSession? session) {
-    state = session;
-  }
-}
+final encryptedDbSessionProvider = sessionValueProvider<EncryptedDbSession?>(
+  null,
+);
 
 /// Persist encrypted database changes immediately after a write.
-Future<void> persistEncryptedDbIfNeeded(dynamic ref) async {
+Future<void> persistEncryptedDbIfNeeded(
+  dynamic ref, {
+  AppDatabase? database,
+}) async {
+  if (database != null && !identical(ref.read(databaseProvider), database)) {
+    throw StateError('Database session changed during the operation');
+  }
   final session = ref.read(encryptedDbSessionProvider);
   if (session != null) {
     await session.persistFromTemp();
   }
 }
 
-/// Holds the callback for database switching, set by main.dart bootstrap.
+/// Holds the callback for database switching, set by the application bootstrap.
 final databaseSwitchCallbackProvider =
-    NotifierProvider<DatabaseSwitchCallbackNotifier, DatabaseSwitchCallback?>(
-      DatabaseSwitchCallbackNotifier.new,
-    );
-
-class DatabaseSwitchCallbackNotifier extends Notifier<DatabaseSwitchCallback?> {
-  @override
-  DatabaseSwitchCallback? build() => null;
-
-  void setCallback(DatabaseSwitchCallback? callback) {
-    state = callback;
-  }
-}
+    sessionValueProvider<DatabaseSwitchCallback?>(null);
 
 /// True while the app is intentionally switching databases.
-final databaseSwitchingProvider =
-    NotifierProvider<DatabaseSwitchingNotifier, bool>(
-      DatabaseSwitchingNotifier.new,
-    );
-
-class DatabaseSwitchingNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void setSwitching(bool value) {
-    state = value;
-  }
-}
+final databaseSwitchingProvider = sessionValueProvider(false);

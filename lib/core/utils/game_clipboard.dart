@@ -14,39 +14,35 @@ class GameClipboard {
   GameClipboard._();
 
   /// Copy only the game keys, one per line.
-  static void copyKeysOnly(List<Game> targets) {
-    final keys = targets
-        .map((g) => g.gameKey)
-        .where((k) => k.isNotEmpty)
-        .join('\n');
-    if (keys.isEmpty) return;
-
-    Clipboard.setData(ClipboardData(text: keys));
-    _notifyCopy(targets.length, 'key');
-  }
+  static void copyKeysOnly(List<Game> targets) =>
+      _copy(targets, (game) => game.gameKey, 'key');
 
   /// Copy "Title: Key" pairs, one per line.
-  static void copyTitleWithKey(List<Game> targets) {
-    final text = targets
-        .where((g) => g.gameKey.isNotEmpty)
-        .map((g) => '${g.title}: ${g.gameKey}')
-        .join('\n');
-
-    if (text.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: text));
-    _notifyCopy(targets.length, 'title with key');
-  }
+  static void copyTitleWithKey(List<Game> targets) => _copy(
+    targets,
+    (game) => '${game.title}: ${game.gameKey}',
+    'title with key',
+  );
 
   /// Copy "Title: ||Key||" (Discord spoiler format), one per line.
-  static void copyDiscordSpoiler(List<Game> targets) {
-    final text = targets
-        .where((g) => g.gameKey.isNotEmpty)
-        .map((g) => '${g.title}: ||${g.gameKey}||')
-        .join('\n');
+  static void copyDiscordSpoiler(List<Game> targets) => _copy(
+    targets,
+    (game) => '${game.title}: ||${game.gameKey}||',
+    'Discord spoiler',
+  );
 
+  static void _copy(
+    List<Game> targets,
+    String Function(Game) format,
+    String type,
+  ) {
+    final text = targets
+        .where((game) => game.gameKey.isNotEmpty)
+        .map(format)
+        .join('\n');
     if (text.isEmpty) return;
     Clipboard.setData(ClipboardData(text: text));
-    _notifyCopy(targets.length, 'Discord spoiler');
+    _notifyCopy(targets.length, type);
   }
 
   /// Copy Steam redemption links for Steam-platform games.
@@ -59,18 +55,10 @@ class GameClipboard {
       return;
     }
 
-    final lines = <String>[];
-    for (final g in steamTargets) {
-      final url = steamRegisterKeyPageUrl(g.gameKey);
-      if (includeTitle) {
-        lines.add('${g.title}: $url');
-      } else {
-        lines.add(url);
-      }
-    }
-
-    Clipboard.setData(ClipboardData(text: lines.join('\n')));
-    _notifyCopy(lines.length, 'Steam redemption link');
+    _copy(steamTargets, (game) {
+      final url = steamRegisterKeyPageUrl(game.gameKey);
+      return includeTitle ? '${game.title}: $url' : url;
+    }, 'Steam redemption link');
   }
 
   static void _notifyCopy(int count, String type) {

@@ -13,9 +13,9 @@ import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
 import '../dialogs/copy_actions_dialog.dart';
-import '../dialogs/game_details_dialog.dart';
+import '../dialogs/delete_games_dialog.dart';
+import '../dialogs/game_editor_dialog.dart';
 import '../dialogs/steam_lookup_dialog.dart';
-import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 
 abstract final class GameSelectionActions {
@@ -33,7 +33,7 @@ abstract final class GameSelectionActions {
   // Details
   // ───────────────────────────────────────────────────────────────────────────
 
-  /// Opens the game-details dialog for [targets], or all currently-selected
+  /// Opens the Game Editor dialog for [targets], or all currently-selected
   /// games when [targets] is omitted.
   ///
   /// [initialGame] is the game to show first (defaults to [targets.first]).
@@ -48,7 +48,7 @@ abstract final class GameSelectionActions {
     }
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.info(
-        'Please wait for the Steam fetch to complete before opening details',
+        'Please wait for the Steam fetch to complete before opening Game Editor',
       );
       return;
     }
@@ -60,7 +60,7 @@ abstract final class GameSelectionActions {
     final first = initialGame ?? targets.first;
     final gameIds = targets.map((g) => g.id).toList();
 
-    showGameDetailsDialog(
+    showGameEditorDialog(
       context,
       first,
       gameIds: gameIds,
@@ -81,20 +81,14 @@ abstract final class GameSelectionActions {
       NotificationManager.instance.info('No games selected');
       return;
     }
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => CopyActionsDialog(targets: targets),
-    );
+    showCopyActionsDialog(context, targets);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
   // Steam page
   // ───────────────────────────────────────────────────────────────────────────
 
-  static Future<void> openSteamPages(
-    WidgetRef ref,
-    List<Game> targets,
-  ) async {
+  static Future<void> openSteamPages(WidgetRef ref, List<Game> targets) async {
     if (targets.isEmpty) {
       NotificationManager.instance.info('No Steam games selected');
       return;
@@ -212,18 +206,12 @@ abstract final class GameSelectionActions {
       return;
     }
 
-    final title = targets.length == 1
-        ? 'Delete "${targets.first.title}"?'
-        : 'Delete ${targets.length} games?';
-
-    final confirmed = await showConfirmDialog(
-      context: context,
-      theme: theme,
-      title: title,
-      message: 'This action cannot be undone.',
-      confirmLabel: 'Delete',
-      confirmIcon: Icons.delete,
-      destructive: true,
+    if (targets.isEmpty) return;
+    final confirmed = await showDeleteGamesDialog(
+      context,
+      theme,
+      targets.length,
+      gameTitle: targets.length == 1 ? targets.first.title : null,
     );
     if (!confirmed) return;
 

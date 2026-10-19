@@ -5,38 +5,45 @@ library;
 
 import 'dart:math' as math;
 
+final _editionPatterns = [
+  RegExp(
+    r'\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition',
+    caseSensitive: false,
+  ),
+  RegExp(r'\s*[-:]?\s*Deluxe\s*(Edition)?', caseSensitive: false),
+  RegExp(
+    r'\s*[-:]?\s*(GOTY|Game of the Year)\s*(Edition)?',
+    caseSensitive: false,
+  ),
+  RegExp(r'\s*[-:]?\s*Definitive\s*(Edition)?', caseSensitive: false),
+  RegExp(r'\s*[-:]?\s*Ultimate\s*(Edition)?', caseSensitive: false),
+  RegExp(r'\s*[-:]?\s*Gold\s*(Edition)?', caseSensitive: false),
+  RegExp(r'\s*[-:]?\s*Complete\s*(Edition)?', caseSensitive: false),
+  RegExp(r'\s*[-:]?\s*Remaster(ed)?', caseSensitive: false),
+];
+
+final _parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
+final _specialCharacterPattern = RegExp(r'[^a-zA-Z0-9\s]');
+final _whitespacePattern = RegExp(r'\s+');
+final _numberPattern = RegExp(r'^\d+$');
+final _romanPattern = RegExp(r'^[ivxlcdm]+$', caseSensitive: false);
+
 /// Clean a title for searching: remove edition words, punctuation, collapse spaces
 String cleanTitleForSearch(String title) {
   var clean = title.trim();
 
   // Remove common edition suffixes (case insensitive)
-  final editionPatterns = [
-    RegExp(
-      r'\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition',
-      caseSensitive: false,
-    ),
-    RegExp(r'\s*[-:]?\s*Deluxe\s*(Edition)?', caseSensitive: false),
-    RegExp(
-      r'\s*[-:]?\s*(GOTY|Game of the Year)\s*(Edition)?',
-      caseSensitive: false,
-    ),
-    RegExp(r'\s*[-:]?\s*Definitive\s*(Edition)?', caseSensitive: false),
-    RegExp(r'\s*[-:]?\s*Ultimate\s*(Edition)?', caseSensitive: false),
-    RegExp(r'\s*[-:]?\s*Gold\s*(Edition)?', caseSensitive: false),
-    RegExp(r'\s*[-:]?\s*Complete\s*(Edition)?', caseSensitive: false),
-    RegExp(r'\s*[-:]?\s*Remaster(ed)?', caseSensitive: false),
-  ];
-  for (final p in editionPatterns) {
+  for (final p in _editionPatterns) {
     clean = clean.replaceAll(p, '');
   }
 
   // Remove parenthetical content
-  clean = clean.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ');
+  clean = clean.replaceAll(_parentheticalPattern, ' ');
 
   // Remove special characters but keep alphanumeric, numbers and spaces
-  clean = clean.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ');
+  clean = clean.replaceAll(_specialCharacterPattern, ' ');
   // Collapse multiple spaces
-  clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+  clean = clean.replaceAll(_whitespacePattern, ' ').trim();
   return clean;
 }
 
@@ -54,22 +61,18 @@ double weightedSimilarity(String a, String b) {
   double totalWeightA = 0.0;
   double totalWeightB = 0.0;
   final weightsA = <double>[];
-  final weightsB = <double>[];
 
   double tokenMatchWeight = 0.0;
 
   bool hasNumberA = false;
   bool hasNumberB = false;
 
-  final numRe = RegExp(r'^\d+$');
-  final romanRe = RegExp(r'^[ivxlcdm]+$', caseSensitive: false);
-
   for (final t in tokensA) {
     double w = t.length.toDouble();
-    if (numRe.hasMatch(t)) {
+    if (_numberPattern.hasMatch(t)) {
       w += 3.0; // number tokens are very important
       hasNumberA = true;
-    } else if (romanRe.hasMatch(t)) {
+    } else if (_romanPattern.hasMatch(t)) {
       w += 2.0; // roman numerals matter
     }
     weightsA.add(w);
@@ -77,13 +80,12 @@ double weightedSimilarity(String a, String b) {
   }
   for (final t in tokensB) {
     double w = t.length.toDouble();
-    if (numRe.hasMatch(t)) {
+    if (_numberPattern.hasMatch(t)) {
       w += 3.0;
       hasNumberB = true;
-    } else if (romanRe.hasMatch(t)) {
+    } else if (_romanPattern.hasMatch(t)) {
       w += 2.0;
     }
-    weightsB.add(w);
     totalWeightB += w;
   }
 
@@ -130,8 +132,8 @@ double weightedSimilarity(String a, String b) {
 
   // Boost if both have the same numeric token
   if (hasNumberA && hasNumberB) {
-    final numsA = tokensA.where((t) => numRe.hasMatch(t)).toSet();
-    final numsB = tokensB.where((t) => numRe.hasMatch(t)).toSet();
+    final numsA = tokensA.where((t) => _numberPattern.hasMatch(t)).toSet();
+    final numsB = tokensB.where((t) => _numberPattern.hasMatch(t)).toSet();
     if (numsA.intersection(numsB).isNotEmpty) {
       combined = math.min(1.0, combined + 0.12);
     }
@@ -142,31 +144,28 @@ double weightedSimilarity(String a, String b) {
 
 /// Levenshtein distance between two strings.
 int _levenshteinDistance(String a, String b) {
-  final m = a.length;
-  final n = b.length;
+  // Keep only the preceding and current rows, with the shorter title as
+  // columns: O(min(a.length, b.length)) space instead of a full matrix.
+  final longer = a.length >= b.length ? a : b;
+  final shorter = a.length >= b.length ? b : a;
+  if (shorter.isEmpty) return longer.length;
 
-  if (m == 0) return n;
-  if (n == 0) return m;
-
-  final d = List.generate(m + 1, (_) => List.filled(n + 1, 0));
-
-  for (var i = 1; i <= m; i++) {
-    d[i][0] = i;
-  }
-  for (var j = 1; j <= n; j++) {
-    d[0][j] = j;
-  }
-
-  for (var i = 1; i <= m; i++) {
-    for (var j = 1; j <= n; j++) {
-      final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-      d[i][j] = [
-        d[i - 1][j] + 1,
-        d[i][j - 1] + 1,
-        d[i - 1][j - 1] + cost,
-      ].reduce((x, y) => x < y ? x : y);
+  var previous = List<int>.generate(shorter.length + 1, (i) => i);
+  var current = List<int>.filled(shorter.length + 1, 0);
+  for (var i = 1; i <= longer.length; i++) {
+    current[0] = i;
+    for (var j = 1; j <= shorter.length; j++) {
+      final cost = longer.codeUnitAt(i - 1) == shorter.codeUnitAt(j - 1)
+          ? 0
+          : 1;
+      current[j] = math.min(
+        math.min(previous[j] + 1, current[j - 1] + 1),
+        previous[j - 1] + cost,
+      );
     }
+    final swap = previous;
+    previous = current;
+    current = swap;
   }
-
-  return d[m][n];
+  return previous[shorter.length];
 }

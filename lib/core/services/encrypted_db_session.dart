@@ -6,6 +6,11 @@
 library;
 
 import 'dart:io';
+import 'dart:isolate';
+
+import 'package:sqlite3/sqlite3.dart';
+
+import '../../shared/storage/encrypted_save_coordinator.dart';
 
 import '../database/database.dart';
 import 'encryption_manager.dart';
@@ -28,40 +33,67 @@ class EncryptedDbSession {
 
   final EncryptionManager encryptionManager;
 
-  DateTime? _lastPersistedAt;
+  late final _saves = EncryptedSaveCoordinator(_writeSnapshot);
+  bool _closing = false;
 
   File get tempFile => File(tempDbPath);
 
-  /// Persist the current temp database back into the encrypted `.enc` file.
-  Future<void> persistFromTemp() async {
-    await encryptionManager.reencryptFromTemp(tempDbPath, password);
-    _lastPersistedAt = DateTime.now();
-  }
-
-  bool shouldPersistOnClose({Duration threshold = const Duration(seconds: 2)}) {
-    final last = _lastPersistedAt;
-    if (last == null) return true;
-    return DateTime.now().difference(last) > threshold;
-  }
-
-  /// Close the database, persist, and clean up temp files.
-  Future<void> closeAndPersist(AppDatabase db) async {
+  Future<void> _writeSnapshot() async {
+    // Use a separate SQLite connection so WAL contents are included. VACUUM
+    // INTO produces a consistent database even while the app connection is open.
+    final snapshotDirectory = await Directory.systemTemp.createTemp(
+      'UniKM_snapshot_',
+    );
+    final snapshotPath = '${snapshotDirectory.path}/snapshot.db';
+    final sourcePath = tempDbPath;
     try {
-      await db.close();
+      await Isolate.run(() {
+        final source = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
+        try {
+          source.execute('PRAGMA busy_timeout = 5000');
+          source.execute("VACUUM INTO '${snapshotPath.replaceAll("'", "''")}'");
+        } finally {
+          source.close();
+        }
+      });
+    } catch (_) {
+      await snapshotDirectory.delete(recursive: true);
+      rethrow;
+    }
+    try {
+      await encryptionManager.reencryptFromTemp(snapshotPath, password);
     } finally {
-      if (shouldPersistOnClose()) {
-        await persistFromTemp();
-      }
-      if (encryptionManager.isEncrypted) {
-        await encryptionManager.deletePlaintextDatabaseFile(
-          throwOnFailure: false,
-        );
-      }
-      // Clean up temp file and directory after database is closed
-      await _cleanupTempFiles();
+      await snapshotDirectory.delete(recursive: true);
     }
   }
-  
+
+  Future<void> persistFromTemp() {
+    if (_closing) {
+      return Future.error(StateError('Database session is closing'));
+    }
+    return _saves.save();
+  }
+
+  Future<void> flush() => _saves.flush();
+
+  /// Always capture a final snapshot: legacy writers do not all mark revisions.
+  bool shouldPersistOnClose() => true;
+
+  Future<void> closeAndPersist(AppDatabase db) async {
+    _closing = true;
+    // Drain all accepted saves before closing the SQLite connection. Never
+    // remove the plaintext recovery file when encryption or replacement fails.
+    await _saves.flush();
+    await db.close();
+    await _saves.save();
+    if (encryptionManager.isEncrypted) {
+      await encryptionManager.deletePlaintextDatabaseFile(
+        throwOnFailure: false,
+      );
+    }
+    await _cleanupTempFiles();
+  }
+
   /// Clean up temp files (call only after database is closed)
   Future<void> _cleanupTempFiles() async {
     try {

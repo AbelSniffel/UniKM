@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,20 +13,18 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/shortcuts/app_shortcuts.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/import_export_dialog.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_card.dart';
 import '../../widgets/selection_overlay.dart' as app_selection_overlay;
 import 'animated_game_card.dart';
-import 'selection_ribbon.dart';
 
-class GameLibraryView extends ConsumerWidget {
+class GameLibraryView extends ConsumerStatefulWidget {
   const GameLibraryView({
     super.key,
     required this.scrollController,
-    required this.playEntryAnimations,
+    this.animateEntries = false,
     required this.gameListFocusNode,
     this.isVeryNarrowLayout = false,
     required this.onSelectAll,
@@ -34,36 +33,43 @@ class GameLibraryView extends ConsumerWidget {
   });
 
   final ScrollController scrollController;
-  final bool playEntryAnimations;
+  final bool animateEntries;
   final FocusNode gameListFocusNode;
   final bool isVeryNarrowLayout;
   final VoidCallback onSelectAll;
   final Future<void> Function() onDeleteSelection;
   final Future<void> Function() onCopySelection;
 
-  static const int _maxAnimatedEntries = 120;
-  static const int _maxAnimatedStaggerIndex = 14;
-  static const int _progressiveRevealInitialCount = 36;
-  static const int _progressiveRevealBatchSize = 24;
-  static const Duration _progressiveRevealTick = Duration(milliseconds: 50);
+  @override
+  ConsumerState<GameLibraryView> createState() => _GameLibraryViewState();
+}
+
+class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
+  var _revealCoordinator = GameCardRevealCoordinator();
+  Object? _database;
   static const double _gridCacheExtent = kGridCardHeight + kGridCardSpacing;
-  static bool shouldUseProgressiveReveal(int totalItems) => true;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final database = ref.watch(databaseProvider);
+    if (!identical(database, _database)) {
+      _database = database;
+      _revealCoordinator = GameCardRevealCoordinator();
+    }
     final theme = ref.watch(themeProvider);
     // Use select to watch specific parts of state relevant to the list
     final isLoading = ref.watch(gamesProvider.select((s) => s.isLoading));
     final error = ref.watch(gamesProvider.select((s) => s.error));
-    // Watch filteredGames explicitly. Since it's a stable list (same reference) when selection changes, this won't rebuild.
-    final filteredGames = ref.watch(
-      gamesProvider.select((s) => s.filteredGames),
-    );
+    // Metadata changes are observed by each card without rebuilding the list.
+    final gameIds = ref.watch(filteredGameIdsProvider);
     final viewMode = ref.watch(viewModeProvider);
+    final slimList = ref.watch(
+      gameCardSettingsProvider.select((s) => s.slimListView),
+    );
 
     if (isLoading) return _buildLoadingState(theme);
     if (error != null) return _buildErrorState(ref, theme, error);
-    if (filteredGames.isEmpty) {
+    if (gameIds.isEmpty) {
       final hasActiveFilters = ref.watch(
         gamesProvider.select(
           (s) =>
@@ -81,31 +87,31 @@ class GameLibraryView extends ConsumerWidget {
         context,
         ref,
         theme,
-        filteredGames.isEmpty,
+        gameIds.isEmpty,
         hasActiveFilters,
       );
     }
 
     // List is ready
     return FocusableActionDetector(
-      focusNode: gameListFocusNode,
+      focusNode: widget.gameListFocusNode,
       shortcuts: AppShortcuts.gameList,
       actions: {
         SelectAllGamesIntent: CallbackAction<SelectAllGamesIntent>(
           onInvoke: (_) {
-            onSelectAll();
+            widget.onSelectAll();
             return null;
           },
         ),
         DeleteSelectionIntent: CallbackAction<DeleteSelectionIntent>(
           onInvoke: (_) async {
-            await onDeleteSelection();
+            await widget.onDeleteSelection();
             return null;
           },
         ),
         CopySelectionIntent: CallbackAction<CopySelectionIntent>(
           onInvoke: (_) async {
-            await onCopySelection();
+            await widget.onCopySelection();
             return null;
           },
         ),
@@ -113,18 +119,18 @@ class GameLibraryView extends ConsumerWidget {
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) {
-          if (!gameListFocusNode.hasFocus) {
-            FocusScope.of(context).requestFocus(gameListFocusNode);
+          if (!widget.gameListFocusNode.hasFocus) {
+            FocusScope.of(context).requestFocus(widget.gameListFocusNode);
           }
         },
         child: _buildGameList(
           context,
           ref,
           theme,
-          filteredGames,
+          gameIds,
           viewMode,
-          scrollController,
-          playEntryAnimations,
+          widget.scrollController,
+          slimList,
         ),
       ),
     );
@@ -151,7 +157,7 @@ class GameLibraryView extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 64, color: theme.error),
+          Icon(Icons.error, size: 64, color: theme.error),
           const SizedBox(height: 16),
           Text(
             'Error loading games',
@@ -188,7 +194,9 @@ class GameLibraryView extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final minHeight = constraints.hasBoundedHeight
-            ? (constraints.maxHeight - 16).clamp(0.0, double.infinity).toDouble()
+            ? (constraints.maxHeight - 16)
+                  .clamp(0.0, double.infinity)
+                  .toDouble()
             : 0.0;
 
         return SingleChildScrollView(
@@ -200,7 +208,9 @@ class GameLibraryView extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    hasFilters ? Icons.filter_alt_off : Icons.videogame_asset_off,
+                    hasFilters
+                        ? Icons.filter_alt_off
+                        : Icons.videogame_asset_off,
                     size: 80,
                     color: theme.textHint,
                   ),
@@ -224,20 +234,19 @@ class GameLibraryView extends ConsumerWidget {
                   ),
                   if (hasFilters) ...[
                     const SizedBox(height: 16),
-                    TextButton.icon(
+                    ElevatedButton(
                       onPressed: () {
                         ref.read(gamesProvider.notifier).setSearchQuery('');
                         ref.read(gamesProvider.notifier).clearAllFilters();
                       },
-                      icon: const Icon(Icons.clear_all),
-                      label: const Text('Clear Filters'),
+                      child: const Text('Clear Filters'),
                     ),
                   ] else ...[
                     const SizedBox(height: 8),
                     ElevatedButton.icon(
                       onPressed: () => ref
                           .read(currentNavProvider.notifier)
-                          .setNav(NavItem.addGames),
+                          .set(NavItem.addGames),
                       icon: const Icon(Icons.add),
                       label: const Text('Add Game'),
                     ),
@@ -261,217 +270,107 @@ class GameLibraryView extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     AppThemeData theme,
-    List<Game> games,
+    List<int> gameIds,
     GameListViewMode viewMode,
     ScrollController scrollController,
-    bool playEntryAnimations,
+    bool slimList,
   ) {
-    final slimList = ref.watch(
-      gameCardSettingsProvider.select((s) => s.slimListView),
-    );
     final listSpacing = slimList ? kSlimListCardSpacing : kListCardSpacing;
-    final listItemExtent = (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
+    final listItemExtent =
+        (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
     final listCacheExtent = listItemExtent * 2;
 
-    final useProgressiveReveal = GameLibraryView.shouldUseProgressiveReveal(
-      games.length,
-    );
-    final shouldAnimateEntries =
-        playEntryAnimations &&
-        games.isNotEmpty &&
-        games.length <= _maxAnimatedEntries;
-
     // NOTE: selectedGameIds is intentionally NOT watched here.
-    // Selection changes are handled by _GameListWithSelectionOverlay, which
-    // wraps only the overlay — so the grid/list itself is never rebuilt on
-    // selection changes.
-
-    final persistedScrollOffset = ref.read(gameLibraryScrollOffsetProvider);
-    final scrollOffset =
-        scrollController.hasClients && scrollController.offset.isFinite
-        ? scrollController.offset
-        : persistedScrollOffset;
-    final viewportHeight =
-        scrollController.hasClients &&
-            scrollController.position.viewportDimension.isFinite &&
-            scrollController.position.viewportDimension > 0
-        ? scrollController.position.viewportDimension
-        : MediaQuery.sizeOf(context).height;
+    // The shell owns the selection ribbon, so selection changes do not
+    // rebuild the grid/list.
 
     if (viewMode == GameListViewMode.grid) {
-      return _GameListWithSelectionRibbon(
-        isVeryNarrowLayout: isVeryNarrowLayout,
-        child: _wrapDragSelection(
-          ref,
-          theme,
-          games,
-          viewMode,
-          scrollController,
-          listItemExtent,
-          _ProgressiveReveal(
-            totalCount: games.length,
-            initialVisibleHint: _estimatedVisibleHint(
-              context,
-              viewMode: viewMode,
-              scrollOffset: scrollOffset,
-              viewportHeight: viewportHeight,
-            ),
-            builder: (visibleCount) => GridView.builder(
-              key: const PageStorageKey('game-library-scroll'),
-              controller: scrollController,
-              cacheExtent: _gridCacheExtent,
-              padding: const EdgeInsets.all(12),
-              clipBehavior: Clip.hardEdge,
-              addAutomaticKeepAlives: false,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
-                mainAxisExtent: kGridCardHeight + kGridCardSpacing,
-                crossAxisSpacing: kGridCardSpacing,
-                mainAxisSpacing: kGridCardSpacing,
-              ),
-              itemCount: visibleCount,
-              itemBuilder: (context, index) {
-                final game = games[index];
-                final card = GameCard(key: ValueKey(game.id), game: game);
-
-                final shouldAnimateCard =
-                    shouldAnimateEntries || useProgressiveReveal;
-                final cappedIndex = index > _maxAnimatedStaggerIndex
-                    ? _maxAnimatedStaggerIndex
-                    : index;
-                final progressiveStagger = index % 10;
-                final staggerIndex = useProgressiveReveal
-                    ? progressiveStagger
-                    : cappedIndex;
-
-                return shouldAnimateCard
-                    ? AnimatedGameCard(
-                        key: ValueKey('anim_${game.id}'),
-                        delay: Duration(milliseconds: staggerIndex * 16),
-                        child: card,
-                      )
-                    : card;
-              },
-            ),
+      return _wrapDragSelection(
+        ref,
+        theme,
+        gameIds,
+        viewMode,
+        scrollController,
+        listItemExtent,
+        GridView.builder(
+          scrollCacheExtent: ScrollCacheExtent.pixels(_gridCacheExtent),
+          key: const PageStorageKey('game-library-scroll'),
+          controller: scrollController,
+          padding: const EdgeInsets.all(12),
+          clipBehavior: Clip.hardEdge,
+          addAutomaticKeepAlives: false,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
+            mainAxisExtent: kGridCardHeight + kGridCardSpacing,
+            crossAxisSpacing: kGridCardSpacing,
+            mainAxisSpacing: kGridCardSpacing,
           ),
+          itemCount: gameIds.length,
+          itemBuilder: (context, index) {
+            final gameId = gameIds[index];
+            final card = _LibraryGameCard(
+              key: ValueKey(gameId),
+              gameId: gameId,
+              viewMode: viewMode,
+              dragSelectionHandledByParent: viewMode == GameListViewMode.list,
+            );
+
+            return _revealCard(gameId, card);
+          },
         ),
       );
     }
 
-    return _GameListWithSelectionRibbon(
-      isVeryNarrowLayout: isVeryNarrowLayout,
-      child: _wrapDragSelection(
-        ref,
-        theme,
-        games,
-        viewMode,
-        scrollController,
-        listItemExtent,
-        _ProgressiveReveal(
-          totalCount: games.length,
-          initialVisibleHint: _estimatedVisibleHint(
-            context,
+    return _wrapDragSelection(
+      ref,
+      theme,
+      gameIds,
+      viewMode,
+      scrollController,
+      listItemExtent,
+      ListView.builder(
+        scrollCacheExtent: ScrollCacheExtent.pixels(listCacheExtent),
+        key: const PageStorageKey('game-library-scroll'),
+        controller: scrollController,
+        itemExtent: listItemExtent,
+        padding: const EdgeInsets.all(12),
+        clipBehavior: Clip.hardEdge,
+        addAutomaticKeepAlives: false,
+        itemCount: gameIds.length,
+        itemBuilder: (context, index) {
+          final gameId = gameIds[index];
+          final card = _LibraryGameCard(
+            key: ValueKey(gameId),
+            gameId: gameId,
             viewMode: viewMode,
-            scrollOffset: scrollOffset,
-            viewportHeight: viewportHeight,
-            listItemExtent: listItemExtent,
-          ),
-          builder: (visibleCount) => ListView.builder(
-            key: const PageStorageKey('game-library-scroll'),
-            controller: scrollController,
-            cacheExtent: listCacheExtent,
-            itemExtent: listItemExtent,
-            padding: const EdgeInsets.all(12),
-            clipBehavior: Clip.hardEdge,
-            addAutomaticKeepAlives: false,
-            itemCount: visibleCount,
-            itemBuilder: (context, index) {
-              final game = games[index];
-              final card = GameCard(key: ValueKey(game.id), game: game);
+            dragSelectionHandledByParent: viewMode == GameListViewMode.list,
+          );
 
-              final shouldAnimateCard =
-                  shouldAnimateEntries || useProgressiveReveal;
-              final cappedIndex = index > _maxAnimatedStaggerIndex
-                  ? _maxAnimatedStaggerIndex
-                  : index;
-              final progressiveStagger = index % 10;
-              final staggerIndex = useProgressiveReveal
-                  ? progressiveStagger
-                  : cappedIndex;
-
-              if (slimList) {
-                return shouldAnimateCard
-                    ? AnimatedGameCard(
-                        key: ValueKey('anim_${game.id}'),
-                        delay: Duration(milliseconds: staggerIndex * 12),
-                        slideX: false,
-                        child: card,
-                      )
-                    : card;
-              }
-
-              return Padding(
-                padding: EdgeInsets.only(bottom: listSpacing),
-                child: shouldAnimateCard
-                    ? AnimatedGameCard(
-                        key: ValueKey('anim_${game.id}'),
-                        delay: Duration(milliseconds: staggerIndex * 12),
-                        slideX: false,
-                        child: card,
-                      )
-                    : card,
-              );
-            },
-          ),
-        ),
+          final revealed = _revealCard(gameId, card);
+          return slimList
+              ? revealed
+              : Padding(
+                  padding: EdgeInsets.only(bottom: listSpacing),
+                  child: revealed,
+                );
+        },
       ),
     );
   }
 
-  int _estimatedVisibleHint(
-    BuildContext context, {
-    required GameListViewMode viewMode,
-    required double scrollOffset,
-    required double viewportHeight,
-    double? listItemExtent,
-  }) {
-    if (scrollOffset <= 0 || viewportHeight <= 0) {
-      return GameLibraryView._progressiveRevealInitialCount;
-    }
-
-    if (viewMode == GameListViewMode.list) {
-      final rowExtent = listItemExtent ?? (kListCardHeight + kListCardSpacing);
-      final firstVisible = (scrollOffset / rowExtent).floor();
-      final viewportRows = (viewportHeight / rowExtent).ceil();
-      final lookAheadRows = viewportRows * 2;
-      final hint = firstVisible + lookAheadRows + 24;
-      return hint < GameLibraryView._progressiveRevealInitialCount
-          ? GameLibraryView._progressiveRevealInitialCount
-          : hint;
-    }
-
-    final rowExtent = kGridCardHeight + kGridCardSpacing;
-    final firstVisibleRow = (scrollOffset / rowExtent).floor();
-    final viewportRows = (viewportHeight / rowExtent).ceil();
-    final contentWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
-      1.0,
-      double.infinity,
-    );
-    final columns = (contentWidth / (kGridCardWidth + kGridCardSpacing))
-        .ceil()
-        .clamp(1, 9999)
-        .toInt();
-    final hintRows = firstVisibleRow + (viewportRows * 2) + 3;
-    final hint = hintRows * columns;
-    return hint < GameLibraryView._progressiveRevealInitialCount
-        ? GameLibraryView._progressiveRevealInitialCount
-        : hint;
-  }
+  Widget _revealCard(int gameId, Widget card) => widget.animateEntries
+      ? AnimatedGameCard(
+          key: ValueKey('anim_$gameId'),
+          gameId: gameId,
+          coordinator: _revealCoordinator,
+          child: card,
+        )
+      : card;
 
   Widget _wrapDragSelection(
     WidgetRef ref,
     AppThemeData theme,
-    List<Game> games,
+    List<int> gameIds,
     GameListViewMode viewMode,
     ScrollController scrollController,
     double listItemExtent,
@@ -479,7 +378,7 @@ class GameLibraryView extends ConsumerWidget {
   ) {
     return _GameLibraryDragSelectionLayer(
       theme: theme,
-      games: games,
+      gameIds: gameIds,
       viewMode: viewMode,
       scrollController: scrollController,
       listItemExtent: listItemExtent,
@@ -488,10 +387,35 @@ class GameLibraryView extends ConsumerWidget {
   }
 }
 
+class _LibraryGameCard extends ConsumerWidget {
+  const _LibraryGameCard({
+    super.key,
+    required this.gameId,
+    required this.viewMode,
+    required this.dragSelectionHandledByParent,
+  });
+
+  final int gameId;
+  final GameListViewMode viewMode;
+  final bool dragSelectionHandledByParent;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final game = ref.watch(gameByIdProvider(gameId));
+    if (game == null) return const SizedBox.shrink();
+    return GameCard(
+      key: ValueKey(gameId),
+      game: game,
+      viewMode: viewMode,
+      dragSelectionHandledByParent: dragSelectionHandledByParent,
+    );
+  }
+}
+
 class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
   const _GameLibraryDragSelectionLayer({
     required this.theme,
-    required this.games,
+    required this.gameIds,
     required this.viewMode,
     required this.scrollController,
     required this.listItemExtent,
@@ -499,7 +423,7 @@ class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
   });
 
   final AppThemeData theme;
-  final List<Game> games;
+  final List<int> gameIds;
   final GameListViewMode viewMode;
   final ScrollController scrollController;
   final double listItemExtent;
@@ -522,6 +446,83 @@ class _GameLibraryDragSelectionLayerState
   static const double _autoScrollMaxStep = 18.0;
   static const app_selection_overlay.SelectionOverlayStyle _marqueeStyle =
       app_selection_overlay.kDefaultSelectionOverlayStyle;
+
+  int? _paintPointer;
+  Offset? _paintDownGlobal;
+  Offset? _paintPreviousContent;
+  bool _painting = false;
+  final Set<int> _paintVisited = {};
+
+  bool get _isCtrlPressed {
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    return keys.contains(LogicalKeyboardKey.controlLeft) ||
+        keys.contains(LogicalKeyboardKey.controlRight) ||
+        keys.contains(LogicalKeyboardKey.metaLeft) ||
+        keys.contains(LogicalKeyboardKey.metaRight);
+  }
+
+  // Sweep every row between raw pointer samples. MouseRegion.onEnter only sees
+  // the row under a sampled position and can miss rows during a fast drag.
+  void _paintListSelection(Offset globalPosition) {
+    final local = _toLocal(globalPosition);
+    final previous = _paintPreviousContent;
+    final box = _renderBox;
+    if (local == null || previous == null || box == null || !box.hasSize) {
+      return;
+    }
+    final current = _toContentOffset(local);
+    _paintPreviousContent = current;
+    final left = _contentPadding;
+    final right = box.size.width - _contentPadding;
+    // Clip the swept segment horizontally to the row bounds.
+    var start = 0.0;
+    var end = 1.0;
+    final dx = current.dx - previous.dx;
+    if (dx == 0) {
+      if (current.dx < left || current.dx > right) return;
+    } else {
+      final a = (left - previous.dx) / dx;
+      final b = (right - previous.dx) / dx;
+      start = (a < b ? a : b).clamp(0.0, 1.0);
+      end = (a > b ? a : b).clamp(0.0, 1.0);
+      if ((a < b ? a : b) > 1 || (a > b ? a : b) < 0) return;
+    }
+    final dy = current.dy - previous.dy;
+    final startY = previous.dy + dy * start;
+    final endY = previous.dy + dy * end;
+    final first =
+        (((startY < endY ? startY : endY) - _contentPadding) /
+                widget.listItemExtent)
+            .floor()
+            .clamp(0, widget.gameIds.length);
+    final last =
+        (((startY > endY ? startY : endY) - _contentPadding) /
+                widget.listItemExtent)
+            .floor()
+            .clamp(-1, widget.gameIds.length - 1);
+    final selection = Set<int>.from(ref.read(gamesProvider).selectedGameIds);
+    int? lastVisited;
+    for (var index = first; index <= last; index++) {
+      final id = widget.gameIds[index];
+      if (!_paintVisited.add(id)) continue;
+      if (!selection.add(id)) selection.remove(id);
+      lastVisited = id;
+    }
+    if (lastVisited != null) {
+      ref.read(gamesProvider.notifier).setSelection(selection);
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .set(lastVisited);
+    }
+  }
+
+  void _clearPaintTracking() {
+    _paintPointer = null;
+    _paintDownGlobal = null;
+    _paintPreviousContent = null;
+    _painting = false;
+    _paintVisited.clear();
+  }
 
   int? _activePointer;
   Offset? _pointerDownGlobal;
@@ -590,7 +591,7 @@ class _GameLibraryDragSelectionLayerState
     ref.read(gamesProvider.notifier).setSelection(nextSelection);
     ref
         .read(lastSelectedGameIdProvider.notifier)
-        .setLastSelectedGameId(
+        .set(
           nextSelection.isEmpty ? null : nextSelection.last,
         );
 
@@ -705,9 +706,20 @@ class _GameLibraryDragSelectionLayerState
     if (event.kind != PointerDeviceKind.mouse) {
       return;
     }
-    if ((event.buttons & kPrimaryMouseButton) == 0 || !_isShiftPressed) {
+    if ((event.buttons & kPrimaryMouseButton) == 0) return;
+    if (widget.viewMode == GameListViewMode.list &&
+        !_isShiftPressed &&
+        (_isCtrlPressed || ref.read(selectionMultiSelectModeProvider))) {
+      final local = _toLocal(event.position);
+      if (local == null) return;
+      _paintPointer = event.pointer;
+      _paintDownGlobal = event.position;
+      _paintPreviousContent = _toContentOffset(local);
+      _paintVisited.clear();
+      _painting = false;
       return;
     }
+    if (!_isShiftPressed) return;
 
     _activePointer = event.pointer;
     _pointerDownGlobal = event.position;
@@ -725,6 +737,16 @@ class _GameLibraryDragSelectionLayerState
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (event.kind != PointerDeviceKind.mouse) {
+      return;
+    }
+    if (event.pointer == _paintPointer &&
+        (event.buttons & kPrimaryMouseButton) != 0) {
+      if (!_painting &&
+          (event.position - _paintDownGlobal!).distance > _dragStartSlop) {
+        _painting = true;
+        ref.read(dragSelectionProvider.notifier).start();
+      }
+      if (_painting) _paintListSelection(event.position);
       return;
     }
     if (event.pointer != _activePointer || !_isShiftPressed) {
@@ -755,6 +777,10 @@ class _GameLibraryDragSelectionLayerState
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    if (event.pointer == _paintPointer) {
+      if (_painting) _paintListSelection(event.position);
+      _clearPaintTracking();
+    }
     if (event.kind == PointerDeviceKind.mouse) {
       ref.read(dragSelectionProvider.notifier).stop();
     }
@@ -764,6 +790,7 @@ class _GameLibraryDragSelectionLayerState
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
+    if (event.pointer == _paintPointer) _clearPaintTracking();
     if (event.kind == PointerDeviceKind.mouse) {
       ref.read(dragSelectionProvider.notifier).stop();
     }
@@ -791,9 +818,19 @@ class _GameLibraryDragSelectionLayerState
 
   List<int> _computeListSelection(Rect rect, double viewportWidth) {
     final rowWidth = viewportWidth - (_contentPadding * 2);
+    if (rect.right <= _contentPadding ||
+        rect.left >= _contentPadding + rowWidth) {
+      return const [];
+    }
+    final first = ((rect.top - _contentPadding) / widget.listItemExtent)
+        .floor()
+        .clamp(0, widget.gameIds.length);
+    final end = ((rect.bottom - _contentPadding) / widget.listItemExtent)
+        .ceil()
+        .clamp(0, widget.gameIds.length);
 
     final selectedIds = <int>[];
-    for (var index = 0; index < widget.games.length; index++) {
+    for (var index = first; index < end; index++) {
       final top = _contentPadding + (index * widget.listItemExtent);
       final itemRect = Rect.fromLTWH(
         _contentPadding,
@@ -802,7 +839,7 @@ class _GameLibraryDragSelectionLayerState
         widget.listItemExtent,
       );
       if (itemRect.overlaps(rect)) {
-        selectedIds.add(widget.games[index].id);
+        selectedIds.add(widget.gameIds[index]);
       }
     }
     return selectedIds;
@@ -821,16 +858,26 @@ class _GameLibraryDragSelectionLayerState
     final tileWidth =
         (availableWidth - ((columns - 1) * kGridCardSpacing)) / columns;
     final rowExtent = (kGridCardHeight + kGridCardSpacing) + kGridCardSpacing;
+    final firstRow = ((rect.top - _contentPadding) / rowExtent).floor().clamp(
+      0,
+      widget.gameIds.length,
+    );
+    final endRow = ((rect.bottom - _contentPadding) / rowExtent).ceil().clamp(
+      0,
+      widget.gameIds.length,
+    );
+    final first = (firstRow * columns).clamp(0, widget.gameIds.length);
+    final end = (endRow * columns).clamp(0, widget.gameIds.length);
 
     final selectedIds = <int>[];
-    for (var index = 0; index < widget.games.length; index++) {
+    for (var index = first; index < end; index++) {
       final row = index ~/ columns;
       final column = index % columns;
       final left = _contentPadding + (column * (tileWidth + kGridCardSpacing));
       final top = _contentPadding + (row * rowExtent);
       final itemRect = Rect.fromLTWH(left, top, tileWidth, rowExtent);
       if (itemRect.overlaps(rect)) {
-        selectedIds.add(widget.games[index].id);
+        selectedIds.add(widget.gameIds[index]);
       }
     }
     return selectedIds;
@@ -867,238 +914,5 @@ class _GameLibraryDragSelectionLayerState
         ],
       ),
     );
-  }
-}
-
-/// Wraps the game grid/list with the selection ribbon.
-///
-/// This is extracted into its own [ConsumerStatefulWidget] so that selection
-/// changes
-/// ONLY rebuild the ribbon animation — not the underlying grid or list widget.
-/// The grid/list is passed in as [child] and remains stable across selection
-/// changes, which is the primary driver of resize-adjacent rebuild overhead.
-class _GameListWithSelectionRibbon extends ConsumerStatefulWidget {
-  const _GameListWithSelectionRibbon({
-    required this.child,
-    this.isVeryNarrowLayout = false,
-  });
-
-  final Widget child;
-  final bool isVeryNarrowLayout;
-
-  @override
-  ConsumerState<_GameListWithSelectionRibbon> createState() =>
-      _GameListWithSelectionRibbonState();
-}
-
-class _GameListWithSelectionRibbonState
-    extends ConsumerState<_GameListWithSelectionRibbon>
-    with SingleTickerProviderStateMixin {
-  bool _expanded = false;
-  bool _hasSelection = false;
-  late final AnimationController _ribbonController;
-  late final Animation<double> _ribbonAnimation;
-  ProviderSubscription<bool>? _hasSelectionSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _ribbonController = AnimationController(
-      vsync: this,
-      duration: kFastAnimation,
-    );
-    _ribbonAnimation = CurvedAnimation(
-      parent: _ribbonController,
-      curve: Curves.easeInOutCubic,
-    );
-
-    // Sync immediately so the ribbon is pre-shown if games are already selected
-    // (e.g. navigating back to this page with an active selection).
-    _hasSelection = ref.read(
-      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
-    );
-    if (_hasSelection) _ribbonController.value = 1.0;
-
-    _hasSelectionSub = ref.listenManual(
-      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
-      (_, hasSelection) {
-        setState(() => _hasSelection = hasSelection);
-        if (hasSelection) {
-          _ribbonController.forward();
-        } else {
-          ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
-          _ribbonController.reverse().then((_) {
-            if (mounted && _expanded) setState(() => _expanded = false);
-          });
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _hasSelectionSub?.close();
-    _ribbonController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final showExpandedList = _hasSelection && _expanded;
-
-    return Column(
-      children: [
-        Expanded(
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              widget.child,
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: IgnorePointer(
-                  ignoring: !showExpandedList,
-                  child: AnimatedSlide(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    offset: showExpandedList
-                        ? Offset.zero
-                        : const Offset(0, 1.0),
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      opacity: showExpandedList ? 1.0 : 0.0,
-                      child: const SelectionRibbonExpandedPanel(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // SizeTransition + FadeTransition share one controller so the ribbon
-        // content is always present during animation — no empty-container
-        // artifact from swapping children mid-transition.
-        ClipRect(
-          child: SizeTransition(
-            sizeFactor: _ribbonAnimation,
-            axisAlignment: 1.0,
-            child: FadeTransition(
-              opacity: _ribbonAnimation,
-              child: SelectionRibbon(
-                isExpanded: _expanded,
-                isVeryNarrowLayout: widget.isVeryNarrowLayout,
-                onToggleExpand: () => setState(() => _expanded = !_expanded),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProgressiveReveal extends StatefulWidget {
-  const _ProgressiveReveal({
-    required this.totalCount,
-    required this.initialVisibleHint,
-    required this.builder,
-  });
-
-  final int totalCount;
-  final int initialVisibleHint;
-  final Widget Function(int visibleCount) builder;
-
-  @override
-  State<_ProgressiveReveal> createState() => _ProgressiveRevealState();
-}
-
-class _ProgressiveRevealState extends State<_ProgressiveReveal> {
-  Timer? _timer;
-  int _visibleCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncToTotal();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ProgressiveReveal oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.totalCount != widget.totalCount) {
-      _syncToTotal();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _syncToTotal() {
-    _timer?.cancel();
-
-    final total = widget.totalCount;
-    if (total <= 0) {
-      if (_visibleCount != 0) {
-        setState(() => _visibleCount = 0);
-      }
-      return;
-    }
-
-    if (!GameLibraryView.shouldUseProgressiveReveal(total)) {
-      if (_visibleCount != total) {
-        setState(() => _visibleCount = total);
-      }
-      return;
-    }
-
-    final initial = total < GameLibraryView._progressiveRevealInitialCount
-        ? total
-        : GameLibraryView._progressiveRevealInitialCount;
-    final hintedInitial = widget.initialVisibleHint < initial
-        ? initial
-        : widget.initialVisibleHint;
-    final targetInitial = hintedInitial > total ? total : hintedInitial;
-
-    if (_visibleCount > total) {
-      setState(() => _visibleCount = total);
-      return;
-    }
-
-    // Do not collapse visibleCount on transient rebuilds (such as navigation
-    // switches or viewport reattachment), otherwise scroll can visually snap.
-    if (_visibleCount < targetInitial) {
-      setState(() => _visibleCount = targetInitial);
-    }
-
-    if (_visibleCount >= total) return;
-
-    _timer = Timer.periodic(GameLibraryView._progressiveRevealTick, (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      final next = _visibleCount + GameLibraryView._progressiveRevealBatchSize;
-      if (next >= total) {
-        setState(() => _visibleCount = total);
-        timer.cancel();
-        return;
-      }
-
-      setState(() => _visibleCount = next);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final clamped = _visibleCount > widget.totalCount
-        ? widget.totalCount
-        : _visibleCount;
-    return widget.builder(clamped);
   }
 }

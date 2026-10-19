@@ -329,10 +329,7 @@ class $GamesTable extends Games with TableInfo<$GamesTable, GameEntry> {
     if (data.containsKey('developer')) {
       context.handle(
         _developerMeta,
-        developer.isAcceptableOrUnknown(
-          data['developer']!,
-          _developerMeta,
-        ),
+        developer.isAcceptableOrUnknown(data['developer']!, _developerMeta),
       );
     }
     if (data.containsKey('review_score')) {
@@ -475,7 +472,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
   /// Steam AppID for API integration
   final String steamAppId;
 
-  /// Steam developer/publisher
+  /// Game developer/publisher (Steam metadata)
   final String developer;
 
   /// Review score from Steam (0-100)
@@ -653,9 +650,7 @@ class GameEntry extends DataClass implements Insertable<GameEntry> {
       steamAppId: data.steamAppId.present
           ? data.steamAppId.value
           : this.steamAppId,
-      developer: data.developer.present
-          ? data.developer.value
-          : this.developer,
+      developer: data.developer.present ? data.developer.value : this.developer,
       reviewScore: data.reviewScore.present
           ? data.reviewScore.value
           : this.reviewScore,
@@ -901,6 +896,9 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
     if (steamAppId.present) {
       map['steam_app_id'] = Variable<String>(steamAppId.value);
     }
+    if (developer.present) {
+      map['developer'] = Variable<String>(developer.value);
+    }
     if (reviewScore.present) {
       map['review_score'] = Variable<int>(reviewScore.value);
     }
@@ -926,6 +924,7 @@ class GamesCompanion extends UpdateCompanion<GameEntry> {
           ..write('deadlineDate: $deadlineDate, ')
           ..write('isDlc: $isDlc, ')
           ..write('steamAppId: $steamAppId, ')
+          ..write('developer: $developer, ')
           ..write('reviewScore: $reviewScore, ')
           ..write('reviewCount: $reviewCount')
           ..write(')'))
@@ -1860,6 +1859,7 @@ typedef $$GamesTableCreateCompanionBuilder =
       Value<DateTime?> deadlineDate,
       Value<bool> isDlc,
       Value<String> steamAppId,
+      Value<String> developer,
       Value<int> reviewScore,
       Value<int> reviewCount,
     });
@@ -1878,6 +1878,7 @@ typedef $$GamesTableUpdateCompanionBuilder =
       Value<DateTime?> deadlineDate,
       Value<bool> isDlc,
       Value<String> steamAppId,
+      Value<String> developer,
       Value<int> reviewScore,
       Value<int> reviewCount,
     });
@@ -1889,7 +1890,7 @@ final class $$GamesTableReferences
   static MultiTypedResultKey<$GameTagsTable, List<GameTagEntry>>
   _gameTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.gameTags,
-    aliasName: $_aliasNameGenerator(db.games.id, db.gameTags.gameId),
+    aliasName: 'games__id__game_tags__game_id',
   );
 
   $$GameTagsTableProcessedTableManager get gameTagsRefs {
@@ -1975,6 +1976,11 @@ class $$GamesTableFilterComposer extends Composer<_$AppDatabase, $GamesTable> {
 
   ColumnFilters<String> get steamAppId => $composableBuilder(
     column: $table.steamAppId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get developer => $composableBuilder(
+    column: $table.developer,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2088,6 +2094,11 @@ class $$GamesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get developer => $composableBuilder(
+    column: $table.developer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get reviewScore => $composableBuilder(
     column: $table.reviewScore,
     builder: (column) => ColumnOrderings(column),
@@ -2154,6 +2165,9 @@ class $$GamesTableAnnotationComposer
     column: $table.steamAppId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get developer =>
+      $composableBuilder(column: $table.developer, builder: (column) => column);
 
   GeneratedColumn<int> get reviewScore => $composableBuilder(
     column: $table.reviewScore,
@@ -2232,6 +2246,7 @@ class $$GamesTableTableManager
                 Value<DateTime?> deadlineDate = const Value.absent(),
                 Value<bool> isDlc = const Value.absent(),
                 Value<String> steamAppId = const Value.absent(),
+                Value<String> developer = const Value.absent(),
                 Value<int> reviewScore = const Value.absent(),
                 Value<int> reviewCount = const Value.absent(),
               }) => GamesCompanion(
@@ -2248,6 +2263,7 @@ class $$GamesTableTableManager
                 deadlineDate: deadlineDate,
                 isDlc: isDlc,
                 steamAppId: steamAppId,
+                developer: developer,
                 reviewScore: reviewScore,
                 reviewCount: reviewCount,
               ),
@@ -2266,6 +2282,7 @@ class $$GamesTableTableManager
                 Value<DateTime?> deadlineDate = const Value.absent(),
                 Value<bool> isDlc = const Value.absent(),
                 Value<String> steamAppId = const Value.absent(),
+                Value<String> developer = const Value.absent(),
                 Value<int> reviewScore = const Value.absent(),
                 Value<int> reviewCount = const Value.absent(),
               }) => GamesCompanion.insert(
@@ -2282,13 +2299,16 @@ class $$GamesTableTableManager
                 deadlineDate: deadlineDate,
                 isDlc: isDlc,
                 steamAppId: steamAppId,
+                developer: developer,
                 reviewScore: reviewScore,
                 reviewCount: reviewCount,
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$GamesTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$GamesTable, GameEntry>(table),
+                  $$GamesTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback: ({gameTagsRefs = false}) {
@@ -2357,7 +2377,7 @@ final class $$TagsTableReferences
   static MultiTypedResultKey<$GameTagsTable, List<GameTagEntry>>
   _gameTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.gameTags,
-    aliasName: $_aliasNameGenerator(db.tags.id, db.gameTags.tagId),
+    aliasName: 'tags__id__game_tags__tag_id',
   );
 
   $$GameTagsTableProcessedTableManager get gameTagsRefs {
@@ -2557,8 +2577,10 @@ class $$TagsTableTableManager
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$TagsTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$TagsTable, TagEntry>(table),
+                  $$TagsTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback: ({gameTagsRefs = false}) {
@@ -2623,9 +2645,8 @@ final class $$GameTagsTableReferences
     extends BaseReferences<_$AppDatabase, $GameTagsTable, GameTagEntry> {
   $$GameTagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $GamesTable _gameIdTable(_$AppDatabase db) => db.games.createAlias(
-    $_aliasNameGenerator(db.gameTags.gameId, db.games.id),
-  );
+  static $GamesTable _gameIdTable(_$AppDatabase db) =>
+      db.games.createAlias('game_tags__game_id__games__id');
 
   $$GamesTableProcessedTableManager get gameId {
     final $_column = $_itemColumn<int>('game_id')!;
@@ -2642,7 +2663,7 @@ final class $$GameTagsTableReferences
   }
 
   static $TagsTable _tagIdTable(_$AppDatabase db) =>
-      db.tags.createAlias($_aliasNameGenerator(db.gameTags.tagId, db.tags.id));
+      db.tags.createAlias('game_tags__tag_id__tags__id');
 
   $$TagsTableProcessedTableManager get tagId {
     final $_column = $_itemColumn<int>('tag_id')!;
@@ -2873,7 +2894,7 @@ class $$GameTagsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$GameTagsTable, GameTagEntry>(table),
                   $$GameTagsTableReferences(db, table, e),
                 ),
               )
@@ -3120,7 +3141,16 @@ class $$BackupsTableTableManager
                 sizeBytes: sizeBytes,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$BackupsTable, BackupEntry>(table),
+                  BaseReferences<_$AppDatabase, $BackupsTable, BackupEntry>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

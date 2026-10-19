@@ -1,15 +1,15 @@
 /// Card Visual settings section
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/services/platform_file_actions.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
+import 'settings_control_cards.dart';
 
 /// Card Visual settings section
 class CardDisplaySection extends ConsumerWidget {
@@ -47,6 +47,11 @@ class CardDisplaySection extends ConsumerWidget {
     description:
         'Hide tag chips and ratings at rest and reveal them only while hovering',
   );
+  static const SettingTextSpec showPlatformOnHoverOnlySpec = SettingTextSpec(
+    label: 'Show platform type only on hover',
+    description:
+        'Hide the platform chip at rest and reveal it only while hovering',
+  );
   static const SettingTextSpec showDeadlineSpec = SettingTextSpec(
     label: 'Show deadline chip',
     description: 'Display deadline info on game cards',
@@ -55,22 +60,25 @@ class CardDisplaySection extends ConsumerWidget {
     label: 'Show ratings',
     description: 'Display review info on game cards',
   );
-  static const SettingTextSpec compactListViewSpec = SettingTextSpec(
+  static const SettingTextSpec listViewModeSpec = SettingTextSpec(
     label: 'List view mode',
-    description:
-        'Choose how dense list view cards should be',
+    description: 'Choose how dense list view cards should be',
   );
 
-  static const SettingsSearchGroup viewOptionsSearchGroup = SettingsSearchGroup(
-    title: 'Style Options',
-    settings: [compactListViewSpec],
+  static const SettingsSearchGroup listViewSearchGroup = SettingsSearchGroup(
+    title: 'List View',
+    settings: [listViewModeSpec],
     extraTexts: ['regular', 'slim', 'list', 'dense'],
   );
 
   static const SettingsSearchGroup displayRulesSearchGroup =
       SettingsSearchGroup(
         title: 'Display Rules',
-        settings: [showTagsOnHoverOnlySpec, showTitleOnNoPictureSpec],
+        settings: [
+          showTagsOnHoverOnlySpec,
+          showPlatformOnHoverOnlySpec,
+          showTitleOnNoPictureSpec,
+        ],
         extraTexts: ['hover', 'picture-less', 'cover image'],
       );
 
@@ -86,50 +94,71 @@ class CardDisplaySection extends ConsumerWidget {
     extraTexts: ['card', 'display'],
   );
 
+  static bool supportsListViewMode(TargetPlatform platform) =>
+      switch (platform) {
+        TargetPlatform.linux ||
+        TargetPlatform.macOS ||
+        TargetPlatform.windows => true,
+        _ => false,
+      };
+
+  static List<SettingsSearchGroup> searchGroupsFor(TargetPlatform platform) => [
+    if (supportsListViewMode(platform)) listViewSearchGroup,
+    displayRulesSearchGroup,
+    chipsSearchGroup,
+  ];
+
+  static List<SettingsSearchGroup> get searchGroups =>
+      searchGroupsFor(defaultTargetPlatform);
+
   static List<String> get sectionSearchTexts => [
     'Game Card Visual Settings',
-    ...viewOptionsSearchGroup.indexTexts,
-    ...displayRulesSearchGroup.indexTexts,
-    ...chipsSearchGroup.indexTexts,
+    for (final group in searchGroups) ...group.indexTexts,
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardSettings = ref.watch(gameCardSettingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final selectedListViewMode = resolveListViewDensityMode(
-      slimListView: cardSettings.slimListView,
-    );
-
-    final showChipsSection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: chipsSearchGroup,
-    );
-    final showDisplayRulesSection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: displayRulesSearchGroup,
-    );
-    final showViewOptionsSection =
-        !PlatformFileActions.isMobilePlatform &&
+    final showListViewSection =
+        supportsListViewMode(Theme.of(context).platform) &&
         shouldShowSettingsGroup(
           query: searchQuery,
           matchesSearch: matchesSearch,
-          group: viewOptionsSearchGroup,
+          group: listViewSearchGroup,
         );
-
-    if (!showChipsSection &&
-        !showDisplayRulesSection &&
-        !showViewOptionsSection) {
-      return const SizedBox.shrink();
-    }
 
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          visible: showDisplayRulesSection,
+          visible: showListViewSection,
+          theme: theme,
+          group: listViewSearchGroup,
+          titleIcon: Icons.view_list_outlined,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          childBuilder: () => SettingsControlWrap(
+            children: [
+              SettingsChoiceCard<ListViewDensityMode>(
+                theme: theme,
+                label: listViewModeSpec.label,
+                description: listViewModeSpec.description,
+                value: resolveListViewDensityMode(
+                  slimListView: cardSettings.slimListView,
+                ),
+                choices: const [
+                  SettingsChoice(ListViewDensityMode.regular, 'Regular'),
+                  SettingsChoice(ListViewDensityMode.slim, 'Slim'),
+                ],
+                onChanged: (value) => settingsNotifier.setMany(
+                  listViewDensityModeSettings(value),
+                ),
+              ),
+            ],
+          ),
+        ),
+        buildSearchableSectionEntry(
           theme: theme,
           group: displayRulesSearchGroup,
           titleIcon: Icons.tune,
@@ -147,6 +176,14 @@ class CardDisplaySection extends ConsumerWidget {
                 ),
               ),
               (
+                spec: showPlatformOnHoverOnlySpec,
+                value: cardSettings.showPlatformOnHoverOnly,
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.showPlatformOnHoverOnly,
+                  value,
+                ),
+              ),
+              (
                 spec: showTitleOnNoPictureSpec,
                 value: cardSettings.showTitleOnNoPicture,
                 onChanged: (value) => settingsNotifier.setSetting(
@@ -158,7 +195,6 @@ class CardDisplaySection extends ConsumerWidget {
           ),
         ),
         buildSearchableSectionEntry(
-          visible: showChipsSection,
           theme: theme,
           group: chipsSearchGroup,
           titleIcon: Icons.crop,
@@ -208,46 +244,6 @@ class CardDisplaySection extends ConsumerWidget {
                 ),
               ),
             ],
-          ),
-        ),
-        buildSearchableSectionEntry(
-          visible: showViewOptionsSection,
-          theme: theme,
-          group: viewOptionsSearchGroup,
-          titleIcon: Icons.view_list_outlined,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          childBuilder: () => SettingRow(
-            theme: theme,
-            label: compactListViewSpec.label,
-            description: compactListViewSpec.description,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 110),
-              child: DropdownButtonFormField<ListViewDensityMode>(
-                initialValue: selectedListViewMode,
-                isExpanded: true,
-                menuMaxHeight: kDropdownMenuMaxHeight,
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-                dropdownColor: theme.surface,
-                style: TextStyle(color: theme.textPrimary),
-                items: [
-                  const DropdownMenuItem(
-                    value: ListViewDensityMode.regular,
-                    child: Text('Regular'),
-                  ),
-                  const DropdownMenuItem(
-                    value: ListViewDensityMode.slim,
-                    child: Text('Slim'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  settingsNotifier.setMany(listViewDensityModeSettings(value));
-                },
-              ),
-            ),
           ),
         ),
       ],

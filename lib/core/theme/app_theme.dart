@@ -9,11 +9,17 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../constants/app_constants.dart';
+import 'theme_icons.dart';
+import 'app_slider_theme.dart';
+import 'button_group_shape.dart';
+import 'button_depth.dart';
+import 'button_notification_pulse.dart';
+import 'package:flutter/foundation.dart';
 import '../settings/settings_model.dart';
 import '../utils/color_utils.dart';
 
 /// App theme configuration with 3 base colors
-class AppThemeData {
+class AppThemeData extends ThemeExtension<AppThemeData> {
   const AppThemeData({
     this.id = '',
     required this.name,
@@ -44,6 +50,18 @@ class AppThemeData {
   final double progressIndicatorStrokeWidth;
   final NavPanelOverlayStyle navPanelOverlayStyle;
 
+  /// Compact info-style actions, with 3px of padding around their icons.
+  /// Leave width flexible so text actions can also share this style.
+  ButtonStyle get compactIconButtonStyle => IconButton.styleFrom(
+    iconSize: 26,
+    minimumSize: const Size.square(42),
+    padding: const EdgeInsets.all(3),
+    visualDensity: VisualDensity.compact,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(cornerRadius),
+    ),
+  );
+
   /// Get the icon for this theme
   IconData get icon => iconData ?? Icons.palette;
 
@@ -72,10 +90,7 @@ class AppThemeData {
       baseSecondary: parseHexColor(fallbackSecondary),
       baseAccent: parseHexColor(fallbackAccent),
       iconData: json['icon_code_point'] != null
-          ? IconData(
-              json['icon_code_point'] as int,
-              fontFamily: 'MaterialIcons',
-            )
+          ? themeIconFromCodePoint(json['icon_code_point'] as int)
           : null,
       cornerRadius: (json['corner_radius'] as num?)?.toDouble() ?? 8.0,
       useThemeToggleRadius: (json['use_theme_toggle_radius'] as bool?) ?? false,
@@ -105,6 +120,7 @@ class AppThemeData {
   }
 
   /// Copy with new values
+  @override
   AppThemeData copyWith({
     String? id,
     String? name,
@@ -137,6 +153,34 @@ class AppThemeData {
       progressIndicatorStrokeWidth:
           progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
       navPanelOverlayStyle: navPanelOverlayStyle ?? this.navPanelOverlayStyle,
+    );
+  }
+
+  @override
+  AppThemeData lerp(covariant AppThemeData? other, double t) {
+    if (other == null) return this;
+    final discrete = t < 0.5 ? this : other;
+    return discrete.copyWith(
+      baseBackground: Color.lerp(baseBackground, other.baseBackground, t),
+      baseSecondary: Color.lerp(baseSecondary, other.baseSecondary, t),
+      baseAccent: Color.lerp(baseAccent, other.baseAccent, t),
+      cornerRadius: lerpDouble(cornerRadius, other.cornerRadius, t),
+      scrollbarRadius: lerpDouble(scrollbarRadius, other.scrollbarRadius, t),
+      inputPaddingHorizontal: lerpDouble(
+        inputPaddingHorizontal,
+        other.inputPaddingHorizontal,
+        t,
+      ),
+      inputPaddingVertical: lerpDouble(
+        inputPaddingVertical,
+        other.inputPaddingVertical,
+        t,
+      ),
+      progressIndicatorStrokeWidth: lerpDouble(
+        progressIndicatorStrokeWidth,
+        other.progressIndicatorStrokeWidth,
+        t,
+      ),
     );
   }
 
@@ -179,14 +223,6 @@ class AppThemeData {
   Color get surface =>
       blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.08);
 
-  /// Surface variant (slightly different surface)
-  Color get surfaceVariant =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.12);
-
-  /// Elevated surface (for elevated cards)
-  Color get surfaceElevated =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.16);
-
   /// Border color
   Color get border => isDark
       ? Colors.white.withValues(alpha: 0.15)
@@ -205,36 +241,24 @@ class AppThemeData {
   Color get secondary => baseSecondary;
 
   /// Primary button background
-  Color get primaryButton => baseAccent;
-
-  /// Primary button hover
-  Color get primaryButtonHover => blendColors(baseAccent, Colors.white, 0.1);
-
-  /// Primary button pressed
-  Color get primaryButtonPressed => blendColors(baseAccent, Colors.black, 0.1);
+  Color get primaryButton => tabSelected;
 
   /// Primary button background when disabled.
   ///
-  /// Keep a visible accent tint instead of falling back to Flutter's generic
-  /// grey so disabled actions still feel attached to the active theme.
-  Color get primaryButtonDisabled =>
-      blendColors(baseAccent, surface, isDark ? 0.72 : 0.8);
+  /// A faint fill makes disabled actions distinct from ready buttons.
+  Color get primaryButtonDisabled => primaryButton.withValues(alpha: 0.18);
 
   /// Primary button text
-  Color get primaryButtonText => contrastColor(baseSecondary);
+  Color get primaryButtonText => textPrimary;
 
   /// Primary button foreground when disabled.
-  Color get primaryButtonDisabledText =>
-      contrastColor(primaryButtonDisabled).withValues(alpha: 0.78);
+  Color get primaryButtonDisabledText => textSecondary.withValues(alpha: 0.5);
 
   /// Accent color (for highlights, links)
   Color get accent => baseAccent;
 
   /// Accent hover
   Color get accentHover => blendColors(baseAccent, Colors.white, 0.15);
-
-  /// Shared tab indicator with a taller silhouette and flared base.
-  Decoration get tabIndicator => FlaredTabIndicator(color: accent);
 
   /// Input field background
   Color get inputBackground => surface.withValues(alpha: 0.0);
@@ -276,11 +300,27 @@ class AppThemeData {
   /// Navigation panel background
   Color get navBackground => blendColors(baseBackground, baseAccent, 0.035);
 
+  /// Shared tint for section title bars and the library action bar.
+  Color get sectionHeaderBackground => accent.withValues(alpha: 0.35);
+
+  /// Navigation groups' tint over their panel, flattened to an opaque fill.
+  /// This can cover a tinted section header without mixing with its color.
+  Color get buttonGroupBackground => Color.alphaBlend(
+    accent.withValues(alpha: 0.20),
+    navBackground.withValues(alpha: 1),
+  );
+
   /// Navigation item hover
   Color get navItemHover => baseAccent.withValues(alpha: 0.30);
 
   /// Navigation item selected
   Color get navItemSelected => baseAccent.withValues(alpha: 0.40);
+
+  /// Shared active fill for tabs and elevated buttons.
+  Color get tabSelected => Color.alphaBlend(
+    baseAccent.withValues(alpha: 0.90),
+    buttonGroupBackground,
+  );
 
   /// Selected popup menu item background
   Color get popupMenuItemSelected => baseAccent.withValues(alpha: 0.16);
@@ -291,12 +331,6 @@ class AppThemeData {
   /// Game card cover placeholder background (no image / loading error)
   Color get cardCoverPlaceholder =>
       blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.10);
-
-  /// Game card hover
-  Color get cardHover => surface;
-
-  /// Game card selected
-  Color get cardSelected => blendColors(surface, baseAccent, 0.2);
 
   /// Tag chip background
   Color get tagBackground => surface;
@@ -374,16 +408,26 @@ class AppThemeData {
   /// Status colors
   Color get success => const Color(0xFF28A745);
   Color get warning => const Color(0xFFFFC107);
-  Color get error => const Color(0xFFDC3545);
+  Color get error => secondary;
   Color get info => const Color(0xFF17A2B8);
 
-  /// Used overlay color
-  Color get usedOverlay => Colors.black.withValues(alpha: 0.6);
+  /// Used overlays become softer as the live theme background gets lighter.
+  Color get usedOverlay => Colors.black.withValues(
+    alpha: 0.20 + 0.46 * (1 - baseBackground.computeLuminance()),
+  );
+
+  /// Cover-only grid cards need a stronger tint on light backgrounds.
+  Color get gridUsedOverlay => Colors.black.withValues(
+    alpha: 0.68 + 0.18 * (1 - baseBackground.computeLuminance()),
+  );
+  Color get slimUsedOverlay => Colors.black.withValues(
+    alpha: 0.05 + 0.13 * (1 - baseBackground.computeLuminance()),
+  );
 
   /// Deadline badge colors
-  Color get deadlineUrgent => const Color(0xFFFF4444);
-  Color get deadlineSoon => const Color(0xFFFFAA00);
-  Color get deadlineNormal => const Color(0xFF44AA44);
+  Color get deadlineUrgent => secondary;
+  Color get deadlineSoon => Color.lerp(accent, secondary, 0.5)!;
+  Color get deadlineNormal => accent;
 
   // ===========================================================================
   // CONVERT TO FLUTTER ThemeData
@@ -392,9 +436,20 @@ class AppThemeData {
   /// Generate Flutter ThemeData from this app theme
   ThemeData toThemeData() {
     final inputBorder = resolveInputBorder(showTopBorder: false);
+    final touch =
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final density = touch ? VisualDensity.standard : VisualDensity.compact;
+    final targetSize = touch
+        ? MaterialTapTargetSize.padded
+        : MaterialTapTargetSize.shrinkWrap;
+    final controlHeight = touch ? 48.0 : kElementHeight;
 
     return ThemeData(
       useMaterial3: true,
+      extensions: <ThemeExtension<dynamic>>[this],
+      visualDensity: density,
+      materialTapTargetSize: targetSize,
       brightness: isDark ? Brightness.dark : Brightness.light,
 
       // Colors
@@ -405,7 +460,7 @@ class AppThemeData {
         secondary: baseAccent,
         onSecondary: contrastColor(baseAccent),
         error: error,
-        onError: Colors.white,
+        onError: primaryButtonText,
         surface: surface,
         onSurface: textPrimary,
       ),
@@ -430,46 +485,51 @@ class AppThemeData {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(cornerRadius),
-          side: BorderSide(color: border),
         ),
       ),
 
       // Buttons
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryButton,
-          foregroundColor:
-              primaryButtonText, // add shadow for the text to improve contrast
-          disabledBackgroundColor: primaryButtonDisabled,
-          disabledForegroundColor: primaryButtonDisabledText,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(cornerRadius),
+        style: withButtonDepth(
+          ElevatedButton.styleFrom(
+            backgroundColor: primaryButton,
+            foregroundColor:
+                primaryButtonText, // add shadow for the text to improve contrast
+            disabledBackgroundColor: primaryButtonDisabled,
+            disabledForegroundColor: primaryButtonDisabledText,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(cornerRadius),
+            ),
+            elevation: 0,
+            padding: EdgeInsets.symmetric(
+              horizontal: kButtonPaddingHorizontal,
+              vertical: 0,
+            ),
+            minimumSize: Size(0, controlHeight),
+            visualDensity: density,
+            tapTargetSize: targetSize,
           ),
-          elevation: 0,
-          padding: EdgeInsets.symmetric(
-            horizontal: kButtonPaddingHorizontal,
-            vertical: 0,
-          ),
-          fixedSize: const Size.fromHeight(kElementHeight),
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          outlined: false,
         ),
       ),
 
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: textPrimary,
-          side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(cornerRadius),
+        style: withButtonDepth(
+          OutlinedButton.styleFrom(
+            foregroundColor: textPrimary,
+            side: BorderSide(color: border),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(cornerRadius),
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: kButtonPaddingHorizontal,
+              vertical: 0,
+            ),
+            minimumSize: Size(0, controlHeight),
+            visualDensity: density,
+            tapTargetSize: targetSize,
           ),
-          padding: EdgeInsets.symmetric(
-            horizontal: kButtonPaddingHorizontal,
-            vertical: 0,
-          ),
-          fixedSize: const Size.fromHeight(kElementHeight),
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          outlined: true,
         ),
       ),
 
@@ -480,25 +540,16 @@ class AppThemeData {
             borderRadius: BorderRadius.circular(cornerRadius),
           ),
           padding: EdgeInsets.symmetric(
-            horizontal: kButtonPaddingHorizontal,
+            horizontal: kTextButtonPaddingHorizontal,
             vertical: 0,
           ),
-          fixedSize: const Size.fromHeight(kElementHeight),
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: Size(0, controlHeight),
+          visualDensity: density,
+          tapTargetSize: targetSize,
         ),
       ),
 
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          iconSize: 26,
-          padding: const EdgeInsets.all(8),
-          minimumSize: const Size(kElementHeight, kElementHeight),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(cornerRadius),
-          ),
-        ),
-      ),
+      iconButtonTheme: IconButtonThemeData(style: compactIconButtonStyle),
 
       // Input fields
       inputDecorationTheme: InputDecorationTheme(
@@ -583,21 +634,6 @@ class AppThemeData {
         ),
       ),
 
-      // Dropdown
-      dropdownMenuTheme: DropdownMenuThemeData(
-        inputDecorationTheme: InputDecorationTheme(
-          constraints: const BoxConstraints(maxHeight: kElementHeight),
-          //isDense: false,
-          filled: true,
-          fillColor: inputBackground,
-          border: inputBorder,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: inputPaddingHorizontal,
-            vertical: inputPaddingVertical,
-          ),
-        ),
-      ),
-
       popupMenuTheme: PopupMenuThemeData(
         color: surface,
         elevation: 12,
@@ -613,23 +649,11 @@ class AppThemeData {
         splashRadius: 14,
       ),
 
-      sliderTheme: SliderThemeData(
-        activeTrackColor: accent,
-        inactiveTrackColor: border.withValues(alpha: 0.35),
-        thumbColor: accent,
-        overlayColor: accent.withValues(alpha: 0.18),
-        activeTickMarkColor: Colors.transparent,
-        inactiveTickMarkColor: Colors.transparent,
-        valueIndicatorColor: accent,
-        valueIndicatorTextStyle: TextStyle(
-          color: contrastColor(baseAccent),
-          fontWeight: FontWeight.w600,
-        ),
-        trackHeight: kSliderTrackHeight,
-        thumbShape: RoundSliderThumbShape(
-          enabledThumbRadius: kSliderIndicatorInnerDiameter / 2,
-          disabledThumbRadius: kSliderIndicatorInnerDiameter / 2,
-        ),
+      sliderTheme: buildAppSliderTheme(
+        accent: accent,
+        disabledColor: textSecondary,
+        indicatorTextColor: contrastColor(baseAccent),
+        cornerRadius: cornerRadius,
       ),
 
       // Text
@@ -696,6 +720,7 @@ class AppThemeData {
           ? inputBorderWrapHover
           : inputBorderWrapDefault,
       showTopBorder: showTopBorder,
+      connection: showTopBorder && isFocused ? 1.0 : 0.0,
     );
   }
 }
@@ -709,12 +734,40 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     this.glowExtent = 0.0,
     this.wrapExtent = 0.0,
     this.showTopBorder = false,
+    this.connection = 0.0,
   });
 
   final Color glowColor;
   final double glowExtent;
   final double wrapExtent;
   final bool showTopBorder;
+
+  /// Focus joins the two growing edges, including in tall multiline fields.
+  final double connection;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BottomGlowInputBorder &&
+      other.borderSide == borderSide &&
+      other.borderRadius == borderRadius &&
+      other.gapPadding == gapPadding &&
+      other.glowColor == glowColor &&
+      other.glowExtent == glowExtent &&
+      other.wrapExtent == wrapExtent &&
+      other.showTopBorder == showTopBorder &&
+      other.connection == connection;
+
+  @override
+  int get hashCode => Object.hash(
+    borderSide,
+    borderRadius,
+    gapPadding,
+    glowColor,
+    glowExtent,
+    wrapExtent,
+    showTopBorder,
+    connection,
+  );
 
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.only(
@@ -731,6 +784,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     double? glowExtent,
     double? wrapExtent,
     bool? showTopBorder,
+    double? connection,
   }) {
     return BottomGlowInputBorder(
       borderSide: borderSide ?? this.borderSide,
@@ -740,6 +794,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
       glowExtent: glowExtent ?? this.glowExtent,
       wrapExtent: wrapExtent ?? this.wrapExtent,
       showTopBorder: showTopBorder ?? this.showTopBorder,
+      connection: connection ?? this.connection,
     );
   }
 
@@ -753,6 +808,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
       glowExtent: glowExtent * t,
       wrapExtent: wrapExtent * t,
       showTopBorder: showTopBorder,
+      connection: connection * t,
     );
   }
 
@@ -767,6 +823,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
         glowExtent: lerpDouble(a.glowExtent, glowExtent, t)!,
         wrapExtent: lerpDouble(a.wrapExtent, wrapExtent, t)!,
         showTopBorder: t < 0.5 ? a.showTopBorder : showTopBorder,
+        connection: lerpDouble(a.connection, connection, t)!,
       );
     }
     if (a is OutlineInputBorder) {
@@ -778,6 +835,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
         glowExtent: lerpDouble(0.0, glowExtent, t)!,
         wrapExtent: lerpDouble(0.0, wrapExtent, t)!,
         showTopBorder: showTopBorder,
+        connection: lerpDouble(0.0, connection, t)!,
       );
     }
     return super.lerpFrom(a, t);
@@ -794,6 +852,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
         glowExtent: lerpDouble(glowExtent, b.glowExtent, t)!,
         wrapExtent: lerpDouble(wrapExtent, b.wrapExtent, t)!,
         showTopBorder: t < 0.5 ? showTopBorder : b.showTopBorder,
+        connection: lerpDouble(connection, b.connection, t)!,
       );
     }
     if (b is OutlineInputBorder) {
@@ -805,6 +864,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
         glowExtent: lerpDouble(glowExtent, 0.0, t)!,
         wrapExtent: lerpDouble(wrapExtent, 0.0, t)!,
         showTopBorder: showTopBorder,
+        connection: lerpDouble(connection, 0.0, t)!,
       );
     }
     return super.lerpTo(b, t);
@@ -821,29 +881,29 @@ class BottomGlowInputBorder extends OutlineInputBorder {
   }) {
     final resolvedRadius = borderRadius.resolve(textDirection);
     final outerRRect = resolvedRadius.toRRect(rect);
-    final effectiveWrapExtent = math.max(wrapExtent, borderSide.width);
+    final effectiveWrapExtent = lerpDouble(
+      math.max(wrapExtent, borderSide.width),
+      math.max(rect.height / 2, wrapExtent),
+      showTopBorder ? connection : 0.0,
+    )!;
 
     final borderPaint = borderSide.toPaint();
     final strokeInset = borderSide.width / 2;
     final strokeRRect = outerRRect.deflate(strokeInset);
     final clipTop = rect.bottom - effectiveWrapExtent - borderSide.width;
 
-    canvas.save();
-    canvas.clipRect(
-      Rect.fromLTRB(
-        rect.left - borderSide.width,
-        clipTop,
-        rect.right + borderSide.width,
-        rect.bottom + borderSide.width,
-      ),
-    );
-    canvas.drawRRect(strokeRRect, borderPaint);
-    canvas.restore();
-
+    final edgeClip = Path()
+      ..addRect(
+        Rect.fromLTRB(
+          rect.left - borderSide.width,
+          clipTop,
+          rect.right + borderSide.width,
+          rect.bottom + borderSide.width,
+        ),
+      );
     if (showTopBorder) {
       final clipBottom = rect.top + effectiveWrapExtent + borderSide.width;
-      canvas.save();
-      canvas.clipRect(
+      edgeClip.addRect(
         Rect.fromLTRB(
           rect.left - borderSide.width,
           rect.top - borderSide.width,
@@ -851,8 +911,6 @@ class BottomGlowInputBorder extends OutlineInputBorder {
           clipBottom,
         ),
       );
-      canvas.drawRRect(strokeRRect, borderPaint);
-      canvas.restore();
     }
 
     if (glowExtent > 0.0 && glowColor.a > 0.0) {
@@ -869,15 +927,16 @@ class BottomGlowInputBorder extends OutlineInputBorder {
           end: Alignment.bottomCenter,
           colors: [
             glowColor.withValues(alpha: 0.0),
-            glowColor.withValues(alpha: 0.15),
-            glowColor.withValues(alpha: 0.25),
+            glowColor.withValues(alpha: 0.15 * (1 - connection)),
+            glowColor.withValues(alpha: 0.25 * (1 - connection)),
           ],
           stops: const [0.0, 0.6, 1.0],
         ).createShader(glowRect)
         ..style = PaintingStyle.fill;
 
       canvas.save();
-      canvas.clipRRect(outerRRect);
+      final innerRRect = outerRRect.deflate(borderSide.width);
+      canvas.clipRRect(innerRRect);
       canvas.drawRect(glowRect, glowPaint);
 
       if (showTopBorder) {
@@ -892,98 +951,68 @@ class BottomGlowInputBorder extends OutlineInputBorder {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              glowColor.withValues(alpha: 0.25),
-              glowColor.withValues(alpha: 0.15),
+              glowColor.withValues(alpha: 0.25 * (1 - connection)),
+              glowColor.withValues(alpha: 0.15 * (1 - connection)),
               glowColor.withValues(alpha: 0.0),
             ],
             stops: const [0.0, 0.45, 1.0],
           ).createShader(topGlowRect)
           ..style = PaintingStyle.fill;
         canvas.drawRect(topGlowRect, topGlowPaint);
+
+        // Inset rounded contours keep the connected glow rounded as well.
+        if (connection > 0) {
+          final depth = math.min(
+            clampedGlowExtent,
+            math.min(innerRRect.width, innerRRect.height) / 2,
+          );
+          Radius contourRadius(double x, double y, double inset) =>
+              Radius.elliptical(
+                math.max(x - inset * 0.35, x * 0.5),
+                math.max(y - inset * 0.35, y * 0.5),
+              );
+          for (var inset = 0.5; inset < depth; inset += 1) {
+            final alpha = 0.25 * connection * math.pow(1 - inset / depth, 2);
+            canvas.drawRRect(
+              RRect.fromRectAndCorners(
+                innerRRect.outerRect.deflate(inset),
+                topLeft: contourRadius(
+                  innerRRect.tlRadiusX,
+                  innerRRect.tlRadiusY,
+                  inset,
+                ),
+                topRight: contourRadius(
+                  innerRRect.trRadiusX,
+                  innerRRect.trRadiusY,
+                  inset,
+                ),
+                bottomLeft: contourRadius(
+                  innerRRect.blRadiusX,
+                  innerRRect.blRadiusY,
+                  inset,
+                ),
+                bottomRight: contourRadius(
+                  innerRRect.brRadiusX,
+                  innerRRect.brRadiusY,
+                  inset,
+                ),
+              ),
+              Paint()
+                ..color = glowColor.withValues(alpha: alpha)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.0,
+            );
+          }
+        }
       }
 
       canvas.restore();
     }
-  }
-}
 
-/// Custom tab indicator with a slim top and wider, flared base.
-class FlaredTabIndicator extends Decoration {
-  const FlaredTabIndicator({
-    required this.color,
-    this.height = 5,
-    this.topWidthFactor = 0.4,
-    this.baseWidthFactor = 0.5,
-    this.bottomInset = 0,
-  });
-
-  final Color color;
-  final double height;
-  final double topWidthFactor;
-  final double baseWidthFactor;
-  final double bottomInset;
-
-  @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
-    return _FlaredTabIndicatorPainter(this);
-  }
-}
-
-class _FlaredTabIndicatorPainter extends BoxPainter {
-  _FlaredTabIndicatorPainter(this.decoration);
-
-  final FlaredTabIndicator decoration;
-
-  @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
-    final size = configuration.size;
-    if (size == null || size.isEmpty) return;
-
-    final rect = offset & size;
-    final maxShapeWidth = (rect.width - 10).clamp(36.0, 112.0);
-    final baseWidth = maxShapeWidth * decoration.baseWidthFactor;
-    final topWidth = maxShapeWidth * decoration.topWidthFactor;
-    final flareDx = (baseWidth - topWidth) / 2;
-
-    final bottom = rect.bottom - decoration.bottomInset;
-    final top = bottom - decoration.height;
-    final centerX = rect.center.dx;
-
-    final topLeft = Offset(centerX - topWidth / 2, top);
-    final topRight = Offset(centerX + topWidth / 2, top);
-    final bottomRight = Offset(centerX + baseWidth / 2, bottom - 1);
-    final bottomLeft = Offset(centerX - baseWidth / 2, bottom - 1);
-
-    final path = Path()
-      ..moveTo(topLeft.dx, topLeft.dy)
-      ..lineTo(topRight.dx, topRight.dy)
-      ..quadraticBezierTo(
-        topRight.dx + flareDx * 0.9,
-        top + decoration.height * 0.52,
-        bottomRight.dx,
-        bottomRight.dy,
-      )
-      ..lineTo(bottomLeft.dx, bottomLeft.dy)
-      ..quadraticBezierTo(
-        topLeft.dx - flareDx * 0.9,
-        top + decoration.height * 0.52,
-        topLeft.dx,
-        topLeft.dy,
-      )
-      ..close();
-
-    final fillPaint = Paint()
-      ..color = decoration.color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    canvas.drawPath(path, fillPaint);
-
-    final rimPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.22)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..isAntiAlias = true;
-    canvas.drawLine(topLeft, topRight, rimPaint);
+    canvas.save();
+    canvas.clipPath(edgeClip);
+    canvas.drawRRect(strokeRRect, borderPaint);
+    canvas.restore();
   }
 }
 
@@ -1013,13 +1042,14 @@ class AppNavigationButton extends StatefulWidget {
     this.verticalSpacing = 0,
     this.horizontalMainAxisSize = MainAxisSize.min,
     this.horizontalMainAxisAlignment = MainAxisAlignment.center,
-    this.duration = const Duration(milliseconds: 1000),
+    this.duration = Duration.zero,
     this.variant = AppNavigationButtonVariant.navigation,
     this.iconSize = kIconSize,
     this.labelVisible = true,
     this.reserveLabelSpace = true,
     this.labelFadeDuration = Duration.zero,
     this.labelFadeCurve = Curves.easeOut,
+    this.hasNotification = false,
   });
 
   final AppThemeData theme;
@@ -1051,6 +1081,7 @@ class AppNavigationButton extends StatefulWidget {
   final bool reserveLabelSpace;
   final Duration labelFadeDuration;
   final Curve labelFadeCurve;
+  final bool hasNotification;
 
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
@@ -1059,7 +1090,6 @@ class AppNavigationButton extends StatefulWidget {
 class _AppNavigationButtonState extends State<AppNavigationButton>
     with TickerProviderStateMixin {
   static const double _hoverIconBoost = 0.2;
-
   late final AnimationController _hoverController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 100),
@@ -1127,18 +1157,14 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   }
 
   TextStyle _labelStyle(double selectionT) {
-    if (!widget.isEnabled) {
-      return TextStyle(
-        color: widget.theme.textSecondary.withValues(alpha: 0.5),
-        fontSize: 14,
-      );
-    }
-    return TextStyle.lerp(
-          TextStyle(color: widget.theme.textSecondary, fontSize: 14),
-          TextStyle(color: widget.theme.textPrimary, fontSize: 14),
-          selectionT,
-        ) ??
-        TextStyle(color: widget.theme.textSecondary, fontSize: 14);
+    final color = !widget.isEnabled
+        ? widget.theme.textSecondary.withValues(alpha: 0.5)
+        : Color.lerp(
+            widget.theme.textSecondary,
+            widget.theme.textPrimary,
+            selectionT,
+          );
+    return const TextStyle(fontSize: 14).copyWith(color: color);
   }
 
   double _labelVisibilityT() {
@@ -1255,9 +1281,11 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(
-      widget.theme.cornerRadius * widget.borderRadiusMultiplier,
-    );
+    final borderRadius =
+        ButtonGroupShape.maybeOf(context) ??
+        BorderRadius.circular(
+          widget.theme.cornerRadius * widget.borderRadiusMultiplier,
+        );
 
     final button = AnimatedBuilder(
       animation: Listenable.merge([
@@ -1294,36 +1322,47 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
                   Colors.transparent;
         final iconColor = _iconColor(selectionT);
         final labelStyle = _labelStyle(selectionT);
-        final iconScale = (1 + (math.max(selectionT, hoverT) * _hoverIconBoost))
-            .clamp(1.0, 1.20);
+        final iconScale = widget.isEnabled
+            ? (1 + (math.max(selectionT, hoverT) * _hoverIconBoost)).clamp(
+                1.0,
+                1.20,
+              )
+            : 1.0;
 
         return MouseRegion(
           onEnter: (_) => _hoverController.forward(),
           onExit: (_) => _hoverController.reverse(),
           child: Material(
             color: backgroundColor,
+            // Hover and selection are animated above. Apply theme geometry
+            // directly so radius edits don't trail behind the other controls.
             animationDuration: widget.duration,
             borderRadius: borderRadius,
-            child: InkWell(
-              onTap: widget.isEnabled ? widget.onTap : null,
+            child: ButtonNotificationPulse(
+              enabled: widget.hasNotification && widget.isEnabled,
+              color: widget.theme.secondary,
               borderRadius: borderRadius,
-              splashColor: widget.theme.navItemHover,
-              highlightColor: widget.theme.navItemSelected,
-              hoverColor: widget.theme.navItemHover,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: widget.minWidth,
-                  minHeight: widget.minHeight,
-                ),
-                child: Padding(
-                  padding: effectivePadding,
-                  child: Align(
-                    alignment: widget.alignment,
-                    child: _buildContent(
-                      iconColor: iconColor,
-                      labelStyle: labelStyle,
-                      iconScale: iconScale,
-                      labelVisibilityT: labelVisibilityT,
+              child: InkWell(
+                onTap: widget.isEnabled ? widget.onTap : null,
+                borderRadius: borderRadius,
+                splashColor: widget.theme.navItemHover,
+                highlightColor: widget.theme.navItemSelected,
+                hoverColor: widget.theme.navItemHover,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: widget.minWidth,
+                    minHeight: widget.minHeight,
+                  ),
+                  child: Padding(
+                    padding: effectivePadding,
+                    child: Align(
+                      alignment: widget.alignment,
+                      child: _buildContent(
+                        iconColor: iconColor,
+                        labelStyle: labelStyle,
+                        iconScale: iconScale,
+                        labelVisibilityT: labelVisibilityT,
+                      ),
                     ),
                   ),
                 ),
@@ -1461,9 +1500,24 @@ const kNebulaTheme = AppThemeData(
 const kSunsetTheme = AppThemeData(
   id: 'builtin-sunset',
   name: 'Sunset',
-  baseBackground: Color.fromARGB(255, 64, 28, 39), // convert this value 401C27 to ARGB
-  baseSecondary: Color.fromARGB(255, 184, 55, 20), // convert this value B83714 to ARGB
-  baseAccent: Color.fromARGB(255, 244, 164, 97), // convert this value F4A461 to ARGB
+  baseBackground: Color.fromARGB(
+    255,
+    64,
+    28,
+    39,
+  ), // convert this value 401C27 to ARGB
+  baseSecondary: Color.fromARGB(
+    255,
+    184,
+    55,
+    20,
+  ), // convert this value B83714 to ARGB
+  baseAccent: Color.fromARGB(
+    255,
+    244,
+    164,
+    97,
+  ), // convert this value F4A461 to ARGB
   iconData: Icons.wb_twilight, // Icons.wb_twilight
 );
 

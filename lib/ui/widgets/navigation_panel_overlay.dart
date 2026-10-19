@@ -23,16 +23,16 @@ class NavigationPanelOverlayPaint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (theme.navPanelOverlayStyle == NavPanelOverlayStyle.none) {
-      return child;
-    }
-
+    // Keep the navigation controls and any open anchored menu mounted when
+    // switching between None and an overlay. Only the painter should change.
     return CustomPaint(
-      painter: _NavigationPanelOverlayPainter(
-        theme: theme,
-        preview: preview,
-        isHorizontal: isHorizontal,
-      ),
+      painter: theme.navPanelOverlayStyle == NavPanelOverlayStyle.none
+          ? null
+          : _NavigationPanelOverlayPainter(
+              theme: theme,
+              preview: preview,
+              isHorizontal: isHorizontal,
+            ),
       child: child,
     );
   }
@@ -83,11 +83,26 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     double alphaScale = 1.0,
   }) {
     final angle = clockwise ? _kAngle : -_kAngle;
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    // Extent large enough so rotated stripes fill the entire panel.
-    final halfDiag = math.sqrt(cx * cx + cy * cy) + 10.0;
+    // Rotate around the local origin. Bounds determine only how many fixed
+    // stripes to draw, so resizing never changes their phase or color order.
+    final cosine = math.cos(angle);
+    final sine = math.sin(angle);
+    final corners =
+        [
+          Offset.zero,
+          Offset(size.width, 0),
+          Offset(0, size.height),
+          Offset(size.width, size.height),
+        ].map(
+          (point) => Offset(
+            point.dx * cosine + point.dy * sine,
+            -point.dx * sine + point.dy * cosine,
+          ),
+        );
+    final minX = corners.map((point) => point.dx).reduce(math.min);
+    final maxX = corners.map((point) => point.dx).reduce(math.max);
+    final minY = corners.map((point) => point.dy).reduce(math.min) - 1;
+    final maxY = corners.map((point) => point.dy).reduce(math.max) + 1;
 
     const stripeW = 36.0;
     const gapW = 20.0;
@@ -104,21 +119,17 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
           ];
 
     canvas.save();
-    canvas.translate(cx, cy);
+    canvas.clipRect(Offset.zero & size);
     canvas.rotate(angle);
-    canvas.translate(-cx, -cy);
-
-    var x = -halfDiag;
-    var i = 0;
-    while (x < size.width + halfDiag) {
+    final firstStripe = (minX / period).floor();
+    final lastStripe = (maxX / period).ceil();
+    for (var index = firstStripe; index <= lastStripe; index++) {
       canvas.drawRect(
-        Rect.fromLTWH(x, -halfDiag, stripeW, size.height + halfDiag * 2),
+        Rect.fromLTWH(index * period, minY, stripeW, maxY - minY),
         Paint()
-          ..color = colors[i % colors.length]
+          ..color = colors[index % colors.length]
           ..style = PaintingStyle.fill,
       );
-      x += period;
-      i++;
     }
 
     canvas.restore();
@@ -131,7 +142,7 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     // a left-to-right gradient, so the gradient always runs perpendicular
     // to the panel's long axis.
     final begin = isHorizontal ? Alignment.centerLeft : Alignment.topCenter;
-    final end   = isHorizontal ? Alignment.centerRight : Alignment.bottomCenter;
+    final end = isHorizontal ? Alignment.centerRight : Alignment.bottomCenter;
 
     canvas.drawRect(
       Offset.zero & size,
@@ -151,12 +162,7 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
 
   /// Draws a pointy-top regular hexagon centred at [center] with circumradius
   /// [r], filling it with [fillPaint].
-  void _drawHex(
-    Canvas canvas,
-    Offset center,
-    double r,
-    Paint fillPaint,
-  ) {
+  void _drawHex(Canvas canvas, Offset center, double r, Paint fillPaint) {
     final path = Path();
     for (var i = 0; i < 6; i++) {
       // Pointy-top: vertex angles start at −90° and step by 60°
@@ -209,12 +215,7 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
         // Diagonal stripe coloring: (row + col * 2) % 3 gives a clean
         // three-way split that never repeats on adjacent cells.
         final fillPaint = fills[(row + col * 2).abs() % 3];
-        _drawHex(
-          canvas,
-          Offset(cx, cy),
-          r,
-          fillPaint,
-        );
+        _drawHex(canvas, Offset(cx, cy), r, fillPaint);
       }
     }
   }
@@ -222,46 +223,53 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
   // ── ripple ────────────────────────────────────────────────────────────────
 
   void _paintRipple(Canvas canvas, Size size) {
+    // Center along the long edge, with the source a fixed distance offscreen.
+    // Ring spacing stays constant as the panel's length changes.
     final origin = isHorizontal
-        ? Offset(size.width / 2, size.height * 5)
-        : Offset(size.width * -3, size.height / 2);
-
-    // Farthest corner distance from origin (how far the rings must reach).
-    double cornerDist(double dx, double dy) => math.sqrt(dx * dx + dy * dy);
-    final maxR = [
-      cornerDist(origin.dx, origin.dy),
-      cornerDist(size.width - origin.dx, origin.dy),
-      cornerDist(origin.dx, size.height - origin.dy),
-      cornerDist(size.width - origin.dx, size.height - origin.dy),
-    ].reduce(math.max) + 4.0;
-
-    // Wide rings with generous spacing give a ripple feel similar in visual
-    // weight to the diagonal stripe bands.
-    const ringGap = 16.0; // gap between rings
-    const strokeW = 28.0;
-    final currentStrokeW = preview ? strokeW * 0.8 : strokeW;
-    final ringStep = ringGap + currentStrokeW;
-    final ringCount = (maxR / ringStep).ceil();
-
-    for (var i = 1; i <= ringCount; i++) {
-      final r = i * ringStep;
-      // Opacity falls off smoothly from the centre outward.
-      // Exponent < 1 keeps outer rings more visible.
-      final t = math.pow(1.0 - (r / maxR).clamp(0.0, 1.0), 0.7) as double;
-      final alpha = (preview ? 0.58 : 0.42) * t;
-      if (alpha < 0.005) continue;
-
-      canvas.drawCircle(
-        origin,
-        r,
-        Paint()
-          ..color = (i.isOdd ? theme.accent : theme.secondary)
-              .withValues(alpha: alpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = preview ? strokeW * 0.8 : strokeW
-          ..isAntiAlias = true,
-      );
+        ? Offset(size.width / 2, size.height + 360)
+        : Offset(-360, size.height / 2);
+    double distance(double x, double y) => math.sqrt(x * x + y * y);
+    final maxR = math.max(
+      math.max(
+        distance(origin.dx, origin.dy),
+        distance(size.width - origin.dx, origin.dy),
+      ),
+      math.max(
+        distance(origin.dx, size.height - origin.dy),
+        distance(size.width - origin.dx, size.height - origin.dy),
+      ),
+    );
+    final nearest = Offset(
+      origin.dx.clamp(0.0, size.width),
+      origin.dy.clamp(0.0, size.height),
+    );
+    final minR = (nearest - origin).distance;
+    const ringGap = 16.0;
+    final strokeWidth = preview ? 22.4 : 28.0;
+    final ringStep = ringGap + strokeWidth;
+    final firstRing = math.max(1, ((minR - strokeWidth / 2) / ringStep).ceil());
+    final lastRing = ((maxR + strokeWidth / 2) / ringStep).ceil();
+    final paints = [
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
+    ];
+    final colors = [theme.accent, theme.secondary];
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    for (var i = firstRing; i <= lastRing; i++) {
+      final radius = i * ringStep;
+      // Radius-based fading stays unchanged when the widget's bounds change.
+      final alpha = (preview ? 0.58 : 0.42) / (1 + radius / 240);
+      final colorIndex = i.isOdd ? 0 : 1;
+      final paint = paints[colorIndex]
+        ..color = colors[colorIndex].withValues(alpha: alpha);
+      canvas.drawCircle(origin, radius, paint);
     }
+    canvas.restore();
   }
 
   @override

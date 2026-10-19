@@ -8,7 +8,23 @@ import '../core/services/steam_service.dart';
 import '../core/settings/settings_model.dart';
 import '../core/utils/batch_parser.dart';
 import '../models/game.dart';
+import '../shared/state/session_value.dart';
 import 'settings_providers.dart';
+import 'theme_providers.dart' show currentThemeIsBuiltInProvider;
+
+/// Window restoration belongs to the app session, rather than to a database
+/// shell which is recreated when a database is switched or reloaded.
+final desktopWindowSessionProvider = Provider((ref) => DesktopWindowSession());
+
+class DesktopWindowSession {
+  bool _initialized = false;
+
+  bool claimInitialization() {
+    if (_initialized) return false;
+    _initialized = true;
+    return true;
+  }
+}
 
 // =============================================================================
 // NAV ITEMS
@@ -29,95 +45,47 @@ enum NavItem {
 }
 
 /// Current navigation state
-final currentNavProvider = NotifierProvider<CurrentNavNotifier, NavItem>(
-  CurrentNavNotifier.new,
-);
-
-class CurrentNavNotifier extends Notifier<NavItem> {
-  @override
-  NavItem build() => NavItem.home;
-
-  void setNav(NavItem navItem) {
-    state = navItem;
-  }
-}
+final currentNavProvider = sessionValueProvider(NavItem.home);
 
 // =============================================================================
 // PAGE NAVIGATION
 // =============================================================================
 
-/// Current page index provider
-final currentPageProvider = NotifierProvider<CurrentPageNotifier, int>(
-  CurrentPageNotifier.new,
-);
-
-class CurrentPageNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void setPage(int pageIndex) {
-    state = pageIndex;
-  }
-}
+/// The developer gallery is mounted only while explicitly opened.
+final dialogGalleryVisibleProvider = sessionValueProvider(false);
 
 /// Last known game library scroll offset.
 ///
 /// Used to restore the library position when the Home page is rebuilt.
-final gameLibraryScrollOffsetProvider =
-    NotifierProvider<GameLibraryScrollOffsetNotifier, double>(
-      GameLibraryScrollOffsetNotifier.new,
+final gameLibraryScrollOffsetProvider = sessionValueProvider(0.0);
+
+final settingsPageSelectedSectionProvider = sessionValueProvider('all');
+
+final settingsPageSearchQueryProvider = sessionValueProvider('');
+
+/// Theme-picker tab memory lasts for this app session, including nav changes.
+final navigationThemeMenuTabProvider =
+    NotifierProvider<NavigationThemeMenuTabNotifier, int>(
+      NavigationThemeMenuTabNotifier.new,
     );
 
-class GameLibraryScrollOffsetNotifier extends Notifier<double> {
+class NavigationThemeMenuTabNotifier extends Notifier<int> {
   @override
-  double build() => 0.0;
+  int build() {
+    // Read once: subsequent theme selections must not replace the chosen tab.
+    return ref.read(currentThemeIsBuiltInProvider) ? 1 : 2;
+  }
 
-  void setOffset(double offset) {
-    state = offset;
+  void setIndex(int index) {
+    state = index.clamp(0, 2);
   }
 }
 
-final homePageEntryAnimationsPlayedProvider =
-    NotifierProvider<HomePageEntryAnimationsPlayedNotifier, bool>(
-      HomePageEntryAnimationsPlayedNotifier.new,
+/// Appearance remembers its own theme collection for this app session.
+final appearanceThemeTabProvider =
+    NotifierProvider<NavigationThemeMenuTabNotifier, int>(
+      NavigationThemeMenuTabNotifier.new,
     );
-
-class HomePageEntryAnimationsPlayedNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void markPlayed() {
-    state = true;
-  }
-}
-
-final settingsPageSelectedSectionProvider =
-    NotifierProvider<SettingsPageSelectedSectionNotifier, String>(
-      SettingsPageSelectedSectionNotifier.new,
-    );
-
-class SettingsPageSelectedSectionNotifier extends Notifier<String> {
-  @override
-  String build() => 'all';
-
-  void setSelectedSection(String sectionId) {
-    state = sectionId;
-  }
-}
-
-final settingsPageSearchQueryProvider =
-    NotifierProvider<SettingsPageSearchQueryNotifier, String>(
-      SettingsPageSearchQueryNotifier.new,
-    );
-
-class SettingsPageSearchQueryNotifier extends Notifier<String> {
-  @override
-  String build() => '';
-
-  void setQuery(String query) {
-    state = query;
-  }
-}
 
 const String kAutoDetectPlatformValue = '__auto__';
 
@@ -145,13 +113,10 @@ class AddGamesSingleEntryDraft {
     this.hasDeadline = false,
     this.deadlineDate,
     this.isDlc = false,
+    this.isUsed = false,
     this.selectedTagIds = const <int>{},
     this.fetchedSteamTags = const <Tag>[],
-    this.fetchedSteamTitle,
-    this.fetchedAppId,
-    this.fetchedCoverImagePath,
-    this.fetchedReviewScore,
-    this.fetchedReviewCount,
+    this.steamPreview,
     this.singleSteamCacheAt,
   });
 
@@ -163,33 +128,16 @@ class AddGamesSingleEntryDraft {
   final bool hasDeadline;
   final DateTime? deadlineDate;
   final bool isDlc;
+  final bool isUsed;
   final Set<int> selectedTagIds;
   final List<Tag> fetchedSteamTags;
-  final String? fetchedSteamTitle;
-  final String? fetchedAppId;
-  final String? fetchedCoverImagePath;
-  final int? fetchedReviewScore;
-  final int? fetchedReviewCount;
+  final SteamSearchResult? steamPreview;
   final DateTime? singleSteamCacheAt;
 }
 
-final addGamesSingleEntryDraftProvider = NotifierProvider<
-    AddGamesSingleEntryDraftNotifier,
-    AddGamesSingleEntryDraft>(AddGamesSingleEntryDraftNotifier.new);
-
-class AddGamesSingleEntryDraftNotifier
-    extends Notifier<AddGamesSingleEntryDraft> {
-  @override
-  AddGamesSingleEntryDraft build() => const AddGamesSingleEntryDraft();
-
-  void replace(AddGamesSingleEntryDraft draft) {
-    state = draft;
-  }
-
-  void clear() {
-    state = const AddGamesSingleEntryDraft();
-  }
-}
+final addGamesSingleEntryDraftProvider = sessionValueProvider(
+  const AddGamesSingleEntryDraft(),
+);
 
 class AddGamesBatchDraft {
   const AddGamesBatchDraft({
@@ -211,22 +159,9 @@ class AddGamesBatchDraft {
   final Map<String, String?> steamErrors;
 }
 
-final addGamesBatchDraftProvider = NotifierProvider<
-    AddGamesBatchDraftNotifier,
-    AddGamesBatchDraft>(AddGamesBatchDraftNotifier.new);
-
-class AddGamesBatchDraftNotifier extends Notifier<AddGamesBatchDraft> {
-  @override
-  AddGamesBatchDraft build() => const AddGamesBatchDraft();
-
-  void replace(AddGamesBatchDraft draft) {
-    state = draft;
-  }
-
-  void clear() {
-    state = const AddGamesBatchDraft();
-  }
-}
+final addGamesBatchDraftProvider = sessionValueProvider(
+  const AddGamesBatchDraft(),
+);
 
 // =============================================================================
 // VIEW MODE
@@ -253,35 +188,8 @@ final viewModeProvider = NotifierProvider<ViewModeNotifier, GameListViewMode>(
   },
 );
 
-/// Health monitor visibility provider
-final healthMonitorVisibleProvider =
-    NotifierProvider<HealthMonitorVisibilityNotifier, bool>(
-      HealthMonitorVisibilityNotifier.new,
-    );
-
-class HealthMonitorVisibilityNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void setVisible(bool visible) {
-    state = visible;
-  }
-}
-
 /// Last selected game ID for range selection
-final lastSelectedGameIdProvider =
-    NotifierProvider<LastSelectedGameIdNotifier, int?>(
-      LastSelectedGameIdNotifier.new,
-    );
-
-class LastSelectedGameIdNotifier extends Notifier<int?> {
-  @override
-  int? build() => null;
-
-  void setLastSelectedGameId(int? gameId) {
-    state = gameId;
-  }
-}
+final lastSelectedGameIdProvider = sessionValueProvider<int?>(null);
 
 final selectionMultiSelectModeProvider =
     NotifierProvider<SelectionMultiSelectModeNotifier, bool>(
@@ -320,8 +228,6 @@ class PageNotificationsNotifier extends Notifier<Set<NavItem>> {
   void add(NavItem item) => state = {...state, item};
 
   void remove(NavItem item) => state = state.difference({item});
-
-  void clear() => state = const {};
 }
 
 // =============================================================================
@@ -334,25 +240,21 @@ class DragSelectionState {
   const DragSelectionState({
     this.isActive = false,
     this.mode,
-    this.startId,
     this.visitedIds = const {},
   });
 
   final bool isActive;
   final DragSelectionMode? mode;
-  final int? startId;
   final Set<int> visitedIds;
 
   DragSelectionState copyWith({
     bool? isActive,
     DragSelectionMode? mode,
-    int? startId,
     Set<int>? visitedIds,
   }) {
     return DragSelectionState(
       isActive: isActive ?? this.isActive,
       mode: mode ?? this.mode,
-      startId: startId ?? this.startId,
       visitedIds: visitedIds ?? this.visitedIds,
     );
   }
@@ -362,12 +264,8 @@ class DragSelectionNotifier extends Notifier<DragSelectionState> {
   @override
   DragSelectionState build() => const DragSelectionState();
 
-  void start({int? startId}) {
-    state = DragSelectionState(
-      isActive: true,
-      startId: startId,
-      visitedIds: const {},
-    );
+  void start() {
+    state = const DragSelectionState(isActive: true);
   }
 
   void stop() {

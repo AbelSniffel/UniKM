@@ -4,245 +4,170 @@ library;
 
 import 'dart:io';
 
+import 'package:collection/collection.dart';
+
 import '../constants/app_constants.dart';
 
 /// Navigation bar position options
 enum NavBarPosition {
-  left,
-  right,
-  top,
-  bottom;
+  left('Left'),
+  right('Right'),
+  top('Top'),
+  bottom('Bottom');
 
-  String get displayName {
-    switch (this) {
-      case NavBarPosition.left:
-        return 'Left';
-      case NavBarPosition.right:
-        return 'Right';
-      case NavBarPosition.top:
-        return 'Top';
-      case NavBarPosition.bottom:
-        return 'Bottom';
-    }
-  }
+  const NavBarPosition(this.displayName);
+
+  final String displayName;
 }
 
-/// Navigation button placement for both standard and integrated nav layouts.
-///
-/// In the standard layout, [center] keeps all page buttons centered and
-/// [split] separates page buttons into leading/trailing groups.
-/// In the integrated gradient layout, [split] splits the page buttons around
-/// the gradient bar.
-/// [start] places all buttons before the center feature area.
-/// [end] places all buttons after the center feature area.
+/// Page-button placement around the navigation gradient bar.
 enum NavButtonArrangement {
   start,
-  center,
   split,
   end;
 
-  /// Returns the display name for the integrated gradient layout.
-  String displayNameForIntegrated({required bool isHorizontal}) {
-    switch (this) {
-      case NavButtonArrangement.split:
-        return 'Split';
-      case NavButtonArrangement.center:
-        // Center is not exposed in integrated mode, but can be restored when
-        // switching back to standard mode.
-        return 'Split';
-      case NavButtonArrangement.start:
-        return isHorizontal ? 'Left' : 'Top';
-      case NavButtonArrangement.end:
-        return isHorizontal ? 'Right' : 'Bottom';
-    }
-  }
-
-  /// Returns the display name for the standard nav panel layout.
-  String displayNameForStandard({required bool isHorizontal}) {
-    switch (this) {
-      case NavButtonArrangement.start:
-        return isHorizontal ? 'Left' : 'Top';
-      case NavButtonArrangement.center:
-        return 'Center';
-      case NavButtonArrangement.split:
-        return 'Split';
-      case NavButtonArrangement.end:
-        return isHorizontal ? 'Right' : 'Bottom';
-    }
-  }
+  String displayName({required bool isHorizontal}) => switch (this) {
+    start => isHorizontal ? 'Left' : 'Top',
+    split => 'Split',
+    end => isHorizontal ? 'Right' : 'Bottom',
+  };
 }
 
-/// Button placement for the standard horizontal navigation panel.
-enum NavBarButtonAlignment {
-  left,
-  center,
-  right;
+/// How page-button labels are shown in the navigation panel.
+enum NavExpansionMode {
+  automatic('Dynamic'),
+  expanded('Expanded'),
+  collapsed('Collapsed');
 
-  String get displayName {
-    switch (this) {
-      case NavBarButtonAlignment.left:
-        return 'Left';
-      case NavBarButtonAlignment.center:
-        return 'Center';
-      case NavBarButtonAlignment.right:
-        return 'Right';
-    }
-  }
+  const NavExpansionMode(this.displayName);
+
+  final String displayName;
+
+  NavExpansionMode get next => values[(index + 1) % values.length];
 }
 
 /// Navigation bar appearance options
 enum NavBarAppearance {
-  iconAndText,
-  iconOnly,
-  textOnly;
+  iconAndText('Icon & Text'),
+  iconOnly('Icon Only'),
+  textOnly('Text Only');
 
-  String get displayName {
-    switch (this) {
-      case NavBarAppearance.iconAndText:
-        return 'Icon & Text';
-      case NavBarAppearance.iconOnly:
-        return 'Icon Only';
-      case NavBarAppearance.textOnly:
-        return 'Text Only';
-    }
-  }
+  const NavBarAppearance(this.displayName);
+
+  final String displayName;
 }
 
 /// Decorative overlay styles applied to the navigation panel background.
 enum NavPanelOverlayStyle {
-  none,
-  gradient,
-  diagonalStripes,
-  crosshatch,
-  hexPattern,
-  ripple;
+  none('None'),
+  gradient('Gradient'),
+  diagonalStripes('Diagonal'),
+  crosshatch('Crosshatch'),
+  hexPattern('Hex Pattern'),
+  ripple('Ripple');
 
-  String get displayName => switch (this) {
-    none => 'None',
-    diagonalStripes => 'Diagonal',
-    crosshatch => 'Crosshatch',
-    gradient => 'Gradient',
-    hexPattern => 'Hex Pattern',
-    ripple => 'Ripple',
-  };
+  const NavPanelOverlayStyle(this.displayName);
+
+  final String displayName;
 }
 
 /// Gradient animation styles
 enum GradientAnimation {
-  solid,
-  scroll,
-  pulse,
-  heart,
-  scanner,
-  aurora,
-  wave;
+  solid('Solid', 'No animation, solid primary color'),
+  scroll('Scroll', 'Smooth scrolling gradient'),
+  pulse('Pulse', 'Gentle breathing pulse'),
+  heart('Heart', 'Expanding heartbeat pulse'),
+  scanner('Scanner', 'Bouncing scanner beam'),
+  wave('Wave', 'Layered wave bands flowing across the bar'),
+  barberPole(
+    'Barber Pole',
+    'Moving diagonal theme colors with softly rounded shading',
+  ),
+  spiral('Spiral', 'Raised theme-color ribbons rotating around the bar axis'),
+  helix(
+    'Helix',
+    'Two twisting ribbons alternate over and under around a shared axis',
+  );
 
-  String get displayName => switch (this) {
-    solid => 'Solid',
-    scroll => 'Scroll',
-    pulse => 'Pulse',
-    scanner => 'Scanner',
-    heart => 'Heart',
-    aurora => 'Aurora',
-    wave => 'Wave',
-  };
+  const GradientAnimation(this.displayName, this.description);
 
-  String get description => switch (this) {
-    solid => 'No animation, solid primary color',
-    scroll => 'Smooth scrolling gradient',
-    pulse => 'Gentle breathing pulse',
-    scanner => 'Bouncing scanner beam',
-    heart => 'Expanding heartbeat pulse',
-    aurora => 'Aurora borealis flow',
-    wave => 'Layered wave bands flowing across the bar',
-  };
+  final String displayName;
+  final String description;
 }
 
-GradientAnimation normalizeGradientAnimation(
-  GradientAnimation animation, {
-  required bool navPanelGradientBar,
-}) {
-  if (!navPanelGradientBar && animation == GradientAnimation.wave) {
-    return GradientAnimation.scroll;
-  }
-  return animation;
+/// Shared multiplier applied to each gradient effect's own base speed.
+enum GradientAnimationSpeed {
+  slow('Slow', 0.5),
+  standard('Default', 1.0),
+  fast('Fast', 1.5);
+
+  const GradientAnimationSpeed(this.displayName, this.multiplier);
+
+  final String displayName;
+  final double multiplier;
 }
 
 /// Tooltip animation styles
 enum TooltipAnimation {
-  fade,
-  slide;
+  fade('Fade'),
+  slide('Slide');
 
-  String get displayName {
-    switch (this) {
-      case TooltipAnimation.fade:
-        return 'Fade';
-      case TooltipAnimation.slide:
-        return 'Slide';
-    }
-  }
+  const TooltipAnimation(this.displayName);
+
+  final String displayName;
 }
 
 /// Toggle switch styles
 enum ToggleStyle {
-  regular,
-  dot,
-  morphDot;
+  regular('Regular', 'Sliding switch with an on/off thumb.'),
+  dot('Dot', 'Round dot that grows when enabled.'),
+  morphDot('Morph Dot', 'Dot toggle that follows the theme’s corner radius.'),
+  segmented('OFF / ON', 'Two-part OFF / ON switch with a sliding highlight.');
 
-  String get displayName {
-    switch (this) {
-      case ToggleStyle.regular:
-        return 'Regular';
-      case ToggleStyle.dot:
-        return 'Dot';
-      case ToggleStyle.morphDot:
-        return 'Morph Dot';
-    }
-  }
+  const ToggleStyle(this.displayName, this.description);
+
+  final String displayName;
+  final String description;
+}
+
+/// Status controls used only by interaction settings cards.
+enum SettingsCardIndicatorStyle {
+  switchControl('Switch', 'Use the selected app switch inside the card.'),
+  retroSquare('Retro Square', 'A glowing recessed display with retro texture.');
+
+  const SettingsCardIndicatorStyle(this.displayName, this.description);
+
+  final String displayName;
+  final String description;
 }
 
 /// Section GroupBox title location
 enum SectionTitleLocation {
-  left,
-  top;
+  left('Left'),
+  top('Top');
 
-  String get displayName {
-    switch (this) {
-      case SectionTitleLocation.left:
-        return 'Left';
-      case SectionTitleLocation.top:
-        return 'Top';
-    }
-  }
+  const SectionTitleLocation(this.displayName);
+
+  final String displayName;
 }
 
 /// Game list view mode
 enum GameListViewMode {
-  grid,
-  list;
+  grid('Grid'),
+  list('List');
 
-  String get displayName {
-    switch (this) {
-      case GameListViewMode.grid:
-        return 'Grid';
-      case GameListViewMode.list:
-        return 'List';
-    }
-  }
+  const GameListViewMode(this.displayName);
+
+  final String displayName;
 }
 
 enum ListViewDensityMode {
-  regular,
-  slim;
+  regular('Regular'),
+  slim('Slim');
 
-  String get displayName {
-    switch (this) {
-      case ListViewDensityMode.regular:
-        return 'Regular';
-      case ListViewDensityMode.slim:
-        return 'Slim';
-    }
-  }
+  const ListViewDensityMode(this.displayName);
+
+  final String displayName;
 }
 
 ListViewDensityMode resolveListViewDensityMode({required bool slimListView}) {
@@ -260,38 +185,19 @@ Map<String, dynamic> listViewDensityModeSettings(ListViewDensityMode mode) {
 
 /// Sort mode for game list
 enum GameSortMode {
-  deadlineFirst,
-  titleAZ,
-  titleZA,
-  platformAZ,
-  platformZA,
-  dateNewest,
-  dateOldest,
-  ratingHigh,
-  ratingLow;
+  deadlineFirst('Deadline First'),
+  titleAZ('Title A-Z'),
+  titleZA('Title Z-A'),
+  platformAZ('Platform A-Z'),
+  platformZA('Platform Z-A'),
+  dateNewest('Date Added (Newest)'),
+  dateOldest('Date Added (Oldest)'),
+  ratingHigh('Rating (Highest first)'),
+  ratingLow('Rating (Lowest first)');
 
-  String get displayName {
-    switch (this) {
-      case GameSortMode.deadlineFirst:
-        return 'Deadline First';
-      case GameSortMode.titleAZ:
-        return 'Title A-Z';
-      case GameSortMode.titleZA:
-        return 'Title Z-A';
-      case GameSortMode.platformAZ:
-        return 'Platform A-Z';
-      case GameSortMode.platformZA:
-        return 'Platform Z-A';
-      case GameSortMode.dateNewest:
-        return 'Date Added (Newest)';
-      case GameSortMode.dateOldest:
-        return 'Date Added (Oldest)';
-      case GameSortMode.ratingHigh:
-        return 'Rating (Highest first)';
-      case GameSortMode.ratingLow:
-        return 'Rating (Lowest first)';
-    }
-  }
+  const GameSortMode(this.displayName);
+
+  final String displayName;
 }
 
 /// All app settings with their keys
@@ -313,11 +219,7 @@ class SettingsKeys {
   // Navigation
   static const String navBarPosition = 'nav_bar_position';
   static const String navBarAppearance = 'nav_bar_appearance';
-  static const String navBarCollapsed = 'nav_bar_collapsed';
-  static const String navBarButtonAlignment = 'nav_bar_button_alignment';
-  static const String navBarCenterButtons = 'nav_bar_center_buttons';
-  static const String navPanelGradientBar = 'nav_panel_gradient_bar';
-  static const String navBarCombineButtons = 'nav_bar_split_buttons';
+  static const String navExpansionMode = 'nav_expansion_mode';
 
   /// Arrangement for horizontal nav panel (top or bottom position).
   static const String navButtonArrangementH = 'nav_button_arrangement_h';
@@ -330,6 +232,7 @@ class SettingsKeys {
 
   // Animations
   static const String gradientAnimation = 'gradient_animation';
+  static const String gradientAnimationSpeed = 'gradient_animation_speed';
   static const String tooltipAnimation = 'tooltip_animation';
   static const String tooltipShowDelay = 'tooltip_show_delay';
   // When true, gradient bars will swap the theme primary and accent colors
@@ -346,14 +249,20 @@ class SettingsKeys {
   static const String showPlatformChip = 'show_platform_chip';
   static const String showTagsChip = 'show_tags_chip';
   static const String showTagsOnHoverOnly = 'show_tags_on_hover_only';
+  static const String showPlatformOnHoverOnly = 'show_platform_on_hover_only';
   static const String showDeadlineChip = 'show_deadline_chip';
-  static const String compactListView = 'compact_list_view';
   static const String slimListView = 'slim_list_view';
 
   // Toggle & Section Style
   static const String toggleStyle = 'toggle_style';
+  static const String settingsCardIndicatorStyle =
+      'settings_card_indicator_style';
   static const String useThemeToggleRadius = 'use_theme_toggle_radius';
   static const String sectionTitleLocation = 'section_title_location';
+
+  // Experimental Settings Layout
+  static const String experimentalInteractionCards =
+      'experimental_interaction_cards';
 
   // Backup
   static const String autoBackupEnabled = 'auto_backup_enabled';
@@ -371,6 +280,7 @@ class SettingsKeys {
   static const String syncAutoOnStartup = 'sync_auto_on_startup';
   static const String syncDeviceId = 'sync_device_id';
   static const String syncTrustedPeersJson = 'sync_trusted_peers_json';
+  static const String syncRevokedPeersJson = 'sync_revoked_peers_json';
   static const String syncLastTrustedPeerId = 'sync_last_trusted_peer_id';
   static const String syncLastSyncAtIso = 'sync_last_sync_at_iso';
   static const String syncDbRevisionId = 'sync_db_revision_id';
@@ -399,6 +309,10 @@ class SettingsKeys {
   static const String showStatusBar = 'show_status_bar';
   static const String showFpsCounter = 'show_fps_counter';
   static const String showGameDetailsSkmId = 'show_game_details_skm_id';
+  static const String showSyncDeviceId = 'show_sync_device_id';
+
+  // Display
+  static const String frameRatePreference = 'frame_rate_preference';
 
   // Window
   static const String windowWidth = 'window_width';
@@ -411,56 +325,6 @@ class SettingsKeys {
   static const String legacyDefaultTagsCleanupDone =
       'legacy_default_tags_cleanup_done';
 
-  /// Settings eligible to be synchronized across devices.
-  ///
-  /// Keep this list explicit to avoid accidentally syncing device-local values
-  /// like window geometry or file paths.
-  static const Set<String> syncableSettingsKeys = {
-    activeTheme,
-    currentTheme,
-    customThemes,
-    navBarPosition,
-    navBarAppearance,
-    navBarCollapsed,
-    navBarButtonAlignment,
-    navBarCenterButtons,
-    navPanelGradientBar,
-    navBarCombineButtons,
-    navButtonArrangementH,
-    navButtonArrangementV,
-    navPanelOverlayStyle,
-    settingsSectionPanelCollapsed,
-    gradientAnimation,
-    tooltipAnimation,
-    tooltipShowDelay,
-    swapGradientColors,
-    gameListViewMode,
-    gameSortMode,
-    viewedNewGameIds,
-    showTitleChip,
-    showTitleOnNoPicture,
-    showPlatformChip,
-    showTagsChip,
-    showTagsOnHoverOnly,
-    showDeadlineChip,
-    slimListView,
-    toggleStyle,
-    useThemeToggleRadius,
-    sectionTitleLocation,
-    autoBackupEnabled,
-    autoBackupIntervalMinutes,
-    backupMaxCount,
-    notificationsEnabled,
-    deadlineReminders,
-    updateNotifications,
-    encryptionEnabled,
-    maskKeys,
-    autoHideKeys,
-    showStatusBar,
-    showFpsCounter,
-    showGameDetailsSkmId,
-  };
-
   /// Keys that are always device-local and must never be synced.
   static const Set<String> syncExcludedKeys = {
     databasePath,
@@ -470,6 +334,9 @@ class SettingsKeys {
     updateRepo,
     skippedVersions,
     developerMode,
+    showSyncDeviceId,
+    experimentalInteractionCards,
+    settingsCardIndicatorStyle,
     windowWidth,
     windowHeight,
     windowX,
@@ -480,6 +347,7 @@ class SettingsKeys {
     syncAutoOnStartup,
     syncDeviceId,
     syncTrustedPeersJson,
+    syncRevokedPeersJson,
     syncLastTrustedPeerId,
     syncLastSyncAtIso,
     syncDbRevisionId,
@@ -506,12 +374,7 @@ class DefaultSettings {
   // Navigation
   static const NavBarPosition navBarPosition = NavBarPosition.bottom;
   static const NavBarAppearance navBarAppearance = NavBarAppearance.iconAndText;
-  static const bool navBarCollapsed = true;
-  static const NavBarButtonAlignment navBarButtonAlignment =
-      NavBarButtonAlignment.center;
-  static const bool navBarCenterButtons = true;
-  static const bool navPanelGradientBar = true;
-  static const bool navBarCombineButtons = false;
+  static const NavExpansionMode navExpansionMode = NavExpansionMode.automatic;
   static const NavPanelOverlayStyle navPanelOverlayStyle =
       NavPanelOverlayStyle.none;
   static const bool settingsSectionPanelCollapsed = false;
@@ -522,6 +385,8 @@ class DefaultSettings {
 
   // Animations
   static const GradientAnimation gradientAnimation = GradientAnimation.scroll;
+  static const GradientAnimationSpeed gradientAnimationSpeed =
+      GradientAnimationSpeed.standard;
   static const TooltipAnimation tooltipAnimation = TooltipAnimation.slide;
   static const int tooltipShowDelay = 600;
   // Swap primary & accent used by gradient bars (off by default)
@@ -537,6 +402,7 @@ class DefaultSettings {
   static const bool showPlatformChip = true;
   static const bool showTagsChip = true;
   static const bool showTagsOnHoverOnly = true;
+  static const bool showPlatformOnHoverOnly = false;
   static const bool showDeadlineChip = true;
   static bool get slimListView => Platform.isAndroid || Platform.isIOS;
   static const bool showRatings =
@@ -544,9 +410,14 @@ class DefaultSettings {
 
   // Toggle & Section Style
   static const ToggleStyle toggleStyle = ToggleStyle.morphDot;
+  static const SettingsCardIndicatorStyle settingsCardIndicatorStyle =
+      SettingsCardIndicatorStyle.switchControl;
   static const bool useThemeToggleRadius = false;
   static const SectionTitleLocation sectionTitleLocation =
       SectionTitleLocation.top;
+
+  // Experimental Settings Layout
+  static const bool experimentalInteractionCards = false;
 
   // Backup
   static const bool autoBackupEnabled = true;
@@ -558,6 +429,7 @@ class DefaultSettings {
   static const bool syncAutoOnStartup = false;
   static const String syncDeviceId = '';
   static const String syncTrustedPeersJson = '[]';
+  static const String syncRevokedPeersJson = '[]';
   static const String syncLastTrustedPeerId = '';
   static const String syncLastSyncAtIso = '';
   static const String syncDbRevisionId = '';
@@ -570,6 +442,10 @@ class DefaultSettings {
   static const bool showStatusBar = false;
   static const bool showFpsCounter = true;
   static const bool showGameDetailsSkmId = false;
+  static const bool showSyncDeviceId = false;
+
+  // Display
+  static const String frameRatePreference = 'auto';
 
   // Maintenance
   static const bool legacyDefaultTagsCleanupDone = false;
@@ -590,6 +466,7 @@ class GameCardSettings {
     required this.showPlatform,
     required this.showTags,
     required this.showTagsOnHoverOnly,
+    required this.showPlatformOnHoverOnly,
     required this.showDeadline,
     required this.showRatings,
     required this.slimListView,
@@ -613,6 +490,9 @@ class GameCardSettings {
       showTags:
           (settings[SettingsKeys.showTagsChip] as bool?) ??
           DefaultSettings.showTagsChip,
+      showPlatformOnHoverOnly:
+          (settings[SettingsKeys.showPlatformOnHoverOnly] as bool?) ??
+          DefaultSettings.showPlatformOnHoverOnly,
       showTagsOnHoverOnly:
           (settings[SettingsKeys.showTagsOnHoverOnly] as bool?) ??
           DefaultSettings.showTagsOnHoverOnly,
@@ -630,6 +510,7 @@ class GameCardSettings {
   final bool showPlatform;
   final bool showTags;
   final bool showTagsOnHoverOnly;
+  final bool showPlatformOnHoverOnly;
   final bool showDeadline;
   final bool showRatings;
   final bool slimListView;
@@ -642,6 +523,7 @@ class GameCardSettings {
         other.showPlatform == showPlatform &&
         other.showTags == showTags &&
         other.showTagsOnHoverOnly == showTagsOnHoverOnly &&
+        other.showPlatformOnHoverOnly == showPlatformOnHoverOnly &&
         other.showDeadline == showDeadline &&
         other.showRatings == showRatings &&
         other.slimListView == slimListView;
@@ -654,65 +536,11 @@ class GameCardSettings {
     showPlatform,
     showTags,
     showTagsOnHoverOnly,
+    showPlatformOnHoverOnly,
     showDeadline,
     showRatings,
     slimListView,
   );
-}
-
-class AppearanceSettings {
-  const AppearanceSettings({required this.currentTheme});
-
-  factory AppearanceSettings.fromMap(Map<String, dynamic> settings) {
-    return AppearanceSettings(
-      currentTheme:
-          (settings[SettingsKeys.currentTheme] as String?) ??
-          (settings[SettingsKeys.activeTheme] as String?) ??
-          DefaultSettings.activeTheme,
-    );
-  }
-
-  final String currentTheme;
-
-  @override
-  bool operator ==(Object other) =>
-      other is AppearanceSettings && other.currentTheme == currentTheme;
-
-  @override
-  int get hashCode => currentTheme.hashCode;
-}
-
-class LibrarySettings {
-  const LibrarySettings({
-    required this.showPlatformBadges,
-    required this.showTagChips,
-    required this.showRatings,
-  });
-
-  factory LibrarySettings.fromMap(Map<String, dynamic> settings) {
-    return LibrarySettings(
-      showPlatformBadges:
-          (settings[SettingsKeys.showPlatformBadges] as bool?) ?? true,
-      showTagChips: (settings[SettingsKeys.showTagChips] as bool?) ?? true,
-      showRatings: (settings[SettingsKeys.showRatings] as bool?) ?? true,
-    );
-  }
-
-  final bool showPlatformBadges;
-  final bool showTagChips;
-  final bool showRatings;
-
-  @override
-  bool operator ==(Object other) {
-    return other is LibrarySettings &&
-        other.showPlatformBadges == showPlatformBadges &&
-        other.showTagChips == showTagChips &&
-        other.showRatings == showRatings;
-  }
-
-  @override
-  int get hashCode =>
-      Object.hash(showPlatformBadges, showTagChips, showRatings);
 }
 
 class NotificationsSettings {
@@ -788,7 +616,10 @@ class UpdatesSettings {
         other.autoCheckEnabled == autoCheckEnabled &&
         other.autoCheckIntervalMinutes == autoCheckIntervalMinutes &&
         other.includePrerelease == includePrerelease &&
-        _listEquals(other.skippedVersions, skippedVersions) &&
+        const ListEquality<String>().equals(
+          other.skippedVersions,
+          skippedVersions,
+        ) &&
         other.updateRepo == updateRepo &&
         other.githubApiToken == githubApiToken;
   }
@@ -802,14 +633,6 @@ class UpdatesSettings {
     updateRepo,
     githubApiToken,
   );
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
 }
 
 class SecuritySettings {
@@ -843,7 +666,10 @@ class SecuritySettings {
         other.maskKeys == maskKeys &&
         other.autoHideKeys == autoHideKeys &&
         other.encryptionEnabled == encryptionEnabled &&
-        _listEquals(other.recentDatabasePaths, recentDatabasePaths);
+        const ListEquality<String>().equals(
+          other.recentDatabasePaths,
+          recentDatabasePaths,
+        );
   }
 
   @override
@@ -853,25 +679,14 @@ class SecuritySettings {
     encryptionEnabled,
     Object.hashAll(recentDatabasePaths),
   );
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
 }
 
 class AppShellSettings {
   const AppShellSettings({
     required this.navBarPosition,
     required this.navBarAppearance,
+    required this.navExpansionMode,
     required this.gradientAnimation,
-    required this.navBarCollapsed,
-    required this.navPanelGradientBar,
-    required this.navBarCombineButtons,
     required this.settingsSectionPanelCollapsed,
     required this.autoBackupEnabled,
     required this.autoBackupIntervalMinutes,
@@ -891,18 +706,12 @@ class AppShellSettings {
       navBarAppearance:
           (settings[SettingsKeys.navBarAppearance] as NavBarAppearance?) ??
           DefaultSettings.navBarAppearance,
+      navExpansionMode:
+          (settings[SettingsKeys.navExpansionMode] as NavExpansionMode?) ??
+          DefaultSettings.navExpansionMode,
       gradientAnimation:
           (settings[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
           DefaultSettings.gradientAnimation,
-      navBarCollapsed:
-          (settings[SettingsKeys.navBarCollapsed] as bool?) ??
-          DefaultSettings.navBarCollapsed,
-      navPanelGradientBar:
-          (settings[SettingsKeys.navPanelGradientBar] as bool?) ??
-          DefaultSettings.navPanelGradientBar,
-      navBarCombineButtons:
-          (settings[SettingsKeys.navBarCombineButtons] as bool?) ??
-          DefaultSettings.navBarCombineButtons,
       settingsSectionPanelCollapsed:
           (settings[SettingsKeys.settingsSectionPanelCollapsed] as bool?) ??
           DefaultSettings.settingsSectionPanelCollapsed,
@@ -930,10 +739,8 @@ class AppShellSettings {
 
   final NavBarPosition navBarPosition;
   final NavBarAppearance navBarAppearance;
+  final NavExpansionMode navExpansionMode;
   final GradientAnimation gradientAnimation;
-  final bool navBarCollapsed;
-  final bool navPanelGradientBar;
-  final bool navBarCombineButtons;
   final bool settingsSectionPanelCollapsed;
   final bool autoBackupEnabled;
   final int autoBackupIntervalMinutes;
@@ -949,10 +756,8 @@ class AppShellSettings {
     return other is AppShellSettings &&
         other.navBarPosition == navBarPosition &&
         other.navBarAppearance == navBarAppearance &&
+        other.navExpansionMode == navExpansionMode &&
         other.gradientAnimation == gradientAnimation &&
-        other.navBarCollapsed == navBarCollapsed &&
-        other.navPanelGradientBar == navPanelGradientBar &&
-        other.navBarCombineButtons == navBarCombineButtons &&
         other.settingsSectionPanelCollapsed == settingsSectionPanelCollapsed &&
         other.autoBackupEnabled == autoBackupEnabled &&
         other.autoBackupIntervalMinutes == autoBackupIntervalMinutes &&
@@ -968,10 +773,8 @@ class AppShellSettings {
   int get hashCode => Object.hash(
     navBarPosition,
     navBarAppearance,
+    navExpansionMode,
     gradientAnimation,
-    navBarCollapsed,
-    navPanelGradientBar,
-    navBarCombineButtons,
     settingsSectionPanelCollapsed,
     autoBackupEnabled,
     autoBackupIntervalMinutes,
@@ -982,34 +785,6 @@ class AppShellSettings {
     windowY,
     windowMaximized,
   );
-}
-
-class TooltipSettings {
-  const TooltipSettings({required this.animation, required this.showDelay});
-
-  factory TooltipSettings.fromMap(Map<String, dynamic> settings) {
-    return TooltipSettings(
-      animation:
-          (settings[SettingsKeys.tooltipAnimation] as TooltipAnimation?) ??
-          DefaultSettings.tooltipAnimation,
-      showDelay:
-          (settings[SettingsKeys.tooltipShowDelay] as int?) ??
-          DefaultSettings.tooltipShowDelay,
-    );
-  }
-
-  final TooltipAnimation animation;
-  final int showDelay;
-
-  @override
-  bool operator ==(Object other) {
-    return other is TooltipSettings &&
-        other.animation == animation &&
-        other.showDelay == showDelay;
-  }
-
-  @override
-  int get hashCode => Object.hash(animation, showDelay);
 }
 
 class BackupSettings {

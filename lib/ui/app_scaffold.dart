@@ -12,41 +12,29 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/constants/app_constants.dart';
 import '../core/services/backup_service.dart';
+import '../core/services/deadline_notification_service.dart';
 import '../core/services/logging.dart';
 import '../core/services/update_service.dart';
 import '../core/settings/settings_model.dart';
 import '../core/theme/app_theme.dart';
 import '../providers/app_providers.dart';
 import '../core/models/device_sync_models.dart';
-import 'dialogs/device_sync_dialog.dart';
-import 'dialogs/import_export_dialog.dart';
+import 'dialogs/incoming_pair_dialog.dart';
+import 'dialogs/dialog_gallery.dart' show DialogGalleryHost;
 import 'pages/add_games_page.dart';
-import 'pages/settings_sections/database_section.dart'
-    show showChangeDatabaseDialog;
 import 'pages/home_page.dart';
+import 'pages/home_sections/selection_ribbon_host.dart';
 import 'pages/settings_page.dart';
 import 'pages/update_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
-import 'widgets/animated_gradient_bar.dart';
 import 'widgets/app_progress_indicator.dart';
+import 'widgets/app_page_stack.dart';
 import 'widgets/dev_window.dart';
+import 'widgets/app_title_bar.dart';
 import 'widgets/dialog_helpers.dart';
 import 'widgets/notification_system.dart';
-import 'widgets/pair_code_widgets.dart';
-import 'widgets/popup_menu_helpers.dart';
 
 const int _kLargeLibraryNavAnimationThreshold = 250;
-const double _kDetachedGradientBarExtent = 6.0;
-
-enum _ShellPageTransitionStyle {
-  pageScroll,
-  fadeThrough,
-  slideFade,
-  sharedAxis,
-}
-
-const _ShellPageTransitionStyle _kShellPageTransitionStyle =
-    _ShellPageTransitionStyle.slideFade;
 
 /// Navigation items5
 /// Main app scaffold
@@ -66,9 +54,9 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   bool _isClosingWindow = false;
   bool _windowMaximized = false;
   NavBarPosition? _lastNavPosition;
-  NavItem? _previousPageNav;
-  bool _navCollapseToggled = false;
-  Timer? _navCollapseAnimTimer;
+  Size? _lastViewportSize;
+  bool _navSelectionTransitionActive = false;
+  Timer? _navSelectionAnimTimer;
   final Set<String> _handledPairRequestPrompts = <String>{};
 
   @override
@@ -94,7 +82,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     _windowSaveDebounce = _cancelTimer(_windowSaveDebounce);
     _autoBackupTimer = _cancelTimer(_autoBackupTimer);
     _autoUpdateTimer = _cancelTimer(_autoUpdateTimer);
-    _navCollapseAnimTimer = _cancelTimer(_navCollapseAnimTimer);
+    _navSelectionAnimTimer = _cancelTimer(_navSelectionAnimTimer);
   }
 
   Timer? _cancelTimer(Timer? timer) {
@@ -124,6 +112,11 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _applyMobileSystemUiMode();
+      unawaited(ref.read(deviceSyncProvider.notifier).setForeground(true));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(ref.read(deviceSyncProvider.notifier).setForeground(false));
     }
   }
 
@@ -163,7 +156,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       // Update the next backup time provider
       ref
           .read(nextAutoBackupTimeProvider.notifier)
-          .setNextBackupTime(DateTime.now().add(interval));
+          .set(DateTime.now().add(interval));
 
       _autoBackupTimer = _replacePeriodicTimer(_autoBackupTimer, interval, (
         _,
@@ -173,7 +166,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         // Update next backup time
         ref
             .read(nextAutoBackupTimeProvider.notifier)
-            .setNextBackupTime(DateTime.now().add(interval));
+            .set(DateTime.now().add(interval));
 
         try {
           final backupService = ref.read(backupServiceProvider);
@@ -195,7 +188,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     } else {
       _autoBackupTimer = _cancelTimer(_autoBackupTimer);
       // Clear next backup time if disabled
-      ref.read(nextAutoBackupTimeProvider.notifier).setNextBackupTime(null);
+      ref.read(nextAutoBackupTimeProvider.notifier).set(null);
     }
   }
 
@@ -203,7 +196,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     final updatesSettings = ref.read(updatesSettingsProvider);
     if (!updatesSettings.autoCheckEnabled) {
       _autoUpdateTimer = _cancelTimer(_autoUpdateTimer);
-      ref.read(nextAutoUpdateTimeProvider.notifier).setNextUpdateTime(null);
+      ref.read(nextAutoUpdateTimeProvider.notifier).set(null);
       return;
     }
 
@@ -213,7 +206,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
     ref
         .read(nextAutoUpdateTimeProvider.notifier)
-        .setNextUpdateTime(DateTime.now().add(delay));
+        .set(DateTime.now().add(delay));
 
     _autoUpdateTimer = _replaceTimer(_autoUpdateTimer, delay, () async {
       if (!mounted) return;
@@ -237,6 +230,12 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
   Future<void> _initWindow() async {
     if (!_hasDesktopWindowControls) return;
+
+    if (!ref.read(desktopWindowSessionProvider).claimInitialization()) {
+      final maximized = await windowManager.isMaximized();
+      if (mounted) setState(() => _windowMaximized = maximized);
+      return;
+    }
 
     await windowManager.ensureInitialized();
     // Prevent immediate close so we can persist encrypted DB changes.
@@ -278,7 +277,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
-      title: AppConstants.appTitle,
+      title: kAppName,
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -434,16 +433,44 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
   @override
   Widget build(BuildContext context) {
+    void updateReminderSchedule() {
+      unawaited(
+        DeadlineNotificationService.instance
+            .updateSchedule(
+              ref.read(allGamesProvider),
+              enabled: ref
+                  .read(notificationsSettingsProvider)
+                  .deadlineReminders,
+            )
+            .catchError((Object error) {
+              AppLog.w('Could not schedule deadline reminders: $error');
+            }),
+      );
+    }
+
+    ref.listen(allGamesProvider, (_, _) => updateReminderSchedule());
+    ref.listen(
+      notificationsSettingsProvider,
+      (_, _) => updateReminderSchedule(),
+    );
     final theme = ref.watch(themeProvider);
     final currentNav = ref.watch(currentNavProvider);
+    final hasSelectedGames = ref.watch(
+      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
+    );
+    final showSelectionRibbon = currentNav == NavItem.home && hasSelectedGames;
     final shellSettings = ref.watch(appShellSettingsProvider);
+    final hideNavForSelection =
+        showSelectionRibbon &&
+        shellSettings.navBarPosition == NavBarPosition.bottom;
     final databaseRevision = ref.watch(
       databaseNotifierProvider.select((state) => state.revision),
     );
-    final platform = Theme.of(context).platform;
-    final isMobilePlatform =
-        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final viewportSize = MediaQuery.sizeOf(context);
+    final viewportChanged =
+        _lastViewportSize != null && _lastViewportSize != viewportSize;
+    _lastViewportSize = viewportSize;
+    final viewportWidth = viewportSize.width;
 
     ref.listen<UpdatesSettings>(updatesSettingsProvider, (previous, next) {
       if (previous == null) {
@@ -455,23 +482,19 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       }
     });
 
-    ref.listen<NavItem>(currentNavProvider, (previous, next) {
-      if (previous == null || previous == next) return;
-      _previousPageNav = previous;
-    });
-
-    // When the user explicitly toggles collapse/expand, temporarily lift the
-    // large-library animation skip so the panel always animates smoothly.
     ref.listen<bool>(
-      appShellSettingsProvider.select((s) => s.navBarCollapsed),
+      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
       (previous, next) {
         if (previous == null || previous == next) return;
-        setState(() => _navCollapseToggled = true);
-        _navCollapseAnimTimer = _replaceTimer(
-          _navCollapseAnimTimer,
+        if (!next) {
+          ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
+        }
+        setState(() => _navSelectionTransitionActive = true);
+        _navSelectionAnimTimer = _replaceTimer(
+          _navSelectionAnimTimer,
           kNavPanelMotionAnimation,
           () {
-            if (mounted) setState(() => _navCollapseToggled = false);
+            if (mounted) setState(() => _navSelectionTransitionActive = false);
           },
         );
       },
@@ -518,67 +541,43 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     final navPosition = shellSettings.navBarPosition;
     final navAppearance = shellSettings.navBarAppearance;
     final gradientAnimation = shellSettings.gradientAnimation;
-    final useInnerNavGradient = shellSettings.navPanelGradientBar;
-    final isVerticalNavBase =
-        navPosition == NavBarPosition.left ||
-        navPosition == NavBarPosition.right;
-    final baseNavCollapsed = isMobilePlatform || shellSettings.navBarCollapsed;
-    final baseNavWidth = useInnerNavGradient && isVerticalNavBase
-        ? (baseNavCollapsed
-              ? nav_panel.kNavigationPanelInnerGradientCollapsedWidth
-              : nav_panel.kNavigationPanelInnerGradientExpandedWidth)
-        : (baseNavCollapsed
-              ? nav_panel.kNavigationPanelCollapsedWidth
-              : nav_panel.kNavigationPanelExpandedWidth);
-    final projectedContentWidth = switch (navPosition) {
-      NavBarPosition.left || NavBarPosition.right =>
-        viewportWidth -
-            (baseNavWidth +
-                (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent)),
-      NavBarPosition.top || NavBarPosition.bottom => viewportWidth,
-    };
-    final isVeryNarrowLayout =
-        projectedContentWidth < kVeryNarrowLayoutBreakpoint;
-    final forceCollapsedNav = isMobilePlatform || isVeryNarrowLayout;
-    final navCollapsed = forceCollapsedNav || shellSettings.navBarCollapsed;
+    // Measure against the width the selected button needs when expanded.
+    // Using the current collapsed width would shift the breakpoint on resize.
+    final baseNavCollapsed = navAppearance == NavBarAppearance.iconOnly;
+    final isVeryNarrowLayout = nav_panel.isVeryNarrowAppLayout(
+      viewportWidth,
+      position: navPosition,
+      appearance: navAppearance,
+    );
+    final forceCollapsedNav = isVeryNarrowLayout;
+    final navCollapsed =
+        baseNavCollapsed ||
+        shellSettings.navExpansionMode == NavExpansionMode.collapsed ||
+        forceCollapsedNav;
     final filteredGameCount = currentNav == NavItem.home
         ? ref.watch(gamesProvider.select((s) => s.filteredGames.length))
         : 0;
     final skipNavSizeAnimationForLargeLibrary =
-        !_navCollapseToggled &&
+        !_navSelectionTransitionActive &&
+        !hideNavForSelection &&
         currentNav == NavItem.home &&
         filteredGameCount >= _kLargeLibraryNavAnimationThreshold;
     final navPositionChanged =
         _lastNavPosition != null && _lastNavPosition != navPosition;
     _lastNavPosition = navPosition;
-    final navMotionAnimationDuration = skipNavSizeAnimationForLargeLibrary
+    // Native window dragging already supplies continuous sizes. Do not chase
+    // those sizes with a second layout animation on any page.
+    final navMotionAnimationDuration =
+        viewportChanged || skipNavSizeAnimationForLargeLibrary
         ? Duration.zero
         : kNavPanelMotionAnimation;
 
     // Keep the expanded vertical rail compact while preserving button spacing.
-    final isVerticalNav =
-        navPosition == NavBarPosition.left ||
-        navPosition == NavBarPosition.right;
-    final navWidth = useInnerNavGradient && isVerticalNav
-        ? (navCollapsed
-              ? nav_panel.kNavigationPanelInnerGradientCollapsedWidth
-              : nav_panel.kNavigationPanelInnerGradientExpandedWidth)
-        : (navCollapsed
-              ? nav_panel.kNavigationPanelCollapsedWidth
-              : nav_panel.kNavigationPanelExpandedWidth);
-    final navPanelHorizontalExtent = useInnerNavGradient
-        ? nav_panel.kNavigationPanelInnerGradientExtent
-        : nav_panel.kNavigationPanelHorizontalExtent;
-    // Width for the always-present left/right slots. Computed independently of
-    // the active position so an exiting side panel keeps its correct size as it
-    // slides out (not affected by a switch to a top/bottom position).
-    final sideNavWidth = useInnerNavGradient
-        ? (navCollapsed
-              ? nav_panel.kNavigationPanelInnerGradientCollapsedWidth
-              : nav_panel.kNavigationPanelInnerGradientExpandedWidth)
-        : (navCollapsed
-              ? nav_panel.kNavigationPanelCollapsedWidth
-              : nav_panel.kNavigationPanelExpandedWidth);
+    final navWidth = navCollapsed
+        ? nav_panel.kNavigationPanelCollapsedWidth
+        : nav_panel.kNavigationPanelExpandedWidth;
+    const navPanelHorizontalExtent = nav_panel.kNavigationPanelHorizontalExtent;
+    final sideNavWidth = navWidth;
 
     final updateIsActive = ref.watch(
       updateProvider.select((s) => s.isChecking || s.isDownloading),
@@ -603,6 +602,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
                 : item.unselectedIcon;
             return nav_panel.NavItem(
               label: item.label,
+              hasNotification: hasNotification,
               icon: iconData,
               selectedIcon: iconData,
               iconBuilder: (color, size) => _UpdateNavIcon(
@@ -617,6 +617,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           }
           return nav_panel.NavItem(
             label: item.label,
+            tooltipLabel: item == NavItem.addGames ? 'Add Games' : null,
             icon: item.unselectedIcon,
             selectedIcon: item.selectedIcon,
           );
@@ -649,7 +650,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       }
       // Visiting a page acknowledges its pending nav notification state.
       ref.read(pageNotificationsProvider.notifier).remove(targetNav);
-      ref.read(currentNavProvider.notifier).setNav(targetNav);
+      ref.read(currentNavProvider.notifier).set(targetNav);
     }
 
     // Returns a NavigationPanel fixed to [pos]. All four instances share the
@@ -672,7 +673,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     final pagesStack = _buildPagesStack(
       currentNav,
       databaseRevision,
-      isVerticalNav,
       isVeryNarrowLayout,
     );
 
@@ -688,17 +688,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
               child: panel,
             )
           : panel;
-      final slotChild = useInnerNavGradient
-          ? panelChild
-          : _NavPanelWithDetachedGradient(
-              position: position,
-              theme: theme,
-              gradientAnimation: gradientAnimation,
-              panel: panelChild,
-            );
-      final slotHorizontalExtent =
-          navPanelHorizontalExtent +
-          (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent);
+      final slotChild = panelChild;
+      const slotHorizontalExtent = navPanelHorizontalExtent;
 
       return switch (position) {
         NavBarPosition.left => Positioned(
@@ -708,7 +699,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           child: _NavPositionSlot(
             key: const ValueKey('nav-slot-left'),
             position: position,
-            isActive: navPosition == position,
+            isActive: navPosition == position && !hideNavForSelection,
             child: slotChild,
           ),
         ),
@@ -719,7 +710,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           child: _NavPositionSlot(
             key: const ValueKey('nav-slot-right'),
             position: position,
-            isActive: navPosition == position,
+            isActive: navPosition == position && !hideNavForSelection,
             child: slotChild,
           ),
         ),
@@ -731,7 +722,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           child: _NavPositionSlot(
             key: const ValueKey('nav-slot-top'),
             position: position,
-            isActive: navPosition == position,
+            isActive: navPosition == position && !hideNavForSelection,
             child: slotChild,
           ),
         ),
@@ -743,38 +734,30 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           child: _NavPositionSlot(
             key: const ValueKey('nav-slot-bottom'),
             position: position,
-            isActive: navPosition == position,
+            isActive: navPosition == position && !hideNavForSelection,
             child: slotChild,
           ),
         ),
       };
     }
 
-    final navLayoutAnimationDuration = navPositionChanged
+    final navLayoutAnimationDuration = viewportChanged
+        ? Duration.zero
+        : navPositionChanged
         ? kNavPanelMotionAnimation
         : navMotionAnimationDuration;
-    final pageInsets = switch (navPosition) {
-      NavBarPosition.left => EdgeInsets.only(
-        left:
-            navWidth +
-            (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent),
-      ),
-      NavBarPosition.right => EdgeInsets.only(
-        right:
-            navWidth +
-            (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent),
-      ),
-      NavBarPosition.top => EdgeInsets.only(
-        top:
-            navPanelHorizontalExtent +
-            (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent),
-      ),
-      NavBarPosition.bottom => EdgeInsets.only(
-        bottom:
-            navPanelHorizontalExtent +
-            (useInnerNavGradient ? 0.0 : _kDetachedGradientBarExtent),
-      ),
-    };
+    final pageInsets = hideNavForSelection
+        ? EdgeInsets.zero
+        : switch (navPosition) {
+            NavBarPosition.left => EdgeInsets.only(left: navWidth),
+            NavBarPosition.right => EdgeInsets.only(right: navWidth),
+            NavBarPosition.top => EdgeInsets.only(
+              top: navPanelHorizontalExtent,
+            ),
+            NavBarPosition.bottom => EdgeInsets.only(
+              bottom: navPanelHorizontalExtent,
+            ),
+          };
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -793,23 +776,31 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           children: [
             Column(
               children: [
-                if (_hasDesktopWindowControls) ...[_TitleBar(theme: theme)],
+                if (_hasDesktopWindowControls) ...[AppTitleBar(theme: theme)],
 
                 // Main content with configurable navigation
                 Expanded(
-                  child: ClipRect(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: AnimatedPadding(
-                            duration: navLayoutAnimationDuration,
-                            curve: kNavPanelMotionCurve,
-                            padding: pageInsets,
-                            child: pagesStack,
+                  child: DialogGalleryHost(
+                    child: ClipRect(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: AnimatedPadding(
+                              key: const ValueKey('page-navigation-insets'),
+                              duration: navLayoutAnimationDuration,
+                              curve: kNavPanelMotionCurve,
+                              padding: pageInsets,
+                              child: SelectionRibbonHost(
+                                visible: showSelectionRibbon,
+                                atTop: false,
+                                isVeryNarrowLayout: isVeryNarrowLayout,
+                                child: pagesStack,
+                              ),
+                            ),
                           ),
-                        ),
-                        ...NavBarPosition.values.map(buildNavSlot),
-                      ],
+                          ...NavBarPosition.values.map(buildNavSlot),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -834,227 +825,22 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   Widget _buildPagesStack(
     NavItem currentNav,
     int databaseRevision,
-    bool isVerticalNav,
     bool isVeryNarrowLayout,
   ) {
-    final activeNavKey = ValueKey<String>('active-nav-${currentNav.name}');
-
-    return AnimatedSwitcher(
-      duration: kPageTransition,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) => ClipRect(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (previousChildren.isNotEmpty) previousChildren.last,
-            ...?currentChild == null ? null : [currentChild],
-          ],
-        ),
-      ),
-      transitionBuilder: (child, animation) => _buildPageTransition(
-        child: child,
-        animation: animation,
-        currentNav: currentNav,
-        currentNavKey: activeNavKey,
-        isVerticalNav: isVerticalNav,
-      ),
-      child: KeyedSubtree(
-        key: activeNavKey,
-        child: RepaintBoundary(
-          child: _buildActivePage(
-            currentNav,
-            databaseRevision,
-            isVeryNarrowLayout,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActivePage(
-    NavItem currentNav,
-    int databaseRevision,
-    bool isVeryNarrowLayout,
-  ) {
-    return switch (currentNav) {
-      NavItem.home => HomePage(
-        key: ValueKey<String>('home-page-$databaseRevision'),
-        isVeryNarrowLayout: isVeryNarrowLayout,
-      ),
-      NavItem.addGames => AddGamesPage(
-        key: ValueKey<String>('add-games-page-$databaseRevision'),
-      ),
-      NavItem.updates => UpdatePage(
-        key: ValueKey<String>('update-page-$databaseRevision'),
-      ),
-      NavItem.settings => SettingsPage(
-        key: ValueKey<String>('settings-page-$databaseRevision'),
-      ),
-    };
-  }
-
-  Widget _buildPageTransition({
-    required Widget child,
-    required Animation<double> animation,
-    required NavItem currentNav,
-    required ValueKey<String> currentNavKey,
-    required bool isVerticalNav,
-  }) {
-    final isIncoming = child.key == currentNavKey;
-    final previousIndex = (_previousPageNav ?? currentNav).index;
-    final direction = currentNav.index >= previousIndex ? 1.0 : -1.0;
-
-    return switch (_kShellPageTransitionStyle) {
-      _ShellPageTransitionStyle.pageScroll => _buildPageScrollTransition(
-        child: child,
-        animation: animation,
-        isIncoming: isIncoming,
-        isVerticalNav: isVerticalNav,
-        direction: direction,
-      ),
-      _ShellPageTransitionStyle.fadeThrough => _buildFadeThroughTransition(
-        child: child,
-        animation: animation,
-        isIncoming: isIncoming,
-      ),
-      _ShellPageTransitionStyle.slideFade => _buildSlideFadeTransition(
-        child: child,
-        animation: animation,
-        isIncoming: isIncoming,
-        isVerticalNav: isVerticalNav,
-        direction: direction,
-      ),
-      _ShellPageTransitionStyle.sharedAxis => _buildSharedAxisTransition(
-        child: child,
-        animation: animation,
-        isIncoming: isIncoming,
-      ),
-    };
-  }
-
-  Widget _buildPageScrollTransition({
-    required Widget child,
-    required Animation<double> animation,
-    required bool isIncoming,
-    required bool isVerticalNav,
-    required double direction,
-  }) {
-    final Offset beginOffset;
-    final Offset outgoingOffset;
-    if (isVerticalNav) {
-      // Vertical nav (left/right): slide pages vertically
-      beginOffset = Offset(0, direction);
-      outgoingOffset = Offset(0, -direction);
-    } else {
-      // Horizontal nav (top/bottom): slide pages horizontally
-      beginOffset = Offset(direction, 0);
-      outgoingOffset = Offset(-direction, 0);
-    }
-    final position = animation.drive(
-      Tween<Offset>(
-        begin: isIncoming ? beginOffset : outgoingOffset,
-        end: Offset.zero,
-      ).chain(CurveTween(curve: Curves.easeInOutCubic)),
-    );
-
-    return SlideTransition(position: position, child: child);
-  }
-
-  Animation<double> _buildScaleAnimation({
-    required Animation<double> animation,
-    required double begin,
-    required Curve curve,
-  }) {
-    return animation.drive(
-      Tween<double>(begin: begin, end: 1.0).chain(CurveTween(curve: curve)),
-    );
-  }
-
-  Widget _buildFadeScaleTransition({
-    required Widget child,
-    required Animation<double> opacity,
-    required Animation<double> scale,
-  }) {
-    return FadeTransition(
-      opacity: opacity,
-      child: ScaleTransition(scale: scale, child: child),
-    );
-  }
-
-  Widget _buildFadeThroughTransition({
-    required Widget child,
-    required Animation<double> animation,
-    required bool isIncoming,
-  }) {
-    final opacity = CurvedAnimation(
-      parent: animation,
-      curve: isIncoming
-          ? const Interval(0.18, 1.0, curve: Curves.easeOutCubic)
-          : const Interval(0.0, 0.55, curve: Curves.easeInCubic),
-    );
-
-    final scale = _buildScaleAnimation(
-      animation: animation,
-      begin: isIncoming ? 0.985 : 1.0,
-      curve: isIncoming ? Curves.easeOutCubic : Curves.linear,
-    );
-
-    return _buildFadeScaleTransition(
-      child: child,
-      opacity: opacity,
-      scale: scale,
-    );
-  }
-
-  Widget _buildSlideFadeTransition({
-    required Widget child,
-    required Animation<double> animation,
-    required bool isIncoming,
-    required bool isVerticalNav,
-    required double direction,
-  }) {
-    final incomingOffset = isVerticalNav
-        ? Offset(0, 0.035 * direction)
-        : Offset(0.035 * direction, 0);
-    final outgoingOffset = Offset(
-      -incomingOffset.dx * 0.55,
-      -incomingOffset.dy * 0.55,
-    );
-
-    return FadeTransition(
-      opacity: animation,
-      child: SlideTransition(
-        position: animation.drive(
-          Tween<Offset>(
-            begin: isIncoming ? incomingOffset : outgoingOffset,
-            end: Offset.zero,
-          ).chain(
-            CurveTween(
-              curve: isIncoming ? Curves.easeOutCubic : Curves.easeInCubic,
-            ),
-          ),
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  Widget _buildSharedAxisTransition({
-    required Widget child,
-    required Animation<double> animation,
-    required bool isIncoming,
-  }) {
-    final scale = _buildScaleAnimation(
-      animation: animation,
-      begin: isIncoming ? 0.96 : 1.02,
-      curve: isIncoming ? Curves.easeOutCubic : Curves.easeInCubic,
-    );
-
-    return _buildFadeScaleTransition(
-      child: child,
-      opacity: animation,
-      scale: scale,
+    return AppPageStack(
+      key: ValueKey(databaseRevision),
+      index: currentNav.index,
+      children: [
+        // Const page configurations keep unrelated shell rebuilds from
+        // rebuilding the retained page trees. Providers still update normally.
+        if (isVeryNarrowLayout)
+          const HomePage(isVeryNarrowLayout: true)
+        else
+          const HomePage(),
+        const AddGamesPage(),
+        const UpdatePage(),
+        const SettingsPage(),
+      ],
     );
   }
 
@@ -1063,10 +849,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     PendingPairRequest request,
   ) async {
     if (!context.mounted) return;
-    final result = await showDialog<_IncomingPairDialogResult>(
+    final result = await showAppDialog<IncomingPairDialogResult>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _IncomingPairDialog(request: request),
+      builder: (_) => IncomingPairDialog(request: request),
     );
     if (!context.mounted || result != null) {
       return;
@@ -1076,188 +862,11 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     // Treat that as an explicit decline so the initiator isn't left waiting
     // for request timeout.
     try {
-      await ref.read(deviceSyncProvider.notifier).respondToPairRequest(
-            requestId: request.requestId,
-            accept: false,
-          );
+      await ref
+          .read(deviceSyncProvider.notifier)
+          .respondToPairRequest(requestId: request.requestId, accept: false);
     } catch (_) {
       // Request may already be resolved remotely.
-    }
-  }
-}
-
-enum _IncomingPairDialogResult { declined, resolved }
-
-/// Dialog shown on the receiver side when an incoming pair request arrives.
-///
-/// Closes automatically when the pairing session is resolved — trusted,
-/// canceled, or timed out — via the service event stream.  MITM protection
-/// is preserved: the entered code is encrypted with a key derived from an
-/// x25519 DH exchange between the two devices' static key-pairs (HKDF +
-/// AES-GCM), so a network-level attacker cannot intercept or forge it.
-class _IncomingPairDialog extends ConsumerStatefulWidget {
-  const _IncomingPairDialog({required this.request});
-  final PendingPairRequest request;
-
-  @override
-  ConsumerState<_IncomingPairDialog> createState() =>
-      _IncomingPairDialogState();
-}
-
-class _IncomingPairDialogState extends ConsumerState<_IncomingPairDialog> {
-  final _codeController = TextEditingController();
-  final _focusNode = FocusNode();
-  bool _submitting = false;
-  String? _error;
-  StreamSubscription<SyncEvent>? _eventSub;
-
-  @override
-  void initState() {
-    super.initState();
-    // Request focus after the first frame so DialogInteractionScope's
-    // autofocus has settled and the PairCodeInput TextField gets it.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNode.requestFocus();
-    });
-    _eventSub =
-        ref.read(deviceSyncServiceProvider).syncEvents.listen((event) {
-      if (!mounted) return;
-
-      if (event is PairRequestCodeRejectedEvent &&
-          event.request.requestId == widget.request.requestId) {
-        _codeController.clear();
-        _focusNode.requestFocus();
-        setState(() {
-          _submitting = false;
-          _error = 'Incorrect code. Please try again.';
-        });
-        return;
-      }
-
-      final shouldClose = switch (event) {
-        PairRequestCanceledEvent e
-            when e.request.requestId == widget.request.requestId =>
-          true,
-        PairRequestTimedOutEvent e
-            when e.request.requestId == widget.request.requestId =>
-          true,
-        PeerTrustedEvent e when e.peer.id == widget.request.peer.id => true,
-        _ => false,
-      };
-
-      if (shouldClose) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) { 
-            Navigator.of(context).maybePop(_IncomingPairDialogResult.resolved);
-          }
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _eventSub?.cancel();
-    _codeController.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-    return DialogInteractionScope(
-      onPrimaryAction: _submitting ? null : _sendCode,
-      onDismiss: _submitting ? null : _decline,
-      child: ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.handshake,
-          title: 'Pair Request',
-          theme: theme,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Allow ${widget.request.peer.name} (${widget.request.peer.host})'
-              ' to pair with this device?',
-              style: TextStyle(color: theme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            PairCodeInput(
-              controller: _codeController,
-              focusNode: _focusNode,
-              theme: theme,
-              error: _error,
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-              onSubmitted: (_) {
-                if (!_submitting) _sendCode();
-              },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Enter the 6-digit code shown on the sending device.',
-              style: TextStyle(color: theme.textSecondary, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: _submitting ? null : _decline,
-            child: const Text('Decline'),
-          ),
-          ElevatedButton(
-            onPressed: _submitting ? null : _sendCode,
-            child: const Text('Send Code'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _decline() async {
-    Navigator.of(context).maybePop(_IncomingPairDialogResult.declined);
-    try {
-      await ref.read(deviceSyncProvider.notifier).respondToPairRequest(
-            requestId: widget.request.requestId,
-            accept: false,
-          );
-    } catch (_) {
-      // Request may already be gone (expired or already canceled remotely).
-    }
-  }
-
-  Future<void> _sendCode() async {
-    final code = _codeController.text.trim();
-    if (code.isEmpty) {
-      setState(() => _error = 'Enter the 6-digit pairing code.');
-      return;
-    }
-
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-
-    try {
-      await ref.read(deviceSyncProvider.notifier).respondToPairRequest(
-            requestId: widget.request.requestId,
-            accept: true,
-            enteredVerificationCode: code,
-          );
-      // Stay in submitting state — the event subscription above will close
-      // the dialog on PeerTrustedEvent (success) or close/error on
-      // PairRequestCanceled/TimedOut.  Code rejections reset _submitting.
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _error = error.toString().replaceFirst('DeviceSyncException: ', '');
-      });
     }
   }
 }
@@ -1443,451 +1052,9 @@ class _EdgeSlideTransition extends StatelessWidget {
   }
 }
 
-class _NavPanelWithDetachedGradient extends StatelessWidget {
-  const _NavPanelWithDetachedGradient({
-    required this.position,
-    required this.theme,
-    required this.gradientAnimation,
-    required this.panel,
-  });
-
-  final NavBarPosition position;
-  final AppThemeData theme;
-  final GradientAnimation gradientAnimation;
-  final Widget panel;
-
-  bool get _isVertical =>
-      position == NavBarPosition.left || position == NavBarPosition.right;
-
-  Widget _buildDetachedGradient() {
-    return RepaintBoundary(
-      child: _isVertical
-          ? AnimatedGradientBar(
-              theme: theme,
-              animationStyle: gradientAnimation,
-              isVertical: true,
-              width: _kDetachedGradientBarExtent,
-              flipWaveForLeftVertical: position == NavBarPosition.left,
-            )
-          : AnimatedGradientBar(
-              theme: theme,
-              animationStyle: gradientAnimation,
-              isVertical: false,
-              height: _kDetachedGradientBarExtent,
-            ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final gradient = _buildDetachedGradient();
-
-    if (_isVertical) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: position == NavBarPosition.left
-            ? [panel, gradient]
-            : [gradient, panel],
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: position == NavBarPosition.top
-          ? [panel, gradient]
-          : [gradient, panel],
-    );
-  }
-}
-
-/// Custom title bar
-// Visible for tests only: a public wrapper that creates the private title bar.
-// Keeping the implementation class private avoids exporting internal helpers
-// from the scaffold file. Unit tests may need to instantiate just the title bar
-// without constructing the full scaffold, so use this helper.
+/// Test harness for the shared title bar without constructing the full shell.
 Widget buildTitleBarForTest(AppThemeData theme) {
-  return Material(child: _TitleBar(theme: theme));
-}
-
-class _TitleBar extends ConsumerWidget {
-  const _TitleBar({required this.theme});
-
-  final AppThemeData theme;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // the dragging/ double‑tap region intentionally excludes the window buttons
-    // so that their taps are delivered immediately rather than being delayed by
-    // the ancestor gesture recognizer. an Expanded makes it stretch to take up
-    // all remaining space.
-    return Container(
-      key: const Key('title-bar'),
-      height: 32,
-      decoration: BoxDecoration(
-        color: theme.surface,
-        border: Border(bottom: BorderSide(color: theme.border, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onPanStart: (_) => windowManager.startDragging(),
-              onDoubleTap: () async {
-                if (await windowManager.isMaximized()) {
-                  await windowManager.unmaximize();
-                } else {
-                  await windowManager.maximize();
-                }
-              },
-              behavior: HitTestBehavior.translucent,
-              child: Row(
-                children: [
-                  // App icon and title
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Icon(Icons.gamepad, size: 16, color: theme.accent),
-                        const SizedBox(width: kElementHSpacing),
-                        Text(
-                          AppConstants.appTitle,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Menu button with Import/Export options
-                  _MenuButton(theme: theme),
-                  _SyncButton(theme: theme),
-
-                  const Spacer(),
-                ],
-              ),
-            ),
-          ),
-
-          // Window controls remain outside of the gesture area that handles
-          // double taps so they are responsive immediately.
-          _WindowButton(
-            icon: Icons.remove,
-            theme: theme,
-            onPressed: () => windowManager.minimize(),
-          ),
-          _WindowButton(
-            icon: Icons.crop_square,
-            theme: theme,
-            onPressed: () async {
-              if (await windowManager.isMaximized()) {
-                await windowManager.unmaximize();
-              } else {
-                await windowManager.maximize();
-              }
-            },
-          ),
-          _WindowButton(
-            icon: Icons.close,
-            theme: theme,
-            hoverColor: Colors.red,
-            onPressed: () => windowManager.close(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Menu button with Import/Export options
-class _MenuButton extends StatefulWidget {
-  const _MenuButton({required this.theme});
-
-  final AppThemeData theme;
-
-  @override
-  State<_MenuButton> createState() => _MenuButtonState();
-}
-
-class _MenuButtonState extends State<_MenuButton> {
-  bool _isHovered = false;
-  bool _isPressed = false;
-
-  Future<void> _openMenu() async {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      button.localToGlobal(Offset.zero) & button.size,
-      Offset.zero & overlay.size,
-    );
-
-    final selected = await showAppMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        PopupMenuItem<String>(
-          value: 'import',
-          child: Row(
-            children: [
-              Icon(
-                Icons.file_download,
-                size: 18,
-                color: widget.theme.textPrimary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Import Database',
-                style: TextStyle(color: widget.theme.textPrimary),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'export',
-          child: Row(
-            children: [
-              Icon(
-                Icons.file_upload,
-                size: 18,
-                color: widget.theme.textPrimary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Export Database',
-                style: TextStyle(color: widget.theme.textPrimary),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'change_db',
-          child: Row(
-            children: [
-              Icon(Icons.swap_horiz, size: 18, color: widget.theme.textPrimary),
-              const SizedBox(width: 12),
-              Text(
-                'Change Database',
-                style: TextStyle(color: widget.theme.textPrimary),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    if (!mounted) return;
-
-    if (selected == 'import') {
-      showImportDialog(context);
-    } else if (selected == 'export') {
-      showExportDialog(context);
-    } else if (selected == 'change_db') {
-      showChangeDatabaseDialog(context, widget.theme);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => setState(() => _isPressed = true),
-        onPointerUp: (_) {
-          if (_isPressed) {
-            _openMenu();
-          }
-          setState(() => _isPressed = false);
-        },
-        onPointerCancel: (_) => setState(() => _isPressed = false),
-        child: Container(
-          width: 36,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? widget.theme.accent.withValues(alpha: 0.2)
-                : Colors.transparent,
-          ),
-          child: Icon(
-            Icons.menu,
-            size: 16,
-            color: _isHovered
-                ? widget.theme.accent
-                : widget.theme.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SyncButton extends ConsumerStatefulWidget {
-  const _SyncButton({required this.theme});
-
-  final AppThemeData theme;
-
-  @override
-  ConsumerState<_SyncButton> createState() => _SyncButtonState();
-}
-
-class _SyncButtonState extends ConsumerState<_SyncButton> {
-  bool _isHovered = false;
-  bool _isPressed = false;
-
-  (IconData, Color) _iconForStatus(DeviceSyncStatus status) {
-    switch (status) {
-      case DeviceSyncStatus.discovering:
-        return (Icons.radar, widget.theme.accent);
-      case DeviceSyncStatus.connecting:
-        return (Icons.link, widget.theme.accent);
-      case DeviceSyncStatus.connected:
-        return (Icons.link, widget.theme.secondary);
-      case DeviceSyncStatus.syncing:
-        return (Icons.sync, widget.theme.accent);
-      case DeviceSyncStatus.error:
-        return (Icons.link_off, widget.theme.error);
-      case DeviceSyncStatus.idle:
-        return (Icons.sync_disabled, widget.theme.textSecondary);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sync = ref.watch(deviceSyncProvider).asData?.value;
-    final enabled = sync?.enabled ?? false;
-    final status = sync?.status ?? DeviceSyncStatus.idle;
-    var (iconData, activeColor) = _iconForStatus(status);
-    final statusText = sync?.statusMessage?.toLowerCase() ?? '';
-    final isUnpairNotice =
-        statusText.contains('removed its pairing') ||
-        statusText.contains('device removed');
-
-    // Surface unpair events as a broken link icon to match sync dialog state.
-    if (isUnpairNotice) {
-      iconData = Icons.link_off;
-      activeColor = widget.theme.textSecondary;
-    }
-
-    // When connected but DB files differ, show a broken link to signal out-of-sync.
-    final hasMismatch = sync?.dbMismatchPeerIds.isNotEmpty ?? false;
-    if (!isUnpairNotice && hasMismatch) {
-      iconData = Icons.link_off;
-      activeColor = Colors.orange;
-    }
-
-    final showBusyIndicator =
-        status == DeviceSyncStatus.syncing ||
-        status == DeviceSyncStatus.discovering ||
-        status == DeviceSyncStatus.connecting;
-
-    return Tooltip(
-      message: 'Device Sync',
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => setState(() => _isPressed = true),
-          onPointerUp: (_) {
-            if (_isPressed) {
-              showDeviceSyncDialog(context);
-            }
-            setState(() => _isPressed = false);
-          },
-          onPointerCancel: (_) => setState(() => _isPressed = false),
-          child: Container(
-            width: 36,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _isHovered
-                  ? widget.theme.accent.withValues(alpha: 0.2)
-                  : Colors.transparent,
-            ),
-            child: Center(
-              child: showBusyIndicator
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: AppCircularProgressIndicator(
-                        color: enabled
-                            ? widget.theme.secondary
-                            : widget.theme.textSecondary,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Icon(
-                      iconData,
-                      size: 16,
-                      color: enabled
-                          ? (_isHovered
-                                ? activeColor
-                                : activeColor.withValues(alpha: 0.9))
-                          : (_isHovered
-                                ? widget.theme.accent
-                                : widget.theme.textSecondary),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Window control button
-class _WindowButton extends StatefulWidget {
-  const _WindowButton({
-    required this.icon,
-    required this.theme,
-    required this.onPressed,
-    this.hoverColor,
-  });
-
-  final IconData icon;
-  final AppThemeData theme;
-  final VoidCallback onPressed;
-  final Color? hoverColor;
-
-  @override
-  State<_WindowButton> createState() => _WindowButtonState();
-}
-
-class _WindowButtonState extends State<_WindowButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          width: 46,
-          height: 32,
-          color: _isHovered
-              ? (widget.hoverColor ?? widget.theme.accent).withValues(
-                  alpha: 0.2,
-                )
-              : Colors.transparent,
-          child: Icon(
-            widget.icon,
-            size: 16,
-            color: _isHovered
-                ? (widget.hoverColor ?? widget.theme.accent)
-                : widget.theme.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
+  return Material(child: AppTitleBar(theme: theme));
 }
 
 /// Transparent overlay that adds resize handles at window edges on Linux.

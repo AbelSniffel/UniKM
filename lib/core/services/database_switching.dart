@@ -1,7 +1,7 @@
 /// Types for switching/creating the active database at runtime.
 ///
-/// This is used by the bootstrapper in `main.dart` to rebuild the app's
-/// ProviderScope with a new `AppDatabase` instance.
+/// The application bootstrap handles these requests and publishes the new
+/// connection through the database providers.
 library;
 
 sealed class DatabaseSwitchRequest {

@@ -1,16 +1,13 @@
 /// Common setting row widgets used across settings sections
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/toggle_switch.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../../core/constants/app_constants.dart';
-
-const double kSectionGroupSpacing = 8.0;
+import 'settings_control_cards.dart';
 
 /// Canonical setting text metadata that can drive both UI labels and search index text.
 class SettingTextSpec {
@@ -136,7 +133,7 @@ class SearchableSectionGroupBox extends StatelessWidget {
 // Connected group strip helpers
 // ---------------------------------------------------------------------------
 
-/// An entry in a [SettingsSectionGroups] strip.
+/// An entry in a [SettingsSectionGroups] layout.
 ///
 /// [visible] determines whether this entry participates in the layout at all.
 /// [builder] receives the computed [SectionGroupPosition] and [isAlternate]
@@ -152,10 +149,12 @@ class SectionGroupEntry {
 
 /// Builds a [SectionGroupEntry] for the common searchable section pattern.
 ///
+/// Visibility defaults to the group search match; callers can supply an explicit
+/// value for additional conditions such as platform or feature availability.
 /// The [childBuilder] is evaluated lazily so hidden groups do not build their
 /// content until the connected strip decides they are visible.
 SectionGroupEntry buildSearchableSectionEntry({
-  required bool visible,
+  bool? visible,
   required AppThemeData theme,
   required SettingsSearchGroup group,
   required String searchQuery,
@@ -166,7 +165,14 @@ SectionGroupEntry buildSearchableSectionEntry({
   bool attachesToAbove = false,
 }) {
   return SectionGroupEntry(
-    visible: visible,
+    visible:
+        visible ??
+        (shouldShowSettingsGroup(
+              query: searchQuery,
+              matchesSearch: matchesSearch,
+              group: group,
+            ) ||
+            (extraMatch?.call() ?? false)),
     builder: (position, isAlternate) => SearchableSectionGroupBox(
       theme: theme,
       group: group,
@@ -182,32 +188,8 @@ SectionGroupEntry buildSearchableSectionEntry({
   );
 }
 
-/// Builds a titleless [SectionGroupEntry] that still participates in the
-/// connected strip styling.
-SectionGroupEntry buildTitlelessSectionEntry({
-  required bool visible,
-  required AppThemeData theme,
-  required Widget Function() childBuilder,
-  String searchQuery = '',
-  bool isSearchMatch = false,
-}) {
-  return SectionGroupEntry(
-    visible: visible,
-    builder: (position, isAlternate) => SectionGroupBox(
-      title: '',
-      theme: theme,
-      searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
-      groupPosition: position,
-      alternateBackground: isAlternate,
-      showTitle: false,
-      child: childBuilder(),
-    ),
-  );
-}
-
-/// Renders a list of [SectionGroupEntry] items as a seamlessly connected
-/// strip with zero gap and alternating backgrounds.
+/// Renders the groupboxes inside a settings section as a connected vertical
+/// strip, with zero gap and alternating backgrounds at every screen width.
 ///
 /// Invisible entries (where [SectionGroupEntry.visible] is false) are
 /// filtered out before position/alternation is computed, so the result is
@@ -227,16 +209,31 @@ class SettingsSectionGroups extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = entries.where((e) => e.visible).toList();
+    final visible = entries.indexed.where((entry) => entry.$2.visible).toList();
     if (visible.isEmpty) return const SizedBox.shrink();
+    final spaced = SpacedSettingsGroups.isEnabledOf(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < visible.length; i++)
-          visible[i].builder(
-            _positionFor(i, visible.length, attachesToAbove: attachesToAbove),
-            i.isOdd, // alternating: index 0 = normal, 1 = alternate, 2 = normal…
+          KeyedSubtree(
+            key: ValueKey(visible[i].$1),
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: spaced && i < visible.length - 1 ? kGroupBoxSpacing : 0,
+              ),
+              child: visible[i].$2.builder(
+                spaced
+                    ? SectionGroupPosition.only
+                    : _positionFor(
+                        i,
+                        visible.length,
+                        attachesToAbove: attachesToAbove,
+                      ),
+                !spaced && i.isOdd,
+              ),
+            ),
           ),
       ],
     );
@@ -416,202 +413,21 @@ typedef SpecToggleSettingEntry = ({
 Widget buildSpecToggleSettingList({
   required AppThemeData theme,
   required List<SpecToggleSettingEntry> entries,
-  Set<int> dividerAfterIndices = const <int>{},
 }) {
   if (entries.isEmpty) {
     return const SizedBox.shrink();
   }
 
-  return Column(
+  return SettingsControlWrap(
     children: [
       for (var index = 0; index < entries.length; index++)
-        SpecToggleSettingRow(
+        SettingsToggleCard(
           theme: theme,
-          spec: entries[index].spec,
+          label: entries[index].spec.label,
+          description: entries[index].spec.description,
           value: entries[index].value,
           onChanged: entries[index].onChanged,
-          showDividerBelow: dividerAfterIndices.contains(index),
         ),
-    ],
-  );
-}
-
-typedef SettingsStatusActionCardColumnsBuilder =
-    int Function(double maxWidth, int buttonCount);
-
-class SettingsStatusActionCard extends StatelessWidget {
-  const SettingsStatusActionCard({
-    super.key,
-    required this.theme,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.titleColor,
-    required this.actions,
-    this.subtitle,
-    this.stackedBreakpoint = 500,
-    this.stretchActionsWhenStacked = false,
-    this.stackedColumnsForWidth,
-  });
-
-  final AppThemeData theme;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String? subtitle;
-  final Color titleColor;
-  final List<Widget> actions;
-  final double stackedBreakpoint;
-  final bool stretchActionsWhenStacked;
-  final SettingsStatusActionCardColumnsBuilder? stackedColumnsForWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.3)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final stacked = constraints.maxWidth < stackedBreakpoint;
-          final info = Row(
-            children: [
-              Icon(icon, color: iconColor),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: titleColor,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          );
-
-          if (actions.isEmpty) {
-            return info;
-          }
-
-          final stackedColumns = stackedColumnsForWidth?.call(
-            constraints.maxWidth,
-            actions.length,
-          );
-          final actionGroup = stacked && stackedColumns != null
-              ? _buildEqualWidthActionGrid(
-                  buttons: actions,
-                  maxWidth: constraints.maxWidth,
-                  columns: stackedColumns,
-                )
-              : _buildAdaptiveActionGroup(
-                  buttons: actions,
-                  stacked: stacked,
-                  stretchWhenStacked: stretchActionsWhenStacked,
-                );
-
-          if (stacked) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                info,
-                const SizedBox(height: 12),
-                if (stretchActionsWhenStacked)
-                  actionGroup
-                else
-                  Align(alignment: Alignment.centerRight, child: actionGroup),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(child: info),
-              const SizedBox(width: 12),
-              actionGroup,
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-Widget _buildAdaptiveActionGroup({
-  required List<Widget> buttons,
-  required bool stacked,
-  bool stretchWhenStacked = false,
-}) {
-  if (buttons.isEmpty) {
-    return const SizedBox.shrink();
-  }
-
-  if (stacked && stretchWhenStacked) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var index = 0; index < buttons.length; index++) ...[
-          if (index > 0) const SizedBox(height: kElementVSpacing),
-          buttons[index],
-        ],
-      ],
-    );
-  }
-
-  return Wrap(
-    spacing: kElementHSpacing,
-    runSpacing: kElementVSpacing,
-    alignment: WrapAlignment.end,
-    children: buttons,
-  );
-}
-
-Widget _buildEqualWidthActionGrid({
-  required List<Widget> buttons,
-  required double maxWidth,
-  required int columns,
-}) {
-  if (buttons.isEmpty) {
-    return const SizedBox.shrink();
-  }
-
-  const spacing = kElementHSpacing;
-  const minButtonWidth = 175.0;
-  var effectiveColumns = math.max(1, math.min(columns, buttons.length));
-  var buttonWidth =
-      (maxWidth - spacing * (effectiveColumns - 1)) / effectiveColumns;
-
-  // Reduce columns until buttons are wide enough, allowing extra rows
-  while (buttonWidth < minButtonWidth && effectiveColumns > 1) {
-    effectiveColumns--;
-    buttonWidth =
-        (maxWidth - spacing * (effectiveColumns - 1)) / effectiveColumns;
-  }
-
-  return Wrap(
-    spacing: spacing,
-    runSpacing: spacing,
-    children: [
-      for (final button in buttons) SizedBox(width: buttonWidth, child: button),
     ],
   );
 }
@@ -738,12 +554,15 @@ class ToggleSettingRow extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (trailing != null) ...[trailing!, const SizedBox(width: kElementHSpacing)],
+              if (trailing != null) ...[
+                trailing!,
+                const SizedBox(width: kElementHSpacing),
+              ],
               AppToggleSwitch(value: value, onChanged: onChanged, theme: theme),
             ],
           ),
         ),
-        if (showDividerBelow) const Divider(),
+        if (showDividerBelow) const Divider(height: 16),
       ],
     );
   }

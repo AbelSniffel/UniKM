@@ -30,15 +30,4 @@ class SteamTagUtils {
 
     return created;
   }
-
-  static List<int> mergeCustomAndSteamTagIds({
-    required Iterable<TagEntry> existingTagEntries,
-    required Iterable<Tag> steamTags,
-  }) {
-    final customTagIds = existingTagEntries
-        .where((t) => !t.isSteamTag)
-        .map((t) => t.id);
-    final steamTagIds = steamTags.map((t) => t.id);
-    return [...{...customTagIds, ...steamTagIds}];
-  }
 }

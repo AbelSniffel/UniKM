@@ -1,11 +1,13 @@
-﻿/// Dialog prompting user to unlock an encrypted database.
+/// Shared password prompt for encrypted databases and backups.
 library;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/database/sqlite_file.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/notification_system.dart';
 import '../widgets/password_field.dart';
 
 class StartupDatabaseUnlockResult {
@@ -21,8 +23,7 @@ class StartupDatabaseUnlockResult {
   const StartupDatabaseUnlockResult.changeDatabase(String value)
     : this._(selectedDatabasePath: value);
 
-  const StartupDatabaseUnlockResult.cancelled()
-    : this._(cancelled: true);
+  const StartupDatabaseUnlockResult.cancelled() : this._(cancelled: true);
 
   final String? password;
   final String? selectedDatabasePath;
@@ -56,17 +57,15 @@ class DatabaseUnlockDialog extends StatefulWidget {
     BuildContext context,
     AppThemeData theme, {
     String title = 'Unlock Database',
-    String message = 'This database is encrypted. Enter the password to continue.',
+    String message =
+        'This database is encrypted. Enter the password to continue.',
     bool barrierDismissible = false,
   }) {
-    return showDialog<String?>(
+    return showAppDialog<String?>(
       context: context,
       barrierDismissible: barrierDismissible,
-      builder: (_) => DatabaseUnlockDialog(
-        theme: theme,
-        title: title,
-        message: message,
-      ),
+      builder: (_) =>
+          DatabaseUnlockDialog(theme: theme, title: title, message: message),
     );
   }
 
@@ -75,7 +74,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
     AppThemeData theme, {
     required String currentDatabasePath,
   }) async {
-    final result = await showDialog<Object?>(
+    final result = await showAppDialog<Object?>(
       context: context,
       barrierDismissible: false,
       builder: (_) => DatabaseUnlockDialog(
@@ -116,18 +115,27 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   }
 
   Future<void> _changeDatabase() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFile(
       dialogTitle: 'Open UniKM Database',
-      type: FileType.custom,
-      allowedExtensions: const ['db', 'enc'],
-      allowMultiple: false,
+      type: FileType.any,
     );
 
-    final selectedPath = result?.files.single.path;
+    final selectedPath = result?.path;
     if (!mounted || selectedPath == null || selectedPath.isEmpty) {
       return;
     }
 
+    final lower = selectedPath.toLowerCase();
+    final hasValidExt = lower.endsWith('.db') || lower.endsWith('.enc');
+    if (!hasValidExt && !await isLikelySqliteFile(selectedPath)) {
+      if (!mounted) return;
+      NotificationManager.instance.error(
+        'Unsupported file type. Please select a .db or .enc file.',
+      );
+      return;
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pop(_StartupDatabaseSelection(selectedPath));
   }
 
@@ -135,12 +143,14 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   Widget build(BuildContext context) {
     return ThemedAlertDialog(
       theme: widget.theme,
+      maxWidth: kCompactDialogWidth,
       title: DialogHeader(
         icon: Icons.lock,
         title: widget.title,
         theme: widget.theme,
       ),
-      titleActions: widget.allowChangeDatabase &&
+      titleActions:
+          widget.allowChangeDatabase &&
               widget.currentDatabasePath != null &&
               widget.currentDatabasePath!.isNotEmpty
           ? [
@@ -160,7 +170,10 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(widget.message, style: TextStyle(color: widget.theme.textSecondary)),
+            Text(
+              widget.message,
+              style: TextStyle(color: widget.theme.textSecondary),
+            ),
             const SizedBox(height: kDialogSpacing),
             PasswordField(
               controller: _passwordController,
@@ -168,7 +181,9 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
               autofocus: true,
               onFieldSubmitted: (_) => _submit(),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'Enter your password';
+                if (value == null || value.isEmpty) {
+                  return 'Enter your password';
+                }
                 return null;
               },
             ),

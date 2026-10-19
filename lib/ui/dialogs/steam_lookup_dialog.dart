@@ -7,20 +7,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../../core/database/database.dart';
+import '../../features/steam/application/apply_steam_metadata.dart';
+export '../../features/steam/application/apply_steam_metadata.dart'
+    show SteamApplyOptions;
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
+import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../pages/settings_sections/settings_common.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import '../../core/constants/app_constants.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
+import '../widgets/game_cover_image.dart';
+import '../widgets/steam_lookup_info_menu.dart';
 import '../../core/services/logging.dart';
 
 /// Show Steam lookup dialog for a game
@@ -30,7 +35,7 @@ Future<bool?> showSteamLookupDialog(
   bool forceRefresh = false,
   SteamSearchResult? initialResult,
 }) {
-  return showDialog<bool>(
+  return showAppDialog<bool>(
     context: context,
     builder: (ctx) => SteamLookupDialog(
       game: game,
@@ -40,74 +45,20 @@ Future<bool?> showSteamLookupDialog(
   );
 }
 
-class SteamApplyOptions {
-  const SteamApplyOptions({
-    required this.applyAppId,
-    required this.applyTags,
-    required this.applyImage,
-    required this.applyReviews,
-    required this.applyDeveloper,
-  });
+/// Share the settings cards and their responsive layout, including text scaling.
+class _SteamOptionsGrid extends StatelessWidget {
+  const _SteamOptionsGrid({required this.children});
 
-  final bool applyAppId;
-  final bool applyTags;
-  final bool applyImage;
-  final bool applyReviews;
-  final bool applyDeveloper;
-
-  static const defaults = SteamApplyOptions(
-    applyAppId: true,
-    applyTags: true,
-    applyImage: true,
-    applyReviews: true,
-    applyDeveloper: true,
-  );
-
-  SteamApplyOptions copyWith({
-    bool? applyAppId,
-    bool? applyTags,
-    bool? applyImage,
-    bool? applyReviews,
-    bool? applyDeveloper,
-  }) {
-    return SteamApplyOptions(
-      applyAppId: applyAppId ?? this.applyAppId,
-      applyTags: applyTags ?? this.applyTags,
-      applyImage: applyImage ?? this.applyImage,
-      applyReviews: applyReviews ?? this.applyReviews,
-      applyDeveloper: applyDeveloper ?? this.applyDeveloper,
-    );
-  }
-}
-
-class _SteamOptionRow extends StatelessWidget {
-  const _SteamOptionRow({
-    required this.theme,
-    required this.label,
-    required this.description,
-    required this.value,
-    required this.onChanged,
-    this.showDividerBelow = false,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool showDividerBelow;
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) {
-    return ToggleSettingRow(
-      theme: theme,
-      label: label,
-      description: description,
-      value: value,
-      onChanged: onChanged,
-      showDividerBelow: showDividerBelow,
-    );
-  }
+  Widget build(BuildContext context) => SettingsControlWrap(
+    minimumCardWidth:
+        kInteractionCardMinWidth *
+        MediaQuery.textScalerOf(context).scale(14) /
+        14,
+    children: children,
+  );
 }
 
 List<Tag> _steamPreviewTags(List<String> names) {
@@ -128,9 +79,17 @@ Future<String?> applySteamResultToGame(
   WidgetRef ref,
   Game game,
   SteamSearchResult result,
-  SteamApplyOptions options,
-) async {
-  return _applySteamResultToGameWithRead(ref.read, ref, game, result, options);
+  SteamApplyOptions options, {
+  int? expectedRevision,
+}) async {
+  return _applySteamResultToGameWithRead(
+    ref.read,
+    ref,
+    game,
+    result,
+    options,
+    expectedRevision: expectedRevision,
+  );
 }
 
 /// Apply a SteamSearchResult using a ProviderContainer reader.
@@ -138,14 +97,18 @@ Future<String?> applySteamResultToGameWithContainer(
   ProviderContainer container,
   Game game,
   SteamSearchResult result,
-  SteamApplyOptions options,
-) async {
+  SteamApplyOptions options, {
+  int? expectedRevision,
+  bool Function()? isCancelled,
+}) async {
   return _applySteamResultToGameWithRead(
     container.read,
     container,
     game,
     result,
     options,
+    expectedRevision: expectedRevision,
+    isCancelled: isCancelled,
   );
 }
 
@@ -154,124 +117,38 @@ Future<String?> _applySteamResultToGameWithRead(
   dynamic refLike,
   Game game,
   SteamSearchResult result,
-  SteamApplyOptions options,
-) async {
+  SteamApplyOptions options, {
+  int? expectedRevision,
+  bool Function()? isCancelled,
+}) async {
   try {
-    AppLog.d(
-      '[applySteamResultToGame] Starting for game: "${game.title}" (ID: ${game.id})',
-    );
-    AppLog.d(
-      '[applySteamResultToGame]   Steam result: AppID=${result.appId}, Tags=[${result.tags.join(", ")}]',
-    );
-    AppLog.d(
-      '[applySteamResultToGame]   Options: applyTags=${options.applyTags}',
-    );
-
-    final db = read(requireDatabaseProvider) as AppDatabase;
+    final session = read(databaseNotifierProvider) as DatabaseState;
+    final db = session.database;
+    if (db == null ||
+        (expectedRevision != null && expectedRevision != session.revision)) {
+      throw StateError('Database session changed during the operation');
+    }
     final steamService = read(steamServiceProvider);
-
-    // Download image if needed
-    String? imagePath;
-    if (options.applyImage) {
-      try {
-        imagePath = await steamService.downloadImage(result.appId);
-      } catch (_) {
-        imagePath = null;
-      }
-    }
-
-    // Build tag IDs: keep custom tags, replace Steam tags with fetched ones
-    final existingTagEntries = await db.getTagsForGame(game.id);
-    AppLog.d(
-      '[applySteamResultToGame]   Existing tags from DB: ${existingTagEntries.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
-    );
-
-    // Keep only custom (non-Steam) tags
-    final customTagIds = existingTagEntries
-        .where((t) => !t.isSteamTag)
-        .map((t) => t.id)
-        .toList();
-    AppLog.d(
-      '[applySteamResultToGame]   Custom tag IDs to keep: $customTagIds',
-    );
-    final newTagIds = <int>{...customTagIds};
-
-    if (options.applyTags && result.tags.isNotEmpty) {
-      // Add the newly fetched Steam tags (replacing old Steam tags)
-      AppLog.d(
-        '[applySteamResultToGame]   Applying NEW Steam tags: ${result.tags.join(", ")}',
-      );
-      for (final tagName in result.tags) {
-        final tag = await db.getOrCreateTag(tagName, isSteamTag: true);
-        AppLog.d(
-          '[applySteamResultToGame]     Created/got tag: ${tag.name} (ID: ${tag.id})',
-        );
-        newTagIds.add(tag.id);
-      }
-    } else {
-      // If not applying tags, keep existing Steam tags too
-      final existingSteamTagIds = existingTagEntries
-          .where((t) => t.isSteamTag)
-          .map((t) => t.id);
-      AppLog.d(
-        '[applySteamResultToGame]   NOT applying tags, keeping existing Steam tag IDs: $existingSteamTagIds',
-      );
-      newTagIds.addAll(existingSteamTagIds);
-    }
-
-    AppLog.d(
-      '[applySteamResultToGame]   Final tag IDs to save: ${newTagIds.toList()}',
-    );
-
-    final updatedGame = game.copyWith(
-      isDlc: result.isDlc,
-      steamAppId: options.applyAppId ? result.appId : game.steamAppId,
-      developer: options.applyDeveloper
-          ? (result.developer ?? game.developer)
-          : game.developer,
-      reviewScore: options.applyReviews
-          ? (result.reviewScore ?? game.reviewScore)
-          : game.reviewScore,
-      reviewCount: options.applyReviews
-          ? (result.reviewCount ?? game.reviewCount)
-          : game.reviewCount,
-      coverImage: options.applyImage
-          ? (imagePath ?? result.imageUrl ?? game.coverImage)
-          : game.coverImage,
-    );
-
-    final success = await read(
-      gamesProvider.notifier,
-    ).updateGame(updatedGame, tagIds: newTagIds.toList());
-
-    if (!success) {
-      AppLog.w('[applySteamResultToGame]   FAILED to update game');
-      return 'Failed to update game with Steam data';
-    }
-
-    await read(tagsProvider.notifier).refresh();
-    await read(gamesProvider.notifier).refreshGame(game.id);
-
-    // Verify what was actually saved
-    final verifyTags = await db.getTagsForGame(game.id);
-    AppLog.i(
-      '[applySteamResultToGame]   VERIFIED tags after save: ${verifyTags.map((t) => '${t.name}(ID:${t.id},${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
-    );
-
-    await persistEncryptedDbIfNeeded(refLike);
-
+    await ApplySteamMetadata(
+      database: db,
+      isCurrent: () =>
+          read(databaseNotifierProvider).revision == session.revision &&
+          !(isCancelled?.call() ?? false),
+      downloadImage: (appId) => steamService.downloadImage(appId),
+    ).apply(game.id, result, options);
+    await persistEncryptedDbIfNeeded(refLike, database: db);
     return null;
   } catch (e) {
     return e.toString();
   }
 }
 
-/// Show a two-button options dialog when cached Steam data exists.
-/// Returns a map with keys: 'choice' -> 'cache'|'fresh', 'cached' -> SteamSearchResult?, 'applyToAll' -> bool, 'options' -> SteamApplyOptions.
+/// Show Steam fetch options, including a cache choice when cached data exists.
+/// Returns a map with keys: 'choice' -> 'cache'|'fresh'|'cancel',
+/// 'cached' -> SteamSearchResult?, 'options' -> SteamApplyOptions.
 Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
   BuildContext context, {
   required String title,
-  bool showApplyToAll = false,
   bool showApplyOptions = true,
 }) async {
   final container = ProviderScope.containerOf(context);
@@ -281,15 +158,19 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
   DateTime? cachedAt;
 
   // Only use title-based cache/lookups. AppID-based lookups are removed for consistency.
-  cached = await getCachedResultForTitle(title);
-  cachedAt = await getCachedAtForTitle(title);
+  final preview = AppDialogPreviewScope.maybeOf(context);
+  cached = preview != null
+      ? preview.steamResult
+      : await getCachedResultForTitle(title);
+  cachedAt = preview != null
+      ? preview.steamCachedAt
+      : await getCachedAtForTitle(title);
 
-  // If no cache and no options/applyToAll needed, return immediately
-  if (cached == null && !showApplyOptions && !showApplyToAll) {
+  // If no cache and no apply options are needed, return immediately.
+  if (cached == null && !showApplyOptions) {
     return {
       'choice': 'fresh',
       'cached': null,
-      'applyToAll': false,
       'options': SteamApplyOptions.defaults,
     };
   }
@@ -298,21 +179,18 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
     return {
       'choice': 'fresh',
       'cached': null,
-      'applyToAll': false,
       'options': SteamApplyOptions.defaults,
     };
   }
 
   final theme = container.read(themeProvider);
 
-  // Use a stateful builder to capture the 'apply to all' checkbox state when requested
-  bool applyToAll = false;
   bool applyAppId = true;
   bool applyTags = true;
   bool applyImage = true;
   bool applyDeveloper = true;
   bool applyReviews = true;
-  final choice = await showDialog<String>(
+  final choice = await showAppDialog<String>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) {
@@ -356,45 +234,38 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                       title: 'Apply Options',
                       theme: theme,
                       titleIcon: Icons.tune,
-                      groupPosition: showApplyToAll
-                          ? SectionGroupPosition.first
-                          : SectionGroupPosition.only,
-                      child: Column(
+                      child: _SteamOptionsGrid(
                         children: [
-                          _SteamOptionRow(
+                          SettingsToggleCard(
                             theme: theme,
                             label: 'AppID',
                             description: 'Save Steam AppID',
                             value: applyAppId,
                             onChanged: (v) => setState2(() => applyAppId = v),
-                            showDividerBelow: false,
                           ),
-                          _SteamOptionRow(
+                          SettingsToggleCard(
                             theme: theme,
                             label: 'Tags',
                             description: 'Add Steam tags',
                             value: applyTags,
                             onChanged: (v) => setState2(() => applyTags = v),
-                            showDividerBelow: false,
                           ),
-                          _SteamOptionRow(
+                          SettingsToggleCard(
                             theme: theme,
                             label: 'Cover Image',
                             description: 'Download Steam header image',
                             value: applyImage,
                             onChanged: (v) => setState2(() => applyImage = v),
-                            showDividerBelow: false,
                           ),
-                          _SteamOptionRow(
+                          SettingsToggleCard(
                             theme: theme,
                             label: 'Developer',
                             description: 'Add game developer name',
                             value: applyDeveloper,
                             onChanged: (v) =>
                                 setState2(() => applyDeveloper = v),
-                            showDividerBelow: false,
                           ),
-                          _SteamOptionRow(
+                          SettingsToggleCard(
                             theme: theme,
                             label: 'Reviews',
                             description: 'Score and review count',
@@ -405,38 +276,18 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                       ),
                     ),
                   ],
-                  if (showApplyToAll) ...[
-                    SectionGroupBox(
-                      title: 'Batch Action',
-                      theme: theme,
-                      titleIcon: Icons.done_all,
-                      groupPosition: showApplyOptions
-                          ? SectionGroupPosition.last
-                          : SectionGroupPosition.only,
-                      alternateBackground: true,
-                      child: _SteamOptionRow(
-                        theme: theme,
-                        label: 'Apply to all remaining',
-                        description:
-                            'Reuse this choice and these apply options for the rest of the batch',
-                        value: applyToAll,
-                        onChanged: (value) =>
-                            setState2(() => applyToAll = value),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
             actions: [
               if (cached != null)
-                TextButton(
+                OutlinedButton(
                   onPressed: () => Navigator.pop(ctx, 'cache'),
                   child: Text('Use Cache'),
                 ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, 'fresh'),
-                child: Text(cached != null ? 'Fetch Fresh' : 'OK'),
+                child: Text(cached != null ? 'Fetch Fresh' : 'Fetch'),
               ),
             ],
           );
@@ -449,7 +300,6 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
     return {
       'choice': 'cancel',
       'cached': null,
-      'applyToAll': false,
       'options': SteamApplyOptions.defaults,
     };
   }
@@ -463,19 +313,9 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
   );
 
   if (choice == 'cache') {
-    return {
-      'choice': 'cache',
-      'cached': cached,
-      'applyToAll': applyToAll,
-      'options': options,
-    };
+    return {'choice': 'cache', 'cached': cached, 'options': options};
   }
-  return {
-    'choice': 'fresh',
-    'cached': null,
-    'applyToAll': applyToAll,
-    'options': options,
-  };
+  return {'choice': 'fresh', 'cached': null, 'options': options};
 }
 
 class SteamFetchResolution {
@@ -490,10 +330,6 @@ class SteamFetchResolution {
   final SteamSearchResult? result;
   final bool usedCache;
   final DateTime? cachedAt;
-}
-
-String _normalizeBatchFetchTitleKey(String title) {
-  return cleanTitleForSearch(title).replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 Future<SteamFetchResolution> resolveSteamResultForTitle(
@@ -516,7 +352,6 @@ Future<SteamFetchResolution> resolveSteamResultForTitle(
     final choice = await showSteamFetchOptionsDialog(
       context,
       title: title,
-      showApplyToAll: false,
       showApplyOptions: false,
     );
 
@@ -552,6 +387,7 @@ Future<void> performSingleSteamLookup(
   WidgetRef ref,
   Game game,
 ) async {
+  final sessionRevision = ref.read(databaseNotifierProvider).revision;
   final batchNotifier = ref.read(batchFetchProvider.notifier);
   batchNotifier.startBatch([game.id]);
   batchNotifier.setProcessing(game.id);
@@ -563,7 +399,9 @@ Future<void> performSingleSteamLookup(
       title: game.title,
       steamService: steamService,
     );
-    if (!context.mounted || resolution.cancelled) {
+    if (!context.mounted ||
+        resolution.cancelled ||
+        ref.read(databaseNotifierProvider).revision != sessionRevision) {
       return;
     }
 
@@ -586,12 +424,16 @@ Future<void> performSingleSteamLookup(
 /// This central helper is used by individual game cards and by the
 /// selection action bar so both paths share the exact same behaviour,
 /// notifications and cancellation handling.
+/// The first confirmed fetch choice and apply options are reused for the batch.
 Future<void> performSteamBatchLookup(
   BuildContext context,
   List<Game> targets, {
   bool promptForOptions = true,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
+  final sessionRevision = container.read(databaseNotifierProvider).revision;
+  bool sessionChanged() =>
+      container.read(databaseNotifierProvider).revision != sessionRevision;
   final batchNotifier = container.read(batchFetchProvider.notifier);
 
   final steamTargets = targets.where((g) => g.platform == 'Steam').toList();
@@ -626,7 +468,6 @@ Future<void> performSteamBatchLookup(
   int failed = 0;
   final freshResultCache = <String, SteamSearchResult>{};
 
-  bool applyToAll = false;
   String? choiceForAll;
   SteamApplyOptions optionsForAll = SteamApplyOptions.defaults;
 
@@ -636,7 +477,7 @@ Future<void> performSteamBatchLookup(
     final gameTitle = gameSnapshot['title'] as String;
 
     // Check for cancellation (user-initiated via notification button)
-    if (batchNotifier.isCancelled) break;
+    if (batchNotifier.isCancelled || sessionChanged()) break;
 
     // Mark this game as processing
     batchNotifier.setProcessing(gameId);
@@ -672,7 +513,7 @@ Future<void> performSteamBatchLookup(
       choice = 'fresh';
       cached = null;
       options = SteamApplyOptions.defaults;
-    } else if (!applyToAll) {
+    } else if (choiceForAll == null) {
       if (!context.mounted) {
         // Continue processing without dialog - use fresh fetch
         choice = 'fresh';
@@ -682,11 +523,10 @@ Future<void> performSteamBatchLookup(
         final selection = await showSteamFetchOptionsDialog(
           context,
           title: gameTitle,
-          showApplyToAll: true,
         );
 
         // Check cancellation after dialog
-        if (batchNotifier.isCancelled) break;
+        if (batchNotifier.isCancelled || sessionChanged()) break;
 
         choice = selection['choice'] as String;
         if (choice == 'cancel') {
@@ -699,20 +539,16 @@ Future<void> performSteamBatchLookup(
             (selection['options'] as SteamApplyOptions?) ??
             SteamApplyOptions.defaults;
 
-        final pickedApplyToAll = selection['applyToAll'] == true;
-        if (pickedApplyToAll) {
-          applyToAll = true;
-          choiceForAll = choice;
-          optionsForAll = options;
-        }
+        choiceForAll = choice;
+        optionsForAll = options;
       }
     } else {
-      choice = choiceForAll ?? 'fresh';
+      choice = choiceForAll;
       options = optionsForAll;
       if (choice == 'cache') {
         cached = await getCachedResultForTitle(gameTitle);
         // Check cancellation after cache lookup
-        if (batchNotifier.isCancelled) break;
+        if (batchNotifier.isCancelled || sessionChanged()) break;
       } else {
         cached = null;
       }
@@ -734,7 +570,7 @@ Future<void> performSteamBatchLookup(
 
     // Resolve result for the chosen option
     SteamSearchResult? result;
-    final batchCacheKey = _normalizeBatchFetchTitleKey(game.title);
+    final batchCacheKey = cleanTitleForSearch(game.title);
     if (choice == 'cache' && cached != null) {
       result = cached;
       // Populate freshResultCache so that a later game with the same title
@@ -752,7 +588,7 @@ Future<void> performSteamBatchLookup(
     }
 
     // Check cancellation after fetch
-    if (batchNotifier.isCancelled) break;
+    if (batchNotifier.isCancelled || sessionChanged()) break;
 
     if (result == null) {
       AppLog.d('[SteamBatchFetch]   Result: NOT FOUND');
@@ -763,13 +599,15 @@ Future<void> performSteamBatchLookup(
 
     // Apply the fetched result via the container-friendly API
     // Check cancellation before the DB write to avoid a pointless write.
-    if (batchNotifier.isCancelled) break;
+    if (batchNotifier.isCancelled || sessionChanged()) break;
     try {
       final applyError = await applySteamResultToGameWithContainer(
         container,
         game,
         result,
         options,
+        expectedRevision: sessionRevision,
+        isCancelled: () => batchNotifier.isCancelled,
       );
 
       if (applyError != null) {
@@ -788,7 +626,7 @@ Future<void> performSteamBatchLookup(
     }
 
     // Check cancellation after applying
-    if (batchNotifier.isCancelled) break;
+    if (batchNotifier.isCancelled || sessionChanged()) break;
   }
 
   AppLog.i(
@@ -796,7 +634,9 @@ Future<void> performSteamBatchLookup(
   );
 
   handle.setProgress(1);
-  unawaited(DeadlineNotificationService.instance.clearFetchProgressNotification());
+  unawaited(
+    DeadlineNotificationService.instance.clearFetchProgressNotification(),
+  );
   if (batchNotifier.isCancelled) {
     // Cancelled: clear state immediately so overlays disappear without delay.
     batchNotifier.endBatch();
@@ -839,6 +679,7 @@ class SteamLookupDialog extends ConsumerStatefulWidget {
 }
 
 class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
+  late final int _sessionRevision;
   bool _isSearching = false;
   bool _isApplying = false;
   SteamSearchResult? _result;
@@ -854,6 +695,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   @override
   void initState() {
     super.initState();
+    _sessionRevision = ref.read(databaseNotifierProvider).revision;
     if (widget.initialResult != null) {
       _result = widget.initialResult;
       _isSearching = false;
@@ -914,6 +756,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         widget.game,
         _result!,
         options,
+        expectedRevision: _sessionRevision,
       );
 
       if (error != null) {
@@ -948,48 +791,22 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         title: 'Steam Lookup',
         theme: theme,
       ),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Game being looked up
-              SectionGroupBox(
-                title: 'Looked Up',
-                theme: theme,
-                titleIcon: Icons.search,
-                groupPosition: SectionGroupPosition.first,
-                child: Text(
-                  widget.game.title,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-
-              // Search status / results
-              if (_isSearching)
-                _buildSearchingState(theme)
-              else if (_error != null)
-                _buildErrorState(theme)
-              else if (_result != null)
-                _buildResultState(theme),
-            ],
-          ),
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_isSearching)
+            _buildSearchingState(theme)
+          else if (_error != null)
+            _buildErrorState(theme)
+          else if (_result != null)
+            _buildResultState(theme),
+        ],
       ),
       actions: [
         if (_result != null && !_isSearching)
           ElevatedButton(
             onPressed: _isApplying ? null : _applyData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.accent,
-              foregroundColor: Colors.white,
-            ),
             child: _isApplying
                 ? const SizedBox(
                     width: 20,
@@ -1007,11 +824,22 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       title: 'Searching Steam...',
       theme: theme,
       titleIcon: FontAwesomeIcons.steam.data,
-      groupPosition: SectionGroupPosition.last,
+      titleLocation: SectionTitleLocation.top,
       alternateBackground: true,
-      child: const Padding(
+      child: Padding(
         padding: EdgeInsets.all(24),
-        child: Center(child: AppCircularProgressIndicator()),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Center(child: AppCircularProgressIndicator()),
+            const SizedBox(height: kDialogSpacing),
+            Text(
+              widget.game.title,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1020,12 +848,21 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     return SectionGroupBox(
       title: 'Search Failed',
       theme: theme,
-      titleIcon: Icons.error_outline,
-      groupPosition: SectionGroupPosition.last,
+      titleIcon: Icons.error,
+      titleLocation: SectionTitleLocation.top,
       alternateBackground: true,
       child: Column(
         children: [
-          Icon(Icons.error_outline, color: theme.error, size: 48),
+          Icon(Icons.error, color: theme.error, size: 48),
+          const SizedBox(height: kDialogSpacing),
+          Text(
+            widget.game.title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: kDialogSpacing),
           Text(
             _error!,
@@ -1044,158 +881,97 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   }
 
   Widget _buildResultState(AppThemeData theme) {
-    final imageUrl = _result?.imageUrl?.trim() ?? '';
+    final result = _result!;
+    final reviewCount = result.reviewCount;
+    final reviews = [
+      if (result.reviewScore != null) '${result.reviewScore}% positive',
+      if (reviewCount != null)
+        '${NumberFormat.compact().format(reviewCount)} reviews',
+    ].join(' · ');
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Found game info
         SectionGroupBox(
           title: 'Found on Steam',
           theme: theme,
           titleIcon: FontAwesomeIcons.steam.data,
-          groupPosition: SectionGroupPosition.middle,
-          alternateBackground: true,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          titleLocation: SectionTitleLocation.top,
+          groupPosition: SectionGroupPosition.first,
+          headerCrossAxisAlignment: CrossAxisAlignment.center,
+          trailing: SteamLookupInfoMenu(
+            theme: theme,
+            searchedTitle: widget.game.title,
+            result: result,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Game image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-                child: (imageUrl.isNotEmpty && imageUrl.startsWith('http'))
-                    ? Image.network(
-                        imageUrl,
-                        width: 120,
-                        height: 56,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          width: 120,
-                          height: 56,
-                          color: theme.surface,
-                          child: Icon(
-                            Icons.image_not_supported,
-                            color: theme.textHint,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: 120,
-                        height: 56,
-                        color: theme.surface,
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: theme.textHint,
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 16),
-              // Game details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _result!.name,
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'AppID: ${_result!.appId}',
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    if (_result!.isDlc) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'DLC',
-                          style: TextStyle(
-                            color: theme.accent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+              _buildGameSummary(theme, result),
+              if (result.tags.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Steam tags (${result.tags.length})',
+                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
                 ),
-              ),
+                const SizedBox(height: 6),
+                TagList(
+                  tags: _steamPreviewTags(result.tags),
+                  theme: theme,
+                  allSelected: true,
+                  maxHeight: 96,
+                ),
+              ],
             ],
           ),
         ),
-
-        // Tags preview
-        if (_result!.tags.isNotEmpty) ...[
-          SectionGroupBox(
-            title: 'Steam Tags (${_result!.tags.length})',
-            theme: theme,
-            titleIcon: FontAwesomeIcons.steam.data,
-            groupPosition: SectionGroupPosition.middle,
-            child: TagList(
-              tags: _steamPreviewTags(_result!.tags),
-              theme: theme,
-              allSelected: true,
-            ),
-          ),
-        ],
-
-        // Apply options
         SectionGroupBox(
           title: 'Apply Options',
           theme: theme,
           titleIcon: Icons.tune,
+          titleLocation: SectionTitleLocation.top,
           groupPosition: SectionGroupPosition.last,
-          alternateBackground: _result!.tags.isNotEmpty,
-          child: Column(
+          alternateBackground: true,
+          child: _SteamOptionsGrid(
             children: [
               _buildOption(
                 theme,
                 'AppID',
-                'Save Steam AppID: ${_result!.appId}',
+                'Save AppID ${result.appId}',
                 _applyAppId,
                 (v) => setState(() => _applyAppId = v),
               ),
-              if (_result!.tags.isNotEmpty)
+              if (result.tags.isNotEmpty)
                 _buildOption(
                   theme,
                   'Tags',
-                  'Add ${_result!.tags.length} Steam tags',
+                  'Add ${result.tags.length} Steam tags',
                   _applyTags,
                   (v) => setState(() => _applyTags = v),
                 ),
               _buildOption(
                 theme,
                 'Cover Image',
-                'Download Steam header image',
+                'Steam header artwork',
                 _applyImage,
                 (v) => setState(() => _applyImage = v),
               ),
               _buildOption(
                 theme,
                 'Developer',
-                'Save Steam developer name',
+                result.developer?.trim().isNotEmpty == true
+                    ? result.developer!
+                    : 'No developer supplied',
                 _applyDeveloper,
                 (v) => setState(() => _applyDeveloper = v),
               ),
-              if (_result!.reviewScore != null)
+              if (reviews.isNotEmpty)
                 _buildOption(
                   theme,
                   'Reviews',
-                  'Score: ${_result!.reviewScore}%',
+                  reviews,
                   _applyReviews,
                   (v) => setState(() => _applyReviews = v),
                 ),
@@ -1206,6 +982,77 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
+  Widget _buildGameSummary(
+    AppThemeData theme,
+    SteamSearchResult result,
+  ) => LayoutBuilder(
+    builder: (context, constraints) {
+      final imageWidth = (constraints.maxWidth * 0.3).clamp(64.0, 148.0);
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+            child: SizedBox(
+              width: imageWidth,
+              height: imageWidth * 215 / 460,
+              child: GameCoverImage(theme: theme, coverImage: result.imageUrl),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.name,
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (result.developer?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    result.developer!,
+                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _detailBadge(theme, 'AppID ${result.appId}'),
+                    if (result.isDlc) _detailBadge(theme, 'DLC'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  Widget _detailBadge(AppThemeData theme, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: theme.accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(theme.cornerRadius),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: theme.accent,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+
   Widget _buildOption(
     AppThemeData theme,
     String label,
@@ -1213,7 +1060,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     bool value,
     ValueChanged<bool> onChanged,
   ) {
-    return _SteamOptionRow(
+    return SettingsToggleCard(
       theme: theme,
       label: label,
       description: description,

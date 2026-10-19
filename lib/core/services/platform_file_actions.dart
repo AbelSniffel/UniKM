@@ -3,6 +3,7 @@ library;
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -22,7 +23,6 @@ class PlatformFileActions {
   const PlatformFileActions._();
 
   static bool get isMobilePlatform => Platform.isAndroid || Platform.isIOS;
-  static bool get isAndroidMobile => Platform.isAndroid;
 
   static bool get supportsDragAndDrop => !isMobilePlatform;
 
@@ -33,10 +33,9 @@ class PlatformFileActions {
     String mobileSubdirectory = 'exports',
   }) async {
     if (!isMobilePlatform) {
-      final outputPath = await FilePicker.saveFile(
+      final outputPath = await _selectDesktopSavePath(
         dialogTitle: dialogTitle,
         fileName: fileName,
-        type: FileType.custom,
         allowedExtensions: allowedExtensions,
       );
 
@@ -87,10 +86,9 @@ class PlatformFileActions {
     required List<String> allowedExtensions,
   }) async {
     if (!isMobilePlatform) {
-      final outputPath = await FilePicker.saveFile(
+      final outputPath = await _selectDesktopSavePath(
         dialogTitle: dialogTitle,
         fileName: fileName,
-        type: FileType.custom,
         allowedExtensions: allowedExtensions,
       );
 
@@ -101,10 +99,27 @@ class PlatformFileActions {
       return outputPath;
     }
 
-    return createManagedFilePath(
-      fileName: fileName,
-      subdirectory: 'databases',
+    return createManagedFilePath(fileName: fileName, subdirectory: 'databases');
+  }
+
+  static Future<String?> _selectDesktopSavePath({
+    required String dialogTitle,
+    required String fileName,
+    required List<String> allowedExtensions,
+  }) async {
+    // FilePicker.saveFile writes bytes immediately. Select a location without
+    // touching the destination until export or database creation has succeeded.
+    final location = await file_selector.getSaveLocation(
+      suggestedName: fileName,
+      acceptedTypeGroups: [
+        file_selector.XTypeGroup(
+          label: dialogTitle,
+          extensions: allowedExtensions,
+        ),
+      ],
     );
+    final path = location?.path;
+    return path == null || path.isEmpty ? null : path;
   }
 
   static Future<String> createUniquePathInDirectory({
@@ -137,7 +152,11 @@ class PlatformFileActions {
     String subdirectory = 'exports',
   }) async {
     final rootDirectory = await getApplicationDocumentsDirectory();
-    final targetDirectoryPath = p.join(rootDirectory.path, 'UniKM', subdirectory);
+    final targetDirectoryPath = p.join(
+      rootDirectory.path,
+      'UniKM',
+      subdirectory,
+    );
     return createUniquePathInDirectory(
       directoryPath: targetDirectoryPath,
       fileName: fileName,
@@ -150,23 +169,14 @@ class PlatformFileActions {
     String? text,
   }) async {
     final result = await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: subject,
-        text: text,
-      ),
+      ShareParams(files: [XFile(file.path)], subject: subject, text: text),
     );
 
     return result.status == ShareResultStatus.success;
   }
 
-  static Future<void> shareText(
-    String text, {
-    String? subject,
-  }) async {
-    await SharePlus.instance.share(
-      ShareParams(text: text, subject: subject),
-    );
+  static Future<void> shareText(String text, {String? subject}) async {
+    await SharePlus.instance.share(ShareParams(text: text, subject: subject));
   }
 
   static Future<bool> openDirectory(String directoryPath) async {

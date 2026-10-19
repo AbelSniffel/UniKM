@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,9 +9,12 @@ import '../../core/services/deadline_notification_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../providers/app_providers.dart';
 import '../pages/update_page.dart';
-import '../../core/constants/app_constants.dart';
+import '../dialogs/dialog_gallery.dart';
+import '../../core/theme/app_theme.dart';
 import 'app_fps_counter.dart';
+import 'app_tab_bar.dart';
 import 'notification_system.dart';
+import 'update_status_icons.dart';
 
 class DevWindowOverlay extends ConsumerStatefulWidget {
   const DevWindowOverlay({super.key, required this.onClose});
@@ -41,7 +47,9 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   static NotificationHandle? _fetchPreviewHandle;
   static int _fetchPreviewStep = 0;
 
-  Offset position = const Offset(100, 100);
+  final _position = ValueNotifier(const Offset(100, 100));
+  Offset? _dragOffset;
+  int _tab = 0;
 
   static const List<({String title, String message, double progress})>
   _fetchPreviewStates = [
@@ -121,9 +129,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         );
 
     if (cleared == 0) {
-      NotificationManager.instance.warning(
-        'No selected games were updated',
-      );
+      NotificationManager.instance.warning('No selected games were updated');
       return;
     }
 
@@ -133,8 +139,9 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   }
 
   Future<void> _openWindowsFirewallAllowedApps() async {
-    final launched =
-        await ref.read(deviceSyncProvider.notifier).openWindowsFirewallAllowedApps();
+    final launched = await ref
+        .read(deviceSyncProvider.notifier)
+        .openWindowsFirewallAllowedApps();
     if (!launched && mounted) {
       NotificationManager.instance.error(
         'Could not open Windows Firewall Allowed Apps.',
@@ -153,519 +160,474 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-    final isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-    final selectedGames = ref.watch(selectedGamesProvider);
-    final batchFetchActive = ref.watch(
-      batchFetchProvider.select((state) => state.isActive),
-    );
-    final showFpsCounter = ref.watch(
-      settingsProvider.select(
-        (s) =>
-            (s[SettingsKeys.showFpsCounter] as bool?) ??
-            DefaultSettings.showFpsCounter,
-      ),
-    );
-    final showGameDetailsSkmId = ref.watch(
-      settingsProvider.select(
-        (s) =>
-            (s[SettingsKeys.showGameDetailsSkmId] as bool?) ??
-            DefaultSettings.showGameDetailsSkmId,
-      ),
-    );
-
-    return Positioned(
-      left: position.dx,
-      top: position.dy,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: 365,
-          decoration: BoxDecoration(
-            color: theme.surface.withValues(alpha: 0.98),
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            boxShadow: [
-              BoxShadow(
-                color: theme.accent.withValues(alpha: 0.30),
-                blurRadius: 8,
-                spreadRadius: 3,
-                offset: const Offset(0, 0),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              //  Drag handle / header
-              GestureDetector(
-                onPanUpdate: (d) => setState(() => position += d.delta),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.accent.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(theme.cornerRadius),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.developer_mode, size: 18, color: theme.accent),
-                      const SizedBox(width: kElementHSpacing),
-                      Text(
-                        'Dev Tools',
-                        style: TextStyle(
-                          color: theme.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (showFpsCounter) ...[
-                        AppFpsCounter(
-                          theme: theme,
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: kElementHSpacing),
-                      ],
-                      _CloseButton(onPressed: widget.onClose, theme: theme),
-                    ],
-                  ),
-                ),
-              ),
-
-              //  Body
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    //  UPDATES
-                    _SectionHeader(
-                      label: 'Updates',
-                      icon: Icons.system_update,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DevButton(
-                            label: 'Check',
-                            icon: Icons.refresh,
-                            theme: theme,
-                            onPressed: () {
-                              ref
-                                  .read(updateProvider.notifier)
-                                  .checkForUpdates();
-                              NotificationManager.instance.info(
-                                'Checking for updates',
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _DevButton(
-                            label: 'Clear State',
-                            icon: Icons.clear_all,
-                            theme: theme,
-                            onPressed: () =>
-                                ref.read(updateProvider.notifier).clearUpdate(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _CompactDevButton(
-                          label: 'Idle',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.idle),
-                        ),
-                        _CompactDevButton(
-                          label: 'Checking',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.checking),
-                        ),
-                        _CompactDevButton(
-                          label: 'Up To Date',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.upToDate),
-                        ),
-                        _CompactDevButton(
-                          label: 'Available',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.updateAvailable),
-                        ),
-                        _CompactDevButton(
-                          label: 'Downloading',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.downloading),
-                        ),
-                        _CompactDevButton(
-                          label: 'Downloaded',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.downloaded),
-                        ),
-                        _CompactDevButton(
-                          label: 'Error',
-                          theme: theme,
-                          onPressed: () => ref
-                              .read(updateProvider.notifier)
-                              .previewState(UpdatePreviewState.error),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    //  NOTIFICATIONS
-                    _SectionHeader(
-                      label: 'Notifications',
-                      icon: Icons.notifications_outlined,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DevButton(
-                            label: 'In-App Notification',
-                            icon: Icons.message_outlined,
-                            theme: theme,
-                            onPressed: () => NotificationManager.instance.info(
-                              'Test in-app notification from Dev Tools.',
-                              title: 'Dev Test',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _DevButton(
-                            label: 'OS Notify',
-                            icon: Icons.desktop_windows_outlined,
-                            theme: theme,
-                            onPressed: () => DeadlineNotificationService
-                                .instance
-                                .sendTestOsNotification(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DevButton(
-                            label: 'Run Deadline Check',
-                            icon: Icons.timer_outlined,
-                            theme: theme,
-                            onPressed: () => DeadlineNotificationService
-                                .instance
-                                .triggerAndRestart(ref),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _DevButton(
-                            label: 'Deadline Sim',
-                            icon: Icons.timelapse,
-                            theme: theme,
-                            onPressed: () async {
-                              await DeadlineNotificationService.instance
-                                  .simulateDeadlineNotifications(ref);
-                              NotificationManager.instance.info(
-                                'Deadline notifications simulated',
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DevButton(
-                            label: _hasActiveFetchPreview
-                                ? 'Advance Fetch Preview'
-                                : 'Show Fetch Preview',
-                            icon: Icons.cloud_download_outlined,
-                            theme: theme,
-                            onPressed: _showOrAdvanceFetchPreview,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    if (isWindows) ...[
-                      const SizedBox(height: 12),
-
-                      //  SYNC
-                      _SectionHeader(
-                        label: 'Firewall',
-                        icon: Icons.shield_outlined,
-                        theme: theme,
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DevButton(
-                              label: 'Allowed Apps',
-                              icon: Icons.shield_outlined,
-                              theme: theme,
-                              onPressed: _openWindowsFirewallAllowedApps,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: _DevButton(
-                              label: 'Advanced Rules',
-                              icon: Icons.admin_panel_settings_outlined,
-                              theme: theme,
-                              onPressed: _openWindowsFirewallAdvancedRules,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-
-                    const SizedBox(height: 12),
-
-                    //  LIBRARY
-                    _SectionHeader(
-                      label: 'Library',
-                      icon: Icons.video_library_outlined,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 6),
-                    _DevButton(
-                      label: selectedGames.isEmpty
-                          ? 'Clear Selected Steam Data'
-                          : 'Clear Steam Data (${selectedGames.length})',
-                      icon: Icons.delete_outline,
-                      theme: theme,
-                      onPressed: selectedGames.isEmpty || batchFetchActive
-                          ? null
-                          : _clearSelectedSteamData,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    //  DISPLAY
-                    _SectionHeader(
-                      label: 'Display',
-                      icon: Icons.display_settings_outlined,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DevButton(
-                            label: showFpsCounter
-                                ? 'Hide FPS'
-                                : 'Show FPS',
-                            icon: showFpsCounter
-                                ? Icons.speed
-                                : Icons.speed_outlined,
-                            theme: theme,
-                            onPressed: () {
-                              ref
-                                  .read(settingsProvider.notifier)
-                                  .setSetting(
-                                    SettingsKeys.showFpsCounter,
-                                    !showFpsCounter,
-                                  );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _DevButton(
-                            label: showGameDetailsSkmId
-                                ? 'Hide SKM-ID'
-                                : 'Show SKM-ID',
-                            icon: showGameDetailsSkmId
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            theme: theme,
-                            onPressed: () {
-                              ref
-                                  .read(settingsProvider.notifier)
-                                  .setSetting(
-                                    SettingsKeys.showGameDetailsSkmId,
-                                    !showGameDetailsSkmId,
-                                  );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Future<void> _grantLinuxFirewallAccess() async {
+    final granted = await ref
+        .read(deviceSyncProvider.notifier)
+        .grantLinuxFirewallAccess();
+    if (granted) {
+      NotificationManager.instance.success(
+        'Firewall rules added for UniKM (ufw/firewalld/iptables).',
+      );
+    } else if (mounted) {
+      NotificationManager.instance.error(
+        'Could not add firewall rules. You may need to run this command manually:\n'
+        'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
+      );
+    }
   }
-}
 
-// =============================================================================
-// Helper widgets
-// =============================================================================
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.label,
-    required this.icon,
-    required this.theme,
-  });
-
-  final String label;
-  final IconData icon;
-  final dynamic theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 13, color: theme.textSecondary),
-        const SizedBox(width: 5),
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: theme.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(child: Divider(height: 1, color: theme.border)),
-      ],
-    );
-  }
-}
-
-class _DevButton extends StatelessWidget {
-  const _DevButton({
-    required this.label,
-    required this.icon,
-    required this.theme,
-    required this.onPressed,
-  });
-
-  final String label;
-  final IconData icon;
-  final dynamic theme;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-    );
-  }
-}
-
-class _CompactDevButton extends StatelessWidget {
-  const _CompactDevButton({
-    required this.label,
-    required this.theme,
-    required this.onPressed,
-  });
-
-  final String label;
-  final dynamic theme;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor = theme.accent as Color;
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: effectiveColor.withValues(alpha: 0.35)),
-        foregroundColor: effectiveColor,
-        backgroundColor: effectiveColor.withValues(alpha: 0.05),
-        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
-    );
-  }
-}
-
-// simple close button with hover effect
-class _CloseButton extends StatefulWidget {
-  const _CloseButton({required this.onPressed, required this.theme});
-
-  final VoidCallback onPressed;
-  final dynamic theme;
-
-  @override
-  State<_CloseButton> createState() => _CloseButtonState();
-}
-
-class _CloseButtonState extends State<_CloseButton> {
-  bool _hovering = false;
-
-  void _onHover(bool hovering) {
-    if (_hovering != hovering) {
-      setState(() {
-        _hovering = hovering;
-      });
+  Future<void> _clearLinuxFirewallAccess() async {
+    final cleared = await ref
+        .read(deviceSyncProvider.notifier)
+        .clearLinuxFirewallAccess();
+    if (cleared) {
+      NotificationManager.instance.success('Firewall rules removed for UniKM.');
+    } else if (mounted) {
+      NotificationManager.instance.error(
+        'Could not remove firewall rules. You may need to run this command manually:\n'
+        'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
+      );
     }
   }
 
   @override
+  void dispose() {
+    _position.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bgColor = _hovering
-        ? (widget.theme.accent as Color).withValues(alpha: 0.15)
-        : Colors.transparent;
-    return MouseRegion(
-      onEnter: (_) => _onHover(true),
-      onExit: (_) => _onHover(false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(12),
+    final theme = ref.watch(themeProvider);
+    final selectedGames = ref.watch(selectedGamesProvider);
+    final batchFetchActive = ref.watch(
+      batchFetchProvider.select((state) => state.isActive),
+    );
+    final settings = ref.watch(settingsProvider);
+    final showFps =
+        (settings[SettingsKeys.showFpsCounter] as bool?) ??
+        DefaultSettings.showFpsCounter;
+    final showId =
+        (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
+        DefaultSettings.showGameDetailsSkmId;
+    final showSyncDeviceId = ref.watch(showSyncDeviceIdProvider);
+    final viewport = MediaQuery.sizeOf(context);
+    final width = math.min(380.0, math.max(0.0, viewport.width - 24));
+    final height = math.min(400.0, math.max(0.0, viewport.height - 24));
+    Offset clampPosition(Offset position) => Offset(
+      position.dx.clamp(12.0, math.max(12.0, viewport.width - width - 12)),
+      position.dy.clamp(12.0, math.max(12.0, viewport.height - height - 12)),
+    );
+
+    Widget action(
+      String label,
+      IconData icon,
+      VoidCallback? onTap, {
+      bool selected = false,
+    }) => _DevAction(
+      label: label,
+      icon: icon,
+      theme: theme,
+      onTap: onTap,
+      selected: selected,
+    );
+    Widget section(String title, List<Widget> actions) =>
+        _DevSection(title: title, theme: theme, children: actions);
+
+    final content = switch (_tab) {
+      0 => [
+        section('Notifications', [
+          action('In-app preview', Icons.notifications_outlined, () {
+            final notifications = NotificationManager.instance;
+            notifications.info(
+              'Test info notification from Dev Tools.',
+              title: 'Info',
+            );
+            notifications.warning(
+              'Test warning notification from Dev Tools.',
+              title: 'Warning',
+            );
+            notifications.error(
+              'Test error notification from Dev Tools.',
+              title: 'Error',
+            );
+          }),
+          action(
+            'OS notification',
+            Icons.desktop_windows_outlined,
+            () => DeadlineNotificationService.instance.sendTestOsNotification(),
           ),
-          child: Icon(Icons.close, size: 20, color: widget.theme.textPrimary),
+        ]),
+        section('Deadlines', [
+          action(
+            'Run check',
+            Icons.timer_outlined,
+            () => DeadlineNotificationService.instance.triggerAndRestart(ref),
+          ),
+          action('Simulate alerts', Icons.timelapse, () async {
+            await DeadlineNotificationService.instance
+                .simulateDeadlineNotifications(ref);
+            NotificationManager.instance.info(
+              'Deadline notifications simulated',
+            );
+          }),
+        ]),
+        section('Steam fetch', [
+          action(
+            _hasActiveFetchPreview ? 'Advance preview' : 'Show preview',
+            Icons.cloud_download_outlined,
+            _showOrAdvanceFetchPreview,
+          ),
+          action(
+            'Clear preview',
+            Icons.close,
+            _hasActiveFetchPreview ? _clearFetchPreview : null,
+          ),
+        ]),
+        section('Dialogs', [
+          action('Open dialog gallery', Icons.grid_view_rounded, () {
+            final navigatorContext = context;
+            widget.onClose();
+            showDialogGallery(navigatorContext);
+          }),
+        ]),
+      ],
+      1 => [
+        section('Update service', [
+          action('Check for updates', Icons.refresh, () {
+            ref.read(updateProvider.notifier).checkForUpdates();
+            NotificationManager.instance.info('Checking for updates');
+          }),
+          action(
+            'Clear state',
+            UpdateStatusIcons.idle,
+            () => ref.read(updateProvider.notifier).clearUpdate(),
+          ),
+        ]),
+        section('Preview update states', [
+          for (final preview in [
+            (UpdatePreviewState.idle, 'Idle', UpdateStatusIcons.idle),
+            (
+              UpdatePreviewState.checking,
+              'Checking',
+              UpdateStatusIcons.checking,
+            ),
+            (
+              UpdatePreviewState.upToDate,
+              'Up to date',
+              UpdateStatusIcons.upToDate,
+            ),
+            (
+              UpdatePreviewState.updateAvailable,
+              'Available',
+              UpdateStatusIcons.available,
+            ),
+            (
+              UpdatePreviewState.downloading,
+              'Downloading',
+              UpdateStatusIcons.downloading,
+            ),
+            (
+              UpdatePreviewState.downloaded,
+              'Downloaded',
+              UpdateStatusIcons.downloaded,
+            ),
+            (UpdatePreviewState.error, 'Error', UpdateStatusIcons.error),
+          ])
+            action(
+              preview.$2,
+              preview.$3,
+              () => ref.read(updateProvider.notifier).previewState(preview.$1),
+            ),
+        ]),
+      ],
+      _ => [
+        section('Display', [
+          action(
+            'Device ID',
+            Icons.fingerprint,
+            () => ref
+                .read(settingsProvider.notifier)
+                .setSetting(SettingsKeys.showSyncDeviceId, !showSyncDeviceId),
+            selected: showSyncDeviceId,
+          ),
+          action(
+            'FPS counter',
+            Icons.speed,
+            () => ref
+                .read(settingsProvider.notifier)
+                .setSetting(SettingsKeys.showFpsCounter, !showFps),
+            selected: showFps,
+          ),
+          action(
+            'SKM-ID',
+            Icons.tag,
+            () => ref
+                .read(settingsProvider.notifier)
+                .setSetting(SettingsKeys.showGameDetailsSkmId, !showId),
+            selected: showId,
+          ),
+        ]),
+        section('Library · ${selectedGames.length} selected', [
+          action(
+            'Clear Steam data',
+            Icons.delete_outline,
+            selectedGames.isEmpty || batchFetchActive
+                ? null
+                : _clearSelectedSteamData,
+          ),
+        ]),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+          section('Windows firewall', [
+            action(
+              'Allowed apps',
+              Icons.shield_outlined,
+              _openWindowsFirewallAllowedApps,
+            ),
+            action(
+              'Advanced rules',
+              Icons.admin_panel_settings_outlined,
+              _openWindowsFirewallAdvancedRules,
+            ),
+          ]),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux)
+          section('Linux firewall', [
+            action(
+              'Grant access',
+              Icons.shield_outlined,
+              _grantLinuxFirewallAccess,
+            ),
+            action(
+              'Clear access',
+              Icons.shield_outlined,
+              _clearLinuxFirewallAccess,
+            ),
+          ]),
+      ],
+    };
+
+    return Positioned.fill(
+      child: RepaintBoundary(
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ValueListenableBuilder<Offset>(
+            valueListenable: _position,
+            builder: (context, position, child) => Transform.translate(
+              offset: clampPosition(position),
+              child: child,
+            ),
+            child: RepaintBoundary(
+              child: SizedBox(
+                width: width,
+                height: height,
+                child: Material(
+                  key: const ValueKey('dev-tools-panel'),
+                  color: theme.surface,
+                  elevation: 12,
+                  shadowColor: Colors.black.withValues(alpha: 0.35),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(theme.cornerRadius),
+                    side: BorderSide(color: theme.border),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: DefaultTextStyle(
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium!.copyWith(color: theme.textPrimary),
+                    child: Column(
+                      children: [
+                        MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            dragStartBehavior: DragStartBehavior.down,
+                            onPanStart: (details) {
+                              _dragOffset =
+                                  details.globalPosition -
+                                  clampPosition(_position.value);
+                            },
+                            onPanUpdate: (details) {
+                              final dragOffset = _dragOffset;
+                              if (dragOffset == null) return;
+                              // Absolute pointer tracking keeps events between frames.
+                              // Only the translation rebuilds; the panel stays cached.
+                              _position.value = clampPosition(
+                                details.globalPosition - dragOffset,
+                              );
+                            },
+                            onPanEnd: (_) => _dragOffset = null,
+                            onPanCancel: () => _dragOffset = null,
+                            child: Container(
+                              color: theme.accent.withValues(alpha: 0.12),
+                              padding: const EdgeInsets.fromLTRB(12, 5, 5, 5),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.tune,
+                                    size: 18,
+                                    color: theme.accent,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Dev Tools',
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  if (showFps) AppFpsCounter(theme: theme),
+                                  IconButton(
+                                    tooltip: 'Close Dev Tools',
+                                    onPressed: widget.onClose,
+                                    icon: Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: theme.textSecondary,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      minimumSize: const Size.square(30),
+                                      padding: const EdgeInsets.all(4),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: AppTabBar(
+                            theme: theme,
+                            selectedIndex: _tab,
+                            onChanged: (index) => setState(() => _tab = index),
+                            tabs: const [
+                              AppTab('Previews'),
+                              AppTab('Updates'),
+                              AppTab('Tools'),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: AppTabTransition(
+                            index: _tab,
+                            child: SingleChildScrollView(
+                              key: ValueKey('dev-tools-tab-$_tab'),
+                              padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: content,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _DevSection extends StatelessWidget {
+  const _DevSection({
+    required this.title,
+    required this.theme,
+    required this.children,
+  });
+  final String title;
+  final AppThemeData theme;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.labelMedium!.copyWith(
+              color: theme.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns =
+                constraints.maxWidth >= 320 &&
+                    MediaQuery.textScalerOf(context).scale(14) <= 17
+                ? 2
+                : 1;
+            final width = (constraints.maxWidth - 6 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final child in children)
+                  SizedBox(width: width, child: child),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _DevAction extends StatelessWidget {
+  const _DevAction({
+    required this.label,
+    required this.icon,
+    required this.theme,
+    required this.onTap,
+    this.selected = false,
+  });
+  final String label;
+  final IconData icon;
+  final AppThemeData theme;
+  final VoidCallback? onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: onTap,
+    style: OutlinedButton.styleFrom(
+      foregroundColor: selected ? theme.accent : theme.textPrimary,
+      backgroundColor: selected
+          ? theme.accent.withValues(alpha: 0.12)
+          : theme.background.withValues(alpha: 0.35),
+      side: BorderSide(color: selected ? theme.accent : theme.border),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 16),
+        const SizedBox(width: 6),
+        Expanded(child: Text(label)),
+        if (selected) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.check, size: 14),
+        ],
+      ],
+    ),
+  );
 }

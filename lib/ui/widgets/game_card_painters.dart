@@ -154,19 +154,21 @@ class UsedPatternPainter extends CustomPainter {
     required this.textColor,
     required this.angleDegrees,
     required this.patternSize,
+    this.tileToCanvas = false,
   });
 
   static const String _label = 'USED';
-  static final Map<int, TextPainter> _textPainterCache = <int, TextPainter>{};
+  static final _textPainterCache = <(Color, double), TextPainter>{};
   static const int _maxCacheEntries = 16;
 
   final Color textColor;
   final double angleDegrees;
   final Size patternSize;
+  final bool tileToCanvas;
 
   TextPainter _resolveTextPainter(double fontSize) {
     final quantized = (fontSize * 2).round() / 2;
-    final cacheKey = Object.hash(textColor.toARGB32(), quantized);
+    final cacheKey = (textColor, quantized);
     final cached = _textPainterCache[cacheKey];
     if (cached != null) return cached;
 
@@ -184,7 +186,7 @@ class UsedPatternPainter extends CustomPainter {
     )..layout();
 
     if (_textPainterCache.length >= _maxCacheEntries) {
-      _textPainterCache.remove(_textPainterCache.keys.first);
+      _textPainterCache.remove(_textPainterCache.keys.first)?.dispose();
     }
     _textPainterCache[cacheKey] = painter;
     return painter;
@@ -197,8 +199,11 @@ class UsedPatternPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
 
-    final shortestSide = math.min(patternSize.width, patternSize.height);
-    final fontSize = (shortestSide * 0.10).clamp(18.0, 28.0);
+    // Card height defines the text size; resizing its width must not change
+    // either the glyphs or their spacing.
+    final fontSize = tileToCanvas
+        ? 12.5
+        : (patternSize.height * 0.10).clamp(18.0, 28.0);
     final textPainter = _resolveTextPainter(fontSize);
 
     final textWidth = textPainter.width;
@@ -206,23 +211,34 @@ class UsedPatternPainter extends CustomPainter {
     final xStep = textWidth + fontSize * 1.3;
     final yStep = textHeight + fontSize * 1.3;
 
-    final diagonal = math.sqrt(
-      patternSize.width * patternSize.width +
-          patternSize.height * patternSize.height,
-    );
+    if (tileToCanvas) {
+      final compactXStep = textWidth + fontSize * 1.6;
+      // Keep each complete diagonal word centered in the slim row rather
+      // than straddling its top and bottom edges in staggered rows.
+      final cy = size.height / 2;
+      for (var col = 0; col * compactXStep < size.width; col++) {
+        final cx = textWidth / 2 + fontSize * 0.5 + col * compactXStep;
+        canvas.save();
+        canvas.translate(cx, cy);
+        canvas.rotate(angleDegrees * (math.pi / 180));
+        textPainter.paint(canvas, Offset(-textWidth / 2, -textHeight / 2));
+        canvas.restore();
+      }
+      canvas.restore();
+      return;
+    }
+
     final angle = angleDegrees * (math.pi / 180);
 
-    // Stable top-left anchor to avoid perceived drift during resize.
-    final anchorX = patternSize.width / 2 - diagonal / 2;
-    final anchorY = patternSize.height / 2 - diagonal / 2;
-
-    final cols = (diagonal / xStep).ceil() + 2;
-    final rows = (diagonal / yStep).ceil() + 2;
+    // Fixed card-local coordinates: resizing reveals or hides columns without
+    // shifting any of the text already on screen.
+    final cols = (size.width / xStep).ceil() + 2;
+    final rows = (size.height / yStep).ceil() + 2;
 
     for (var row = -1; row < rows; row++) {
       for (var col = -1; col < cols; col++) {
-        final cx = anchorX + col * xStep + textWidth / 2;
-        final cy = anchorY + row * yStep + textHeight / 2;
+        final cx = col * xStep + textWidth / 2;
+        final cy = row * yStep + textHeight / 2;
 
         canvas.save();
         canvas.translate(cx, cy);
@@ -239,7 +255,8 @@ class UsedPatternPainter extends CustomPainter {
   bool shouldRepaint(covariant UsedPatternPainter old) =>
       old.textColor != textColor ||
       old.angleDegrees != angleDegrees ||
-      old.patternSize != patternSize;
+      old.patternSize != patternSize ||
+      old.tileToCanvas != tileToCanvas;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -326,7 +343,7 @@ class _VisibilityRevealState extends State<VisibilityReveal>
     return ClipRect(
       child: SizeTransition(
         sizeFactor: _curve,
-        axisAlignment: widget.axisAlignment,
+        alignment: Alignment(0, widget.axisAlignment),
         child: Align(
           alignment: widget.alignment,
           heightFactor: 1.0,

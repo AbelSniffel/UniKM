@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../widgets/app_combo_box.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -13,18 +14,15 @@ import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/device_sync_dialog.dart';
 import '../../widgets/app_search_field.dart';
+import '../../widgets/app_tab_bar.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/app_tag_chip.dart';
-import '../../widgets/badge.dart';
-import '../../widgets/page_header_title.dart';
 import '../../widgets/platform_icon.dart';
+import '../../widgets/page_bar_surface.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tag_list.dart';
-import '../settings_sections/settings_common.dart';
 import 'animated_view_mode_toggle.dart';
-
-const double _compactHeaderFiltersBreakpoint = 900.0;
 
 class HomeHeader extends ConsumerStatefulWidget {
   const HomeHeader({
@@ -44,40 +42,56 @@ class HomeHeader extends ConsumerStatefulWidget {
 
 class _HomeHeaderState extends ConsumerState<HomeHeader>
     with SingleTickerProviderStateMixin {
-  bool _showTagsPanel = false;
+  bool _showFiltersPanel = false;
   final ScrollController _filtersScrollController = ScrollController();
   late final AnimationController _filterPanelController;
-  late final CurvedAnimation _filterPanelAnimation;
   String _tagSearchQuery = '';
+  final _tagSearchController = TextEditingController();
+  int _filterTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _filterPanelController = AnimationController(
       vsync: this,
-      duration: kMediumAnimation,
-    );
-    _filterPanelAnimation = CurvedAnimation(
-      parent: _filterPanelController,
-      curve: Curves.easeInOutCubic,
+      duration: kFilterExpandAnimation,
     );
   }
 
   @override
+  void didUpdateWidget(covariant HomeHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isVeryNarrowLayout && _filterTabIndex == 2) {
+      _filterTabIndex = 0;
+    }
+  }
+
+  @override
   void dispose() {
+    _tagSearchController.dispose();
     _filtersScrollController.dispose();
     _filterPanelController.dispose();
-    _filterPanelAnimation.dispose();
     super.dispose();
   }
 
   void _toggleFilterPanel() {
-    setState(() => _showTagsPanel = !_showTagsPanel);
-    if (_showTagsPanel) {
-      _filterPanelController.forward();
-    } else {
-      _filterPanelController.reverse();
-    }
+    setState(() => _showFiltersPanel = !_showFiltersPanel);
+    final target = _showFiltersPanel ? 1.0 : 0.0;
+    final duration = _showFiltersPanel
+        ? kFilterExpandAnimation
+        : kFilterCollapseAnimation;
+    _filterPanelController.animateTo(
+      target,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : Duration(
+              microseconds:
+                  (duration.inMicroseconds *
+                          (target - _filterPanelController.value).abs())
+                      .round(),
+            ),
+      curve: kFilterPanelCurve,
+    );
   }
 
   IconData _sortIconFor(GameSortMode mode) {
@@ -118,135 +132,127 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     final tags = ref.watch(tagsProvider);
     final platform = Theme.of(context).platform;
     final isMobilePlatform =
-      platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: BoxDecoration(
-        color: theme.navBackground,
-        border: Border(bottom: BorderSide(color: theme.border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title, game count, and search/filters inline
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow =
-                  constraints.maxWidth < _compactHeaderFiltersBreakpoint;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      PageHeaderTitle(
-                        title: 'Game Library',
-                        icon: Icons.home,
-                        theme: theme,
-                        showTitle: false,
-                        tooltip: 'Game Library Page',
+    return PageBarSurface(
+      theme: theme,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Home/view control, game count, and search/filters inline
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final viewModeToggle = _buildViewModeToggle(
+                  context,
+                  ref,
+                  theme,
+                  viewMode,
+                  selectedListViewMode,
+                );
+                final searchField = AppSearchField(
+                  theme: theme,
+                  controller: widget.searchController,
+                  focusNode: widget.searchFocusNode,
+                  hintText: 'Search by title or key...',
+                  onChanged: (value) => ref
+                      .read(gamesProvider.notifier)
+                      .setSearchQueryDebounced(value),
+                  onCleared: () =>
+                      ref.read(gamesProvider.notifier).setSearchQuery(''),
+                );
+                final filtersButton = _buildFiltersToggleButton(
+                  context,
+                  theme,
+                  activeFiltersState,
+                  platformFilter: platformFilter,
+                );
+                final counter = _buildGamesCountChip(
+                  theme,
+                  gamesCount,
+                  totalGamesCount,
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.isVeryNarrowLayout) ...[
+                      Row(
+                        children: [
+                          _LibrarySyncButton(theme: theme),
+                          const SizedBox(width: kElementHSpacing),
+                          Expanded(
+                            child: _buildGamesCountChip(
+                              theme,
+                              gamesCount,
+                              totalGamesCount,
+                              expand: true,
+                              centerText: true,
+                            ),
+                          ),
+                          const SizedBox(width: kElementHSpacing),
+                          viewModeToggle,
+                        ],
                       ),
-                      if (isMobilePlatform) ...[
-                        const SizedBox(width: kElementHSpacing),
-                        _MobileSyncButton(theme: theme),
-                      ],
-                      const SizedBox(width: kElementHSpacing),
-                      if (!widget.isVeryNarrowLayout) ...[
-                        _buildGamesCountChip(
-                          theme,
-                          gamesCount,
-                          totalGamesCount,
-                        ),
-                        const SizedBox(width: kElementHSpacing),
-                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(child: searchField),
+                          const SizedBox(width: kElementHSpacing),
+                          filtersButton,
+                        ],
+                      ),
+                    ] else
+                      Row(
+                        children: [
+                          if (isMobilePlatform) ...[
+                            _LibrarySyncButton(theme: theme),
+                            const SizedBox(width: kElementHSpacing),
+                          ],
+                          counter,
+                          const SizedBox(width: kElementHSpacing),
+                          Expanded(flex: 2, child: searchField),
+                          const SizedBox(width: kElementHSpacing),
+                          Expanded(
+                            child: _buildPlatformDropdown(
+                              theme,
+                              platformFilter,
+                            ),
+                          ),
+                          const SizedBox(width: kElementHSpacing),
+                          Expanded(child: _buildSortDropdown(theme, sortMode)),
+                          const SizedBox(width: kElementHSpacing),
+                          filtersButton,
+                          const SizedBox(width: kElementHSpacing),
+                          viewModeToggle,
+                        ],
+                      ),
 
-                      // Search field (always visible, fills remaining space)
-                      Expanded(
-                        child: AppSearchField(
-                          theme: theme,
-                          controller: widget.searchController,
-                          focusNode: widget.searchFocusNode,
-                          hintText: 'Search by title or key...',
-                          onChanged: (value) {
-                            ref
-                                .read(gamesProvider.notifier)
-                                .setSearchQuery(value);
-                          },
-                          onCleared: () {
-                            ref.read(gamesProvider.notifier).setSearchQuery('');
-                          },
-                        ),
-                      ),
-                      if (!isNarrow) ...[
-                        const SizedBox(width: kElementHSpacing),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: _buildPlatformDropdown(theme, platformFilter),
-                        ),
-                        const SizedBox(width: kElementHSpacing),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 220),
-                          child: _buildSortDropdown(theme, sortMode),
-                        ),
-                      ],
-                      const SizedBox(width: kElementHSpacing),
-                      _buildFiltersToggleButton(
-                        context,
-                        theme,
-                        activeFiltersState,
-                        platformFilter: platformFilter,
-                        includePlatformFilterCount: isNarrow,
-                      ),
-                      const SizedBox(width: kElementHSpacing),
-
-                      // View mode toggle (always visible)
-                      _buildViewModeToggle(
-                        context,
-                        ref,
-                        theme,
-                        viewMode,
-                        selectedListViewMode,
-                      ),
-                    ],
-                  ),
-                  if (widget.isVeryNarrowLayout) ...[
-                    const SizedBox(height: 8),
-                    _buildGamesCountChip(
-                      theme,
-                      gamesCount,
-                      totalGamesCount,
-                      expand: true,
-                      centerText: true,
-                    ),
-                  ],
-
-                  // Filters panel (animated show/hide)
-                  SizeTransition(
-                    sizeFactor: _filterPanelAnimation,
-                    axisAlignment: -1.0,
-                    child: FadeTransition(
-                      opacity: _filterPanelAnimation,
-                      child: IgnorePointer(
-                        ignoring: !_showTagsPanel,
-                        child: _buildTagsPanel(
-                          theme,
-                          tags,
-                          activeFiltersState,
-                          isNarrow: isNarrow,
-                          isVeryNarrow: widget.isVeryNarrowLayout,
-                          platformFilter: platformFilter,
-                          sortMode: sortMode,
-                          gamesCount: gamesCount,
-                          totalGamesCount: totalGamesCount,
+                    // Filters panel (animated show/hide)
+                    SizeTransition(
+                      sizeFactor: _filterPanelController,
+                      alignment: Alignment.topCenter,
+                      child: FadeTransition(
+                        opacity: _filterPanelController,
+                        child: IgnorePointer(
+                          ignoring: !_showFiltersPanel,
+                          child: _buildFiltersPanel(
+                            theme,
+                            tags,
+                            activeFiltersState,
+                            isVeryNarrow: widget.isVeryNarrowLayout,
+                            platformFilter: platformFilter,
+                            sortMode: sortMode,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -254,30 +260,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   // ---------------------------------------------------------------------------
   // View mode toggle
   // ---------------------------------------------------------------------------
-
-  Widget _buildViewModeToggle(
-    BuildContext context,
-    WidgetRef ref,
-    AppThemeData theme,
-    GameListViewMode viewMode,
-    ListViewDensityMode selectedListViewMode,
-  ) {
-    return AnimatedViewModeToggle(
-      theme: theme,
-      isGridView: viewMode == GameListViewMode.grid,
-      selectedListViewMode: selectedListViewMode,
-      onToggle: () {
-        final newMode = viewMode == GameListViewMode.grid
-            ? GameListViewMode.list
-            : GameListViewMode.grid;
-        ref.read(viewModeProvider.notifier).setViewMode(newMode);
-      },
-      onSelectListViewMode: (mode) {
-        final notifier = ref.read(settingsProvider.notifier);
-        notifier.setMany(listViewDensityModeSettings(mode));
-      },
-    );
-  }
 
   Widget _buildGamesCountChip(
     AppThemeData theme,
@@ -292,6 +274,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
 
     final counter = Container(
+      key: const ValueKey('library-game-counter'),
       width: expand ? double.infinity : null,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -319,12 +302,38 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       ),
     );
 
-    if (expand) {
-      return animatedCounter;
-    }
-
-    // Align to the left so AnimatedSize grows rightward, not in both directions.
+    if (expand) return animatedCounter;
     return Align(alignment: Alignment.centerLeft, child: animatedCounter);
+  }
+
+  Widget _buildViewModeToggle(
+    BuildContext context,
+    WidgetRef ref,
+    AppThemeData theme,
+    GameListViewMode viewMode,
+    ListViewDensityMode selectedListViewMode,
+  ) {
+    return AnimatedViewModeToggle(
+      theme: theme,
+      isGridView: viewMode == GameListViewMode.grid,
+      selectedListViewMode: selectedListViewMode,
+      onToggle: () {
+        final newMode = viewMode == GameListViewMode.grid
+            ? GameListViewMode.list
+            : GameListViewMode.grid;
+        ref.read(viewModeProvider.notifier).setViewMode(newMode);
+      },
+      onSelectGridView: () => ref
+          .read(viewModeProvider.notifier)
+          .setViewMode(GameListViewMode.grid),
+      onSelectListViewMode: (mode) {
+        final notifier = ref.read(settingsProvider.notifier);
+        notifier.setMany({
+          ...listViewDensityModeSettings(mode),
+          SettingsKeys.gameListViewMode: GameListViewMode.list,
+        });
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -332,17 +341,13 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   // ---------------------------------------------------------------------------
 
   Widget _buildPlatformDropdown(AppThemeData theme, String? platformFilter) {
-    return DropdownButtonFormField<String>(
+    return AppComboBox<String>(
       initialValue: platformFilter ?? '',
-      isExpanded: true,
-      menuMaxHeight: kDropdownMenuMaxHeight,
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
       onChanged: (value) {
         final platform = (value == null || value.isEmpty) ? null : value;
         ref.read(gamesProvider.notifier).setPlatformFilter(platform);
       },
-      style: TextStyle(color: theme.textPrimary),
-      dropdownColor: theme.surface,
+      theme: theme,
       hint: Text('All Platforms', style: TextStyle(color: theme.textHint)),
       items: [
         DropdownMenuItem<String>(
@@ -375,13 +380,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           PlatformIcon(platform: platform, color: theme.textPrimary, size: 16),
           const SizedBox(width: 10),
         ],
-        Flexible(
-          child: Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: theme.textPrimary),
-          ),
-        ),
+        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
       ],
     );
   }
@@ -391,18 +390,14 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   // ---------------------------------------------------------------------------
 
   Widget _buildSortDropdown(AppThemeData theme, GameSortMode sortMode) {
-    return DropdownButtonFormField<GameSortMode>(
+    return AppComboBox<GameSortMode>(
       initialValue: sortMode,
-      menuMaxHeight: kDropdownMenuMaxHeight,
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
       onChanged: (value) {
         if (value != null) {
           ref.read(gamesProvider.notifier).setSortMode(value);
         }
       },
-      style: TextStyle(color: theme.textPrimary),
-      dropdownColor: theme.surface,
-      isExpanded: true,
+      theme: theme,
       items: GameSortMode.values
           .map(
             (mode) => DropdownMenuItem(
@@ -415,7 +410,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                   Flexible(
                     child: Text(
                       mode.displayName,
-                      style: TextStyle(color: theme.textPrimary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -445,108 +439,38 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     })
     state, {
     required String? platformFilter,
-    required bool includePlatformFilterCount,
   }) {
     final filterCount =
         state.tagFilters.length +
-        (includePlatformFilterCount &&
-                platformFilter != null &&
-                platformFilter.isNotEmpty
-            ? 1
-            : 0) +
+        (platformFilter != null && platformFilter.isNotEmpty ? 1 : 0) +
         (state.showDeadlineOnly ? 1 : 0) +
         (state.showDlcOnly ? 1 : 0) +
         (state.showUsedOnly ? 1 : 0) +
         (state.showNoPicturesOnly ? 1 : 0) +
         (state.showNoTagsOnly ? 1 : 0);
     final hasActiveFilters = filterCount > 0;
-    final isActive = _showTagsPanel;
-    final iconColor = (isActive || hasActiveFilters)
-        ? theme.accent
-        : theme.textSecondary;
-
-    if (widget.isVeryNarrowLayout) {
-      final btn = AppNavigationButton(
-        theme: theme,
-        isSelected: isActive || hasActiveFilters,
-        isEnabled: true,
-        isHorizontal: true,
-        onTap: _toggleFilterPanel,
-        iconData: Icons.tune,
-        tooltipMessage:
-            hasActiveFilters ? 'Filters ($filterCount active)' : 'Filters',
-        selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
-      );
-      final withBadge = hasActiveFilters
-          ? btn.withCountBadge(
-              filterCount,
-              backgroundColor: theme.accent,
-              borderColor: theme.navBackground,
-              theme: theme,
-            )
-          : btn;
-      return GestureDetector(
-        onSecondaryTapUp: (details) => _showFiltersContextMenu(
-          context,
-          details.globalPosition,
-          theme,
-          state,
-        ),
-        child: withBadge,
-      );
-    }
-
-    return ClipRect(
-      child: GestureDetector(
-        onSecondaryTapUp: (details) => _showFiltersContextMenu(
-          context,
-          details.globalPosition,
-          theme,
-          state,
-        ),
-        child: TextButton.icon(
-          onPressed: _toggleFilterPanel,
-          style: ButtonStyle(
-            backgroundColor: WidgetStateProperty.resolveWith((states) {
-              if (isActive) {
-                return theme.accent.withValues(alpha: 0.30);
-              }
-              if (states.contains(WidgetState.hovered)) {
-                return theme.navItemHover;
-              }
-              return Colors.transparent;
-            }),
-            overlayColor: WidgetStatePropertyAll(
-              theme.accent.withValues(alpha: 0.16),
-            ),
-            foregroundColor: WidgetStatePropertyAll(theme.textPrimary),
-            iconColor: WidgetStatePropertyAll(iconColor),
-          ),
-          icon: const Icon(Icons.tune),
-          // Animate only the count suffix so the button width tracks its
-          // label naturally — no manual measurement needed.
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Filters'),
-              ClipRect(
-                child: AnimatedSize(
-                  duration: kFastAnimation,
-                  curve: Curves.easeInOutCubic,
-                  child: hasActiveFilters
-                      ? Text(
-                          ' ($filterCount)',
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.clip,
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ],
-          ),
-        ),
+    final isActive = _showFiltersPanel;
+    final btn = AppNavigationButton(
+      theme: theme,
+      isSelected: isActive || hasActiveFilters,
+      isEnabled: true,
+      isHorizontal: true,
+      hasNotification: hasActiveFilters,
+      onTap: _toggleFilterPanel,
+      iconData: Icons.tune,
+      tooltipMessage: hasActiveFilters
+          ? 'Filters ($filterCount active)'
+          : 'Filters',
+      selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
+    );
+    return GestureDetector(
+      onSecondaryTapUp: (details) => _showFiltersContextMenu(
+        context,
+        details.globalPosition,
+        theme,
+        state,
       ),
+      child: btn,
     );
   }
 
@@ -554,7 +478,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   // Filters panel (expandable)
   // ---------------------------------------------------------------------------
 
-  Widget _buildTagsPanel(
+  Widget _buildFiltersPanel(
     AppThemeData theme,
     List<Tag> tags,
     ({
@@ -567,247 +491,207 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       bool showNoTagsOnly,
     })
     state, {
-    required bool isNarrow,
     required bool isVeryNarrow,
     required String? platformFilter,
     required GameSortMode sortMode,
-    required int gamesCount,
-    required int totalGamesCount,
   }) {
-    final tagFilters = state.tagFilters;
-    // Filter tags by search query
-    final filteredTags = _tagSearchQuery.isEmpty
-        ? tags
-        : tags
-              .where(
-                (t) => t.name.toLowerCase().contains(
-                  _tagSearchQuery.toLowerCase(),
-                ),
-              )
-              .toList();
-
-    final hasActiveOptions =
-        state.showDeadlineOnly ||
-        state.showDlcOnly ||
-        state.showUsedOnly ||
-        state.showNoPicturesOnly ||
-        state.showNoTagsOnly;
-    final iconOnlyButtonStyle = ElevatedButton.styleFrom(
-      padding: EdgeInsets.zero,
-      minimumSize: const Size.square(kElementHeight),
-      fixedSize: const Size.square(kElementHeight),
-      maximumSize: const Size.square(kElementHeight),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
+    final selectedTagIds = state.tagFilters.toSet();
+    final matchingTags = tags
+        .where(
+          (tag) =>
+              _tagSearchQuery.isEmpty ||
+              tag.name.toLowerCase().contains(_tagSearchQuery.toLowerCase()),
+        )
+        .toList();
+    final optionCount = [
+      state.showDeadlineOnly,
+      state.showDlcOnly,
+      state.showUsedOnly,
+      state.showNoTagsOnly,
+      state.showNoPicturesOnly,
+    ].where((enabled) => enabled).length;
+    final platformCount = platformFilter?.isNotEmpty == true ? 1 : 0;
+    final hasSortingOverrides =
+        platformCount > 0 || sortMode != DefaultSettings.gameSortMode;
+    final tabId = ['tags', 'options', 'sorting'][_filterTabIndex];
     final maxFilterPanelHeight = (MediaQuery.sizeOf(context).height * 0.45)
         .clamp(50.0, 450.0)
         .toDouble();
+    final notifier = ref.read(gamesProvider.notifier);
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxFilterPanelHeight),
-        child: Scrollbar(
-          controller: _filtersScrollController,
-          child: SingleChildScrollView(
-            controller: _filtersScrollController,
-            primary: false,
-            child: SettingsSectionGroups(
-              entries: [
-                SectionGroupEntry(
-                  visible: true,
-                  builder: (position, isAlternate) => SectionGroupBox(
-                    title: '',
-                    showTitle: false,
-                    theme: theme,
-                    groupPosition: position,
-                    alternateBackground: isAlternate,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppSearchField(
-                                theme: theme,
-                                backgroundColor: Color.lerp(
-                                  theme.surface,
-                                  theme.background,
-                                  0.6,
-                                ),
-                                hintText: 'Search tags...',
-                                onChanged: (value) =>
-                                    setState(() => _tagSearchQuery = value),
-                                showClearButton: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: kElementHSpacing),
-                            if (isVeryNarrow)
-                              ElevatedButton(
-                                style: iconOnlyButtonStyle,
-                                onPressed: tagFilters.isNotEmpty
-                                    ? () => ref
-                                          .read(gamesProvider.notifier)
-                                          .setTagFilters([])
-                                    : null,
-                                child: const Icon(Icons.label_off),
-                              )
-                            else
-                              ElevatedButton.icon(
-                                onPressed: tagFilters.isNotEmpty
-                                    ? () => ref
-                                          .read(gamesProvider.notifier)
-                                          .setTagFilters([])
-                                    : null,
-                                icon: const Icon(Icons.label_off),
-                                label: Text(
-                                  tagFilters.isNotEmpty
-                                      ? 'Clear (${tagFilters.length})'
-                                      : 'Clear',
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        TagList(
-                          tags: filteredTags,
-                          theme: theme,
-                          selectedTagIds: tagFilters.toSet(),
-                          onTagToggled: (tagId) => ref
-                              .read(gamesProvider.notifier)
-                              .toggleTagFilter(tagId),
-                          maxHeight: 120,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SectionGroupEntry(
-                  visible: true,
-                  builder: (position, isAlternate) => SectionGroupBox(
-                    title: '',
-                    showTitle: false,
-                    theme: theme,
-                    groupPosition: position,
-                    alternateBackground: isAlternate,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              AppOptionChip(
-                                label: 'Deadline',
-                                theme: theme,
-                                isSelected: state.showDeadlineOnly,
-                                onTap: () => ref
-                                    .read(gamesProvider.notifier)
-                                    .setShowDeadlineOnly(
-                                      !state.showDeadlineOnly,
-                                    ),
-                              ),
-                              AppOptionChip(
-                                label: 'DLC',
-                                theme: theme,
-                                isSelected: state.showDlcOnly,
-                                onTap: () => ref
-                                    .read(gamesProvider.notifier)
-                                    .setShowDlcOnly(!state.showDlcOnly),
-                              ),
-                              AppOptionChip(
-                                label: 'Used',
-                                theme: theme,
-                                isSelected: state.showUsedOnly,
-                                onTap: () => ref
-                                    .read(gamesProvider.notifier)
-                                    .setShowUsedOnly(!state.showUsedOnly),
-                              ),
-                              AppOptionChip(
-                                label: 'No Tags',
-                                theme: theme,
-                                isSelected: state.showNoTagsOnly,
-                                onTap: () => ref
-                                    .read(gamesProvider.notifier)
-                                    .setShowNoTagsOnly(!state.showNoTagsOnly),
-                              ),
-                              AppOptionChip(
-                                label: 'No Pictures',
-                                theme: theme,
-                                isSelected: state.showNoPicturesOnly,
-                                onTap: () => ref
-                                    .read(gamesProvider.notifier)
-                                    .setShowNoPicturesOnly(
-                                      !state.showNoPicturesOnly,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: kElementHSpacing),
-                        if (isVeryNarrow)
-                          ElevatedButton(
-                            style: iconOnlyButtonStyle,
-                            onPressed: hasActiveOptions
-                                ? _clearBoolFilters
-                                : null,
-                            child: const Icon(Icons.filter_list_off),
-                          )
-                        else
-                          ElevatedButton.icon(
-                            onPressed: hasActiveOptions
-                                ? _clearBoolFilters
-                                : null,
-                            icon: const Icon(Icons.filter_list_off),
-                            label: const Text('Clear'),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                SectionGroupEntry(
-                  visible: isNarrow,
-                  builder: (position, isAlternate) => SectionGroupBox(
-                    title: '',
-                    showTitle: false,
-                    theme: theme,
-                    groupPosition: position,
-                    alternateBackground: isAlternate,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (isVeryNarrow) ...[
-                          _buildPlatformDropdown(theme, platformFilter),
-                          const SizedBox(height: 6),
-                          _buildSortDropdown(theme, sortMode),
-                        ] else
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildPlatformDropdown(
-                                  theme,
-                                  platformFilter,
-                                ),
-                              ),
-                              const SizedBox(width: kElementHSpacing),
-                              Expanded(
-                                child: _buildSortDropdown(theme, sortMode),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+    String tabLabel(String label, int count) =>
+        count > 0 ? '$label ($count)' : label;
+    Widget group(Widget child) => SectionGroupBox(
+      key: ValueKey('home-filter-group-$tabId'),
+      title: '',
+      showTitle: false,
+      theme: theme,
+      child: child,
+    );
+    final content = switch (_filterTabIndex) {
+      0 => group(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppSearchField(
+              theme: theme,
+              backgroundColor: Color.lerp(theme.surface, theme.background, 0.6),
+              hintText: 'Search tags...',
+              controller: _tagSearchController,
+              onChanged: (value) => setState(() => _tagSearchQuery = value),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
             ),
-          ),
+            const SizedBox(height: 6),
+            TagList(
+              tags: matchingTags,
+              selectedTagIds: selectedTagIds,
+              theme: theme,
+              onTagToggled: notifier.toggleTagFilter,
+              maxHeight: 120,
+            ),
+          ],
         ),
       ),
+      1 => group(
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            AppOptionChip(
+              label: 'Deadline',
+              theme: theme,
+              isSelected: state.showDeadlineOnly,
+              onTap: () =>
+                  notifier.setShowDeadlineOnly(!state.showDeadlineOnly),
+            ),
+            AppOptionChip(
+              label: 'DLC',
+              theme: theme,
+              isSelected: state.showDlcOnly,
+              onTap: () => notifier.setShowDlcOnly(!state.showDlcOnly),
+            ),
+            AppOptionChip(
+              label: 'Used',
+              theme: theme,
+              isSelected: state.showUsedOnly,
+              onTap: () => notifier.setShowUsedOnly(!state.showUsedOnly),
+            ),
+            AppOptionChip(
+              label: 'No Tags',
+              theme: theme,
+              isSelected: state.showNoTagsOnly,
+              onTap: () => notifier.setShowNoTagsOnly(!state.showNoTagsOnly),
+            ),
+            AppOptionChip(
+              label: 'No Pictures',
+              theme: theme,
+              isSelected: state.showNoPicturesOnly,
+              onTap: () =>
+                  notifier.setShowNoPicturesOnly(!state.showNoPicturesOnly),
+            ),
+          ],
+        ),
+      ),
+      _ => group(
+        Column(
+          children: [
+            _buildPlatformDropdown(theme, platformFilter),
+            const SizedBox(height: 6),
+            _buildSortDropdown(theme, sortMode),
+          ],
+        ),
+      ),
+    };
+    final VoidCallback? onClear = switch (_filterTabIndex) {
+      0 => selectedTagIds.isEmpty ? null : () => notifier.setTagFilters([]),
+      1 => optionCount == 0 ? null : _clearBoolFilters,
+      _ =>
+        !hasSortingOverrides
+            ? null
+            : () async {
+                notifier.setPlatformFilter(null);
+                await notifier.setSortMode(DefaultSettings.gameSortMode);
+              },
+    };
+    final panel = ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxFilterPanelHeight),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppTabBar(
+            key: const ValueKey('home-filter-tabs'),
+            theme: theme,
+            tabs: [
+              AppTab(tabLabel('Tags', selectedTagIds.length)),
+              AppTab(tabLabel('Options', optionCount)),
+              if (isVeryNarrow) AppTab(tabLabel('Sorting', platformCount)),
+            ],
+            selectedIndex: _filterTabIndex,
+            onChanged: (index) {
+              if (_filtersScrollController.hasClients) {
+                _filtersScrollController.jumpTo(0);
+              }
+              setState(() => _filterTabIndex = index);
+            },
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: Scrollbar(
+              controller: _filtersScrollController,
+              child: SingleChildScrollView(
+                controller: _filtersScrollController,
+                primary: false,
+                child: AppTabTransition(
+                  index: _filterTabIndex,
+                  child: KeyedSubtree(
+                    key: ValueKey('home-filter-tab-$tabId'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        content,
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            key: ValueKey(
+                              'home-filter-$tabId-${_filterTabIndex == 2 ? 'default' : 'clear'}',
+                            ),
+                            onPressed: onClear,
+                            icon: Icon(
+                              _filterTabIndex == 2
+                                  ? Icons.restore
+                                  : Icons.filter_list_off,
+                            ),
+                            label: Text(
+                              _filterTabIndex == 2 ? 'Default' : 'Clear',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      key: const ValueKey('home-filter-panel-height'),
+      padding: const EdgeInsets.only(top: 8),
+      child: MediaQuery.disableAnimationsOf(context)
+          ? panel
+          : AnimatedSize(
+              duration: kFilterExpandAnimation,
+              curve: kFilterPanelCurve,
+              alignment: Alignment.topCenter,
+              child: panel,
+            ),
     );
   }
 
@@ -847,7 +731,10 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         state.showUsedOnly ||
         state.showNoPicturesOnly ||
         state.showNoTagsOnly;
-    final hasAnyFilters = hasTagFilters || hasBoolFilters;
+    final hasAnyFilters =
+        hasTagFilters ||
+        hasBoolFilters ||
+        ref.read(gamesProvider).platformFilter?.isNotEmpty == true;
 
     showAppMenu<String>(
       context: context,
@@ -869,10 +756,14 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                 color: hasTagFilters ? theme.textPrimary : theme.textHint,
               ),
               const SizedBox(width: kElementHSpacing),
-              Text(
-                'Clear Tag Filters',
-                style: TextStyle(
-                  color: hasTagFilters ? theme.textPrimary : theme.textHint,
+              Expanded(
+                child: Text(
+                  'Clear Tag Filters',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: hasTagFilters ? theme.textPrimary : theme.textHint,
+                  ),
                 ),
               ),
             ],
@@ -889,10 +780,14 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                 color: hasBoolFilters ? theme.textPrimary : theme.textHint,
               ),
               const SizedBox(width: kElementHSpacing),
-              Text(
-                'Clear Options',
-                style: TextStyle(
-                  color: hasBoolFilters ? theme.textPrimary : theme.textHint,
+              Expanded(
+                child: Text(
+                  'Clear Options',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: hasBoolFilters ? theme.textPrimary : theme.textHint,
+                  ),
                 ),
               ),
             ],
@@ -910,10 +805,14 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                 color: hasAnyFilters ? theme.textPrimary : theme.textHint,
               ),
               const SizedBox(width: kElementHSpacing),
-              Text(
-                'Clear All Filters',
-                style: TextStyle(
-                  color: hasAnyFilters ? theme.textPrimary : theme.textHint,
+              Expanded(
+                child: Text(
+                  'Clear All Filters',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: hasAnyFilters ? theme.textPrimary : theme.textHint,
+                  ),
                 ),
               ),
             ],
@@ -932,8 +831,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   }
 }
 
-class _MobileSyncButton extends ConsumerWidget {
-  const _MobileSyncButton({required this.theme});
+class _LibrarySyncButton extends ConsumerWidget {
+  const _LibrarySyncButton({required this.theme});
 
   final AppThemeData theme;
 
@@ -995,10 +894,7 @@ class _MobileSyncButton extends ConsumerWidget {
                 strokeWidth: 2,
               ),
             )
-          : Icon(
-              icon,
-              color: enabled ? color : theme.textSecondary,
-            ),
+          : Icon(icon, color: enabled ? color : theme.textSecondary),
     );
   }
 }

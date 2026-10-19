@@ -47,23 +47,10 @@ class NotificationsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifications = ref.watch(notificationsSettingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final isSearching = searchQuery.trim().isNotEmpty;
-
-    final showTypes = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: typesSearchGroup,
-    );
-
-    if (isSearching && !showTypes) {
-      return const SizedBox.shrink();
-    }
-
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          visible: showTypes,
           theme: theme,
           group: typesSearchGroup,
           titleIcon: Icons.notifications_active,

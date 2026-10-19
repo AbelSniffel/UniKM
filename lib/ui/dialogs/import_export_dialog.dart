@@ -1,10 +1,16 @@
 /// Import/Export dialogs for database operations
 library;
 
+import '../widgets/window_drop_target.dart';
+
+import '../../features/transfer/application/library_import.dart';
+import '../../features/transfer/application/library_export.dart';
 import 'dart:convert';
+import 'dart:async';
+import '../../features/transfer/application/sqlite_import_reader.dart';
+import '../../features/transfer/application/import_image_checkpoint.dart';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
@@ -13,15 +19,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
+import '../../core/database/sqlite_file.dart';
 import '../../core/database/database.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/services/encryption_manager.dart';
-import '../../core/services/legacy_db_converter.dart';
 import '../../core/services/legacy_encrypted_import.dart';
 import '../../core/services/platform_file_actions.dart';
+import '../../core/services/legacy_db_converter.dart';
 import '../../core/services/steamkm1_import.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import 'legacy_conversion_dialog.dart';
 import '../pages/settings_sections/settings_common.dart';
 import 'database_unlock_dialog.dart';
 import '../widgets/app_progress_indicator.dart';
@@ -64,10 +72,12 @@ const _importModeOptions = <_DialogRadioOption>[
 
 Future<void> _markImportSyncDirty(WidgetRef ref, AppDatabase db) async {
   await db.bumpLocalSyncRevision();
-  await ref.read(settingsProvider.notifier).setSetting(
-    SettingsKeys.syncDbRevisionId,
-    DateTime.now().millisecondsSinceEpoch.toString(),
-  );
+  await ref
+      .read(settingsProvider.notifier)
+      .setSetting(
+        SettingsKeys.syncDbRevisionId,
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      );
 }
 
 Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) {
@@ -84,7 +94,7 @@ Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) {
 
 /// Show export dialog
 Future<void> showExportDialog(BuildContext context) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (ctx) => const ExportDialog(),
   );
@@ -92,7 +102,7 @@ Future<void> showExportDialog(BuildContext context) {
 
 /// Show import dialog
 Future<void> showImportDialog(BuildContext context) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (ctx) => const ImportDialog(),
   );
@@ -251,20 +261,13 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       final games = gamesState.games;
       final tags = ref.read(tagsProvider);
 
-      // Filter based on options
       final filteredGames = _includeUsed
           ? games
-          : games.where((g) => !g.isUsed).toList();
-
-      // Build export data
-      String exportData;
-      if (_exportFormat == 'json') {
-        exportData = _buildJsonExport(filteredGames, tags);
-      } else if (_exportFormat == 'csv') {
-        exportData = _buildCsvExport(filteredGames, tags);
-      } else {
-        exportData = _buildTextExport(filteredGames);
-      }
+          : games.where((game) => !game.isUsed).toList();
+      final exportData = LibraryBackupExporter(
+        includeTags: _includeTags,
+        includeNotes: _includeNotes,
+      ).encode(filteredGames, tags, _exportFormat);
 
       // Write file
       await File(result).writeAsString(exportData);
@@ -291,101 +294,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     }
   }
 
-  String _buildJsonExport(List<dynamic> games, List<dynamic> tags) {
-    final gamesList = games.map((g) {
-      final map = <String, dynamic>{
-        'title': g.title,
-        'key': g.gameKey,
-        'platform': g.platform,
-        'is_used': g.isUsed,
-        'is_dlc': g.isDlc,
-        'rating': g.rating,
-      };
-
-      if (_includeTags && g.tagIds.isNotEmpty) {
-        final tagNames = g.tagIds
-            .map((id) => tags.where((t) => t.id == id).firstOrNull)
-            .where((t) => t != null)
-            .map((t) => t!.name)
-            .toList();
-        map['tags'] = tagNames;
-      }
-
-      if (_includeNotes && g.notes != null) {
-        map['notes'] = g.notes;
-      }
-
-      if (g.coverImage != null) {
-        map['cover_image'] = g.coverImage;
-      }
-
-      if (g.hasDeadline && g.deadlineDate != null) {
-        map['deadline'] = g.deadlineDate!.toIso8601String();
-      }
-
-      return map;
-    }).toList();
-
-    return const JsonEncoder.withIndent('  ').convert({
-      'exported_at': DateTime.now().toIso8601String(),
-      'games': gamesList,
-    });
-  }
-
-  String _buildCsvExport(List<dynamic> games, List<dynamic> tags) {
-    final buffer = StringBuffer();
-
-    // Header
-    final headers = ['Title', 'Key', 'Platform', 'Used', 'DLC', 'Rating'];
-    if (_includeTags) headers.add('Tags');
-    if (_includeNotes) headers.add('Notes');
-    buffer.writeln(headers.join(','));
-
-    // Rows
-    for (final g in games) {
-      final row = [
-        _csvEscape(g.title),
-        _csvEscape(g.gameKey),
-        _csvEscape(g.platform),
-        g.isUsed ? 'Yes' : 'No',
-        g.isDlc ? 'Yes' : 'No',
-        g.rating.toString(),
-      ];
-
-      if (_includeTags) {
-        final tagNames = g.tagIds
-            .map((id) => tags.where((t) => t.id == id).firstOrNull)
-            .where((t) => t != null)
-            .map((t) => t!.name)
-            .join(';');
-        row.add(_csvEscape(tagNames));
-      }
-
-      if (_includeNotes) {
-        row.add(_csvEscape(g.notes ?? ''));
-      }
-
-      buffer.writeln(row.join(','));
-    }
-
-    return buffer.toString();
-  }
-
-  String _csvEscape(String value) {
-    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
-      return '"${value.replaceAll('"', '""')}"';
-    }
-    return value;
-  }
-
-  String _buildTextExport(List<dynamic> games) {
-    final buffer = StringBuffer();
-    for (final g in games) {
-      buffer.writeln('${g.title} | ${g.gameKey}');
-    }
-    return buffer.toString();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
@@ -410,7 +318,9 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
             title: 'Format',
             titleIcon: Icons.format_align_center,
             theme: theme,
-            groupPosition: showsAdditionalInfo ? SectionGroupPosition.first : SectionGroupPosition.only,
+            groupPosition: showsAdditionalInfo
+                ? SectionGroupPosition.first
+                : SectionGroupPosition.only,
             child: RadioGroup<String>(
               groupValue: _exportFormat,
               onChanged: (v) {
@@ -497,15 +407,79 @@ class ImportDialog extends ConsumerStatefulWidget {
 
 class _ImportDialogState extends ConsumerState<ImportDialog> {
   String? _selectedFile;
+  int _fileSelectionRevision = 0;
   String _importMode = 'merge';
+  ImportMode _activeImportMode = ImportMode.merge;
   bool _isImporting = false;
+  bool _cancelRequested = false;
+  bool _importCommitted = false;
+  AppDatabase? _importDatabase;
+  ImportImageCheckpoint? _imageCheckpoint;
+  NotificationHandle? _importTask;
+  Timer? _importHeartbeat;
+  String _importMessage = 'Preparing import...';
+  double? _importProgress;
+  String _importSummary = 'Import completed';
+  LegacyDbConversionResult? _legacyConversion;
+
+  void _checkImport() {
+    if (_cancelRequested ||
+        !mounted ||
+        !identical(ref.read(databaseProvider), _importDatabase)) {
+      throw const ImportCancelled();
+    }
+  }
+
+  void _showImportProgress() {
+    if (!_isImporting) return;
+    final manager = NotificationManager.instance;
+    final visible = manager.currentNotifications.any(
+      (n) => n.id == _importTask?.id && !n.isDismissing,
+    );
+    if (!visible) {
+      _importTask = manager.beginTask(
+        _importMessage,
+        progress: _importProgress,
+        actionLabel: _importCommitted || _cancelRequested
+            ? null
+            : 'Cancel import',
+        onAction: _importCommitted || _cancelRequested
+            ? null
+            : () {
+                _cancelRequested = true;
+                _importMessage =
+                    'Cancelling import and restoring checkpoint...';
+                _showImportProgress();
+              },
+      );
+    } else {
+      _importTask!.update(
+        message: _importMessage,
+        progress: _importProgress,
+        clearAction: _importCommitted || _cancelRequested,
+      );
+    }
+  }
+
+  void _reportImportProgress(int done, int total) {
+    _importMessage = 'Importing games: $done of $total';
+    _importProgress = total == 0 ? 1 : done / total;
+    _showImportProgress();
+  }
+
+  @override
+  void dispose() {
+    _cancelRequested = true;
+    _importHeartbeat?.cancel();
+    super.dispose();
+  }
+
   int _previewCount = 0;
   bool _isDragging = false;
   bool _isHovering = false;
   bool _allowDuplicates = false;
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
-  bool get _isMerge => _importMode == 'merge' || _importMode == 'skip';
   bool get _isReplace => _importMode == 'replace';
   bool get _isUpdate => _importMode == 'update';
 
@@ -516,30 +490,22 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       context: context,
       theme: theme,
       title: 'Replace all data?',
+      titleIcon: Icons.warning_amber_rounded,
       message:
           'This will delete all existing games, tags, and backups before importing.',
       confirmLabel: 'Replace',
+      destructive: true,
     );
   }
 
   Future<void> _selectFile() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFile(
       dialogTitle: 'Select Database File',
-      type: FileType.custom,
-      allowedExtensions: [
-        'db',
-        'sqlite',
-        'sqlite3',
-        'enc',
-        'json',
-        'csv',
-        'txt',
-        'bak',
-      ],
+      type: FileType.any,
     );
 
-    if (result != null && result.files.isNotEmpty) {
-      final path = result.files.first.path;
+    if (result != null) {
+      final path = result.path;
       if (path != null) {
         await _handleSelectedFilePath(path);
       }
@@ -547,10 +513,14 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   Future<void> _handleSelectedFilePath(String path) async {
-    final kind = _classifyImportFile(path);
+    if (_isImporting) return;
+    final revision = ++_fileSelectionRevision;
+    setState(() => _isDragging = false);
+    final kind = await _classifyImportFile(path);
+    if (!mounted || revision != _fileSelectionRevision) return;
     if (kind == _ImportFileKind.unsupported) {
       NotificationManager.instance.error(
-        'Unsupported file type. Please select .db, .sqlite, .sqlite3, .enc, .json, .csv, .txt, or supported .bak backups',
+        'Unsupported file type. Please select a .db, .sqlite, .sqlite3, .enc, .json, .csv, .txt, or supported .bak backup',
       );
       return;
     }
@@ -561,10 +531,20 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       _isDragging = false;
     });
 
-    await _scanFileForCount(File(path));
+    await _scanFileForCount(File(path), revision);
   }
 
-  _ImportFileKind _classifyImportFile(String path) {
+  void _clearFileSelection() {
+    if (_isImporting) return;
+    ++_fileSelectionRevision;
+    setState(() {
+      _selectedFile = null;
+      _previewCount = 0;
+      _isDragging = false;
+    });
+  }
+
+  Future<_ImportFileKind> _classifyImportFile(String path) async {
     final lowerPath = path.toLowerCase();
     if (lowerPath.endsWith('.db') ||
         lowerPath.endsWith('.sqlite') ||
@@ -586,25 +566,64 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     if (lowerPath.endsWith('.txt')) {
       return _ImportFileKind.txt;
     }
+
+    // Linux database files may have no suffix. Require the SQLite signature;
+    // never reinterpret arbitrary extensionless files as a text import.
+    if (p.extension(path).isEmpty && await isLikelySqliteFile(path)) {
+      return _ImportFileKind.sqlite;
+    }
+    // Generic backup files may need content-based classification too.
+    if (!lowerPath.endsWith('.bak')) return _ImportFileKind.unsupported;
+    try {
+      final file = File(path);
+      if (!await file.exists()) return _ImportFileKind.unsupported;
+
+      final firstBytes = await file.openRead(0, 16).first;
+      if (hasSqliteHeader(firstBytes)) {
+        return _ImportFileKind.sqlite;
+      }
+
+      // Legacy JSON backups may use only the .bak suffix.
+      final header = await file
+          .openRead(0, 256)
+          .map((b) => String.fromCharCodes(b))
+          .join();
+      final trimmed = header.trimLeft();
+      if (trimmed.isNotEmpty &&
+          (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        return _ImportFileKind.json;
+      }
+    } catch (_) {
+      // File read failed — fall through to unsupported.
+    }
+
     return _ImportFileKind.unsupported;
   }
 
-  Future<void> _scanFileForCount(File file) async {
+  Future<void> _scanFileForCount(File file, int revision) async {
     try {
-      final kind = _classifyImportFile(file.path);
+      final kind = await _classifyImportFile(file.path);
       int count = 0;
 
       if (kind == _ImportFileKind.sqlite) {
         // Count games in SQLite
-        final sourceDb = sqlite3.sqlite3.open(
-          file.path,
-          mode: sqlite3.OpenMode.readOnly,
-        );
+        sqlite3.Database? sourceDb;
         try {
-          final result = sourceDb.select('SELECT COUNT(*) as count FROM games');
-          count = result.first['count'] as int;
+          sourceDb = sqlite3.sqlite3.open(
+            file.path,
+            mode: sqlite3.OpenMode.readOnly,
+          );
+          final tables = sourceDb.select(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='games'",
+          );
+          if (tables.isNotEmpty) {
+            final result = sourceDb.select(
+              'SELECT COUNT(*) as count FROM games',
+            );
+            count = result.first['count'] as int;
+          }
         } finally {
-          sourceDb.close();
+          sourceDb?.close();
         }
       } else if (kind == _ImportFileKind.encrypted) {
         // Can't preview count without password.
@@ -621,12 +640,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         final content = await file.readAsString();
         count = parseSteamKm1TextExport(content).length;
       } else if (kind == _ImportFileKind.csv) {
-        final lines = await file.readAsLines();
-        count = lines.length - 1; // Exclude header
-        if (count < 0) count = 0;
+        count = parseLibraryCsv(await file.readAsString()).length;
       }
 
-      if (!mounted) return;
+      if (!mounted || revision != _fileSelectionRevision) return;
       setState(() => _previewCount = count);
     } catch (e) {
       // Ignore errors during preview count
@@ -634,61 +651,102 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   Future<void> _import() async {
-    if (_selectedFile == null) return;
-
-    if (!await _confirmReplaceIfNeeded()) return;
-
+    if (_selectedFile == null || _isImporting) return;
+    if (!await _confirmReplaceIfNeeded() || !mounted) return;
+    _cancelRequested = false;
+    _activeImportMode = _isReplace
+        ? ImportMode.replace
+        : _isUpdate
+        ? ImportMode.update
+        : _allowDuplicates
+        ? ImportMode.addAnyway
+        : ImportMode.merge;
+    _importCommitted = false;
+    _legacyConversion = null;
+    _importDatabase = ref.read(requireDatabaseProvider);
+    _imageCheckpoint = ImportImageCheckpoint();
+    _importMessage = 'Validating import file...';
+    _importProgress = null;
     setState(() => _isImporting = true);
-
-    NotificationHandle? task;
-
+    _showImportProgress();
+    _importHeartbeat = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _showImportProgress(),
+    );
     try {
       final file = File(_selectedFile!);
-      final kind = _classifyImportFile(_selectedFile!);
-
-      final db = ref.read(requireDatabaseProvider);
-      if (_isReplace) {
-        await db.clearAllData();
-        await ref.read(gamesProvider.notifier).refresh();
-        await ref.read(tagsProvider.notifier).refresh();
-        await persistEncryptedDbIfNeeded(ref);
-      }
-
-      task = NotificationManager.instance.beginTask('Importing...');
-
+      final kind = await _classifyImportFile(_selectedFile!);
+      _checkImport();
       var completed = true;
-      if (kind == _ImportFileKind.sqlite) {
-        // Import SQLite database
-        await _importSqliteDatabase(file, task: task);
-      } else if (kind == _ImportFileKind.encrypted) {
-        completed = await _importEncryptedFile(file, task: task);
-      } else if (kind == _ImportFileKind.json) {
-        // Import JSON
-        await _importJson(file, task: task);
-      } else if (kind == _ImportFileKind.txt) {
-        // Import plain text export
-        await _importTxt(file, task: task);
-      } else if (kind == _ImportFileKind.csv) {
-        // Import CSV
-        await _importCsv(file, task: task);
-      } else {
-        throw Exception('Unsupported import file');
+      switch (kind) {
+        case _ImportFileKind.sqlite:
+          await _importSqliteDatabase(file);
+        case _ImportFileKind.encrypted:
+          completed = await _importEncryptedFile(file, task: _importTask);
+        case _ImportFileKind.json:
+          await _importJson(file);
+        case _ImportFileKind.txt:
+          await _importTxt(file);
+        case _ImportFileKind.csv:
+          await _importCsv(file);
+        case _ImportFileKind.unsupported:
+          throw const FormatException('Unsupported import file');
       }
-
       if (!completed) {
-        task.dismiss();
+        _importTask?.dismiss();
         return;
       }
-
-      task.completeSuccess('Import completed');
-
+      _showImportProgress();
+      _importHeartbeat?.cancel();
+      _importTask?.completeSuccess(_importSummary);
+      final conversion = _legacyConversion;
+      if (mounted && conversion != null && conversion.converted) {
+        // Only successful imports show a report; startup and database reloads
+        // never block on a conversion notice.
+        await showLegacyConversionDialog(
+          context,
+          theme: ref.read(themeProvider),
+          conversion: conversion,
+          dbPath: _selectedFile!,
+        );
+      }
       if (mounted) Navigator.pop(context);
-    } catch (e) {
-      task?.completeError('Import failed: $e');
-      NotificationManager.instance.error('Import failed: $e');
+    } catch (error) {
+      final cancelled = error is ImportCancelled;
+      if (cancelled) {
+        _importMessage = 'Cancelling import and restoring checkpoint...';
+        _showImportProgress();
+      }
+      final checkpoint = _imageCheckpoint;
+      _imageCheckpoint = null;
+      try {
+        await checkpoint?.finish(committed: _importCommitted);
+      } catch (restoreError) {
+        _showImportProgress();
+        _importTask?.completeError(
+          'Database import stopped, but image recovery failed: $restoreError',
+        );
+        return;
+      }
+      _showImportProgress();
+      if (cancelled) {
+        _importTask?.completeSuccess(
+          'Import cancelled. Previous library restored.',
+        );
+      } else {
+        _importTask?.completeError(
+          _importCommitted
+              ? 'Import saved, but refreshing or saving the encrypted file failed: $error'
+              : 'Import rejected; previous library preserved. $error',
+        );
+      }
     } finally {
-      if (mounted) {
-        setState(() => _isImporting = false);
+      _importHeartbeat?.cancel();
+      try {
+        await _imageCheckpoint?.finish(committed: _importCommitted);
+      } finally {
+        _imageCheckpoint = null;
+        if (mounted) setState(() => _isImporting = false);
       }
     }
   }
@@ -783,6 +841,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     NotificationHandle? task,
   }) async {
     while (true) {
+      _checkImport();
       final password = await _promptForImportPassword(
         title: title,
         message: message,
@@ -792,6 +851,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       }
 
       try {
+        _checkImport();
         return await action(password);
       } on InvalidPasswordException {
         task?.update(message: 'Incorrect password, try again...');
@@ -804,11 +864,11 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required String message,
   }) {
     final theme = ref.read(themeProvider);
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) =>
-          DatabaseUnlockDialog(theme: theme, title: title, message: message),
+    return DatabaseUnlockDialog.show(
+      context,
+      theme,
+      title: title,
+      message: message,
     );
   }
 
@@ -816,198 +876,92 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     File file, {
     NotificationHandle? task,
   }) async {
-    final prepared = await prepareDatabaseForImport(file.path);
-    final conversion = prepared.conversion;
-    if (conversion.converted && conversion.actions.isNotEmpty) {
-      task?.update(
-        message:
-            'Normalized legacy layout (${conversion.actions.length} changes)...',
+    final prepared = await readSqliteImport(
+      file.path,
+      checkCancelled: _checkImport,
+    );
+    final source = prepared.tables;
+    _legacyConversion = prepared.conversion;
+    _checkImport();
+    final tags = <int, ImportTagSpec>{};
+    for (final row in source['tags']!) {
+      tags[row['id'] as int] = (
+        name: row['name'] as String,
+        color: row['color'] as String? ?? '#0078d4',
+        isSteamTag: row['is_steam_tag'] == 1,
       );
     }
-
-    // Import from a normalized UniKM SQLite database
-    final db = ref.read(requireDatabaseProvider);
-
-    // Open source database using sqlite3 directly
-    final sourceDb = sqlite3.sqlite3.open(
-      prepared.preparedPath,
-      mode: sqlite3.OpenMode.readOnly,
+    final links = <int, List<String>>{};
+    final gameIds = source['games']!.map((r) => r['id'] as int).toSet();
+    for (final row in source['game_tags']!) {
+      final tag = tags[row['tag_id']];
+      if (tag == null || !gameIds.contains(row['game_id'])) {
+        throw const FormatException('Database contains invalid game/tag links');
+      }
+      links.putIfAbsent(row['game_id'] as int, () => []).add(tag.name);
+    }
+    final records = <ImportRecord>[];
+    for (final row in source['games']!) {
+      final rawDeadline = row['deadline_date'];
+      final epoch = rawDeadline is int
+          ? rawDeadline
+          : int.tryParse('$rawDeadline');
+      final game = GamesCompanion.insert(
+        title: row['title'] as String,
+        gameKey: row['game_key'] as String,
+        platform: Value(row['platform'] as String? ?? 'Steam'),
+        notes: Value(row['notes'] as String? ?? ''),
+        isUsed: Value(row['is_used'] == 1),
+        coverImage: Value(row['cover_image'] as String? ?? ''),
+        hasDeadline: Value(row['has_deadline'] == 1),
+        deadlineDate: Value(
+          epoch != null && epoch > 0
+              ? DateTime.fromMillisecondsSinceEpoch(epoch * 1000)
+              : null,
+        ),
+        isDlc: Value(row['is_dlc'] == 1),
+        steamAppId: Value(row['steam_app_id'] as String? ?? ''),
+        developer: Value(row['developer'] as String? ?? ''),
+        reviewScore: Value(row['review_score'] as int? ?? 0),
+        reviewCount: Value(row['review_count'] as int? ?? 0),
+        updatedAt: Value(DateTime.now()),
+      );
+      _importDatabase!.games
+          .validateIntegrity(game, isInserting: true)
+          .throwIfInvalid(game);
+      records.add(ImportRecord(game, links[row['id']] ?? []));
+    }
+    final imagesDir = await _resolveManagedImagesDirectory();
+    final cache = <String, String>{};
+    final normalized = <ImportRecord>[];
+    for (var i = 0; i < records.length; i++) {
+      _checkImport();
+      final record = records[i];
+      final cover = await _normalizeImportedCoverImagePath(
+        record.game.coverImage.value,
+        sourceDbFile: file,
+        targetImagesDir: imagesDir,
+        cache: cache,
+      );
+      normalized.add(
+        ImportRecord(
+          record.game.copyWith(coverImage: Value(cover)),
+          record.tagNames,
+        ),
+      );
+      if (i % 100 == 0) {
+        _importMessage = 'Preparing images: ${i + 1} of ${records.length}';
+        _showImportProgress();
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    await _commitLibraryImport(
+      normalized,
+      'database',
+      tagSpecs: tags.values.toList(),
     );
-
-    try {
-      // Read all games from source (without GROUP_CONCAT for simplicity)
-      final gameResult = sourceDb.select('SELECT * FROM games');
-
-      // Read all tags from source
-      final tagResult = sourceDb.select('SELECT * FROM tags');
-
-      // Read game_tags for linking
-      final gameTagsResult = sourceDb.select('SELECT * FROM game_tags');
-
-      // Import tags first
-      final tagIdMap = <int, int>{}; // old_id -> new_id
-
-      // Build game -> tags map (pure in-memory, no DB)
-      final gameTagsMap = <int, List<int>>{};
-      for (final row in gameTagsResult) {
-        final gameId = row['game_id'] as int;
-        final tagId = row['tag_id'] as int;
-        gameTagsMap.putIfAbsent(gameId, () => []).add(tagId);
-      }
-
-      // Pre-normalize cover image paths before opening the transaction so that
-      // file I/O (copy, exists-check) stays outside the SQLite write path.
-      final imagesDir = await _resolveManagedImagesDirectory();
-      final importedCoverPathCache = <String, String>{};
-      final copiedImagePaths = <String>{};
-      final normalizedCoverImages = <int, String>{};
-      for (final row in gameResult) {
-        final oldGameId = row['id'] as int;
-        final sourceCoverImage = row['cover_image'] as String? ?? '';
-        final normalizedCoverImage = await _normalizeImportedCoverImagePath(
-          sourceCoverImage,
-          sourceDbFile: file,
-          targetImagesDir: imagesDir,
-          cache: importedCoverPathCache,
-        );
-        normalizedCoverImages[oldGameId] = normalizedCoverImage;
-        if (sourceCoverImage.trim().isNotEmpty &&
-            normalizedCoverImage != sourceCoverImage) {
-          copiedImagePaths.add(normalizedCoverImage);
-        }
-      }
-
-      // Wrap all DB writes in one transaction � the single biggest performance
-      // gain for large imports (avoids an implicit transaction per statement).
-      int importedCount = 0;
-      int skippedCount = 0;
-      int updatedCount = 0;
-      await db.transaction(() async {
-        // Import tags inside the transaction
-        for (final row in tagResult) {
-          final name = row['name'] as String;
-          final color = row['color'] as String? ?? '#0078d4';
-          final isSteamTag = (row['is_steam_tag'] as int?) == 1;
-
-          final entry = await db.getOrCreateTag(
-            name,
-            color: color,
-            isSteamTag: isSteamTag,
-          );
-          tagIdMap[row['id'] as int] = entry.id;
-        }
-
-        // Import games inside the same transaction
-        for (final row in gameResult) {
-          final key = row['game_key'] as String;
-          final notes = row['notes'] as String? ?? '';
-          final existingId = await db.getGameIdByKey(key);
-          if (_isMerge && existingId != null && !_allowDuplicates) {
-            skippedCount++;
-            continue;
-          }
-
-          // Parse deadline date if present
-          DateTime? deadlineDate;
-          final rawDeadline = row['deadline_date'];
-          if (rawDeadline is int && rawDeadline > 0) {
-            deadlineDate = DateTime.fromMillisecondsSinceEpoch(
-              rawDeadline * 1000,
-            );
-          } else if (rawDeadline is String && rawDeadline.isNotEmpty) {
-            final epoch = int.tryParse(rawDeadline);
-            if (epoch != null && epoch > 0) {
-              deadlineDate = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
-            }
-          }
-
-          final oldGameId = row['id'] as int;
-          final normalizedCoverImage = normalizedCoverImages[oldGameId] ?? '';
-
-          int gameId;
-          if (_isUpdate && existingId != null) {
-            gameId = existingId;
-            await db.updateGameFields(
-              gameId,
-              title: row['title'] as String,
-              platform: row['platform'] as String? ?? 'Steam',
-              notes: notes,
-              isUsed: (row['is_used'] as int?) == 1,
-              coverImage: normalizedCoverImage,
-              hasDeadline: (row['has_deadline'] as int?) == 1,
-              deadlineDate: deadlineDate,
-              isDlc: (row['is_dlc'] as int?) == 1,
-              steamAppId: row['steam_app_id'] as String? ?? '',
-              reviewScore: row['review_score'] as int? ?? 0,
-              reviewCount: row['review_count'] as int? ?? 0,
-              updatedAt: DateTime.now(),
-            );
-            updatedCount++;
-          } else {
-            gameId = await db.insertGame(
-              GamesCompanion.insert(
-                title: row['title'] as String,
-                gameKey: key,
-                platform: Value(row['platform'] as String? ?? 'Steam'),
-                notes: Value(notes),
-                isUsed: Value((row['is_used'] as int?) == 1),
-                coverImage: Value(normalizedCoverImage),
-                hasDeadline: Value((row['has_deadline'] as int?) == 1),
-                deadlineDate: Value(deadlineDate),
-                isDlc: Value((row['is_dlc'] as int?) == 1),
-                steamAppId: Value(row['steam_app_id'] as String? ?? ''),
-                reviewScore: Value(row['review_score'] as int? ?? 0),
-                reviewCount: Value(row['review_count'] as int? ?? 0),
-                updatedAt: Value(DateTime.now()),
-              ),
-            );
-            importedCount++;
-          }
-
-          // Link tags using the old->new id map
-          final oldTagIds = gameTagsMap[oldGameId] ?? [];
-          final newTagIds = <int>[];
-          for (final oldTagId in oldTagIds) {
-            final newTagId = tagIdMap[oldTagId];
-            if (newTagId != null) {
-              newTagIds.add(newTagId);
-            }
-          }
-          await db.setTagsForGame(gameId, newTagIds);
-
-          if (task != null && importedCount + updatedCount + skippedCount > 0) {
-            final done = importedCount + updatedCount + skippedCount;
-            task.update(message: 'Imported $done...');
-          }
-        }
-      });
-
-      // Refresh games list
-      await ref.read(gamesProvider.notifier).refresh();
-      await ref.read(tagsProvider.notifier).refresh();
-      await persistEncryptedDbIfNeeded(ref);
-      await _markImportSyncDirty(ref, db);
-
-      // Evict only the overwritten image paths from Flutter's cache so game
-      // cards immediately display fresh artwork without reloading every other
-      // cached image unnecessarily.
-      for (final path in copiedImagePaths) {
-        PaintingBinding.instance.imageCache.evict(FileImage(File(path)));
-      }
-
-      String message = 'Imported $importedCount games';
-      if (updatedCount > 0) message += ', updated $updatedCount';
-      message += ' and ${tagIdMap.length} tags';
-      if (copiedImagePaths.isNotEmpty) {
-        message += ', copied ${copiedImagePaths.length} cover images';
-      }
-      if (skippedCount > 0) {
-        message += ' (skipped $skippedCount duplicates)';
-      }
-      NotificationManager.instance.success(message);
-    } finally {
-      sourceDb.close();
-      await prepared.dispose();
+    for (final path in cache.values) {
+      PaintingBinding.instance.imageCache.evict(FileImage(File(path)));
     }
   }
 
@@ -1051,7 +1005,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       destinationFile.absolute.path,
     );
     if (sourceCanonical != destinationCanonical) {
-      await sourceFile.copy(destinationFile.path);
+      _checkImport();
+      await _imageCheckpoint!.copy(sourceFile, destinationFile);
     }
 
     cache[raw] = destinationFile.path;
@@ -1119,127 +1074,36 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       return;
     }
 
+    await _commitLibraryImport(parseLibraryJson(content), 'JSON');
+  }
+
+  Future<void> _commitLibraryImport(
+    List<ImportRecord> records,
+    String source, {
+    List<ImportTagSpec> tagSpecs = const [],
+  }) async {
     final db = ref.read(requireDatabaseProvider);
-
-    try {
-      final data = decoded is Map<String, dynamic> ? decoded : null;
-
-      if (data == null || data['games'] == null) {
-        throw Exception('Invalid JSON format - missing games array');
-      }
-
-      final games = data['games'] as List;
-
-      // First pass: collect all tags
-      final tagIdMap = <String, int>{}; // tag_name -> tag_id
-
-      for (final gameData in games) {
-        final gameTags = gameData['tags'] as List?;
-        if (gameTags != null) {
-          for (final tagName in gameTags) {
-            final name = tagName.toString();
-            if (!tagIdMap.containsKey(name)) {
-              final tagEntry = await db.getOrCreateTag(name);
-              tagIdMap[name] = tagEntry.id;
-            }
-          }
-        }
-      }
-
-      // Import games
-      int importedCount = 0;
-      int skippedCount = 0;
-      int updatedCount = 0;
-
-      for (final gameData in games) {
-        final key = gameData['key'] as String?;
-        if (key == null || key.isEmpty) continue;
-
-        final existingId = await db.getGameIdByKey(key);
-        if (_isMerge && existingId != null && !_allowDuplicates) {
-          skippedCount++;
-          continue;
-        }
-        final notes = (gameData['notes'] as String?) ?? '';
-
-        // Parse deadline date if present
-        DateTime? deadlineDate;
-        final deadline = gameData['deadline'] as String?;
-        if (deadline != null && deadline.isNotEmpty) {
-          try {
-            deadlineDate = DateTime.parse(deadline);
-          } catch (_) {}
-        }
-
-        int gameId;
-        if (_isUpdate && existingId != null) {
-          gameId = existingId;
-          await db.updateGameFields(
-            gameId,
-            title: (gameData['title'] as String?) ?? 'Unknown',
-            platform: (gameData['platform'] as String?) ?? 'Steam',
-            notes: notes,
-            isUsed: (gameData['is_used'] as bool?) ?? false,
-            coverImage: (gameData['cover_image'] as String?) ?? '',
-            hasDeadline: deadlineDate != null,
-            deadlineDate: deadlineDate,
-            isDlc: (gameData['is_dlc'] as bool?) ?? false,
-            steamAppId: (gameData['steam_app_id'] as String?) ?? '',
-            reviewScore: (gameData['rating'] as int?) ?? 0,
-            updatedAt: DateTime.now(),
-          );
-          updatedCount++;
-        } else {
-          gameId = await db.insertGame(
-            GamesCompanion.insert(
-              title: (gameData['title'] as String?) ?? 'Unknown',
-              gameKey: key,
-              platform: Value((gameData['platform'] as String?) ?? 'Steam'),
-              notes: Value(notes),
-              isUsed: Value((gameData['is_used'] as bool?) ?? false),
-              coverImage: Value((gameData['cover_image'] as String?) ?? ''),
-              hasDeadline: Value(deadlineDate != null),
-              deadlineDate: Value(deadlineDate),
-              isDlc: Value((gameData['is_dlc'] as bool?) ?? false),
-              steamAppId: Value((gameData['steam_app_id'] as String?) ?? ''),
-              reviewScore: Value((gameData['rating'] as int?) ?? 0),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-          importedCount++;
-        }
-
-        // Link tags (replace existing)
-        final gameTags = gameData['tags'] as List?;
-        if (gameTags != null) {
-          final ids = <int>[];
-          for (final tagName in gameTags) {
-            final tagId = tagIdMap[tagName.toString()];
-            if (tagId != null) ids.add(tagId);
-          }
-          await db.setTagsForGame(gameId, ids);
-        }
-
-        if (task != null && importedCount + updatedCount + skippedCount > 0) {
-          final done = importedCount + updatedCount + skippedCount;
-          task.update(message: 'Imported $done...');
-        }
-      }
-
-      // Refresh
-      await ref.read(gamesProvider.notifier).refresh();
-      await ref.read(tagsProvider.notifier).refresh();
-      await persistEncryptedDbIfNeeded(ref);
-      await _markImportSyncDirty(ref, db);
-
-      String message = 'Imported $importedCount games';
-      if (updatedCount > 0) message += ', updated $updatedCount';
-      if (skippedCount > 0) {
-        message += ' (skipped $skippedCount duplicates)';
-      }
-      NotificationManager.instance.success(message);
-    } catch (e) {
-      throw Exception('JSON import failed: $e');
+    _checkImport();
+    final result = await LibraryImporter(db).commit(
+      records,
+      _activeImportMode,
+      checkCancelled: _checkImport,
+      onProgress: _reportImportProgress,
+      tagSpecs: tagSpecs,
+    );
+    _importCommitted = true;
+    _importMessage = 'Saving imported library...';
+    _showImportProgress();
+    if (!mounted || !identical(ref.read(databaseProvider), db)) return;
+    await _markImportSyncDirty(ref, db);
+    await persistEncryptedDbIfNeeded(ref);
+    if (!mounted || !identical(ref.read(databaseProvider), db)) return;
+    await ref.read(gamesProvider.notifier).refresh();
+    await ref.read(tagsProvider.notifier).refresh();
+    _importSummary =
+        'Imported ${result.imported} games from $source, updated ${result.updated}';
+    if (result.skipped > 0) {
+      _importSummary += ' (skipped ${result.skipped} duplicates)';
     }
   }
 
@@ -1264,280 +1128,46 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required String sourceLabel,
     NotificationHandle? task,
   }) async {
-    final db = ref.read(requireDatabaseProvider);
     final imagesDir = await _resolveManagedImagesDirectory();
-    final importedCoverPathCache = <String, String>{};
-    final copiedImagePaths = <String>{};
-    final categoryTagIdMap = <String, int>{};
-
-    int importedCount = 0;
-    int skippedCount = 0;
-    int updatedCount = 0;
-
-    for (final record in records) {
-      final existingId = await db.getGameIdByKey(record.key);
-      if (_isMerge && existingId != null && !_allowDuplicates) {
-        skippedCount++;
-        continue;
-      }
-
-      final sourceCoverImage = record.iconPath ?? '';
-      final normalizedCoverImage = await _normalizeImportedCoverImagePath(
-        sourceCoverImage,
+    final cache = <String, String>{};
+    final imported = <ImportRecord>[];
+    for (var i = 0; i < records.length; i++) {
+      _checkImport();
+      final record = records[i];
+      final cover = await _normalizeImportedCoverImagePath(
+        record.iconPath ?? '',
         sourceDbFile: sourceFile,
         targetImagesDir: imagesDir,
-        cache: importedCoverPathCache,
+        cache: cache,
       );
-      if (sourceCoverImage.trim().isNotEmpty &&
-          normalizedCoverImage != sourceCoverImage) {
-        copiedImagePaths.add(normalizedCoverImage);
-      }
-
-      final developer = record.developer?.trim();
-      final reviewScore = record.reviewScore ?? 0;
-      final reviewCount = record.reviewCount ?? 0;
-
-      int gameId;
-      if (_isUpdate && existingId != null) {
-        gameId = existingId;
-        await db.updateGameFields(
-          gameId,
-          title: record.title,
-          platform: 'Steam',
-          coverImage: normalizedCoverImage,
-          steamAppId: record.appId ?? '',
-          developer: developer != null && developer.isNotEmpty
-              ? developer
-              : null,
-          reviewScore: reviewScore,
-          reviewCount: reviewCount,
-          updatedAt: DateTime.now(),
-        );
-        updatedCount++;
-      } else {
-        gameId = await db.insertGame(
+      final developer = record.developer?.trim() ?? '';
+      final category = record.category?.trim() ?? '';
+      imported.add(
+        ImportRecord(
           GamesCompanion.insert(
             title: record.title,
             gameKey: record.key,
             platform: const Value('Steam'),
-            coverImage: Value(normalizedCoverImage),
+            coverImage: Value(cover),
             steamAppId: Value(record.appId ?? ''),
-            developer: Value(developer ?? ''),
-            reviewScore: Value(reviewScore),
-            reviewCount: Value(reviewCount),
+            developer: developer.isEmpty
+                ? const Value.absent()
+                : Value(developer),
+            reviewScore: Value(record.reviewScore ?? 0),
+            reviewCount: Value(record.reviewCount ?? 0),
             updatedAt: Value(DateTime.now()),
           ),
-        );
-        if (developer != null && developer.isNotEmpty) {
-          await db.updateGameFields(
-            gameId,
-            developer: developer,
-            updatedAt: DateTime.now(),
-          );
-        }
-        importedCount++;
-      }
-
-      final category = record.category?.trim() ?? '';
-      if (category.isNotEmpty && category.toLowerCase() != 'new') {
-        final existingTagId = categoryTagIdMap[category];
-        final tagId = existingTagId ?? (await db.getOrCreateTag(category)).id;
-        categoryTagIdMap[category] = tagId;
-        await db.setTagsForGame(gameId, <int>[tagId]);
-      } else {
-        await db.setTagsForGame(gameId, const <int>[]);
-      }
-
-      if (task != null && importedCount + updatedCount + skippedCount > 0) {
-        final done = importedCount + updatedCount + skippedCount;
-        task.update(message: 'Imported $done from $sourceLabel...');
-      }
+          category.isEmpty || category.toLowerCase() == 'new' ? [] : [category],
+        ),
+      );
+      if (i % 100 == 0) await Future<void>.delayed(Duration.zero);
     }
-
-    await ref.read(gamesProvider.notifier).refresh();
-    await ref.read(tagsProvider.notifier).refresh();
-    await persistEncryptedDbIfNeeded(ref);
-    await _markImportSyncDirty(ref, db);
-
-    String message = 'Imported $importedCount games from $sourceLabel';
-    if (updatedCount > 0) {
-      message += ', updated $updatedCount';
-    }
-    if (categoryTagIdMap.isNotEmpty) {
-      message += ', mapped ${categoryTagIdMap.length} categories to tags';
-    }
-    if (copiedImagePaths.isNotEmpty) {
-      message += ', copied ${copiedImagePaths.length} cover images';
-    }
-    if (skippedCount > 0) {
-      message += ' (skipped $skippedCount duplicates)';
-    }
-    NotificationManager.instance.success(message);
+    await _commitLibraryImport(imported, sourceLabel);
   }
 
-  Future<void> _importCsv(File file, {NotificationHandle? task}) async {
-    final lines = await file.readAsLines();
-    if (lines.isEmpty) {
-      throw Exception('CSV file is empty');
-    }
-
-    final db = ref.read(requireDatabaseProvider);
-
-    // Parse header to find column indices
-    final headers = _parseCsvLine(lines.first);
-    final titleIdx = headers.indexOf('Title');
-    final keyIdx = headers.indexOf('Key');
-    final platformIdx = headers.indexOf('Platform');
-    final usedIdx = headers.indexOf('Used');
-    final dlcIdx = headers.indexOf('DLC');
-    final ratingIdx = headers.indexOf('Rating');
-    final tagsIdx = headers.indexOf('Tags');
-    final notesIdx = headers.indexOf('Notes');
-
-    if (keyIdx == -1) {
-      throw Exception('CSV must have a "Key" column');
-    }
-    if (titleIdx == -1) {
-      throw Exception('CSV must have a "Title" column');
-    }
-
-    // Tag name -> id map
-    final tagIdMap = <String, int>{};
-
-    int importedCount = 0;
-    int skippedCount = 0;
-    int updatedCount = 0;
-
-    // Parse data rows
-    for (var i = 1; i < lines.length; i++) {
-      final values = _parseCsvLine(lines[i]);
-      if (values.isEmpty) continue;
-
-      final key = values.length > keyIdx ? values[keyIdx] : '';
-      if (key.isEmpty) continue;
-
-      final existingId = await db.getGameIdByKey(key);
-      if (_isMerge && existingId != null && !_allowDuplicates) {
-        skippedCount++;
-        continue;
-      }
-
-      final title = values.length > titleIdx ? values[titleIdx] : 'Unknown';
-      final platform = platformIdx >= 0 && values.length > platformIdx
-          ? values[platformIdx]
-          : 'Steam';
-      final isUsed =
-          usedIdx >= 0 &&
-          values.length > usedIdx &&
-          values[usedIdx].toLowerCase() == 'yes';
-      final isDlc =
-          dlcIdx >= 0 &&
-          values.length > dlcIdx &&
-          values[dlcIdx].toLowerCase() == 'yes';
-      final rating = ratingIdx >= 0 && values.length > ratingIdx
-          ? int.tryParse(values[ratingIdx]) ?? 0
-          : 0;
-      final notes = notesIdx >= 0 && values.length > notesIdx
-          ? values[notesIdx]
-          : '';
-
-      int gameId;
-      if (_isUpdate && existingId != null) {
-        gameId = existingId;
-        await db.updateGameFields(
-          gameId,
-          title: title,
-          platform: platform,
-          notes: notes,
-          isUsed: isUsed,
-          isDlc: isDlc,
-          reviewScore: rating,
-          updatedAt: DateTime.now(),
-        );
-        updatedCount++;
-      } else {
-        gameId = await db.insertGame(
-          GamesCompanion.insert(
-            title: title,
-            gameKey: key,
-            platform: Value(platform),
-            notes: Value(notes),
-            isUsed: Value(isUsed),
-            isDlc: Value(isDlc),
-            reviewScore: Value(rating),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-        importedCount++;
-      }
-
-      // Handle tags (semicolon-separated) (replace existing)
-      if (tagsIdx >= 0 &&
-          values.length > tagsIdx &&
-          values[tagsIdx].isNotEmpty) {
-        final tagNames = values[tagsIdx]
-            .split(';')
-            .map((t) => t.trim())
-            .where((t) => t.isNotEmpty);
-        final ids = <int>[];
-        for (final tagName in tagNames) {
-          if (!tagIdMap.containsKey(tagName)) {
-            final tagEntry = await db.getOrCreateTag(tagName);
-            tagIdMap[tagName] = tagEntry.id;
-          }
-          final tagId = tagIdMap[tagName];
-          if (tagId != null) ids.add(tagId);
-        }
-        await db.setTagsForGame(gameId, ids);
-      } else {
-        await db.setTagsForGame(gameId, const []);
-      }
-
-      if (task != null && importedCount + updatedCount + skippedCount > 0) {
-        final done = importedCount + updatedCount + skippedCount;
-        task.update(message: 'Imported $done...');
-      }
-    }
-
-    // Refresh
-    await ref.read(gamesProvider.notifier).refresh();
-    await ref.read(tagsProvider.notifier).refresh();
-    await persistEncryptedDbIfNeeded(ref);
-    await _markImportSyncDirty(ref, db);
-
-    String message = 'Imported $importedCount games from CSV';
-    if (updatedCount > 0) message += ', updated $updatedCount';
-    if (skippedCount > 0) {
-      message += ' (skipped $skippedCount duplicates)';
-    }
-    NotificationManager.instance.success(message);
-  }
-
-  List<String> _parseCsvLine(String line) {
-    final result = <String>[];
-    var inQuotes = false;
-    var field = StringBuffer();
-
-    for (var i = 0; i < line.length; i++) {
-      final char = line[i];
-
-      if (char == '"') {
-        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-          // Escaped quote
-          field.write('"');
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char == ',' && !inQuotes) {
-        result.add(field.toString());
-        field = StringBuffer();
-      } else {
-        field.write(char);
-      }
-    }
-    result.add(field.toString());
-    return result;
+  Future<void> _importCsv(File file) async {
+    final records = parseLibraryCsv(await file.readAsString());
+    await _commitLibraryImport(records, 'CSV');
   }
 
   @override
@@ -1571,19 +1201,25 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                   child: MouseRegion(
                     onEnter: (_) => setState(() => _isHovering = true),
                     onExit: (_) => setState(() => _isHovering = false),
-                    child: DropTarget(
-                      enable: supportsDragAndDrop,
+                    child: WindowDropTarget(
+                      enable: supportsDragAndDrop && !_isImporting,
                       onDragDone: (details) async {
-                        if (details.files.isNotEmpty) {
-                          await _handleSelectedFilePath(
-                            details.files.first.path,
+                        setState(() => _isDragging = false);
+                        if (details.files.length != 1 ||
+                            details.files.single is DropItemDirectory) {
+                          NotificationManager.instance.error(
+                            'Drop one supported database import file.',
                           );
+                          return;
                         }
+                        await _handleSelectedFilePath(
+                          details.files.single.path,
+                        );
                       },
                       onDragEntered: (_) => setState(() => _isDragging = true),
                       onDragExited: (_) => setState(() => _isDragging = false),
                       child: InkWell(
-                        onTap: _selectFile,
+                        onTap: _isImporting ? null : _selectFile,
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -1640,6 +1276,15 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (_selectedFile != null)
+                                IconButton(
+                                  tooltip: 'Clear selection',
+                                  style: theme.compactIconButtonStyle,
+                                  onPressed: _isImporting
+                                      ? null
+                                      : _clearFileSelection,
+                                  icon: const Icon(Icons.close, size: 20),
+                                ),
                             ],
                           ),
                         ),
@@ -1649,7 +1294,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
                 ),
                 const SizedBox(height: kElementVSpacing),
                 Text(
-                  'Supported: .db, .sqlite, .enc, .json, .csv, .txt, and compatible .bak backups',
+                  'Supported: SQLite databases (including files without an extension), .enc, .json, .csv, .txt, and compatible .bak backups',
                   style: TextStyle(color: theme.textSecondary, fontSize: 12),
                 ),
                 if (_selectedFile != null && _previewCount > 0) ...[
@@ -1734,6 +1379,18 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         ],
       ),
       actions: [
+        if (_isImporting && !_importCommitted)
+          OutlinedButton(
+            onPressed: _cancelRequested
+                ? null
+                : () {
+                    _cancelRequested = true;
+                    _importMessage =
+                        'Cancelling import and restoring checkpoint...';
+                    _showImportProgress();
+                  },
+            child: const Text('Cancel import'),
+          ),
         DialogActionBar(
           theme: theme,
           onConfirm: _import,

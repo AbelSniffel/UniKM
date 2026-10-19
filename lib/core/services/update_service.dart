@@ -5,12 +5,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pub_semver/pub_semver.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/state/session_value.dart';
 import '../utils/format_utils.dart';
 
 import '../constants/app_constants.dart';
@@ -154,11 +155,9 @@ class UpdateDownloadResult {
 class UpdateService {
   UpdateService({
     String? customRepo,
-    String? githubToken,
-    http.Client? githubClient,
-  }) : _repo = customRepo ?? kGitHubRepo,
-       _githubToken = githubToken,
-       _githubClient = githubClient;
+    this._githubToken,
+    this._githubClient,
+  }) : _repo = customRepo ?? kGitHubRepo;
 
   final String _repo;
   final String? _githubToken;
@@ -350,7 +349,7 @@ class UpdateService {
         continue;
       }
 
-      if (!_isNewerVersion(release.version, currentVersion)) {
+      if (compareVersions(release.version, currentVersion) <= 0) {
         continue;
       }
 
@@ -624,68 +623,35 @@ class UpdateService {
   // Version comparison
   // ---------------------------------------------------------------------------
 
-  /// Compare two semantic versions
-  /// Returns true if [newVersion] is newer than [currentVersion]
-  bool _isNewerVersion(String newVersion, String currentVersion) {
-    try {
-      final newParts = _parseVersion(newVersion);
-      final currentParts = _parseVersion(currentVersion);
-
-      for (var i = 0; i < 3; i++) {
-        if (newParts[i] > currentParts[i]) return true;
-        if (newParts[i] < currentParts[i]) return false;
-      }
-
-      return false; // Versions are equal
-    } catch (e) {
-      // If parsing fails, do a simple string comparison
-      return newVersion.compareTo(currentVersion) > 0;
-    }
-  }
-
-  /// Returns a positive value if [a] is newer, negative if older, 0 if equal.
+  /// Shared release precedence for update checks and the changelog. Build
+  /// metadata does not identify a newer release; prerelease identifiers do.
   int compareVersions(String a, String b) {
     try {
-      final aParts = _parseVersion(a);
-      final bParts = _parseVersion(b);
-      for (var i = 0; i < 3; i++) {
-        if (aParts[i] > bParts[i]) return 1;
-        if (aParts[i] < bParts[i]) return -1;
-      }
-      return 0;
-    } catch (_) {
+      return _parseVersion(a).compareTo(_parseVersion(b));
+    } on FormatException {
       return a.compareTo(b);
     }
   }
 
-  /// Parse a semantic version string into [major, minor, patch]
-  List<int> _parseVersion(String version) {
-    // Remove 'v' prefix if present
-    final cleanVersion = version.startsWith('v') ? version.substring(1) : version;
-
-    // Remove any prerelease suffix (e.g., "-beta.1")
-    final baseParts = cleanVersion.split('-')[0].split('.');
-
-    final result = <int>[0, 0, 0];
-    for (var i = 0; i < baseParts.length && i < 3; i++) {
-      result[i] = int.tryParse(baseParts[i]) ?? 0;
+  Version _parseVersion(String version) {
+    final clean = version
+        .trim()
+        .replaceFirst(RegExp(r'^[vV]'), '')
+        .split('+')
+        .first;
+    final suffixAt = clean.indexOf('-');
+    final core = (suffixAt < 0 ? clean : clean.substring(0, suffixAt)).split(
+      '.',
+    );
+    // Retain support for older abbreviated tags such as v1 and v1.4.
+    while (core.length < 3) {
+      core.add('0');
     }
-
-    return result;
+    return Version.parse(
+      '${core.join('.')}${suffixAt < 0 ? '' : clean.substring(suffixAt)}',
+    );
   }
 }
 
 /// State for the next scheduled automatic update check.
-final nextAutoUpdateTimeProvider =
-    NotifierProvider<NextAutoUpdateTimeNotifier, DateTime?>(
-      NextAutoUpdateTimeNotifier.new,
-    );
-
-class NextAutoUpdateTimeNotifier extends Notifier<DateTime?> {
-  @override
-  DateTime? build() => null;
-
-  void setNextUpdateTime(DateTime? value) {
-    state = value;
-  }
-}
+final nextAutoUpdateTimeProvider = sessionValueProvider<DateTime?>(null);

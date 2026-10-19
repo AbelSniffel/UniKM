@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
@@ -48,10 +49,20 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
   bool _cachedTagCountFits = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _lastTagCacheKey = null;
+  }
+
+  @override
   void didUpdateWidget(GameCardTagsRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Invalidate if the game changes (different tag list).
-    if (oldWidget.game.id != widget.game.id) {
+    if (oldWidget.game.id != widget.game.id ||
+        !const ListEquality<Tag>().equals(
+          oldWidget.game.tags,
+          widget.game.tags,
+        )) {
       _lastTagCacheKey = null;
     }
   }
@@ -79,7 +90,12 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final bucketedWidth = (rawWidth / 8).floorToDouble() * 8.0;
-        return _buildTagsRowForWidth(context, bucketedWidth, tagNames, textScaler);
+        return _buildTagsRowForWidth(
+          context,
+          bucketedWidth,
+          tagNames,
+          textScaler,
+        );
       },
     );
   }
@@ -109,9 +125,14 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
     const gap = 4.0;
 
     double measureChip(String text, TextStyle style, EdgeInsets padding) {
-      return TagWidthCache.measureTextWidth(text, style, textDirection, textScaler)
-          + padding.horizontal
-          + 2.0;
+      return TagWidthCache.measureTextWidth(
+            text,
+            style,
+            textDirection,
+            textScaler,
+          ) +
+          padding.horizontal +
+          2.0;
     }
 
     final tagFingerprint = widget.game.tags.map((t) => t.id).join(',');
@@ -134,12 +155,6 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
         textScaler,
       );
 
-      final tagNameWidths = List<double>.generate(
-        tagNames.length,
-        (i) => TagWidthCache.measureTextWidth(tagNames[i], resolvedTagStyle, textDirection, textScaler),
-        growable: false,
-      );
-
       final countWidthCache = <int, double>{};
       double countChipWidthFor(int remaining) {
         return countWidthCache.putIfAbsent(
@@ -152,7 +167,14 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
       double runningTextWidth = 0.0;
       bestTagsWidth = 0.0;
       for (var i = 0; i < tagNames.length; i++) {
-        runningTextWidth += tagNameWidths[i];
+        // Stop measuring as soon as another tag cannot fit. Long Steam tag
+        // lists should not lay out text that is represented by the count chip.
+        runningTextWidth += TagWidthCache.measureTextWidth(
+          tagNames[i],
+          resolvedTagStyle,
+          textDirection,
+          textScaler,
+        );
         if (i > 0) runningTextWidth += separatorWidth;
 
         final visibleCount = i + 1;
@@ -175,8 +197,8 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
       final remainingForFit = tagNames.length - bestCount;
       countFits = remainingForFit > 0
           ? (countChipWidthFor(remainingForFit) +
-                  (bestTagsWidth > 0 ? bestTagsWidth + gap : 0.0) <=
-              maxWidth)
+                    (bestTagsWidth > 0 ? bestTagsWidth + gap : 0.0) <=
+                maxWidth)
           : false;
 
       _lastTagCacheKey = tagKey;
@@ -187,7 +209,9 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
 
     final showTagsText = bestCount > 0;
     final remainingCount = tagNames.length - bestCount;
-    final displayTags = showTagsText ? tagNames.take(bestCount).join(' · ') : '';
+    final displayTags = showTagsText
+        ? tagNames.take(bestCount).join(' · ')
+        : '';
     final displayCount = remainingCount > 0 ? '+$remainingCount' : '';
     final representativeTag = widget.game.tags.first;
 
@@ -217,8 +241,8 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
               padding: countPadding,
               weight: FontWeight.w600,
               overrideBackground: representativeTag.isSteamTag
-                  ? widget.theme.accent.withValues(alpha: 0.92)
-                  : representativeTag.color.withValues(alpha: 0.92),
+                  ? widget.theme.accent
+                  : representativeTag.color,
               overrideTextColor: widget.theme.primaryButtonText,
             ),
           ],

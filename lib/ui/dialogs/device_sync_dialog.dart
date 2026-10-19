@@ -7,17 +7,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/device_sync_models.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
-import '../pages/settings_sections/settings_common.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/pair_code_widgets.dart';
 import '../widgets/section_groupbox.dart';
+import '../widgets/groupbox_family_title.dart';
+import '../widgets/settings_header_actions.dart';
+import '../widgets/toggle_switch.dart';
 
 Future<void> showDeviceSyncDialog(BuildContext context) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (_) => const _DeviceSyncDialog(),
   );
@@ -25,31 +28,66 @@ Future<void> showDeviceSyncDialog(BuildContext context) {
 
 /// Shows the sync direction choice dialog for a trusted peer.
 ///
-/// Returns `true` when the user chooses "This Device" (push),
-/// `false` for "Remote Device" (pull), or `null` if dismissed.
-Future<bool?> _showChooseSyncDirectionDialog({
+/// Returns `true` when the user chooses "Send",
+/// `false` for "Receive", or `null` if dismissed.
+Future<bool?> showChooseSyncDirectionDialog({
   required BuildContext context,
   required AppThemeData theme,
   required bool hasMismatch,
+  required String peerName,
+  required String peerId,
 }) {
-  return showDialog<bool>(
+  const directionButtonStyle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
+
+  return showAppDialog<bool>(
     context: context,
     barrierDismissible: true,
     builder: (ctx) => ThemedAlertDialog(
       theme: theme,
+      maxWidth: kCompactDialogWidth,
       title: DialogHeader(
-        icon: hasMismatch ? Icons.warning_amber_rounded : Icons.sync,
-        title: hasMismatch ? 'Database Mismatch' : 'Choose Sync Direction',
+        icon: Icons.sync,
+        title: 'Sync Library',
         theme: theme,
       ),
-      content: Text(
-        hasMismatch
-            ? 'These devices have different database files. '
-                  'Choose which device\'s data to sync from — changes will be merged in. '
-                  'If you choose Remote Device, this device will switch to the remote database filename before syncing.'
-            : 'Choose which device\'s data to sync from. '
-                  'Changes from the selected device will be merged in.',
-        style: TextStyle(color: theme.textSecondary),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Sync with $peerName',
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose where to send changes. Changes are merged into the destination library.',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Consumer(
+            builder: (context, ref, _) {
+              final lastSync = ref.watch(syncPeerLastSyncProvider(peerId));
+              return Text(
+                'Last sync: ${lastSync.when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              );
+            },
+          ),
+          if (hasMismatch) ...[
+            const SizedBox(height: 16),
+            DialogBanner.warning(
+              theme: theme,
+              message:
+                  'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
+            ),
+          ],
+        ],
       ),
       actions: [
         Row(
@@ -57,16 +95,32 @@ Future<bool?> _showChooseSyncDirectionDialog({
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.pop(ctx, false),
-                icon: const Icon(Icons.download),
-                label: const Text('Remote Device'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  textStyle: directionButtonStyle,
+                ),
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Receive'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.pop(ctx, true),
-                icon: const Icon(Icons.upload),
-                label: const Text('This Device'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  textStyle: directionButtonStyle,
+                ),
+                icon: const Icon(Icons.upload, size: 18),
+                label: const Text('Send'),
               ),
             ),
           ],
@@ -76,7 +130,14 @@ Future<bool?> _showChooseSyncDirectionDialog({
   );
 }
 
-void _showOutgoingPairCodeDialog({
+String _formatLastSync(DateTime? value) {
+  if (value == null) return 'Never';
+  final local = value.toLocal();
+  return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+}
+
+void showOutgoingPairCodeDialog({
   required BuildContext context,
   required AppThemeData theme,
   required String peerName,
@@ -95,7 +156,7 @@ void _showOutgoingPairCodeDialog({
     if (ctx != null && ctx.mounted) Navigator.of(ctx).maybePop();
   }
 
-  showDialog<void>(
+  showAppDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) {
@@ -124,10 +185,7 @@ void _showOutgoingPairCodeDialog({
                 style: TextStyle(color: theme.textSecondary),
               ),
               const SizedBox(height: 12),
-              PairCodeDisplay(
-                code: verificationCode,
-                theme: theme,
-              ),
+              PairCodeDisplay(code: verificationCode, theme: theme),
               const SizedBox(height: 8),
               Text(
                 'This dialog will close automatically when pairing completes.',
@@ -136,7 +194,7 @@ void _showOutgoingPairCodeDialog({
             ],
           ),
           actions: [
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 if (cancelTriggered) return;
                 cancelTriggered = true;
@@ -166,13 +224,27 @@ class _DeviceSyncDialog extends ConsumerStatefulWidget {
 }
 
 class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
+  bool _refreshing = false;
+
+  Future<void> _refreshDiscovery() async {
+    if (_refreshing) return;
+    final notifier = ref.read(deviceSyncProvider.notifier);
+    setState(() => _refreshing = true);
+    try {
+      await notifier.discoverPeers();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final snapshot = ref.read(deviceSyncProvider).asData?.value;
       if (snapshot?.enabled == true) {
-        unawaited(ref.read(deviceSyncProvider.notifier).discoverPeers());
+        unawaited(_refreshDiscovery());
       }
     });
   }
@@ -181,12 +253,16 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final syncAsync = ref.watch(deviceSyncProvider);
-    final isWindows =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    final isDesktop =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.fuchsia);
     final notifier = ref.read(deviceSyncProvider.notifier);
 
     Future<void> grantFirewallAccess() async {
-      final granted = await notifier.grantWindowsFirewallAccess();
+      final granted = await notifier.grantFirewallAccess();
       if (granted) {
         NotificationManager.instance.success(
           'Firewall rules added for UniKM. Rechecked firewall status.',
@@ -205,12 +281,17 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
       maxWidth: 680,
       title: DialogHeader(icon: Icons.lan, title: 'Device Sync', theme: theme),
       titleActions: [
-        if (isWindows)
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings_outlined),
-            tooltip: 'Grant Firewall Access',
-            onPressed: grantFirewallAccess,
+        Tooltip(
+          message: 'Enable Local Device Sync',
+          child: Semantics(
+            label: 'Enable Local Device Sync',
+            child: AppToggleSwitch(
+              theme: theme,
+              value: syncAsync.asData?.value.enabled ?? false,
+              onChanged: syncAsync.asData == null ? null : notifier.setEnabled,
+            ),
           ),
+        ),
       ],
       content: syncAsync.when(
         loading: () => const SizedBox(
@@ -224,10 +305,16 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
           ),
         ),
         error: (error, _) => _ErrorView(error: error.toString(), theme: theme),
-        data: (sync) => _SyncContent(sync: sync, theme: theme),
+        data: (sync) => _SyncContent(
+          sync: sync,
+          theme: theme,
+          onGrantFirewallAccess: isDesktop ? grantFirewallAccess : null,
+          refreshing: _refreshing,
+          onRefresh: _refreshDiscovery,
+        ),
       ),
       actions: [
-        TextButton(
+        ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
         ),
@@ -237,17 +324,19 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
 }
 
 class _SyncContent extends ConsumerWidget {
-  const _SyncContent({required this.sync, required this.theme});
+  const _SyncContent({
+    required this.sync,
+    required this.theme,
+    this.onGrantFirewallAccess,
+    required this.refreshing,
+    required this.onRefresh,
+  });
 
   final DeviceSyncSnapshot sync;
   final AppThemeData theme;
-
-  String _formatLastSync(DateTime? value) {
-    if (value == null) return 'Never';
-    final local = value.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
+  final VoidCallback? onGrantFirewallAccess;
+  final bool refreshing;
+  final VoidCallback onRefresh;
 
   IconData _statusIcon(DeviceSyncStatus status) {
     return switch (status) {
@@ -337,46 +426,35 @@ class _SyncContent extends ConsumerWidget {
         : Icons.desktop_windows;
   }
 
-  ({IconData icon, Color color, String label}) _deviceVisual(
-    _UnifiedDeviceRow row,
-  ) {
+  ({Color color, String label}) _deviceVisual(_UnifiedDeviceRow row) {
+    if (row.discovered?.isSyncCompatible == false) {
+      return (color: theme.textSecondary, label: 'Incompatible sync version');
+    }
     if (row.pendingRequest != null) {
-      return (
-        icon: Icons.handshake,
-        color: theme.accent,
-        label: 'Incoming Pair Request',
-      );
+      return (color: theme.accent, label: 'Incoming Pair Request');
     }
 
     if (row.trusted != null) {
       if (!sync.enabled) {
-        return (icon: Icons.link, color: theme.textSecondary, label: 'Trusted');
+        return (color: theme.textSecondary, label: 'Trusted');
       }
       // DB mismatch takes highest priority — warn regardless of online state.
       if (sync.dbMismatchPeerIds.contains(row.id)) {
-        return (icon: Icons.link, color: Colors.orange, label: 'DB Mismatch');
+        return (color: Colors.orange, label: 'DB Mismatch');
       }
       // Sync is currently in progress with this specific device.
       if (sync.activeSyncPeerId == row.id) {
-        return (icon: Icons.sync, color: theme.secondary, label: 'Syncing...');
+        return (color: theme.secondary, label: 'Syncing...');
       }
       // Device responded to the last discovery scan — it is reachable.
       if (row.discovered != null) {
-        return (icon: Icons.link, color: theme.secondary, label: 'Online');
+        return (color: theme.secondary, label: 'Online');
       }
       // Trusted but did not respond to discovery — offline.
-      return (
-        icon: Icons.link_off,
-        color: theme.textSecondary,
-        label: 'Offline',
-      );
+      return (color: theme.textSecondary, label: 'Offline');
     }
 
-    return (
-      icon: Icons.devices,
-      color: theme.textSecondary,
-      label: 'Discovered',
-    );
+    return (color: theme.textSecondary, label: 'Discovered');
   }
 
   List<_UnifiedDeviceRow> _buildUnifiedRows() {
@@ -436,9 +514,13 @@ class _SyncContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(deviceSyncProvider.notifier);
     final unifiedRows = _buildUnifiedRows();
+    final showDeviceId = ref.watch(showSyncDeviceIdProvider);
     final hasStatus =
         sync.statusMessage != null && sync.statusMessage!.isNotEmpty;
+    final isRefreshing =
+        refreshing || sync.status == DeviceSyncStatus.discovering;
     final isBusy =
+        isRefreshing ||
         sync.status == DeviceSyncStatus.syncing ||
         sync.status == DeviceSyncStatus.discovering ||
         sync.status == DeviceSyncStatus.connecting;
@@ -452,163 +534,100 @@ class _SyncContent extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Top groupbox: device list ─────────────────────────────────────
-        SectionGroupBox(
-          title: 'Devices',
-          titleIcon: Icons.devices,
+        GroupBoxFamilyTitle(
           theme: theme,
-          groupPosition: SectionGroupPosition.first,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          title: 'Device List',
+          icon: Icons.devices_outlined,
+          trailingBuilder: (expanded) => SettingsHeaderActions(
+            theme: theme,
+            expanded: expanded,
             children: [
-              // Device list
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: unifiedRows.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          'No devices found yet. Device discovery runs automatically while sync is enabled.',
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
+              if (onGrantFirewallAccess != null)
+                AppNavigationButton(
+                  theme: theme,
+                  isSelected: false,
+                  isEnabled: true,
+                  isHorizontal: true,
+                  tooltipMessage: 'Grant Firewall Access',
+                  iconData: Icons.admin_panel_settings_outlined,
+                  iconSize: 20,
+                  minWidth: 40,
+                  minHeight: 36,
+                  onTap: onGrantFirewallAccess,
+                ),
+              AppNavigationButton(
+                theme: theme,
+                isSelected: false,
+                isEnabled: sync.enabled && !isBusy,
+                isHorizontal: true,
+                tooltipMessage: 'Refresh device discovery',
+                iconData: isRefreshing ? null : Icons.refresh,
+                iconSize: 20,
+                minWidth: 40,
+                minHeight: 36,
+                onTap: sync.enabled && !isBusy ? onRefresh : null,
+                iconBuilder: isRefreshing
+                    ? (context, color, size) => SizedBox(
+                        width: size,
+                        height: size,
+                        child: AppCircularProgressIndicator(color: color),
                       )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: unifiedRows.length,
-                        itemBuilder: (_, i) {
-                          final row = unifiedRows[i];
-                          final visual = _deviceVisual(row);
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Tooltip(
-                              message: row.trusted != null
-                                  ? 'Last sync: ${_formatLastSync(sync.lastSyncAt)}'
-                                  : '',
-                              child: Icon(visual.icon, color: visual.color),
-                            ),
-                            title: Row(
-                              children: [
-                                Icon(
-                                  _deviceTypeIcon(row),
-                                  size: 16,
-                                  color: theme.textSecondary,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    row.name,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Text(
-                              '${row.host}:${row.port} \u2022 ${visual.label}',
-                            ),
-                            trailing: _buildRowActions(
-                              context,
-                              row,
-                              ref,
-                              notifier,
-                            ),
-                          );
-                        },
-                      ),
+                    : null,
               ),
             ],
           ),
         ),
-        // ── Bottom groupbox: sync settings ────────────────────────────────
+        const SizedBox(height: kGroupBoxSpacing),
         SectionGroupBox(
-          title: 'Sync Settings',
-          titleIcon: Icons.settings,
+          title: '',
+          showTitle: false,
           theme: theme,
-          groupPosition: SectionGroupPosition.last,
-          alternateBackground: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ToggleSettingRow(
-                theme: theme,
-                label: 'Enable Local Device Sync',
-                description:
-                    'Allows LAN discovery and manual sync between paired devices.',
-                value: sync.enabled,
-                onChanged: (value) {
-                  notifier.setEnabled(value);
-                },
-              ),
-              if (!kIsWeb &&
-                  defaultTargetPlatform == TargetPlatform.windows) ...[
-                const SizedBox(height: 10),
-                if (sync.firewallStatusMessage != null &&
-                    sync.firewallStatusMessage!.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: theme.surface.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: theme.warning.withValues(alpha: 0.5),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: unifiedRows.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      'No devices found yet. Device discovery runs automatically while sync is enabled.',
+                      style: TextStyle(
+                        color: theme.textSecondary,
+                        fontSize: 12,
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.shield_outlined,
-                              color: theme.warning,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                sync.firewallStatusMessage!,
-                                style: TextStyle(
-                                  color: theme.textSecondary,
-                                  fontSize: 12,
-                                ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: unifiedRows.length,
+                    itemBuilder: (_, i) {
+                      final row = unifiedRows[i];
+                      final visual = _deviceVisual(row);
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Consumer(
+                          builder: (context, ref, _) {
+                            final lastSync = row.trusted == null
+                                ? null
+                                : ref.watch(syncPeerLastSyncProvider(row.id));
+                            return Tooltip(
+                              message: lastSync == null
+                                  ? ''
+                                  : 'Last sync: ${lastSync.when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+                              child: Icon(
+                                _deviceTypeIcon(row),
+                                color: visual.color,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final granted = await notifier
-                                .grantWindowsFirewallAccess();
-                            if (granted) {
-                              NotificationManager.instance.success(
-                                'Firewall rules added for UniKM. Rechecked firewall status.',
-                              );
-                              return;
-                            }
-                            if (context.mounted) {
-                              NotificationManager.instance.error(
-                                'Could not add firewall rules (request canceled or failed).',
-                              );
-                            }
+                            );
                           },
-                          icon: const Icon(
-                            Icons.admin_panel_settings_outlined,
-                            size: 16,
-                          ),
-                          label: const Text('Grant Firewall Access'),
                         ),
-                      ],
-                    ),
+                        title: Text(row.name, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                          '${row.host}:${row.port} \u2022 ${visual.label}',
+                        ),
+                        trailing: _buildRowActions(context, row, ref, notifier),
+                      );
+                    },
                   ),
-              ],
-            ],
           ),
         ),
         if (hasStatus)
@@ -644,14 +663,14 @@ class _SyncContent extends ConsumerWidget {
               ],
             ),
           ),
-        // ── Device ID info (between groupboxes and footer) ─────────────────
-        Padding(
-          padding: const EdgeInsets.only(top: 8, left: 4),
-          child: Text(
-            'Device ID: ${sync.deviceId}',
-            style: TextStyle(color: theme.textSecondary, fontSize: 11),
+        if (showDeviceId)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 4),
+            child: SelectableText(
+              'Device ID: ${sync.deviceId}',
+              style: TextStyle(color: theme.textSecondary, fontSize: 11),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -662,6 +681,9 @@ class _SyncContent extends ConsumerWidget {
     WidgetRef ref,
     DeviceSyncNotifier notifier,
   ) {
+    if (row.discovered?.isSyncCompatible == false) {
+      return _IncompatibleSyncInfoButton(theme: theme);
+    }
     if (row.pendingRequest != null) {
       // Pending requests are handled via the global Pair Request prompt
       // No action buttons shown here
@@ -670,21 +692,16 @@ class _SyncContent extends ConsumerWidget {
 
     if (row.trusted != null) {
       Future<void> runSync() async {
-        // Actively check for DB name mismatch before showing the dialog so
-        // that freshly-paired devices (where the background poll hasn't run
-        // yet) are still caught.
-        final service = ref.read(deviceSyncServiceProvider);
-        final codeResult = await service.checkSyncCode(peerId: row.id);
-        final hasMismatch = codeResult.dbNameMismatch;
-        if (hasMismatch) {
-          // Update the in-memory mismatch set so the UI reflects it.
-          notifier.addDbMismatch(row.id);
-        }
-        if (!context.mounted) return;
-        final bool? choice = await _showChooseSyncDirectionDialog(
+        // Background discovery already tracks mismatches. Opening the chooser
+        // must not wait on another network round trip; manualSync validates the
+        // live peer and database before transferring anything.
+        final hasMismatch = sync.dbMismatchPeerIds.contains(row.id);
+        final bool? choice = await showChooseSyncDirectionDialog(
           context: context,
           theme: theme,
           hasMismatch: hasMismatch,
+          peerName: row.name,
+          peerId: row.id,
         );
         if (choice == null) return;
         final isPull = !choice;
@@ -695,7 +712,7 @@ class _SyncContent extends ConsumerWidget {
             fullScan: true,
           );
           NotificationManager.instance.success(
-            isPull ? 'Scan pull completed.' : 'Scan sync completed.',
+            isPull ? 'Receive sync completed.' : 'Send sync completed.',
           );
         } catch (error) {
           NotificationManager.instance.error('Sync failed: $error');
@@ -704,14 +721,48 @@ class _SyncContent extends ConsumerWidget {
 
       return Row(
         mainAxisSize: MainAxisSize.min,
+        spacing: kElementHSpacing,
         children: [
           IconButton(
-            onPressed: runSync,
-            tooltip: 'Scan & recover missing data',
-            icon: const Icon(Icons.manage_search),
+            onPressed:
+                sync.enabled &&
+                    row.discovered != null &&
+                    sync.activeSyncPeerId == null &&
+                    sync.status != DeviceSyncStatus.syncing &&
+                    sync.status != DeviceSyncStatus.connecting
+                ? runSync
+                : null,
+            tooltip: 'Sync',
+            // ListTile supplies an IconTheme color that otherwise also applies
+            // to disabled buttons. Resolve both states explicitly here.
+            style: IconButton.styleFrom(
+              foregroundColor: theme.textPrimary,
+              disabledForegroundColor: theme.textPrimary.withValues(
+                alpha: 0.38,
+              ),
+            ),
+            icon: const Icon(Icons.sync),
           ),
           IconButton(
-            onPressed: () => notifier.removeTrustedPeer(row.id),
+            onPressed: () async {
+              final confirmed = await showConfirmDialog(
+                context: context,
+                theme: theme,
+                title: 'Unpair Device',
+                titleIcon: Icons.link_off,
+                message: 'Are you sure you want to unpair "${row.name}"?',
+                confirmLabel: 'Unpair',
+                showCancel: true,
+                confirmIcon: Icons.link_off,
+                destructive: true,
+              );
+              if (!confirmed || !context.mounted) return;
+              try {
+                await notifier.removeTrustedPeer(row.id);
+              } catch (error) {
+                NotificationManager.instance.error('Unpair failed: $error');
+              }
+            },
             tooltip: 'Remove',
             icon: const Icon(Icons.link_off),
           ),
@@ -732,7 +783,7 @@ class _SyncContent extends ConsumerWidget {
                 .requestPairing(
                   discovered,
                   showVerificationCode: (verificationCode) {
-                    _showOutgoingPairCodeDialog(
+                    showOutgoingPairCodeDialog(
                       context: context,
                       theme: theme,
                       peerName: discovered.name,
@@ -808,4 +859,34 @@ class _ErrorView extends StatelessWidget {
       ),
     );
   }
+}
+
+// Match the click-to-show info buttons used on the settings page.
+class _IncompatibleSyncInfoButton extends StatefulWidget {
+  const _IncompatibleSyncInfoButton({required this.theme});
+
+  final AppThemeData theme;
+
+  @override
+  State<_IncompatibleSyncInfoButton> createState() =>
+      _IncompatibleSyncInfoButtonState();
+}
+
+class _IncompatibleSyncInfoButtonState
+    extends State<_IncompatibleSyncInfoButton> {
+  final _tooltipKey = GlobalKey<TooltipState>();
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    key: _tooltipKey,
+    message:
+        'This device is running an incompatible sync version. '
+        'Update UniKM on both devices to use pairing and device sync.',
+    child: IconButton(
+      style: widget.theme.compactIconButtonStyle,
+      icon: const Icon(Icons.info_outline, size: 26),
+      color: widget.theme.accent,
+      onPressed: () => _tooltipKey.currentState?.ensureTooltipVisible(),
+    ),
+  );
 }

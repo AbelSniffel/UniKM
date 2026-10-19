@@ -3,13 +3,16 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 
 import '../core/constants/platform_patterns.dart';
 import '../core/database/database.dart';
 import '../core/utils/color_utils.dart';
+import '../shared/time/calendar_date.dart';
 
 /// Extended game model with tags and computed properties
 class Game {
+  static const _unchanged = Object();
   Game({
     required this.id,
     required this.title,
@@ -27,8 +30,9 @@ class Game {
     this.developer = '',
     this.reviewScore = 0,
     this.reviewCount = 0,
-    this.tags = const [],
-  }) : updatedAt = updatedAt ?? dateAdded;
+    List<Tag> tags = const [],
+  }) : tags = List.unmodifiable(tags),
+       updatedAt = updatedAt ?? dateAdded;
 
   final int id;
   final String title;
@@ -85,19 +89,13 @@ class Game {
     if (normalizedDeadline == null) return null;
 
     final today = DateUtils.dateOnly(DateTime.now());
-    return normalizedDeadline.difference(today).inDays;
+    return calendarDaysUntil(normalizedDeadline, today);
   }
 
   /// Check if the deadline has passed.
   bool get isExpired {
     final daysUntil = daysUntilDeadline;
     return daysUntil != null && daysUntil < 0;
-  }
-
-  /// Check if deadline is within 7 days.
-  bool get isDeadlineSoon {
-    final daysUntil = daysUntilDeadline;
-    return daysUntil != null && daysUntil >= 0 && daysUntil <= 7;
   }
 
   /// Check if game has a cover image
@@ -119,12 +117,12 @@ class Game {
     return reviewRatingFor(reviewScore);
   }
 
-  /// Get review rating color
-  Color get reviewColor {
+  /// Resolve negative review styling with the current theme color.
+  Color reviewColorFor({required Color negativeColor}) {
     if (reviewCount == 0) return Colors.grey;
     if (reviewScore >= 70) return Colors.green;
     if (reviewScore >= 40) return Colors.orange;
-    return Colors.red;
+    return negativeColor;
   }
 
   /// Alias for dateAdded (createdAt)
@@ -148,7 +146,7 @@ class Game {
     bool? isUsed,
     String? coverImage,
     bool? hasDeadline,
-    DateTime? deadlineDate,
+    Object? deadlineDate = _unchanged,
     bool? isDlc,
     String? steamAppId,
     String? developer,
@@ -167,7 +165,9 @@ class Game {
       isUsed: isUsed ?? this.isUsed,
       coverImage: coverImage ?? this.coverImage,
       hasDeadline: hasDeadline ?? this.hasDeadline,
-      deadlineDate: deadlineDate ?? this.deadlineDate,
+      deadlineDate: identical(deadlineDate, _unchanged)
+          ? this.deadlineDate
+          : deadlineDate as DateTime?,
       isDlc: isDlc ?? this.isDlc,
       steamAppId: steamAppId ?? this.steamAppId,
       developer: developer ?? this.developer,
@@ -180,11 +180,46 @@ class Game {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is Game && other.id == id;
+    return other is Game &&
+        id == other.id &&
+        title == other.title &&
+        gameKey == other.gameKey &&
+        platform == other.platform &&
+        dateAdded == other.dateAdded &&
+        updatedAt == other.updatedAt &&
+        notes == other.notes &&
+        isUsed == other.isUsed &&
+        coverImage == other.coverImage &&
+        hasDeadline == other.hasDeadline &&
+        deadlineDate == other.deadlineDate &&
+        isDlc == other.isDlc &&
+        steamAppId == other.steamAppId &&
+        developer == other.developer &&
+        reviewScore == other.reviewScore &&
+        reviewCount == other.reviewCount &&
+        const ListEquality<Tag>().equals(tags, other.tags);
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(
+    id,
+    title,
+    gameKey,
+    platform,
+    dateAdded,
+    updatedAt,
+    notes,
+    isUsed,
+    coverImage,
+    hasDeadline,
+    deadlineDate,
+    isDlc,
+    steamAppId,
+    developer,
+    reviewScore,
+    reviewCount,
+    const ListEquality<Tag>().hash(tags),
+  );
 }
 
 /// Tag model with color parsing
@@ -221,12 +256,7 @@ class Tag {
   Color get textColor => contrastColor(color);
 
   /// Copy with new values
-  Tag copyWith({
-    int? id,
-    String? name,
-    String? colorHex,
-    bool? isSteamTag,
-  }) {
+  Tag copyWith({int? id, String? name, String? colorHex, bool? isSteamTag}) {
     return Tag(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -238,9 +268,13 @@ class Tag {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is Tag && other.id == id;
+    return other is Tag &&
+        other.id == id &&
+        other.name == name &&
+        other.colorHex == colorHex &&
+        other.isSteamTag == isSteamTag;
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, name, colorHex, isSteamTag);
 }

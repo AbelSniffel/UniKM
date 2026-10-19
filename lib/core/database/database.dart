@@ -3,6 +3,7 @@ library;
 
 import 'dart:io';
 
+import 'package:collection/collection.dart' show IterableExtension;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
@@ -24,6 +25,10 @@ class AppDatabase extends _$AppDatabase {
   static const String _syncPeerCheckpointsTable = 'sync_peer_checkpoints';
   static const String _syncMetadataLocalRevisionKey = 'local_revision';
   static const String _syncMetadataDbTimestampKey = 'db_timestamp_millis';
+  static const String _syncRecordsTable = 'sync_records';
+  static const String _syncTagRecordsTable = 'sync_tag_records';
+  static const String _syncClockKey = 'logical_clock';
+  static const String _syncOriginKey = 'database_origin';
 
   AppDatabase() : super(_openConnection());
 
@@ -35,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
     : super(NativeDatabase.createInBackground(file));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Initialize database with defaults (call once at app startup)
   Future<void> initDefaults() async {
@@ -47,10 +52,19 @@ class AppDatabase extends _$AppDatabase {
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
+      beforeOpen: (_) async {
+        // Repair only dangling relationships left by older connections.
+        await customStatement(
+          'DELETE FROM game_tags WHERE game_id NOT IN '
+          '(SELECT id FROM games) OR tag_id NOT IN (SELECT id FROM tags)',
+        );
+        await customStatement('PRAGMA foreign_keys = ON');
+      },
       onCreate: (Migrator m) async {
         await m.createAll();
         await _createSyncMetadataTables();
         await _initializeSyncMetadata();
+        await _createSyncConvergenceTables();
         // Create indexes for better query performance
         await _createIndexes();
       },
@@ -71,58 +85,43 @@ class AppDatabase extends _$AppDatabase {
           return rows.isNotEmpty;
         }
 
-        if (from < 2) {
-          // Games table: Steam-related columns
-          if (!await columnExists('games', 'cover_image')) {
+        Future<void> addColumnIfMissing(
+          String table,
+          String column,
+          String definition,
+        ) async {
+          if (!await columnExists(table, column)) {
             await customStatement(
-              'ALTER TABLE games ADD COLUMN cover_image TEXT NOT NULL DEFAULT ""',
-            );
-          }
-          if (!await columnExists('games', 'has_deadline')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN has_deadline INTEGER NOT NULL DEFAULT 0',
-            );
-          }
-          if (!await columnExists('games', 'deadline_date')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN deadline_date TEXT',
-            );
-          }
-          if (!await columnExists('games', 'is_dlc')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN is_dlc INTEGER NOT NULL DEFAULT 0',
-            );
-          }
-          if (!await columnExists('games', 'steam_app_id')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN steam_app_id TEXT NOT NULL DEFAULT ""',
-            );
-          }
-          if (!await columnExists('games', 'review_score')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN review_score INTEGER NOT NULL DEFAULT 0',
-            );
-          }
-          if (!await columnExists('games', 'review_count')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0',
-            );
-          }
-
-          // Tags table: Steam tag marker
-          if (!await columnExists('tags', 'is_steam_tag')) {
-            await customStatement(
-              'ALTER TABLE tags ADD COLUMN is_steam_tag INTEGER NOT NULL DEFAULT 0',
+              'ALTER TABLE $table ADD COLUMN $column $definition',
             );
           }
         }
 
-        if (from < 3) {
-          if (!await columnExists('games', 'updated_at')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
-            );
+        if (from < 2) {
+          for (final column in {
+            'cover_image': 'TEXT NOT NULL DEFAULT ""',
+            'has_deadline': 'INTEGER NOT NULL DEFAULT 0',
+            'deadline_date': 'TEXT',
+            'is_dlc': 'INTEGER NOT NULL DEFAULT 0',
+            'steam_app_id': 'TEXT NOT NULL DEFAULT ""',
+            'review_score': 'INTEGER NOT NULL DEFAULT 0',
+            'review_count': 'INTEGER NOT NULL DEFAULT 0',
+          }.entries) {
+            await addColumnIfMissing('games', column.key, column.value);
           }
+          await addColumnIfMissing(
+            'tags',
+            'is_steam_tag',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+
+        if (from < 3) {
+          await addColumnIfMissing(
+            'games',
+            'updated_at',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
 
         if (from < 4) {
@@ -145,11 +144,11 @@ class AppDatabase extends _$AppDatabase {
         }
 
         if (from < 6) {
-          if (!await columnExists('games', 'developer')) {
-            await customStatement(
-              'ALTER TABLE games ADD COLUMN developer TEXT NOT NULL DEFAULT ""',
-            );
-          }
+          await addColumnIfMissing(
+            'games',
+            'developer',
+            'TEXT NOT NULL DEFAULT ""',
+          );
         }
 
         if (from < 7) {
@@ -180,26 +179,13 @@ class AppDatabase extends _$AppDatabase {
           // Recreate tombstones as SKM-ID centric. Legacy key-only tombstones
           // are intentionally dropped because they cannot be mapped safely
           // when duplicate keys exist.
-          await customStatement(
-            'CREATE TABLE IF NOT EXISTS $_syncGameTombstonesTable ('
-            'game_id INTEGER PRIMARY KEY NOT NULL, '
-            'game_key TEXT NOT NULL DEFAULT "", '
-            'deleted_at INTEGER NOT NULL, '
-            'local_revision INTEGER NOT NULL'
-            ')',
-          );
-          await customStatement(
-            'CREATE INDEX IF NOT EXISTS idx_sync_game_tombstones_revision '
-            'ON $_syncGameTombstonesTable(local_revision)',
-          );
-          await customStatement(
-            'CREATE INDEX IF NOT EXISTS idx_sync_game_tombstones_deleted_at '
-            'ON $_syncGameTombstonesTable(deleted_at)',
-          );
+          await _createSyncTombstonesTable();
           await customStatement(
             'DROP TABLE IF EXISTS $_legacySyncGameTombstonesTable',
           );
         }
+
+        if (from < 9) await _createSyncConvergenceTables();
 
         // Always try to create indexes (will be ignored if they exist)
         await _createIndexes();
@@ -215,14 +201,7 @@ class AppDatabase extends _$AppDatabase {
       ')',
     );
 
-    await customStatement(
-      'CREATE TABLE IF NOT EXISTS $_syncGameTombstonesTable ('
-      'game_id INTEGER PRIMARY KEY NOT NULL, '
-      'game_key TEXT NOT NULL DEFAULT "", '
-      'deleted_at INTEGER NOT NULL, '
-      'local_revision INTEGER NOT NULL'
-      ')',
-    );
+    await _createSyncTombstonesTable();
 
     await customStatement(
       'CREATE TABLE IF NOT EXISTS $_syncPeerCheckpointsTable ('
@@ -232,7 +211,17 @@ class AppDatabase extends _$AppDatabase {
       'remote_revision_id TEXT NOT NULL DEFAULT ""'
       ')',
     );
+  }
 
+  Future<void> _createSyncTombstonesTable() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS $_syncGameTombstonesTable ('
+      'game_id INTEGER PRIMARY KEY NOT NULL, '
+      'game_key TEXT NOT NULL DEFAULT "", '
+      'deleted_at INTEGER NOT NULL, '
+      'local_revision INTEGER NOT NULL'
+      ')',
+    );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_sync_game_tombstones_revision '
       'ON $_syncGameTombstonesTable(local_revision)',
@@ -261,6 +250,350 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Version 9 adds an identity and a Lamport version independent of the local
+  /// integer primary key. SQL triggers journal every write, including batch
+  /// imports and changes to tag relationships made outside repository helpers.
+  Future<void> _createSyncConvergenceTables() async {
+    await customStatement(
+      'INSERT OR IGNORE INTO $_syncMetadataTable(key, value) '
+      "VALUES('$_syncOriginKey', lower(hex(randomblob(16))))",
+    );
+    await customStatement(
+      'INSERT OR IGNORE INTO $_syncMetadataTable(key, value) '
+      "VALUES('$_syncClockKey', '1')",
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS $_syncRecordsTable ('
+      'sync_id TEXT PRIMARY KEY NOT NULL, '
+      'local_game_id INTEGER, '
+      'game_key TEXT NOT NULL DEFAULT "", '
+      'change_clock INTEGER NOT NULL, '
+      'change_origin TEXT NOT NULL, '
+      'deleted_at INTEGER NOT NULL DEFAULT 0, '
+      'local_revision INTEGER NOT NULL)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_records_active_game '
+      'ON $_syncRecordsTable(local_game_id) WHERE deleted_at = 0',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sync_records_revision '
+      'ON $_syncRecordsTable(local_revision)',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS $_syncTagRecordsTable ('
+      'tag_id INTEGER PRIMARY KEY NOT NULL, change_clock INTEGER NOT NULL, '
+      'change_origin TEXT NOT NULL)',
+    );
+    await customStatement(
+      'INSERT OR IGNORE INTO $_syncTagRecordsTable(tag_id, change_clock, change_origin) '
+      "SELECT id, 1, 'legacy' FROM tags",
+    );
+    // Copies synchronised by the old protocol have the same key, id and
+    // creation time. Bootstrap them with the same identity; new rows use
+    // random identities so independent additions cannot collide.
+    await customStatement(
+      'INSERT OR IGNORE INTO $_syncRecordsTable '
+      '(sync_id, local_game_id, game_key, change_clock, change_origin, '
+      'deleted_at, local_revision) '
+      "SELECT 'legacy:' || id || ':' || lower(hex(game_key)) || ':' || date_added, "
+      "id, game_key, MAX(1, updated_at * 1000), 'legacy', 0, "
+      "(SELECT CAST(value AS INTEGER) FROM $_syncMetadataTable WHERE key = '$_syncMetadataLocalRevisionKey') "
+      'FROM games',
+    );
+    await customStatement(
+      'INSERT OR IGNORE INTO $_syncRecordsTable '
+      '(sync_id, local_game_id, game_key, change_clock, change_origin, '
+      'deleted_at, local_revision) '
+      "SELECT 'legacy-delete:' || game_id || ':' || lower(hex(game_key)), "
+      "game_id, game_key, MAX(1, deleted_at), 'legacy', deleted_at, local_revision "
+      'FROM $_syncGameTombstonesTable',
+    );
+    await customStatement(
+      'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), '
+      '(SELECT COALESCE(MAX(change_clock), 1) FROM $_syncRecordsTable)) WHERE key = ?',
+      [_syncClockKey],
+    );
+    final advance =
+        "UPDATE $_syncMetadataTable SET value = CAST(value AS INTEGER) + 1 WHERE key IN ('$_syncMetadataLocalRevisionKey', '$_syncClockKey'); "
+        "UPDATE $_syncMetadataTable SET value = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE key = '$_syncMetadataDbTimestampKey'; ";
+    final revision =
+        "(SELECT CAST(value AS INTEGER) FROM $_syncMetadataTable WHERE key = '$_syncMetadataLocalRevisionKey')";
+    final clock =
+        "(SELECT CAST(value AS INTEGER) FROM $_syncMetadataTable WHERE key = '$_syncClockKey')";
+    final origin =
+        "(SELECT value FROM $_syncMetadataTable WHERE key = '$_syncOriginKey')";
+    String touch(String gameIds) =>
+        'UPDATE $_syncRecordsTable SET change_clock = $clock, '
+        'change_origin = $origin, local_revision = $revision '
+        'WHERE deleted_at = 0 AND local_game_id IN ($gameIds); ';
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_game_insert AFTER INSERT ON games BEGIN '
+      '$advance'
+      'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, '
+      'change_clock, change_origin, deleted_at, local_revision) '
+      'VALUES(lower(hex(randomblob(16))), NEW.id, NEW.game_key, $clock, $origin, 0, $revision); '
+      'END',
+    );
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_game_update AFTER UPDATE ON games '
+      'WHEN OLD.title IS NOT NEW.title OR OLD.game_key IS NOT NEW.game_key '
+      'OR OLD.platform IS NOT NEW.platform OR OLD.date_added IS NOT NEW.date_added '
+      'OR OLD.updated_at IS NOT NEW.updated_at OR OLD.notes IS NOT NEW.notes '
+      'OR OLD.is_used IS NOT NEW.is_used OR OLD.cover_image IS NOT NEW.cover_image '
+      'OR OLD.has_deadline IS NOT NEW.has_deadline OR OLD.deadline_date IS NOT NEW.deadline_date '
+      'OR OLD.is_dlc IS NOT NEW.is_dlc OR OLD.steam_app_id IS NOT NEW.steam_app_id '
+      'OR OLD.developer IS NOT NEW.developer OR OLD.review_score IS NOT NEW.review_score '
+      'OR OLD.review_count IS NOT NEW.review_count BEGIN '
+      '$advance'
+      '${touch('NEW.id')}'
+      'UPDATE $_syncRecordsTable SET game_key = NEW.game_key WHERE local_game_id = NEW.id AND deleted_at = 0; '
+      'END',
+    );
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_game_delete AFTER DELETE ON games BEGIN '
+      '$advance'
+      'UPDATE $_syncRecordsTable SET change_clock = $clock, change_origin = $origin, '
+      'deleted_at = MAX(1, CAST((julianday(\'now\') - 2440587.5) * 86400000 AS INTEGER)), '
+      'local_revision = $revision WHERE local_game_id = OLD.id AND deleted_at = 0; '
+      'END',
+    );
+    for (final operation in ['INSERT', 'DELETE']) {
+      final record = operation == 'INSERT' ? 'NEW' : 'OLD';
+      await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS sync_journal_relationship_${operation.toLowerCase()} '
+        'AFTER $operation ON game_tags BEGIN '
+        '$advance${touch('$record.game_id')}END',
+      );
+    }
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_tag_insert AFTER INSERT ON tags BEGIN '
+      '$advance'
+      'INSERT INTO $_syncTagRecordsTable(tag_id, change_clock, change_origin) '
+      'VALUES(NEW.id, $clock, $origin); END',
+    );
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_tag_update AFTER UPDATE ON tags '
+      'WHEN OLD.name IS NOT NEW.name OR OLD.color IS NOT NEW.color OR OLD.is_steam_tag IS NOT NEW.is_steam_tag BEGIN '
+      '$advance${touch('SELECT game_id FROM game_tags WHERE tag_id = NEW.id')}'
+      'UPDATE $_syncTagRecordsTable SET change_clock = $clock, change_origin = $origin WHERE tag_id = NEW.id; END',
+    );
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS sync_journal_tag_delete AFTER DELETE ON tags BEGIN '
+      'DELETE FROM $_syncTagRecordsTable WHERE tag_id = OLD.id; END',
+    );
+  }
+
+  Future<Map<int, Map<String, dynamic>>> getSyncTagVersions() async {
+    final rows = await customSelect(
+      'SELECT tag_id, change_clock, change_origin FROM $_syncTagRecordsTable',
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<int>('tag_id'): {
+          'changeClock': row.read<int>('change_clock'),
+          'changeOrigin': row.read<String>('change_origin'),
+        },
+    };
+  }
+
+  Future<void> acceptRemoteTagVersion(
+    int tagId,
+    int clock,
+    String origin,
+  ) async {
+    final revision = await markLocalDataChanged();
+    await customStatement(
+      'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), ?) WHERE key = ?',
+      [clock, _syncClockKey],
+    );
+    await customStatement(
+      'INSERT INTO $_syncTagRecordsTable(tag_id, change_clock, change_origin) VALUES(?, ?, ?) '
+      'ON CONFLICT(tag_id) DO UPDATE SET change_clock = excluded.change_clock, change_origin = excluded.change_origin',
+      [tagId, clock, origin],
+    );
+    await customStatement(
+      'UPDATE $_syncRecordsTable SET local_revision = ? WHERE deleted_at = 0 '
+      'AND local_game_id IN (SELECT game_id FROM game_tags WHERE tag_id = ?)',
+      [revision, tagId],
+    );
+  }
+
+  /// Receiving a tag update is not a new local edit of every attached game.
+  /// Preserve their logical versions while retaining the trigger's journal
+  /// cursor, which still forwards the new tag metadata to other peers.
+  Future<void> restoreSyncRecordVersions(
+    List<Map<String, dynamic>> records,
+  ) => batch((batch) {
+    for (final record in records) {
+      batch.customStatement(
+        'UPDATE $_syncRecordsTable SET change_clock = ?, change_origin = ? WHERE sync_id = ?',
+        [record['changeClock'], record['changeOrigin'], record['syncId']],
+      );
+    }
+  });
+
+  /// Emits once initially and after committed content changes. Checkpoints and
+  /// timestamps alone do not wake listeners; transactions coalesce emissions.
+  Stream<int> watchSyncRevision() =>
+      customSelect(
+            'SELECT value FROM $_syncMetadataTable WHERE key = ?',
+            variables: [Variable.withString(_syncMetadataLocalRevisionKey)],
+            readsFrom: {games, tags, gameTags},
+          )
+          .watch()
+          .map((rows) => int.parse(rows.single.read<String>('value')))
+          .distinct();
+
+  /// Include the database origin: replace-import resets the journal and may
+  /// finish at the same (or a larger) revision as the previous library.
+  Stream<(String, int)> watchLibraryRevision() =>
+      customSelect(
+            'SELECT '
+            "(SELECT value FROM $_syncMetadataTable WHERE key = '$_syncOriginKey') AS origin, "
+            "(SELECT value FROM $_syncMetadataTable WHERE key = '$_syncMetadataLocalRevisionKey') AS revision",
+            readsFrom: {games, tags, gameTags},
+          )
+          .watch()
+          .map(
+            (rows) => (
+              rows.single.read<String>('origin'),
+              int.parse(rows.single.read<String>('revision')),
+            ),
+          )
+          .distinct();
+
+  Future<List<Map<String, dynamic>>> getSyncRecords({
+    int sinceRevision = 0,
+    List<int>? attachedTagIds,
+  }) async {
+    if (attachedTagIds != null && attachedTagIds.isEmpty) return [];
+    final tagFilter = attachedTagIds == null
+        ? ''
+        : ' AND local_game_id IN (SELECT game_id FROM game_tags WHERE tag_id IN (${List.filled(attachedTagIds.length, '?').join(', ')}))';
+    final rows = await customSelect(
+      'SELECT sync_id, local_game_id, game_key, change_clock, change_origin, '
+      'deleted_at, local_revision FROM $_syncRecordsTable WHERE local_revision > ?$tagFilter',
+      variables: [
+        Variable.withInt(sinceRevision),
+        ...?attachedTagIds?.map(Variable.withInt),
+      ],
+    ).get();
+    return rows
+        .map(
+          (row) => <String, dynamic>{
+            'syncId': row.read<String>('sync_id'),
+            'id': row.readNullable<int>('local_game_id'),
+            'gameKey': row.read<String>('game_key'),
+            'changeClock': row.read<int>('change_clock'),
+            'changeOrigin': row.read<String>('change_origin'),
+            'deletedAt': row.read<int>('deleted_at'),
+            'localRevision': row.read<int>('local_revision'),
+          },
+        )
+        .toList(growable: false);
+  }
+
+  Future<String> getSyncDatabaseOrigin() async =>
+      await _readSyncMetadataValue(_syncOriginKey) ?? '';
+
+  Future<Set<String>> getSyncRecordIds() async {
+    final rows = await customSelect(
+      'SELECT sync_id FROM $_syncRecordsTable',
+    ).get();
+    return rows.map((row) => row.read<String>('sync_id')).toSet();
+  }
+
+  /// Retains an imported version unchanged for subsequent relays. The local
+  /// journal cursor advances, but the origin/version never become a new edit.
+  Future<void> acceptRemoteSyncRecord({
+    required String syncId,
+    required int? localGameId,
+    required String gameKey,
+    required int changeClock,
+    required String changeOrigin,
+    int deletedAt = 0,
+  }) async {
+    final revision = await markLocalDataChanged();
+    await customStatement(
+      'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), ?) WHERE key = ?',
+      [changeClock, _syncClockKey],
+    );
+    if (localGameId != null && deletedAt == 0) {
+      await customStatement(
+        'DELETE FROM $_syncRecordsTable WHERE local_game_id = ? AND deleted_at = 0 AND sync_id != ?',
+        [localGameId, syncId],
+      );
+      await clearGameTombstone(localGameId);
+    }
+    await customStatement(
+      'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, '
+      'change_clock, change_origin, deleted_at, local_revision) VALUES(?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT(sync_id) DO UPDATE SET local_game_id = excluded.local_game_id, '
+      'game_key = excluded.game_key, change_clock = excluded.change_clock, '
+      'change_origin = excluded.change_origin, deleted_at = excluded.deleted_at, '
+      'local_revision = excluded.local_revision',
+      [
+        syncId,
+        localGameId,
+        gameKey,
+        changeClock,
+        changeOrigin,
+        deletedAt,
+        revision,
+      ],
+    );
+  }
+
+  Future<void> acceptRemoteSyncRecords(
+    List<Map<String, dynamic>> records,
+  ) async {
+    if (records.isEmpty) return;
+    final revision = await markLocalDataChanged();
+    var maxClock = 0;
+    for (final record in records) {
+      final clock = (record['changeClock'] as num).toInt();
+      if (clock > maxClock) maxClock = clock;
+    }
+    await customStatement(
+      'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), ?) WHERE key = ?',
+      [maxClock, _syncClockKey],
+    );
+    await batch((batch) {
+      for (final record in records) {
+        final localId = record['id'];
+        final deletedAt = record['deletedAt'] ?? 0;
+        if (localId != null && deletedAt == 0) {
+          batch.customStatement(
+            'DELETE FROM $_syncRecordsTable WHERE local_game_id = ? AND deleted_at = 0 AND sync_id != ?',
+            [localId, record['syncId']],
+          );
+          batch.customStatement(
+            'DELETE FROM $_syncGameTombstonesTable WHERE game_id = ?',
+            [localId],
+          );
+        }
+        batch.customStatement(
+          'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, change_clock, '
+          'change_origin, deleted_at, local_revision) VALUES(?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(sync_id) DO UPDATE SET local_game_id = excluded.local_game_id, '
+          'game_key = excluded.game_key, change_clock = excluded.change_clock, '
+          'change_origin = excluded.change_origin, deleted_at = excluded.deleted_at, '
+          'local_revision = excluded.local_revision',
+          [
+            record['syncId'],
+            localId,
+            record['gameKey'],
+            record['changeClock'],
+            record['changeOrigin'],
+            deletedAt,
+            revision,
+          ],
+        );
+      }
+    });
+  }
+
   /// Create indexes for better query performance
   Future<void> _createIndexes() async {
     // Index on games.title for search queries
@@ -285,12 +618,15 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> _writeSyncMetadataValue(String key, String value) {
-    return customStatement(
+  Future<void> _writeSyncMetadataValue(String key, String value) async {
+    await customStatement(
       'INSERT INTO $_syncMetadataTable(key, value) VALUES(?, ?) '
       'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       <Object>[key, value],
     );
+    if (key == _syncMetadataLocalRevisionKey) {
+      notifyUpdates({TableUpdate('games', kind: UpdateKind.update)});
+    }
   }
 
   Future<String?> _readSyncMetadataValue(String key) async {
@@ -351,6 +687,16 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'DELETE FROM $_syncGameTombstonesTable WHERE game_id = ?',
       <Object>[gameId],
+    );
+  }
+
+  /// Clear legacy tombstones for a bounded import batch. Sync journal triggers
+  /// already record the individual writes in the surrounding transaction.
+  Future<void> clearImportedGameTombstones(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await customStatement(
+      'DELETE FROM $_syncGameTombstonesTable WHERE game_id IN (${List.filled(ids.length, '?').join(',')})',
+      ids,
     );
   }
 
@@ -445,8 +791,7 @@ class AppDatabase extends _$AppDatabase {
     final trimmedPeerId = peerId.trim();
     if (trimmedPeerId.isEmpty) return;
 
-    final syncAtMillis =
-        (lastSyncAt ?? DateTime.now()).millisecondsSinceEpoch;
+    final syncAtMillis = (lastSyncAt ?? DateTime.now()).millisecondsSinceEpoch;
 
     await customStatement(
       'INSERT INTO $_syncPeerCheckpointsTable('
@@ -456,12 +801,7 @@ class AppDatabase extends _$AppDatabase {
       'last_revision = excluded.last_revision, '
       'last_sync_at = excluded.last_sync_at, '
       'remote_revision_id = excluded.remote_revision_id',
-      <Object>[
-        trimmedPeerId,
-        lastRevision,
-        syncAtMillis,
-        remoteRevisionId,
-      ],
+      <Object>[trimmedPeerId, lastRevision, syncAtMillis, remoteRevisionId],
     );
   }
 
@@ -472,17 +812,26 @@ class AppDatabase extends _$AppDatabase {
   /// Get all games
   Future<List<GameEntry>> getAllGames() => select(games).get();
 
-  /// Watch all games (for real-time updates)
-  Stream<List<GameEntry>> watchAllGames() => select(games).watch();
+  Future<List<GameEntry>> getGamesByIds(Iterable<int> gameIds) async {
+    final result = <GameEntry>[];
+    for (final ids in _idBatches(gameIds)) {
+      result.addAll(
+        await (select(games)..where((game) => game.id.isIn(ids))).get(),
+      );
+    }
+    return result;
+  }
+
+  Future<int> getNextGameIdForSync() async {
+    final row = await customSelect(
+      "SELECT MAX(COALESCE((SELECT MAX(id) FROM games), 0), COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'games'), 0)) + 1 AS next_id",
+    ).getSingle();
+    return row.read<int>('next_id');
+  }
 
   /// Get a single game by ID
   Future<GameEntry?> getGameById(int id) {
     return (select(games)..where((g) => g.id.equals(id))).getSingleOrNull();
-  }
-
-  /// Search games by title
-  Future<List<GameEntry>> searchGamesByTitle(String query) {
-    return (select(games)..where((g) => g.title.like('%$query%'))).get();
   }
 
   /// Get a game's id by key.
@@ -496,21 +845,47 @@ class AppDatabase extends _$AppDatabase {
     return row?.read(games.id);
   }
 
+  /// Supply the schema's declared defaults explicitly: legacy tables may have
+  /// NOT NULL columns without the SQL defaults present in new databases.
+  /// Caller-supplied values remain intact; updates don't use this helper.
+  Insertable<GameEntry> gameInsertWithDefaults(GamesCompanion game) {
+    final values = game.toColumns(true);
+    for (final column in games.$columns) {
+      final defaultValue = column.defaultValue;
+      if (defaultValue != null) {
+        values.putIfAbsent(column.name, () => defaultValue);
+      }
+    }
+    return RawValuesInsertable(values);
+  }
+
   /// Insert a new game
   Future<int> insertGame(GamesCompanion game) {
-    return into(games).insert(game);
+    return transaction(() async {
+      final id = await into(games).insert(gameInsertWithDefaults(game));
+      final revision = await markLocalDataChanged();
+      await recordGameUpsert(id, localRevision: revision);
+      return id;
+    });
   }
 
   /// Insert multiple games in a batch
   Future<void> insertGames(List<GamesCompanion> gamesList) {
     return batch((b) {
-      b.insertAll(games, gamesList);
+      b.insertAll(games, gamesList.map(gameInsertWithDefaults).toList());
     });
   }
 
   /// Update a game
   Future<bool> updateGame(GameEntry game) {
-    return update(games).replace(game);
+    return transaction(() async {
+      final changed = await update(games).replace(game);
+      if (changed) {
+        final revision = await markLocalDataChanged();
+        await recordGameUpsert(game.id, localRevision: revision);
+      }
+      return changed;
+    });
   }
 
   /// Update specific fields of a game
@@ -544,7 +919,9 @@ class AppDatabase extends _$AppDatabase {
       isUsed: isUsed ?? existing.isUsed,
       coverImage: coverImage ?? existing.coverImage,
       hasDeadline: hasDeadline ?? existing.hasDeadline,
-      deadlineDate: deadlineDate != null
+      deadlineDate: hasDeadline == false
+          ? const Value(null)
+          : deadlineDate != null
           ? Value(deadlineDate)
           : const Value.absent(),
       isDlc: isDlc ?? existing.isDlc,
@@ -558,88 +935,38 @@ class AppDatabase extends _$AppDatabase {
     return await updateGame(updated) ? 1 : 0;
   }
 
-  /// Delete a game by ID
-  /// Delete a game by ID.
-  ///
-  /// Also removes any relationships in [gameTags] to keep the database
-  /// clean. Prior versions of the app relied on `ON DELETE CASCADE` in the
-  /// schema, but SQLite did not enforce it for existing databases. To ensure
-  /// tags become truly unused after the last game is removed we manually
-  /// clear the junction rows here. This method runs in a transaction so the
-  /// two operations are atomic.
-  Future<int> deleteGame(int id) {
-    return transaction(() async {
-      final revision = await bumpLocalSyncRevision();
-      final deletedAt = DateTime.now().millisecondsSinceEpoch;
-      final row = await customSelect(
-        'SELECT game_key FROM games WHERE id = ?',
-        variables: [Variable.withInt(id)],
-        readsFrom: {games},
-      ).getSingleOrNull();
-      final gameKey = (row?.data['game_key'] as String?)?.trim() ?? '';
+  /// Delete games and their tag links atomically, retaining both sync journals.
+  Future<int> deleteGame(int id) => deleteGames([id]);
 
-      // Remove any orphaned relationships first (defensive).
-      await (delete(gameTags)..where((gt) => gt.gameId.equals(id))).go();
-      final deleted = await (delete(games)..where((g) => g.id.equals(id))).go();
-      if (deleted > 0) {
-        await recordGameDeletionTombstones(
-          [id],
-          gameKeysById: gameKey.isEmpty ? null : {id: gameKey},
-          localRevision: revision,
-          deletedAtMillis: deletedAt,
-        );
-      }
-      return deleted;
-    });
-  }
-
-  /// Delete multiple games by IDs.
-  ///
-  /// The implementation mirrors [deleteGame] but operates on a list of
-  /// identifiers. It also clears the corresponding entries in [gameTags]
-  /// so that downstream operations, such as `deleteUnusedTags`, correctly
-  /// recognise when a tag is no longer associated with any remaining game.
   Future<int> deleteGames(List<int> ids) {
-    if (ids.isEmpty) return Future.value(0);
+    final uniqueIds = ids.where((id) => id > 0).toSet().toList();
+    if (uniqueIds.isEmpty) return Future.value(0);
     return transaction(() async {
-      final revision = await bumpLocalSyncRevision();
+      final before = await getGamesCount();
+      final revision = await markLocalDataChanged();
       final deletedAt = DateTime.now().millisecondsSinceEpoch;
-      final keyRows = await customSelect(
-        'SELECT id, game_key FROM games WHERE id IN (${List.filled(ids.length, '?').join(', ')})',
-        variables: ids.map(Variable.withInt).toList(growable: false),
-        readsFrom: {games},
-      ).get();
-      final gameKeysById = <int, String>{};
-      final deletedIds = <int>[];
-      for (final row in keyRows) {
-        final gameId = (row.data['id'] as num?)?.toInt();
-        if (gameId == null || gameId <= 0) continue;
-        deletedIds.add(gameId);
-        final key = (row.data['game_key'] as String?)?.trim() ?? '';
-        if (key.isNotEmpty) {
-          gameKeysById[gameId] = key;
+      // Send bounded statements together to the database worker. INSERT SELECT
+      // records the real keys without 10,000 awaited per-game writes or a large
+      // list of key rows crossing the isolate boundary.
+      await batch((batch) {
+        for (var start = 0; start < uniqueIds.length; start += 500) {
+          final chunk = uniqueIds.skip(start).take(500).toList();
+          final placeholders = List.filled(chunk.length, '?').join(',');
+          batch.customStatement(
+            'INSERT INTO $_syncGameTombstonesTable(game_id, game_key, deleted_at, local_revision) '
+            'SELECT id, trim(game_key), ?, ? FROM games WHERE id IN ($placeholders) '
+            'ON CONFLICT(game_id) DO UPDATE SET game_key = excluded.game_key, '
+            'deleted_at = excluded.deleted_at, local_revision = excluded.local_revision',
+            [deletedAt, revision, ...chunk],
+          );
+          // Explicit link cleanup also supports databases created by older
+          // versions that did not enforce cascading foreign keys.
+          batch.deleteWhere(gameTags, (link) => link.gameId.isIn(chunk));
+          batch.deleteWhere(games, (game) => game.id.isIn(chunk));
         }
-      }
-
-      await (delete(gameTags)..where((gt) => gt.gameId.isIn(ids))).go();
-      final deleted = await (delete(games)..where((g) => g.id.isIn(ids))).go();
-      if (deleted > 0 && deletedIds.isNotEmpty) {
-        await recordGameDeletionTombstones(
-          deletedIds,
-          gameKeysById: gameKeysById,
-          localRevision: revision,
-          deletedAtMillis: deletedAt,
-        );
-      }
-      return deleted;
+      });
+      return before - await getGamesCount();
     });
-  }
-
-  /// Mark game as used/unused
-  Future<bool> setGameUsed(int id, bool isUsed) async {
-    final game = await getGameById(id);
-    if (game == null) return false;
-    return updateGame(game.copyWith(isUsed: isUsed));
   }
 
   /// Mark multiple games as used/unused in a single update.
@@ -647,12 +974,13 @@ class AppDatabase extends _$AppDatabase {
   /// Returns the number of rows updated.
   Future<int> setGamesUsed(List<int> ids, bool isUsed) {
     if (ids.isEmpty) return Future.value(0);
-    return (update(games)..where((g) => g.id.isIn(ids))).write(
-      GamesCompanion(
-        isUsed: Value(isUsed),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    return transaction(() async {
+      final count = await (update(games)..where((g) => g.id.isIn(ids))).write(
+        GamesCompanion(isUsed: Value(isUsed), updatedAt: Value(DateTime.now())),
+      );
+      if (count > 0) await markLocalDataChanged();
+      return count;
+    });
   }
 
   /// Get games count
@@ -732,6 +1060,12 @@ class AppDatabase extends _$AppDatabase {
     return (delete(tags)..where((t) => t.id.equals(id))).go();
   }
 
+  /// Delete all custom tags in one statement. Foreign keys remove their game
+  /// relationships atomically; Steam tags and their relationships are retained.
+  Future<int> deleteAllCustomTags() {
+    return (delete(tags)..where((t) => t.isSteamTag.equals(false))).go();
+  }
+
   /// Delete unused tags (tags not associated with any game)
   Future<int> deleteUnusedTags() async {
     // Compute the set of tag IDs that are still referenced by *existing*
@@ -806,61 +1140,32 @@ class AppDatabase extends _$AppDatabase {
   // GAME-TAG RELATIONSHIP OPERATIONS
   // ===========================================================================
 
-  /// Get tags for a game
-  Future<List<TagEntry>> getTagsForGame(int gameId) async {
-    final query = select(tags).join([
-      innerJoin(gameTags, gameTags.tagId.equalsExp(tags.id)),
-    ])..where(gameTags.gameId.equals(gameId));
+  /// Keep ID queries below SQLite parameter limits and avoid duplicate rows
+  /// when an ID appears in more than one batch.
+  static Iterable<List<int>> _idBatches(Iterable<int> ids) =>
+      ids.toSet().slices(500);
 
-    final results = await query.get();
-    return results.map((row) => row.readTable(tags)).toList();
-  }
+  /// Get tags for a game using the same relationship query as bulk reads.
+  Future<List<TagEntry>> getTagsForGame(int gameId) async =>
+      (await getTagsForGames([gameId]))[gameId] ?? [];
 
-  /// Get tags for multiple games in a single query (batch fetch).
-  /// Returns a map of gameId to a list of [TagEntry] objects.
+  /// Read tags in bounded queries within one consistent database snapshot.
   Future<Map<int, List<TagEntry>>> getTagsForGames(List<int> gameIds) async {
     if (gameIds.isEmpty) return {};
-
-    final query = select(tags).join([
-      innerJoin(gameTags, gameTags.tagId.equalsExp(tags.id)),
-    ])..where(gameTags.gameId.isIn(gameIds));
-
-    final results = await query.get();
-    final Map<int, List<TagEntry>> tagsByGame = {};
-
-    for (final row in results) {
-      final gameId = row.readTable(gameTags).gameId;
-      final tag = row.readTable(tags);
-      tagsByGame.putIfAbsent(gameId, () => []).add(tag);
-    }
-
-    return tagsByGame;
-  }
-
-  /// Watch tags for a game
-  Stream<List<TagEntry>> watchTagsForGame(int gameId) {
-    final query = select(tags).join([
-      innerJoin(gameTags, gameTags.tagId.equalsExp(tags.id)),
-    ])..where(gameTags.gameId.equals(gameId));
-
-    return query.watch().map(
-      (rows) => rows.map((row) => row.readTable(tags)).toList(),
-    );
-  }
-
-  /// Get games for a tag
-  Future<List<GameEntry>> getGamesForTag(int tagId) async {
-    final query = select(games).join([
-      innerJoin(gameTags, gameTags.gameId.equalsExp(games.id)),
-    ])..where(gameTags.tagId.equals(tagId));
-
-    final results = await query.get();
-    return results.map((row) => row.readTable(games)).toList();
-  }
-
-  /// Get games by Steam AppID
-  Future<List<GameEntry>> getGamesBySteamAppId(String appId) async {
-    return (select(games)..where((g) => g.steamAppId.equals(appId))).get();
+    return transaction(() async {
+      final tagsByGame = <int, List<TagEntry>>{};
+      for (final ids in _idBatches(gameIds)) {
+        final query = select(tags).join([
+          innerJoin(gameTags, gameTags.tagId.equalsExp(tags.id)),
+        ])..where(gameTags.gameId.isIn(ids));
+        for (final row in await query.get()) {
+          tagsByGame
+              .putIfAbsent(row.readTable(gameTags).gameId, () => [])
+              .add(row.readTable(tags));
+        }
+      }
+      return tagsByGame;
+    });
   }
 
   /// Add a tag to a game
@@ -871,46 +1176,14 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  /// Remove a tag from a game
-  Future<int> removeTagFromGame(int gameId, int tagId) {
-    return (delete(
-      gameTags,
-    )..where((gt) => gt.gameId.equals(gameId) & gt.tagId.equals(tagId))).go();
-  }
-
   /// Set tags for a game (replaces existing tags)
   Future<void> setTagsForGame(
     int gameId,
     List<int> tagIds, {
     bool touchGameUpdatedAt = true,
-  }) async {
-    await transaction(() async {
-      // Remove existing tags
-      await (delete(gameTags)..where((gt) => gt.gameId.equals(gameId))).go();
-
-      // Add new tags
-      if (tagIds.isNotEmpty) {
-        await batch((b) {
-          b.insertAll(
-            gameTags,
-            tagIds
-                .map(
-                  (tagId) =>
-                      GameTagsCompanion.insert(gameId: gameId, tagId: tagId),
-                )
-                .toList(),
-            mode: InsertMode.insertOrIgnore,
-          );
-        });
-      }
-
-      if (touchGameUpdatedAt) {
-        await (update(games)..where((g) => g.id.equals(gameId))).write(
-          GamesCompanion(updatedAt: Value(DateTime.now())),
-        );
-      }
-    });
-  }
+  }) => batchSetTagsForGames({
+    gameId: tagIds,
+  }, touchGameUpdatedAt: touchGameUpdatedAt);
 
   // ===========================================================================
   // BATCH OPERATIONS (for high-performance sync)
@@ -930,21 +1203,22 @@ class AppDatabase extends _$AppDatabase {
         .toList(growable: false);
     if (namesLower.isEmpty) return {};
 
-    // Single query: SELECT * FROM tags WHERE name IN (...)
-    final existingRows = await (select(tags)
-          ..where((t) => t.name.lower().isIn(namesLower)))
-        .get();
-
+    // SQLite's lower() only folds ASCII. Normalize in Dart so tags such as
+    // "Çok Oyunculu" match the same keys used by imports and device sync.
+    final requestedNames = namesLower.toSet();
     final result = <String, TagEntry>{};
-    final existingByNameLower = <String, TagEntry>{};
-    for (final row in existingRows) {
-      final key = row.name.toLowerCase();
-      result[key] = row;
-      existingByNameLower[key] = row;
+    void collect(List<TagEntry> rows) {
+      for (final row in rows) {
+        final key = row.name.trim().toLowerCase();
+        if (requestedNames.contains(key)) result.putIfAbsent(key, () => row);
+      }
     }
 
+    collect(await getAllTags());
+
     // Determine which names need inserting
-    final specsByNameLower = <String, ({String name, String color, bool isSteamTag})>{};
+    final specsByNameLower =
+        <String, ({String name, String color, bool isSteamTag})>{};
     for (final spec in tagSpecs) {
       final key = spec.name.trim().toLowerCase();
       if (key.isEmpty) continue;
@@ -973,55 +1247,49 @@ class AppDatabase extends _$AppDatabase {
         );
       });
 
-      // Re-query the newly inserted tags to get their IDs
-      final missingNames = missingSpecs
-          .map((s) => s.name.trim().toLowerCase())
-          .toList();
-      final insertedRows = await (select(tags)
-            ..where((t) => t.name.lower().isIn(missingNames)))
-          .get();
-      for (final row in insertedRows) {
-        final key = row.name.toLowerCase();
-        result[key] = row;
-      }
+      // Use the same Unicode normalization when resolving inserted IDs.
+      collect(await getAllTags());
     }
 
     return result;
   }
 
-  /// Set tags for multiple games in a single batch.
-  /// Replaces all tag associations for each game in [gameTagMap].
-  Future<void> batchSetTagsForGames(Map<int, List<int>> gameTagMap) async {
+  /// Atomically replace relationships; sync/import callers retain timestamps.
+  Future<void> batchSetTagsForGames(
+    Map<int, List<int>> gameTagMap, {
+    bool touchGameUpdatedAt = false,
+  }) async {
     if (gameTagMap.isEmpty) return;
-
-    final gameIds = gameTagMap.keys.toList(growable: false);
-
     await transaction(() async {
-      // Single DELETE for all affected games
-      await (delete(gameTags)..where((gt) => gt.gameId.isIn(gameIds))).go();
-
-      // Batch INSERT all new relationships
-      final companions = <GameTagsCompanion>[];
-      for (final entry in gameTagMap.entries) {
-        for (final tagId in entry.value) {
-          companions.add(GameTagsCompanion.insert(
-            gameId: entry.key,
-            tagId: tagId,
-          ));
+      await batchDeleteGameTags(gameTagMap.keys.toList());
+      await batch((b) {
+        b.insertAll(gameTags, [
+          for (final entry in gameTagMap.entries)
+            for (final tagId in entry.value)
+              GameTagsCompanion.insert(gameId: entry.key, tagId: tagId),
+        ], mode: InsertMode.insertOrIgnore);
+      });
+      if (touchGameUpdatedAt) {
+        final timestamp = GamesCompanion(updatedAt: Value(DateTime.now()));
+        for (final ids in _idBatches(gameTagMap.keys)) {
+          await (update(games)..where((g) => g.id.isIn(ids))).write(timestamp);
         }
-      }
-      if (companions.isNotEmpty) {
-        await batch((b) {
-          b.insertAll(gameTags, companions, mode: InsertMode.insertOrIgnore);
-        });
       }
     });
   }
 
-  /// Delete all game_tags rows for the given game IDs in one query.
+  /// Delete relationships in bounded queries, rolling back every batch on error.
   Future<int> batchDeleteGameTags(List<int> gameIds) async {
     if (gameIds.isEmpty) return 0;
-    return (delete(gameTags)..where((gt) => gt.gameId.isIn(gameIds))).go();
+    return transaction(() async {
+      var deleted = 0;
+      for (final ids in _idBatches(gameIds)) {
+        deleted += await (delete(
+          gameTags,
+        )..where((gt) => gt.gameId.isIn(ids))).go();
+      }
+      return deleted;
+    });
   }
 
   /// Update multiple games in a single batch.
@@ -1050,15 +1318,6 @@ class AppDatabase extends _$AppDatabase {
     return into(backups).insert(backup);
   }
 
-  /// Delete old backups keeping only the most recent N
-  Future<void> pruneBackups(int keepCount) async {
-    final allBackups = await getAllBackups();
-    if (allBackups.length <= keepCount) return;
-
-    final toDelete = allBackups.skip(keepCount).map((b) => b.id).toList();
-    await (delete(backups)..where((b) => b.id.isIn(toDelete))).go();
-  }
-
   // ===========================================================================
   // UTILITY METHODS
   // ===========================================================================
@@ -1079,21 +1338,6 @@ class AppDatabase extends _$AppDatabase {
     return File(path);
   }
 
-  /// Check if a key already exists in the database
-  Future<bool> keyExists(String key) async {
-    final query = selectOnly(games)..where(games.gameKey.equals(key));
-    query.addColumns([games.id]);
-    final result = await query.getSingleOrNull();
-    return result != null;
-  }
-
-  /// Get duplicate keys from a list
-  Future<List<String>> findDuplicateKeys(List<String> keys) async {
-    final query = select(games)..where((g) => g.gameKey.isIn(keys));
-    final results = await query.get();
-    return results.map((g) => g.gameKey).toList();
-  }
-
   /// Clear all user data (games/tags/relationships/backups) but keep schema.
   Future<void> clearAllData() async {
     await transaction(() async {
@@ -1104,7 +1348,10 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('DELETE FROM $_syncGameTombstonesTable');
       await customStatement('DELETE FROM $_syncPeerCheckpointsTable');
       await customStatement('DELETE FROM $_syncMetadataTable');
+      await customStatement('DELETE FROM $_syncRecordsTable');
+      await customStatement('DELETE FROM $_syncTagRecordsTable');
       await _initializeSyncMetadata();
+      await _createSyncConvergenceTables();
     });
   }
 }

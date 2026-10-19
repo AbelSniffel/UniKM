@@ -8,7 +8,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
@@ -132,33 +131,22 @@ class NotificationHandle {
     update(progress: progress);
   }
 
-  void completeSuccess(String message, {String? title}) {
-    _manager.update(
-      id,
-      message: message,
-      type: NotificationType.success,
-      title: title,
-      clearProgress: true,
-      clearAction: true,
-      clearSecondaryAction: true,
-      autoDismissAfter: NotificationManager.defaultDuration(
-        NotificationType.success,
-      ),
-    );
-  }
+  void completeSuccess(String message, {String? title}) =>
+      _complete(message, NotificationType.success, title: title);
 
-  void completeError(String message, {String? title}) {
+  void completeError(String message, {String? title}) =>
+      _complete(message, NotificationType.error, title: title);
+
+  void _complete(String message, NotificationType type, {String? title}) {
     _manager.update(
       id,
       message: message,
-      type: NotificationType.error,
+      type: type,
       title: title,
       clearProgress: true,
       clearAction: true,
       clearSecondaryAction: true,
-      autoDismissAfter: NotificationManager.defaultDuration(
-        NotificationType.error,
-      ),
+      autoDismissAfter: NotificationManager.defaultDuration(type),
     );
   }
 
@@ -332,22 +320,18 @@ class NotificationManager {
     if (index == -1) return;
 
     final old = list[index];
-    final updated = AppNotification(
-      id: id,
-      message: message ?? old.message,
-      type: type ?? old.type,
-      title: title ?? old.title,
-      progress: clearProgress ? null : (progress ?? old.progress),
-      onTap: old.onTap,
-      actionLabel: clearAction ? null : (actionLabel ?? old.actionLabel),
-      onAction: clearAction ? null : (onAction ?? old.onAction),
-        secondaryActionLabel: clearSecondaryAction
-          ? null
-          : (secondaryActionLabel ?? old.secondaryActionLabel),
-        onSecondaryAction: clearSecondaryAction
-          ? null
-          : (onSecondaryAction ?? old.onSecondaryAction),
-      isDismissing: old.isDismissing,
+    final updated = old.copyWith(
+      message: message,
+      type: type,
+      title: title,
+      progress: progress,
+      actionLabel: actionLabel,
+      onAction: onAction,
+      secondaryActionLabel: secondaryActionLabel,
+      onSecondaryAction: onSecondaryAction,
+      clearProgress: clearProgress,
+      clearAction: clearAction,
+      clearSecondaryAction: clearSecondaryAction,
     );
 
     _notifications
@@ -499,13 +483,8 @@ class NotificationOverlay extends StatelessWidget {
   }
 }
 
-/// Individual notification toast widget.
-///
-/// Implemented as a [StatefulWidget] so that Flutter preserves this widget's
-/// subtree state (including the [flutter_animate] [Animate] state that drives
-/// the entry animation) when the notification list shifts after a toast above
-/// this one is dismissed.  Without this, every rebuild would replay the slide-
-/// in animation on the topmost remaining notification.
+/// Individual notification toast. Its keyed state retains the entry animation
+/// and drag position when other notifications are dismissed or updated.
 class NotificationToast extends StatefulWidget {
   const NotificationToast({
     super.key,
@@ -527,288 +506,235 @@ class _NotificationToastState extends State<NotificationToast> {
 
   bool get _isMobileTarget {
     final platform = Theme.of(context).platform;
-    return platform == TargetPlatform.android ||
-        platform == TargetPlatform.iOS;
+    return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
   }
 
   @override
   Widget build(BuildContext context) {
     final notification = widget.notification;
-    final theme = widget.theme;
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    // Keep the same 16px overlay inset on both sides when shrinking on
-    // narrow screens, so left/right edge gaps remain symmetrical.
-    final responsiveMaxWidth = math.min(380.0, math.max(0.0, viewportWidth - 32));
-    final responsiveMinWidth = responsiveMaxWidth >= 280 ? 280.0 : 0.0;
+    final maxWidth = math.min(380.0, math.max(0.0, viewportWidth - 32));
     final useSizeCollapse = !_isMobileTarget;
     final dismissOffset = _isMobileTarget
         ? const Offset(0.05, 0)
         : const Offset(0.2, 0);
-    return AnimatedSize(
-      duration: useSizeCollapse
-          ? NotificationManager.dismissAnimationDuration
-          : Duration.zero,
-      curve: Curves.easeInOutCubic,
+    final child = Align(
       alignment: Alignment.topCenter,
-      child: Align(
-        alignment: Alignment.topCenter,
-        heightFactor:
-            notification.isDismissing && useSizeCollapse ? 0 : 1,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Transform.translate(
-            offset: Offset(_dragOffset, 0),
-            child: AnimatedOpacity(
+      heightFactor: notification.isDismissing && useSizeCollapse ? 0 : 1,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Transform.translate(
+          offset: Offset(_dragOffset, 0),
+          child: AnimatedOpacity(
+            duration: NotificationManager.dismissAnimationDuration,
+            opacity: notification.isDismissing ? 0 : 1,
+            curve: Curves.easeIn,
+            child: AnimatedSlide(
               duration: NotificationManager.dismissAnimationDuration,
-              opacity: notification.isDismissing ? 0 : 1,
+              offset: notification.isDismissing ? dismissOffset : Offset.zero,
               curve: Curves.easeIn,
-              child: AnimatedSlide(
-                duration: NotificationManager.dismissAnimationDuration,
-                offset: notification.isDismissing
-                    ? dismissOffset
-                    : Offset.zero,
-                curve: Curves.easeIn,
-                child:
-                    GestureDetector(
-                          onTap: () {
-                            notification.onTap?.call();
-                            widget.onDismiss();
-                          },
-                          onHorizontalDragUpdate: (details) {
-                            if (!notification.isDismissing) {
-                              setState(() {
-                                _dragOffset = (_dragOffset + details.delta.dx)
-                                    .clamp(0.0, double.infinity);
-                              });
-                            }
-                          },
-                          onHorizontalDragEnd: (details) {
-                            if (_dragOffset >= 40.0) {
-                              widget.onDismiss();
-                            } else {
-                              setState(() => _dragOffset = 0.0);
-                            }
-                          },
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: responsiveMaxWidth,
-                              minWidth: responsiveMinWidth,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.background.withValues(alpha: 0.93),
-                              borderRadius: BorderRadius.circular(
-                                theme.cornerRadius,
-                              ),
-                              border: Border.all(
-                                color: _getTypeColor().withValues(alpha: 0.3),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Row(
-                                    children: [
-                                      _buildIcon(),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            if (notification.title != null)
-                                              Text(
-                                                notification.title!,
-                                                style: TextStyle(
-                                                  color: theme.textPrimary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            Text(
-                                              notification.message,
-                                              style: TextStyle(
-                                                color:
-                                                    notification.title != null
-                                                    ? theme.textSecondary
-                                                    : theme.textPrimary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.close,
-                                          size: 18,
-                                          color: theme.textHint,
-                                        ),
-                                        onPressed: widget.onDismiss,
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                          minWidth: 24,
-                                          minHeight: 24,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (notification.progress == null &&
-                                    ((notification.actionLabel != null &&
-                                            notification.onAction != null) ||
-                                        (notification.secondaryActionLabel !=
-                                                null &&
-                                            notification.onSecondaryAction !=
-                                                null)))
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      10,
-                                      0,
-                                      10,
-                                      6,
-                                    ),
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Wrap(
-                                        spacing: 6,
-                                        children: [
-                                          if (notification.actionLabel != null &&
-                                              notification.onAction != null)
-                                            TextButton(
-                                              onPressed: notification.onAction,
-                                              child: Text(
-                                                notification.actionLabel!,
-                                              ),
-                                            ),
-                                          if (notification.secondaryActionLabel !=
-                                                  null &&
-                                              notification.onSecondaryAction !=
-                                                  null)
-                                            TextButton(
-                                              onPressed: notification
-                                                  .onSecondaryAction,
-                                              child: Text(
-                                                notification
-                                                    .secondaryActionLabel!,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                if (notification.progress != null)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      10,
-                                      0,
-                                      10,
-                                      6,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: AppLinearProgressBar(
-                                            theme: theme,
-                                            value: notification.progress,
-                                            label:
-                                                '${_progressPercent(notification.progress)}%',
-                                          ),
-                                        ),
-                                        if (notification.actionLabel != null &&
-                                            notification.onAction != null) ...[
-                                          const SizedBox(width: kElementHSpacing),
-                                          TextButton(
-                                            onPressed: notification.onAction,
-                                            child: Text(
-                                              notification.actionLabel!,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: const Duration(milliseconds: 200))
-                        .slideX(
-                          begin: 0.3,
-                          end: 0,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut,
-                        ),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 200),
+                builder: (context, value, child) => FractionalTranslation(
+                  translation: Offset(
+                    0.3 * (1 - Curves.easeOut.transform(value)),
+                    0,
+                  ),
+                  child: Opacity(opacity: value, child: child),
+                ),
+                child: GestureDetector(
+                  onTap: () {
+                    notification.onTap?.call();
+                    widget.onDismiss();
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    if (!notification.isDismissing) {
+                      setState(() {
+                        _dragOffset = (_dragOffset + details.delta.dx).clamp(
+                          0.0,
+                          double.infinity,
+                        );
+                      });
+                    }
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_dragOffset >= 40.0) {
+                      widget.onDismiss();
+                    } else {
+                      setState(() => _dragOffset = 0.0);
+                    }
+                  },
+                  child: _buildSurface(maxWidth),
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+    // Mobile sizes change immediately. A zero-duration AnimatedSize can notify
+    // its render object during layout when a progress/action row is added.
+    return useSizeCollapse
+        ? AnimatedSize(
+            duration: NotificationManager.dismissAnimationDuration,
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: child,
+          )
+        : child;
   }
 
-  Widget _buildIcon() {
+  Widget _buildSurface(double maxWidth) {
+    final theme = widget.theme;
+    final notification = widget.notification;
+    final radius = BorderRadius.circular(theme.cornerRadius);
     return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: _getTypeColor().withValues(alpha: 0.2),
-        border: Border.all(color: _getTypeColor().withValues(alpha: 0.35)),
-        shape: BoxShape.rectangle,
-        borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
+      constraints: BoxConstraints(
+        maxWidth: maxWidth,
+        minWidth: maxWidth >= 280 ? 280 : 0,
       ),
-      child: Icon(_getTypeIcon(), color: _getTypeColor(), size: 20),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          _getTypeColor().withValues(alpha: 0.10),
+          theme.background,
+        ).withValues(alpha: 0.95),
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(color: theme.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 56,
+            child: ColoredBox(
+              color: _getTypeColor().withValues(alpha: 0.55),
+              child: Center(
+                child: Icon(_getTypeIcon(), color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 56),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (notification.title != null)
+                              Text(
+                                notification.title!,
+                                style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            Text(
+                              notification.message,
+                              style: TextStyle(
+                                color: notification.title != null
+                                    ? theme.textSecondary
+                                    : theme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: theme.textHint,
+                        ),
+                        onPressed: widget.onDismiss,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  int _progressPercent(double? value) {
-    if (value == null) return 0;
-    final clamped = value.clamp(0.0, 1.0);
-    return (clamped * 100).round();
+  Widget _buildFooter() {
+    final notification = widget.notification;
+    final actions = [
+      for (final (label, onPressed) in [
+        (notification.actionLabel, notification.onAction),
+        if (notification.progress == null)
+          (notification.secondaryActionLabel, notification.onSecondaryAction),
+      ])
+        if (label != null && onPressed != null)
+          TextButton(onPressed: onPressed, child: Text(label)),
+    ];
+    final progress = notification.progress;
+    if (progress == null && actions.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+      child: progress == null
+          ? Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(spacing: 6, children: actions),
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: AppLinearProgressBar(
+                    theme: widget.theme,
+                    value: progress,
+                    label: '${(progress.clamp(0.0, 1.0) * 100).round()}%',
+                  ),
+                ),
+                if (actions.isNotEmpty) const SizedBox(width: kElementHSpacing),
+                ...actions,
+              ],
+            ),
+    );
   }
 
-  IconData _getTypeIcon() {
-    switch (widget.notification.type) {
-      case NotificationType.success:
-        return Icons.check_circle_outline;
-      case NotificationType.error:
-        return Icons.error_outline;
-      case NotificationType.warning:
-        return Icons.warning_amber_outlined;
-      case NotificationType.info:
-        return Icons.info_outline;
-      case NotificationType.update:
-        return Icons.update;
-      case NotificationType.download:
-        return Icons.download;
-      case NotificationType.steam:
-        return Icons.cloud_download;
-    }
-  }
+  IconData _getTypeIcon() => switch (widget.notification.type) {
+    NotificationType.success => Icons.check_circle_outline,
+    NotificationType.error => Icons.error,
+    NotificationType.warning => Icons.warning_amber_outlined,
+    NotificationType.info => Icons.info_outline,
+    NotificationType.update => Icons.update,
+    NotificationType.download => Icons.download,
+    NotificationType.steam => Icons.cloud_download,
+  };
 
-  Color _getTypeColor() {
-    switch (widget.notification.type) {
-      case NotificationType.success:
-        return widget.theme.success;
-      case NotificationType.error:
-        return widget.theme.error;
-      case NotificationType.warning:
-        return widget.theme.warning;
-      case NotificationType.info:
-        return widget.theme.accent;
-      case NotificationType.update:
-        return widget.theme.accent;
-      case NotificationType.download:
-        return widget.theme.accent;
-      case NotificationType.steam:
-        return widget.theme.accent;
-    }
-  }
+  Color _getTypeColor() => switch (widget.notification.type) {
+    NotificationType.success => widget.theme.success,
+    NotificationType.error => widget.theme.error,
+    NotificationType.warning => widget.theme.warning,
+    _ => widget.theme.accent,
+  };
 }

@@ -16,19 +16,22 @@ import '../database/database.dart';
 import 'logging.dart';
 import '../utils/title_similarity.dart';
 
-export '../utils/title_similarity.dart' show cleanTitleForSearch, weightedSimilarity;
+export '../utils/title_similarity.dart'
+    show cleanTitleForSearch, weightedSimilarity;
 
 /// Steam API URLs
 class SteamApi {
   static final storeSearch = steamStoreApiUrl('storesearch/');
-  static const communitySearch = 'https://steamcommunity.com/actions/SearchApps/';
+  static const communitySearch =
+      'https://steamcommunity.com/actions/SearchApps/';
   static final appDetails = steamStoreApiUrl('appdetails');
   static const steamSpy = 'https://steamspy.com/api.php';
 
   /// CDN URLs for images
-  static String headerImage(String appId) => steamCdnAppImageUrl(appId, 'header.jpg');
-  static String libraryImage(String appId) => steamCdnAppImageUrl(appId, 'library_600x900.jpg');
-  static String capsuleImage(String appId) => steamCdnAppImageUrl(appId, 'capsule_231x87.jpg');
+  static String headerImage(String appId) =>
+      steamCdnAppImageUrl(appId, 'header.jpg');
+  static String libraryImage(String appId) =>
+      steamCdnAppImageUrl(appId, 'library_600x900.jpg');
   static String appReviews(String appId) => steamStoreUrl('appreviews/$appId');
 }
 
@@ -115,6 +118,25 @@ class _DiskCache {
       reviewCount: entry['review_count'] as int?,
       isDlc: entry['is_dlc'] as bool? ?? false,
       developer: entry['developer']?.toString(),
+      searchSource: SteamSearchSource.values
+          .where((source) => source.name == entry['search_source'])
+          .firstOrNull,
+      searchSourcesTried: SteamSearchSource.values
+          .where(
+            (source) =>
+                (entry['search_sources_tried'] as List?)?.contains(
+                  source.name,
+                ) ??
+                false,
+          )
+          .toList(),
+      dataSources: SteamDataSource.values
+          .where(
+            (source) =>
+                (entry['data_sources'] as List?)?.contains(source.name) ??
+                false,
+          )
+          .toList(),
     );
   }
 
@@ -144,6 +166,9 @@ class _DiskCache {
       'is_dlc': r.isDlc,
       'image_url': r.imageUrl,
       'developer': r.developer,
+      'search_source': r.searchSource?.name,
+      'search_sources_tried': r.searchSourcesTried.map((s) => s.name).toList(),
+      'data_sources': r.dataSources.map((s) => s.name).toList(),
       'cached_at': DateTime.now().millisecondsSinceEpoch / 1000.0,
     };
 
@@ -154,14 +179,7 @@ class _DiskCache {
     final keyFromName = _normalizeCacheKey(r.name);
     if (keyFromName != key) _cache![keyFromName] = entry;
 
-    // Persist to disk
-    try {
-      final jsonStr = json.encode(_cache);
-      final path = await _getCacheFilePath();
-      await File(path).writeAsString(jsonStr);
-    } catch (_) {
-      // Ignore cache write failures
-    }
+    await _persist();
   }
 
   Future<Map<String, dynamic>> exportForSync() async {
@@ -194,9 +212,7 @@ class _DiskCache {
 
       // Preserve this device's image_url while overwriting other fields.
       final localImageUrl = localMap['image_url'];
-      final merged = <String, dynamic>{
-        ...remoteMap,
-      };
+      final merged = <String, dynamic>{...remoteMap};
       if (localImageUrl != null) {
         merged['image_url'] = localImageUrl;
       } else {
@@ -206,6 +222,10 @@ class _DiskCache {
       _cache![key] = merged;
     }
 
+    await _persist();
+  }
+
+  Future<void> _persist() async {
     try {
       final jsonStr = json.encode(_cache);
       final path = await _getCacheFilePath();
@@ -214,10 +234,6 @@ class _DiskCache {
       // Ignore cache write failures
     }
   }
-}
-
-Future<void> _writeCacheEntry(String key, SteamSearchResult r) async {
-  await _DiskCache.instance.writeEntry(key, r);
 }
 
 Future<DateTime?> getCachedAtForTitle(String title) async {
@@ -232,7 +248,9 @@ Future<Map<String, dynamic>> exportSteamCacheSnapshotForSync() async {
   return _DiskCache.instance.exportForSync();
 }
 
-Future<void> mergeSteamCacheSnapshotFromSync(Map<String, dynamic> incoming) async {
+Future<void> mergeSteamCacheSnapshotFromSync(
+  Map<String, dynamic> incoming,
+) async {
   await _DiskCache.instance.mergeFromSync(incoming);
 }
 
@@ -339,7 +357,24 @@ const Map<String, String> _tagMapping = {
   'hack-and-slash': 'Hack and Slash',
 };
 
-/// Result from a Steam search
+enum SteamSearchSource {
+  store('Steam Store'),
+  community('Steam Community');
+
+  const SteamSearchSource(this.label);
+  final String label;
+}
+
+enum SteamDataSource {
+  steamSpy('SteamSpy'),
+  storeDetails('Steam Store details'),
+  reviews('Steam Reviews');
+
+  const SteamDataSource(this.label);
+  final String label;
+}
+
+/// Result from a Steam search, including the services that supplied it.
 class SteamSearchResult {
   final String appId;
   final String name;
@@ -349,6 +384,9 @@ class SteamSearchResult {
   final int? reviewCount;
   final bool isDlc;
   final String? developer;
+  final SteamSearchSource? searchSource;
+  final List<SteamSearchSource> searchSourcesTried;
+  final List<SteamDataSource> dataSources;
 
   const SteamSearchResult({
     required this.appId,
@@ -359,50 +397,33 @@ class SteamSearchResult {
     this.reviewCount,
     this.isDlc = false,
     this.developer,
+    this.searchSource,
+    this.searchSourcesTried = const [],
+    this.dataSources = const [],
   });
 
   @override
   String toString() => 'SteamSearchResult(appId: $appId, name: $name)';
 }
 
-/// Simple LRU cache implementation with max size limit
-class _LruCache<K, V> {
+/// Insertion order tracks recency; reads and writes move entries to the end.
+class _LruCache<K, V extends Object> {
   final int maxSize;
   final _cache = <K, V>{};
-  final _accessOrder = <K>[];
 
   _LruCache(this.maxSize);
 
   V? get(K key) {
-    final value = _cache[key];
-    if (value != null) {
-      // Move to end (most recently used)
-      _accessOrder.remove(key);
-      _accessOrder.add(key);
-    }
+    final value = _cache.remove(key);
+    if (value != null) _cache[key] = value;
     return value;
   }
 
   void put(K key, V value) {
-    if (_cache.containsKey(key)) {
-      _accessOrder.remove(key);
-    } else if (_cache.length >= maxSize) {
-      // Evict least recently used
-      final lruKey = _accessOrder.removeAt(0);
-      _cache.remove(lruKey);
-    }
+    _cache.remove(key);
+    if (_cache.length >= maxSize) _cache.remove(_cache.keys.first);
     _cache[key] = value;
-    _accessOrder.add(key);
   }
-
-  bool containsKey(K key) => _cache.containsKey(key);
-
-  void clear() {
-    _cache.clear();
-    _accessOrder.clear();
-  }
-
-  int get length => _cache.length;
 }
 
 /// Steam integration service
@@ -439,7 +460,10 @@ class SteamService {
         await _imagesDir!.create(recursive: true);
       }
     } catch (e) {
-      developer.log('Failed to init Steam image cache: $e', name: 'SteamService');
+      developer.log(
+        'Failed to init Steam image cache: $e',
+        name: 'SteamService',
+      );
       _imagesDir = null;
     }
   }
@@ -524,7 +548,7 @@ class SteamService {
     if (title.trim().isEmpty) return null;
 
     // Check in-memory cache first unless we're forcing a refresh
-    final normalizedTitle = _normalizeTitle(title);
+    final normalizedTitle = _normalizeCacheKey(title);
     if (!forceRefresh) {
       final cached = _cache.get(normalizedTitle);
       if (cached != null) return cached;
@@ -543,32 +567,31 @@ class SteamService {
 
     // Generate search variants
     final variants = _generateSearchVariants(title);
+    final searchSourcesTried = <SteamSearchSource>{};
 
     for (final variant in variants) {
-      // Try store API first
-      final storeResults = await _searchStoreApi(variant);
-      final storeResult = await _fetchBestMatchResult(
-        title,
-        storeResults,
-        fetchTags: fetchTags,
-        fetchReviews: fetchReviews,
-      );
-      if (storeResult != null) {
-        await _cacheResultSafely(normalizedTitle, storeResult);
-        return storeResult;
-      }
-
-      // Try community API as fallback
-      final communityResults = await _searchCommunityApi(variant);
-      final communityResult = await _fetchBestMatchResult(
-        title,
-        communityResults,
-        fetchTags: fetchTags,
-        fetchReviews: fetchReviews,
-      );
-      if (communityResult != null) {
-        await _cacheResultSafely(normalizedTitle, communityResult);
-        return communityResult;
+      // Preserve Store-first search and Community fallback for each variant.
+      for (final source in const [
+        SteamSearchSource.store,
+        SteamSearchSource.community,
+      ]) {
+        searchSourcesTried.add(source);
+        final items = await switch (source) {
+          SteamSearchSource.store => _searchStoreApi(variant),
+          SteamSearchSource.community => _searchCommunityApi(variant),
+        };
+        final result = await _fetchBestMatchResult(
+          title,
+          items,
+          fetchTags: fetchTags,
+          fetchReviews: fetchReviews,
+          searchSource: source,
+          searchSourcesTried: List.unmodifiable(searchSourcesTried),
+        );
+        if (result != null) {
+          await _cacheResultSafely(normalizedTitle, result);
+          return result;
+        }
       }
     }
 
@@ -580,6 +603,8 @@ class SteamService {
     List<Map<String, dynamic>> items, {
     required bool fetchTags,
     required bool fetchReviews,
+    required SteamSearchSource searchSource,
+    required List<SteamSearchSource> searchSourcesTried,
   }) async {
     if (items.isEmpty) return null;
 
@@ -591,6 +616,8 @@ class SteamService {
       match['name'] as String,
       fetchTags: fetchTags,
       fetchReviews: fetchReviews,
+      searchSource: searchSource,
+      searchSourcesTried: searchSourcesTried,
     );
     if (primaryResult == null || !primaryResult.isDlc) {
       return primaryResult;
@@ -610,18 +637,20 @@ class SteamService {
     }
 
     final cleanSearch = cleanTitleForSearch(title).toLowerCase();
-    alternatives.sort(
-      (a, b) => _scoreCandidate(cleanSearch, b).compareTo(
-        _scoreCandidate(cleanSearch, a),
-      ),
-    );
+    // Similarity includes edit-distance scoring: compute it once per candidate
+    // rather than on both sides of every comparison during sorting.
+    final ranked = [
+      for (final item in alternatives) (item, _scoreCandidate(cleanSearch, item)),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
 
-    for (final candidate in alternatives.take(8)) {
+    for (final (candidate, _) in ranked.take(8)) {
       final altResult = await _fetchGameDetails(
         candidate['id'].toString(),
         candidate['name'] as String?,
         fetchTags: fetchTags,
         fetchReviews: fetchReviews,
+        searchSource: searchSource,
+        searchSourcesTried: searchSourcesTried,
       );
       if (altResult != null && !altResult.isDlc) {
         return altResult;
@@ -645,7 +674,7 @@ class SteamService {
   double _scoreCandidate(String cleanSearch, Map<String, dynamic> item) {
     final name = item['name'] as String? ?? '';
     final itemLower = name.toLowerCase().trim();
-    final itemClean = _cleanTitleForSearch(name).toLowerCase();
+    final itemClean = cleanTitleForSearch(name).toLowerCase();
 
     var score = weightedSimilarity(cleanSearch, itemClean);
     if (itemLower == cleanSearch || itemClean == cleanSearch) {
@@ -660,7 +689,7 @@ class SteamService {
   Future<void> _cacheResultSafely(String key, SteamSearchResult result) async {
     try {
       _cache.put(key, result);
-      await _writeCacheEntry(key, result);
+      await _DiskCache.instance.writeEntry(key, result);
     } catch (e) {
       AppLog.d('Failed to cache search result: $e');
     }
@@ -716,19 +745,6 @@ class SteamService {
     }
 
     return null;
-  }
-
-  /// Get local image path if it exists
-  String? getLocalImagePath(String appId) {
-    if (_imagesDir == null) return null;
-    final path = p.join(_imagesDir!.path, '$appId.jpg');
-    return File(path).existsSync() ? path : null;
-  }
-
-  // Private methods
-
-  String _normalizeTitle(String title) {
-    return title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
   }
 
   /// Normalize and map Steam tag names. Returns null if tag should be ignored.
@@ -850,14 +866,12 @@ class SteamService {
 
   Map<String, dynamic>? _findBestMatch(
     String originalTitle,
-    List<Map<String, dynamic>> items, [
-    String? searchVariant,
-  ]) {
+    List<Map<String, dynamic>> items,
+  ) {
     if (items.isEmpty) return null;
 
     final searchTitle = originalTitle.toLowerCase().trim();
     final cleanSearch = cleanTitleForSearch(originalTitle).toLowerCase();
-    final variantLower = (searchVariant ?? originalTitle).toLowerCase().trim();
 
     // 1. Exact match first (case-insensitive)
     for (final item in items) {
@@ -868,21 +882,11 @@ class SteamService {
     // 2. Exact match with cleaned title
     for (final item in items) {
       final itemName = item['name'] as String? ?? '';
-      final itemClean = _cleanTitleForSearch(itemName).toLowerCase();
+      final itemClean = cleanTitleForSearch(itemName).toLowerCase();
       if (itemClean == cleanSearch) return item;
     }
 
-    // 3. If we used a search variant, check cleaned equality against that
-    if (searchVariant != null) {
-      for (final item in items) {
-        final itemClean = _cleanTitleForSearch(
-          item['name'] as String? ?? '',
-        ).toLowerCase();
-        if (itemClean == variantLower) return item;
-      }
-    }
-
-    // 4. Contains match (original in item OR item in original) - avoid sequels
+    // 3. Contains match (original in item OR item in original) - avoid sequels
     for (final item in items) {
       final itemName = item['name'] as String? ?? '';
       final itemLower = itemName.toLowerCase();
@@ -891,29 +895,16 @@ class SteamService {
       }
     }
 
-    // 5. Contains match with cleaned versions - avoid sequels
+    // 4. Contains match with cleaned versions - avoid sequels
     for (final item in items) {
       final itemName = item['name'] as String? ?? '';
-      final itemClean = _cleanTitleForSearch(itemName).toLowerCase();
+      final itemClean = cleanTitleForSearch(itemName).toLowerCase();
       if (cleanSearch.contains(itemClean) || itemClean.contains(cleanSearch)) {
         if (!_isSequelMismatch(originalTitle, itemName)) return item;
       }
     }
 
-    // 6. Second pass: allow contains matches even if it's less strict (but still reject clear sequel mismatches)
-    for (final item in items) {
-      final itemName = item['name'] as String? ?? '';
-      final itemLower = itemName.toLowerCase();
-      final itemClean = _cleanTitleForSearch(itemName).toLowerCase();
-      if ((itemLower.contains(searchTitle) ||
-          searchTitle.contains(itemLower) ||
-          itemClean.contains(cleanSearch) ||
-          cleanSearch.contains(itemClean))) {
-        if (!_isSequelMismatch(originalTitle, itemName)) return item;
-      }
-    }
-
-    // 7. Fallback: return first result ONLY if it's not a sequel mismatch AND has reasonable similarity
+    // 5. Fallback: return first result ONLY if it's not a sequel mismatch AND has reasonable similarity
     final firstItem = items[0];
     final firstName = firstItem['name'] as String? ?? '';
     if (!_isSequelMismatch(originalTitle, firstName)) {
@@ -930,11 +921,6 @@ class SteamService {
     }
 
     return null;
-  }
-
-  String _cleanTitleForSearch(String title) {
-    // Delegate to shared helper to keep logic consistent and testable
-    return cleanTitleForSearch(title);
   }
 
   bool _isSequelMismatch(String searchTitle, String resultName) {
@@ -962,15 +948,19 @@ class SteamService {
     String? name, {
     bool fetchTags = true,
     bool fetchReviews = true,
+    required SteamSearchSource searchSource,
+    required List<SteamSearchSource> searchSourcesTried,
   }) async {
     try {
       // Collect tags (SteamSpy first, then app details genres/categories)
       final tags = <String>[];
       final seen = <String>{};
+      final dataSources = <SteamDataSource>[];
 
       if (fetchTags) {
         final steamspyTags = await _fetchSteamSpyTags(appId);
         if (steamspyTags.isNotEmpty) {
+          dataSources.add(SteamDataSource.steamSpy);
           for (final t in steamspyTags) {
             if (!seen.contains(t)) {
               tags.add(t);
@@ -999,6 +989,7 @@ class SteamService {
 
         if (appData != null && appData['success'] == true) {
           final details = appData['data'] as Map<String, dynamic>;
+          dataSources.add(SteamDataSource.storeDetails);
           gameName = details['name'] as String? ?? gameName;
           isDlc = (details['type'] == 'dlc');
           final developers = (details['developers'] as List<dynamic>?)
@@ -1054,6 +1045,7 @@ class SteamService {
               final totalNegative = (summary['total_negative'] as int?) ?? 0;
               final total = totalPositive + totalNegative;
               if (total > 0) {
+                dataSources.add(SteamDataSource.reviews);
                 reviewCount = total;
                 reviewScore = ((totalPositive / total) * 100).round();
               }
@@ -1074,8 +1066,11 @@ class SteamService {
         reviewCount: reviewCount,
         isDlc: isDlc,
         developer: developer,
+        searchSource: searchSource,
+        searchSourcesTried: searchSourcesTried,
+        dataSources: List.unmodifiable(dataSources),
       );
-      final key = _normalizeTitle(result.name);
+      final key = _normalizeCacheKey(result.name);
       await _cacheResultSafely(key, result);
       return result;
     } catch (e) {
@@ -1088,8 +1083,10 @@ class SteamService {
         appId: appId,
         name: name ?? 'Unknown',
         imageUrl: SteamApi.headerImage(appId),
+        searchSource: searchSource,
+        searchSourcesTried: searchSourcesTried,
       );
-      final key = _normalizeTitle(result.name);
+      final key = _normalizeCacheKey(result.name);
       await _cacheResultSafely(key, result);
       return result;
     }
@@ -1171,11 +1168,6 @@ class SteamService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  /// Clear the in-memory cache
-  void clearCache() {
-    _cache.clear();
   }
 }
 

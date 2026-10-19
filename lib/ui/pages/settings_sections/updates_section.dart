@@ -12,6 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
+import 'settings_control_cards.dart';
 
 /// Updates settings section
 class UpdatesSection extends ConsumerStatefulWidget {
@@ -76,6 +77,7 @@ class UpdatesSection extends ConsumerStatefulWidget {
 class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
   final _repoController = TextEditingController();
   final _tokenController = TextEditingController();
+  final _tokenInfoKey = GlobalKey<TooltipState>();
   Timer? _countdownTicker;
   DateTime _now = DateTime.now();
 
@@ -156,66 +158,34 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     final updates = ref.watch(updatesSettingsProvider);
     final nextUpdateCheck = ref.watch(nextAutoUpdateTimeProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final isSearching = widget.searchQuery.trim().isNotEmpty;
-
-    final showUpdatePreferences = shouldShowSettingsGroup(
-      query: widget.searchQuery,
-      matchesSearch: widget.matchesSearch,
-      group: UpdatesSection.searchGroups[0],
-    );
-
-    final showGithubGroup = shouldShowSettingsGroup(
-      query: widget.searchQuery,
-      matchesSearch: widget.matchesSearch,
-      group: UpdatesSection.searchGroups[1],
-    );
-
-    if (isSearching && !showUpdatePreferences && !showGithubGroup) {
-      return const SizedBox.shrink();
-    }
-
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
-        buildTitlelessSectionEntry(
-          visible: showUpdatePreferences,
-          theme: widget.theme,
-          searchQuery: widget.searchQuery,
-          isSearchMatch: isSearching,
-          childBuilder: () => SettingsStatusActionCard(
-            theme: widget.theme,
-            icon: Icons.schedule,
-            iconColor: widget.theme.accent,
-            title: UpdatesSection.autoCheckSpec.label,
-            subtitle: _automaticUpdateCheckDescription(
-              autoCheckEnabled: updates.autoCheckEnabled,
-              nextUpdateCheck: nextUpdateCheck,
-            ),
-            titleColor: widget.theme.textPrimary,
-            stretchActionsWhenStacked: true,
-            actions: [
-              ElevatedButton(
-                onPressed: () => settingsNotifier.setSetting(
-                  SettingsKeys.autoUpdateCheck,
-                  !updates.autoCheckEnabled,
-                ),
-                child: Text(updates.autoCheckEnabled ? 'Disable' : 'Enable'),
-              ),
-            ],
-          ),
-        ),
         buildSearchableSectionEntry(
-          visible: showUpdatePreferences,
           theme: widget.theme,
           group: UpdatesSection.searchGroups[0],
           titleIcon: Icons.download_rounded,
           searchQuery: widget.searchQuery,
           matchesSearch: widget.matchesSearch,
-          childBuilder: () => buildSpecToggleSettingList(
-            theme: widget.theme,
-            entries: [
-              (
-                spec: UpdatesSection.includePrereleaseSpec,
+          childBuilder: () => SettingsControlWrap(
+            children: [
+              SettingsToggleCard(
+                theme: widget.theme,
+                label: UpdatesSection.autoCheckSpec.label,
+                description: _automaticUpdateCheckDescription(
+                  autoCheckEnabled: updates.autoCheckEnabled,
+                  nextUpdateCheck: nextUpdateCheck,
+                ),
+                value: updates.autoCheckEnabled,
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.autoUpdateCheck,
+                  value,
+                ),
+              ),
+              SettingsToggleCard(
+                theme: widget.theme,
+                label: UpdatesSection.includePrereleaseSpec.label,
+                description: UpdatesSection.includePrereleaseSpec.description,
                 value: updates.includePrerelease,
                 onChanged: (value) => settingsNotifier.setSetting(
                   SettingsKeys.includePreReleases,
@@ -226,7 +196,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           ),
         ),
         buildSearchableSectionEntry(
-          visible: showGithubGroup,
           theme: widget.theme,
           group: UpdatesSection.searchGroups[1],
           titleIcon: Icons.code,
@@ -253,13 +222,30 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                 },
               ),
               const SizedBox(height: 16),
-              Text(
-                UpdatesSection.githubTokenSpec.label,
-                style: TextStyle(
-                  color: widget.theme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      UpdatesSection.githubTokenSpec.label,
+                      style: TextStyle(
+                        color: widget.theme.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    key: _tokenInfoKey,
+                    message:
+                        'A personal access token increases GitHub API rate limits.',
+                    child: IconButton(
+                      icon: const Icon(Icons.info_outline, size: 26),
+                      color: widget.theme.accent,
+                      onPressed: () =>
+                          _tokenInfoKey.currentState?.ensureTooltipVisible(),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: kElementVSpacing),
               ThemedTextField(
@@ -273,11 +259,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                     value,
                   );
                 },
-              ),
-              const SizedBox(height: kElementVSpacing),
-              Text(
-                'A personal access token increases GitHub API rate limits.',
-                style: TextStyle(color: widget.theme.textHint, fontSize: 12),
               ),
             ],
           ),

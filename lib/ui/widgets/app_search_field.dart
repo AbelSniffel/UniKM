@@ -35,6 +35,7 @@ class AppSearchField extends StatefulWidget {
     this.backgroundColor,
     this.onSubmitted,
     this.prefixIcon,
+    this.suffix,
     this.showTopBorder = false,
   });
 
@@ -64,6 +65,9 @@ class AppSearchField extends StatefulWidget {
 
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon;
+
+  /// Persistent trailing content displayed beside the clear button.
+  final Widget? suffix;
 
   /// Whether the themed animated top border should be shown for this field.
   final bool showTopBorder;
@@ -140,17 +144,28 @@ class _AppSearchFieldState extends State<AppSearchField> {
           minWidth: 38,
           minHeight: 36,
         ),
-        suffixIcon: showClear
-            ? IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 38, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.clear, color: widget.theme.textHint),
-                onPressed: () {
-                  controller.clear();
-                  widget.onChanged('');
-                  widget.onCleared?.call();
-                },
+        suffixIcon: showClear || widget.suffix != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.suffix != null) widget.suffix!,
+                  if (showClear)
+                    IconButton(
+                      tooltip: 'Clear search',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 38,
+                        minHeight: 36,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.clear, color: widget.theme.textHint),
+                      onPressed: () {
+                        controller.clear();
+                        widget.onChanged('');
+                        widget.onCleared?.call();
+                      },
+                    ),
+                ],
               )
             : null,
         filled: true,

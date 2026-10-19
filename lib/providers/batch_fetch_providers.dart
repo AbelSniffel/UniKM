@@ -43,9 +43,6 @@ class BatchFetchState {
   /// Get status for a specific game
   GameFetchStatus? getStatus(int gameId) => gameStatuses[gameId];
   
-  /// Check if a specific game is in the batch
-  bool containsGame(int gameId) => gameStatuses.containsKey(gameId);
-
   BatchFetchState copyWith({
     bool? isActive,
     Map<int, GameFetchStatus>? gameStatuses,
@@ -77,13 +74,9 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
   /// Start a batch fetch with the given game IDs
   void startBatch(List<int> gameIds) {
     _cancelled = false;
-    final statuses = <int, GameFetchStatus>{};
-    for (final id in gameIds) {
-      statuses[id] = GameFetchStatus.waiting;
-    }
     state = BatchFetchState(
       isActive: true,
-      gameStatuses: statuses,
+      gameStatuses: {for (final id in gameIds) id: GameFetchStatus.waiting},
       totalGames: gameIds.length,
       completedGames: 0,
     );
@@ -115,25 +108,16 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
     );
   }
 
-  /// Mark a game as done
-  void setDone(int gameId) {
-    if (!state.gameStatuses.containsKey(gameId)) return;
-    final newStatuses = Map<int, GameFetchStatus>.from(state.gameStatuses);
-    newStatuses[gameId] = GameFetchStatus.done;
-    state = state.copyWith(
-      gameStatuses: newStatuses,
-      completedGames: state.completedGames + 1,
-      clearCurrentGame: state.currentGameId == gameId,
-    );
-  }
+  /// Mark a game as done.
+  void setDone(int gameId) => _finishGame(gameId, GameFetchStatus.done);
 
-  /// Mark a game as error
-  void setError(int gameId) {
+  /// Mark a game as failed.
+  void setError(int gameId) => _finishGame(gameId, GameFetchStatus.error);
+
+  void _finishGame(int gameId, GameFetchStatus status) {
     if (!state.gameStatuses.containsKey(gameId)) return;
-    final newStatuses = Map<int, GameFetchStatus>.from(state.gameStatuses);
-    newStatuses[gameId] = GameFetchStatus.error;
     state = state.copyWith(
-      gameStatuses: newStatuses,
+      gameStatuses: {...state.gameStatuses, gameId: status},
       completedGames: state.completedGames + 1,
       clearCurrentGame: state.currentGameId == gameId,
     );

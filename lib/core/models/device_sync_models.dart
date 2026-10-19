@@ -2,6 +2,8 @@ library;
 
 import 'dart:convert';
 
+const supportedDeviceSyncProtocol = 3;
+
 // ---------------------------------------------------------------------------
 // Sync snapshot — UI state for the device sync dialog and notifier.
 // ---------------------------------------------------------------------------
@@ -98,6 +100,7 @@ class SyncImportResult {
     required this.inserted,
     required this.updated,
     required this.conflicts,
+    this.deleted = 0,
   });
 
   /// Games that were new on the remote and inserted locally.
@@ -106,12 +109,13 @@ class SyncImportResult {
   /// Games that existed locally but were replaced by the fresher remote copy.
   final int updated;
 
-  /// Games where both devices had local changes since the last sync;
-  /// the remote version was skipped to avoid data loss.
+  /// Competing edits detected. Modern sync deterministically resolves their
+  /// logical versions; legacy sync retains protected local edits.
   final int conflicts;
+  final int deleted;
 
   bool get hasConflicts => conflicts > 0;
-  int get total => inserted + updated;
+  int get total => inserted + updated + deleted;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +134,22 @@ class PeerTrustedEvent extends SyncEvent {
 class PeerRemovedEvent extends SyncEvent {
   const PeerRemovedEvent(this.peerId);
   final String peerId;
+}
+
+class PeerOfflineEvent extends SyncEvent {
+  const PeerOfflineEvent(this.peerId);
+  final String peerId;
+}
+
+/// A hint to check a peer's authenticated state, never a data mutation itself.
+class SyncChangeAvailableEvent extends SyncEvent {
+  const SyncChangeAvailableEvent({this.peerId});
+  final String? peerId;
+}
+
+class PeerAvailableEvent extends SyncEvent {
+  const PeerAvailableEvent(this.peer);
+  final DiscoveredSyncPeer peer;
 }
 
 class SyncDataAppliedEvent extends SyncEvent {
@@ -217,6 +237,8 @@ class TrustedSyncPeer {
     required this.port,
     this.deviceType = SyncDeviceType.unknown,
     this.fingerprint,
+    this.pairingId = '',
+    this.transferPort,
     this.lastSeenAtIso,
   });
 
@@ -226,6 +248,10 @@ class TrustedSyncPeer {
   final int port;
   final SyncDeviceType deviceType;
   final String? fingerprint;
+
+  /// Identifies this consent to pair; old removal messages cannot revoke it.
+  final String pairingId;
+  final int? transferPort;
   final String? lastSeenAtIso;
 
   Map<String, dynamic> toJson() {
@@ -235,6 +261,8 @@ class TrustedSyncPeer {
       'host': host,
       'port': port,
       'fingerprint': fingerprint,
+      'pairing_id': pairingId,
+      if (transferPort != null) 'transfer_port': transferPort,
       'last_seen_at_iso': lastSeenAtIso,
     };
     if (deviceType != SyncDeviceType.unknown) {
@@ -253,6 +281,8 @@ class TrustedSyncPeer {
         json['device_type'] as String? ?? json['deviceType'] as String?,
       ),
       fingerprint: json['fingerprint'] as String?,
+      pairingId: json['pairing_id'] as String? ?? '',
+      transferPort: (json['transfer_port'] as num?)?.toInt(),
       lastSeenAtIso: json['last_seen_at_iso'] as String?,
     );
   }
@@ -264,6 +294,8 @@ class TrustedSyncPeer {
     int? port,
     SyncDeviceType? deviceType,
     String? fingerprint,
+    String? pairingId,
+    int? transferPort,
     String? lastSeenAtIso,
   }) {
     return TrustedSyncPeer(
@@ -273,6 +305,8 @@ class TrustedSyncPeer {
       port: port ?? this.port,
       deviceType: deviceType ?? this.deviceType,
       fingerprint: fingerprint ?? this.fingerprint,
+      pairingId: pairingId ?? this.pairingId,
+      transferPort: transferPort ?? this.transferPort,
       lastSeenAtIso: lastSeenAtIso ?? this.lastSeenAtIso,
     );
   }
@@ -284,6 +318,8 @@ class DiscoveredSyncPeer {
     required this.name,
     required this.host,
     required this.port,
+    this.transferPort,
+    this.syncProtocol = supportedDeviceSyncProtocol,
     this.deviceType = SyncDeviceType.unknown,
   });
 
@@ -291,6 +327,10 @@ class DiscoveredSyncPeer {
   final String name;
   final String host;
   final int port;
+  final int? transferPort;
+  final int syncProtocol;
+
+  bool get isSyncCompatible => syncProtocol == supportedDeviceSyncProtocol;
   final SyncDeviceType deviceType;
 
   TrustedSyncPeer toTrustedPeer() {
@@ -299,6 +339,7 @@ class DiscoveredSyncPeer {
       name: name,
       host: host,
       port: port,
+      transferPort: transferPort,
       deviceType: deviceType,
       lastSeenAtIso: DateTime.now().toIso8601String(),
     );

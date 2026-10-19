@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,11 +53,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     // Default to dark theme
     return kDarkTheme;
-  }
-
-  /// Load theme (for initial load - no-op since build() loads it)
-  Future<void> loadTheme() async {
-    // Theme is automatically loaded through build() watching settingsProvider
   }
 
   /// Start previewing a theme without persisting
@@ -112,30 +108,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     });
   }
 
-  /// Set the active theme by unique ID
-  Future<void> setThemeById(String themeId) async {
-    final allThemes = getAllThemes();
-    final theme = allThemes.where((t) => t.id == themeId).firstOrNull;
-    if (theme != null) {
-      await setTheme(theme);
-      return;
-    }
-
-    // Fallback for stale IDs
-    await setTheme(kDarkTheme);
-  }
-
-  /// Set the active theme by name
-  Future<void> setThemeByName(String themeName) async {
-    final allThemes = getAllThemes();
-    final theme = allThemes.where((t) => t.name == themeName).firstOrNull;
-    if (theme != null) {
-      await setTheme(theme);
-    } else {
-      await setTheme(kDarkTheme);
-    }
-  }
-
   /// Save a custom theme
   Future<void> saveCustomTheme(AppThemeData theme) async {
     _previewOriginalTheme = null; // Clear preview state
@@ -143,16 +115,9 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     final customThemes = List<String>.from(ref.read(customThemesJsonProvider));
 
     // Replace existing theme with the same ID (edit flow), otherwise append.
-    customThemes.removeWhere((json) {
-      try {
-        final existing = AppThemeData.fromJson(
-          jsonDecode(json) as Map<String, dynamic>,
-        );
-        return existing.id == theme.id;
-      } catch (_) {
-        return false;
-      }
-    });
+    customThemes.removeWhere(
+      (json) => _decodeCustomTheme(json)?.id == theme.id,
+    );
 
     // Add new theme
     customThemes.add(jsonEncode(theme.toJson()));
@@ -180,27 +145,13 @@ class ThemeNotifier extends Notifier<AppThemeData> {
   ) async {
     final decoded = jsonDecode(jsonContent);
 
-    final rawThemes = <Map<String, dynamic>>[];
-
-    if (decoded is Map<String, dynamic>) {
-      if (decoded.containsKey('themes') && decoded['themes'] is List) {
-        for (final raw in decoded['themes'] as List<dynamic>) {
-          if (raw is Map<String, dynamic>) {
-            rawThemes.add(raw);
-          }
-        }
-      } else {
-        rawThemes.add(decoded);
-      }
-    } else if (decoded is List<dynamic>) {
-      for (final raw in decoded) {
-        if (raw is Map<String, dynamic>) {
-          rawThemes.add(raw);
-        }
-      }
-    } else {
-      throw const FormatException('Unsupported theme file format');
-    }
+    final candidates = switch (decoded) {
+      {'themes': final List themes} => themes,
+      final Map<String, dynamic> theme => [theme],
+      final List themes => themes,
+      _ => throw const FormatException('Unsupported theme file format'),
+    };
+    final rawThemes = candidates.whereType<Map<String, dynamic>>().toList();
 
     if (rawThemes.isEmpty) {
       throw const FormatException('No themes found in selected file');
@@ -263,16 +214,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     final settings = ref.read(settingsProvider.notifier);
     final customThemes = List<String>.from(ref.read(customThemesJsonProvider));
 
-    customThemes.removeWhere((json) {
-      try {
-        final t = AppThemeData.fromJson(
-          jsonDecode(json) as Map<String, dynamic>,
-        );
-        return t.id == id;
-      } catch (e) {
-        return false;
-      }
-    });
+    customThemes.removeWhere((json) => _decodeCustomTheme(json)?.id == id);
 
     _cachedCustomThemesJson = null;
     _cachedAllThemes = null;
@@ -288,25 +230,30 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     }
   }
 
+  // Malformed saved entries are ignored for display and retained during edits.
+  AppThemeData? _decodeCustomTheme(String json) {
+    try {
+      return AppThemeData.fromJson(jsonDecode(json) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Get all available themes (built-in + custom)
   List<AppThemeData> getAllThemes() {
     final customThemesJson = ref.read(customThemesJsonProvider);
 
     if (_cachedCustomThemesJson != null &&
-        _listEquals(_cachedCustomThemesJson!, customThemesJson)) {
+        const ListEquality<String>().equals(
+          _cachedCustomThemesJson!,
+          customThemesJson,
+        )) {
       return _cachedAllThemes!;
     }
 
-    final customThemes = <AppThemeData>[];
-    for (final json in customThemesJson) {
-      try {
-        customThemes.add(
-          AppThemeData.fromJson(jsonDecode(json) as Map<String, dynamic>),
-        );
-      } catch (e) {
-        // Ignore invalid themes
-      }
-    }
+    final customThemes = customThemesJson
+        .map(_decodeCustomTheme)
+        .whereType<AppThemeData>();
 
     _cachedCustomThemesJson = List<String>.unmodifiable(customThemesJson);
     _cachedAllThemes = List<AppThemeData>.unmodifiable([
@@ -314,21 +261,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
       ...customThemes,
     ]);
     return _cachedAllThemes!;
-  }
-
-  bool _listEquals(List<String> a, List<String> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
   }
 }
 

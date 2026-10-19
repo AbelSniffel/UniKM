@@ -2,18 +2,21 @@
 /// Supports both encrypted (.enc) and unencrypted (.db) databases seamlessly
 library;
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
+import 'package:uuid/uuid.dart';
 
+import '../../shared/state/session_value.dart';
+import '../../app/application/database_session_loader.dart';
 import '../../providers/app_providers.dart';
 import '../constants/app_constants.dart';
 import '../database/database.dart';
 import 'encryption_manager.dart';
+import 'database_file_info.dart';
 import 'legacy_db_converter.dart';
 import 'logging.dart';
 import '../utils/format_utils.dart';
@@ -51,11 +54,7 @@ class BackupInfo {
 
 /// Result of a backup operation
 class BackupResult {
-  const BackupResult({
-    required this.success,
-    this.backupInfo,
-    this.error,
-  });
+  const BackupResult({required this.success, this.backupInfo, this.error});
 
   final bool success;
   final BackupInfo? backupInfo;
@@ -85,9 +84,6 @@ class BackupService {
   final Ref ref;
   final int maxBackupCount;
 
-  /// Timer for automatic backups
-  Timer? _autoBackupTimer;
-
   /// Get the backups directory path
   Future<Directory> getBackupsDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -108,7 +104,7 @@ class BackupService {
   }
 
   /// Create a backup of the current database
-  /// 
+  ///
   /// Automatically detects whether the database is encrypted and creates
   /// the appropriate backup format.
   Future<BackupResult> createBackup({String? label}) async {
@@ -116,32 +112,35 @@ class BackupService {
       final basePath = await _getBaseDatabasePath();
       final encryptionManager = EncryptionManager(basePath);
       final isEncrypted = encryptionManager.isEncrypted;
-      
+
       // Get session if encrypted (to ensure latest changes are persisted)
       final session = ref.read(encryptedDbSessionProvider);
-      
+
       // Generate backup filename with timestamp and encryption state
       final timestamp = DateTime.now();
-      final timestampStr = '${timestamp.year}'
+      final timestampStr =
+          '${timestamp.year}'
           '${timestamp.month.toString().padLeft(2, '0')}'
           '${timestamp.day.toString().padLeft(2, '0')}_'
           '${timestamp.hour.toString().padLeft(2, '0')}'
           '${timestamp.minute.toString().padLeft(2, '0')}'
-          '${timestamp.second.toString().padLeft(2, '0')}';
-      
+          '${timestamp.second.toString().padLeft(2, '0')}_'
+          '${(timestamp.millisecond * 1000 + timestamp.microsecond).toString().padLeft(6, '0')}';
+
       final encryptionSuffix = isEncrypted ? '_encrypted' : '_plain';
       final extension = isEncrypted ? 'enc' : 'db';
-      final fileName = 'backup_$timestampStr$encryptionSuffix.$extension';
-      
+      final fileName =
+          'backup_${timestampStr}_${const Uuid().v4()}$encryptionSuffix.$extension';
+
       final backupsDir = await getBackupsDirectory();
       final backupPath = p.join(backupsDir.path, fileName);
-      
+
       if (isEncrypted) {
         // For encrypted database, persist any pending changes first
         if (session != null) {
           await session.persistFromTemp();
         }
-        
+
         // Copy the encrypted file
         final encPath = '$basePath.enc';
         await File(encPath).copy(backupPath);
@@ -149,22 +148,14 @@ class BackupService {
         // For unencrypted database, use VACUUM INTO for a clean snapshot
         // Use the temp path if we have an encrypted session, otherwise use base path
         final sourcePath = session?.tempDbPath ?? basePath;
-        
-        final sourceDb = sqlite3.sqlite3.open(
-          sourcePath,
-          mode: sqlite3.OpenMode.readOnly,
-        );
-        try {
-          sourceDb.execute("VACUUM INTO '${_escapeSqlString(backupPath)}'");
-        } finally {
-          sourceDb.close();
-        }
+
+        _snapshotDatabase(sourcePath, backupPath);
       }
-      
+
       // Get file size
       final backupFile = File(backupPath);
       final sizeBytes = await backupFile.length();
-      
+
       final backupInfo = BackupInfo(
         filePath: backupPath,
         fileName: fileName,
@@ -172,10 +163,10 @@ class BackupService {
         isEncrypted: isEncrypted,
         sizeBytes: sizeBytes,
       );
-      
+
       // Prune old backups
       await pruneOldBackups();
-      
+
       return BackupResult(success: true, backupInfo: backupInfo);
     } catch (e) {
       return BackupResult(success: false, error: 'Failed to create backup: $e');
@@ -186,24 +177,30 @@ class BackupService {
   Future<List<BackupInfo>> listBackups() async {
     final backupsDir = await getBackupsDirectory();
     final backups = <BackupInfo>[];
-    
+
     if (!await backupsDir.exists()) {
       return backups;
     }
-    
+
     await for (final entity in backupsDir.list()) {
       if (entity is File) {
         final fileName = p.basename(entity.path);
-        
+
         // Parse backup filename: backup_YYYYMMDD_HHMMSS_encrypted.enc or backup_YYYYMMDD_HHMMSS_plain.db
         if (!fileName.startsWith('backup_')) continue;
-        
-        final isEncrypted = fileName.contains('_encrypted') || fileName.endsWith('.enc');
-        
+
+        final fileInfo = await inspectDatabaseFile(
+          entity.path,
+          resolveEncryptedSibling: false,
+        );
+        final isEncrypted = fileInfo.isEncrypted;
+
         // Extract timestamp from filename
         DateTime? createdAt;
         try {
-          final match = RegExp(r'backup_(\d{8})_(\d{6})').firstMatch(fileName);
+          final match = RegExp(
+            r'backup_(\d{8})_(\d{6})(?:_(\d{6})_)?',
+          ).firstMatch(fileName);
           if (match != null) {
             final dateStr = match.group(1)!;
             final timeStr = match.group(2)!;
@@ -214,28 +211,32 @@ class BackupService {
               int.parse(timeStr.substring(0, 2)),
               int.parse(timeStr.substring(2, 4)),
               int.parse(timeStr.substring(4, 6)),
+              0,
+              int.parse(match.group(3) ?? '0'),
             );
           }
         } catch (_) {
           // If parsing fails, use file modification time
         }
-        
+
         createdAt ??= await entity.lastModified();
         final stat = await entity.stat();
-        
-        backups.add(BackupInfo(
-          filePath: entity.path,
-          fileName: fileName,
-          createdAt: createdAt,
-          isEncrypted: isEncrypted,
-          sizeBytes: stat.size,
-        ));
+
+        backups.add(
+          BackupInfo(
+            filePath: entity.path,
+            fileName: fileName,
+            createdAt: createdAt,
+            isEncrypted: isEncrypted,
+            sizeBytes: stat.size,
+          ),
+        );
       }
     }
-    
+
     // Sort by date, newest first
     backups.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    
+
     return backups;
   }
 
@@ -243,11 +244,11 @@ class BackupService {
   Future<int> pruneOldBackups() async {
     final backups = await listBackups();
     var deletedCount = 0;
-    
+
     if (backups.length <= maxBackupCount) {
       return 0;
     }
-    
+
     // Delete oldest backups
     final toDelete = backups.skip(maxBackupCount);
     for (final backup in toDelete) {
@@ -259,16 +260,16 @@ class BackupService {
         AppLog.w('Could not delete old backup ${backup.fileName}', error: e);
       }
     }
-    
+
     return deletedCount;
   }
 
   /// Restore a backup file
-  /// 
+  ///
   /// [backupPath] - Path to the backup file to restore
   /// [password] - Password for encrypted backups (required if backup is encrypted)
   /// [createBackupFirst] - Whether to create a backup of current database before restoring
-  /// 
+  ///
   /// Returns a RestoreResult indicating success or failure.
   /// Note: After a successful restore, the active database connection should
   /// be reloaded so the restored file is used immediately.
@@ -277,39 +278,53 @@ class BackupService {
     String? password,
     bool createBackupFirst = true,
   }) async {
+    Directory? restoreDirectory;
     try {
-      final backupFile = File(backupPath);
-      if (!await backupFile.exists()) {
+      final info = await inspectDatabaseFile(
+        backupPath,
+        resolveEncryptedSibling: false,
+      );
+      if (!info.exists) {
         return const RestoreResult(
           success: false,
           error: 'Backup file not found',
         );
       }
-      
-      final basePath = await _getBaseDatabasePath();
-      final isBackupEncrypted = backupPath.endsWith('.enc') || 
-          p.basename(backupPath).contains('_encrypted');
-      
-      // Validate encrypted backup has password
-      if (isBackupEncrypted && (password == null || password.isEmpty)) {
+      if (info.isEncrypted && (password == null || password.isEmpty)) {
         return const RestoreResult(
           success: false,
           error: 'Password required for encrypted backup',
         );
       }
-      
-      // If encrypted backup, verify password first
-      if (isBackupEncrypted) {
-        final isValid = await _verifyBackupPassword(backupPath, password!);
-        if (!isValid) {
-          return const RestoreResult(
-            success: false,
-            error: 'Incorrect password for backup',
-          );
-        }
+
+      final basePath = await _getBaseDatabasePath();
+      final targetDirectory = await Directory(
+        p.dirname(basePath),
+      ).create(recursive: true);
+      // Stage beside the destination so replacement is a same-filesystem rename.
+      // Prepare before pruning backups or closing the active library: either
+      // action could make the selected source unavailable.
+      restoreDirectory = await targetDirectory.createTemp('.unikm-restore-');
+      final preparedPath = p.join(restoreDirectory.path, 'prepared.db');
+      if (info.isEncrypted) {
+        final sourceBase = p.join(restoreDirectory.path, 'source');
+        await File(backupPath).copy('$sourceBase.enc');
+        final bytes = await EncryptionManager(sourceBase).decrypt(password!);
+        await File(sourceBase).writeAsBytes(bytes, flush: true);
+        _snapshotDatabase(sourceBase, preparedPath);
+      } else {
+        _snapshotDatabase(backupPath, preparedPath);
       }
-      
-      // Create backup of current database first if requested
+      final conversion = await convertLegacyDbToCurrentLayoutIfNeeded(
+        preparedPath,
+      );
+      if (conversion.converted) {
+        AppLog.i('Converted restored backup: ${conversion.actions.join(', ')}');
+      }
+      if (info.isEncrypted) {
+        await EncryptionManager(preparedPath).enable(password!);
+      }
+
       if (createBackupFirst) {
         final currentBackup = await createBackup(label: 'pre-restore');
         if (!currentBackup.success) {
@@ -319,119 +334,58 @@ class BackupService {
           );
         }
       }
-      
-      // Close the current database connection before deleting files
+
       final db = ref.read(databaseProvider);
       final session = ref.read(encryptedDbSessionProvider);
-      
-      // Clear database from notifier so providers know it's gone
       ref.read(databaseNotifierProvider.notifier).clearDatabase();
-      
-      if (db != null) {
-        if (session != null) {
-          // For encrypted databases, persist and close properly
-          await session.closeAndPersist(db);
-          ref.read(encryptedDbSessionProvider.notifier).setSession(null);
-        } else {
-          await db.close();
-        }
+      if (db != null) await const DatabaseSessionLoader().close(db, session);
+      ref.read(encryptedDbSessionProvider.notifier).set(null);
+
+      // Closed connections must not leave journals attached to a new database.
+      for (final suffix in ['-wal', '-shm', '-journal']) {
+        final companion = File('$basePath$suffix');
+        if (await companion.exists()) await companion.delete();
       }
-      
-      // Small delay to ensure file handles are released
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Prepare restored database in latest schema layout before writing target files.
-      final restoreTempDir = await Directory.systemTemp.createTemp('UniKM_restore_');
-      try {
-        final preparedPlainPath = p.join(restoreTempDir.path, 'prepared_restore.db');
-
-        if (isBackupEncrypted) {
-          final sourceBasePath = p.join(restoreTempDir.path, 'restore_source');
-          await backupFile.copy('$sourceBasePath.enc');
-          final sourceEncryptionManager = EncryptionManager(sourceBasePath);
-          final decryptedBytes = await sourceEncryptionManager.decrypt(password!);
-          await File(preparedPlainPath).writeAsBytes(decryptedBytes, flush: true);
-        } else {
-          await backupFile.copy(preparedPlainPath);
-        }
-
-        final conversionResult = await convertLegacyDbToCurrentLayoutIfNeeded(preparedPlainPath);
-        if (conversionResult.converted) {
-          AppLog.i(
-            'Converted restored backup to latest layout: '
-            '${conversionResult.actions.join(', ')}',
-          );
-        }
-
-        final targetDir = Directory(p.dirname(basePath));
-        if (!await targetDir.exists()) {
-          await targetDir.create(recursive: true);
-        }
-
-        if (isBackupEncrypted) {
-          final convertedBasePath = p.join(restoreTempDir.path, 'converted_restore');
-          await File(preparedPlainPath).copy(convertedBasePath);
-
-          final convertedEncryptionManager = EncryptionManager(convertedBasePath);
-          await convertedEncryptionManager.enable(password!);
-
-          final encryptedBytes = await File('$convertedBasePath.enc').readAsBytes();
-          await File('$basePath.enc').writeAsBytes(encryptedBytes, flush: true);
-        } else {
-          final restoredBytes = await File(preparedPlainPath).readAsBytes();
-          await File(basePath).writeAsBytes(restoredBytes, flush: true);
-        }
-      } finally {
-        try {
-          if (await restoreTempDir.exists()) {
-            await restoreTempDir.delete(recursive: true);
-          }
-        } catch (e) {
-          AppLog.d('Failed to cleanup restore temp dir: $e');
-        }
-      }
-      
+      final suffix = info.isEncrypted ? '.enc' : '';
+      await File('$preparedPath$suffix').rename('$basePath$suffix');
+      // The loader prefers .enc, so an obsolete sibling would hide a plain
+      // restore. Conversely, encrypted restores must not retain plaintext.
+      final obsolete = File(info.isEncrypted ? basePath : '$basePath.enc');
+      if (await obsolete.exists()) await obsolete.delete();
+      return const RestoreResult(success: true, requiresRestart: false);
+    } on InvalidPasswordException {
       return const RestoreResult(
-        success: true,
-        requiresRestart: false,
+        success: false,
+        error: 'Incorrect password for backup',
       );
     } catch (e) {
       return RestoreResult(
         success: false,
         error: 'Failed to restore backup: $e',
       );
+    } finally {
+      try {
+        await restoreDirectory?.delete(recursive: true);
+      } catch (e) {
+        AppLog.d('Failed to cleanup restore temp dir: $e');
+      }
     }
   }
 
-  /// Verify password for an encrypted backup
-  Future<bool> _verifyBackupPassword(String backupPath, String password) async {
+  /// Validate and snapshot SQLite, including committed data in its WAL file.
+  void _snapshotDatabase(String sourcePath, String destinationPath) {
+    final source = sqlite3.sqlite3.open(
+      sourcePath,
+      mode: sqlite3.OpenMode.readOnly,
+    );
     try {
-      // Create a temporary encryption manager for the backup
-      final tempDir = Directory.systemTemp.createTempSync('UniKM_verify_');
-      final tempBasePath = p.join(tempDir.path, 'verify');
-      
-      // Copy the backup to temp location with .enc extension
-      await File(backupPath).copy('$tempBasePath.enc');
-      
-      final encManager = EncryptionManager(tempBasePath);
-      
-      try {
-        // Try to decrypt - will throw if password is wrong
-        await encManager.decrypt(password);
-        return true;
-      } catch (e) {
-        return false;
-      } finally {
-        // Cleanup temp files
-        try {
-          await tempDir.delete(recursive: true);
-        } catch (e) {
-          // Ignore cleanup errors, but log for debugging
-          AppLog.d('Failed to cleanup temp dir: $e');
-        }
+      if (source.select('PRAGMA quick_check').single.values.single != 'ok') {
+        throw const FormatException('Backup is not a valid UniKM database');
       }
-    } catch (e) {
-      return false;
+      source.select('SELECT id, title, game_key FROM games LIMIT 0');
+      source.execute("VACUUM INTO '${destinationPath.replaceAll("'", "''")}'");
+    } finally {
+      source.close();
     }
   }
 
@@ -448,60 +402,13 @@ class BackupService {
       return false;
     }
   }
-
-  /// Start automatic backup timer
-  void startAutoBackup(Duration interval) {
-    stopAutoBackup();
-    _autoBackupTimer = Timer.periodic(interval, (_) async {
-      await createBackup();
-    });
-  }
-
-  /// Stop automatic backup timer
-  void stopAutoBackup() {
-    _autoBackupTimer?.cancel();
-    _autoBackupTimer = null;
-  }
-
-  /// Check if auto backup is running
-  bool get isAutoBackupRunning => _autoBackupTimer?.isActive ?? false;
-
-  /// Escape SQL string for VACUUM INTO command
-  String _escapeSqlString(String value) {
-    return value.replaceAll("'", "''");
-  }
-
-  /// Dispose resources
-  void dispose() {
-    stopAutoBackup();
-  }
 }
 
 /// Provider for backup service
 final backupServiceProvider = Provider<BackupService>((ref) {
   final maxBackupCount = ref.watch(backupSettingsProvider).maxCount;
-  final service = BackupService(ref: ref, maxBackupCount: maxBackupCount);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for the list of backups
-final backupListProvider = FutureProvider<List<BackupInfo>>((ref) async {
-  final backupService = ref.watch(backupServiceProvider);
-  return backupService.listBackups();
+  return BackupService(ref: ref, maxBackupCount: maxBackupCount);
 });
 
 /// State for next auto backup time
-final nextAutoBackupTimeProvider =
-    NotifierProvider<NextAutoBackupTimeNotifier, DateTime?>(
-      NextAutoBackupTimeNotifier.new,
-    );
-
-class NextAutoBackupTimeNotifier extends Notifier<DateTime?> {
-  @override
-  DateTime? build() => null;
-
-  void setNextBackupTime(DateTime? value) {
-    state = value;
-  }
-}
+final nextAutoBackupTimeProvider = sessionValueProvider<DateTime?>(null);

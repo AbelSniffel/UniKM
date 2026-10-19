@@ -10,10 +10,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
+import '../widgets/hover_builder.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_search_field.dart';
-import '../widgets/hover_builder.dart';
+import '../widgets/app_tab_bar.dart';
+import '../widgets/groupbox_family_title.dart';
+import '../widgets/settings_section_grid.dart';
+import '../widgets/settings_section_family.dart';
 import 'settings_sections/settings_sections.dart';
 
 typedef _SettingsSectionBuilder =
@@ -31,25 +35,29 @@ class _SettingsSectionDefinition {
   const _SettingsSectionDefinition({
     required this.id,
     required this.railLabel,
-    required this.pageTitle,
     required this.headerTitle,
     required this.icon,
     required this.searchGroups,
     required this.builder,
     this.extraMatch,
+    this.platformSearchGroups,
+    this.availableSearchGroups,
   });
 
   final String id;
   final String railLabel;
-  final String pageTitle;
   final String headerTitle;
   final IconData icon;
   final List<SettingsSearchGroup> searchGroups;
+  final List<SettingsSearchGroup> Function(TargetPlatform)?
+  platformSearchGroups;
   final _SettingsSectionBuilder builder;
   final _SectionExtraMatch? extraMatch;
+  final List<SettingsSearchGroup> Function(WidgetRef)? availableSearchGroups;
 
   bool shouldShow({
     required WidgetRef ref,
+    required TargetPlatform platform,
     required String searchQuery,
     required bool Function(String) matchesSearch,
     required bool showOnlyMatches,
@@ -61,7 +69,10 @@ class _SettingsSectionDefinition {
     return matchesAnySettingsSearchGroup(
           query: searchQuery,
           matchesSearch: matchesSearch,
-          groups: searchGroups,
+          groups:
+              availableSearchGroups?.call(ref) ??
+              platformSearchGroups?.call(platform) ??
+              searchGroups,
         ) ||
         (extraMatch?.call(ref, matchesSearch) ?? false);
   }
@@ -85,10 +96,12 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'appearance',
     railLabel: 'Appearance',
-    pageTitle: 'Appearance Settings',
     headerTitle: 'Appearance',
     icon: Icons.palette,
     searchGroups: AppearanceSection.searchGroups,
+    availableSearchGroups: (ref) => AppearanceSection.searchGroupsFor(
+      interactionCards: ref.watch(experimentalInteractionCardsProvider),
+    ),
     extraMatch: (ref, matchesSearch) {
       ref.watch(customThemesJsonProvider);
       return ref
@@ -110,16 +123,31 @@ final List<_SettingsSectionDefinition> _settingsSections = [
         ),
   ),
   _SettingsSectionDefinition(
+    id: 'navigation',
+    railLabel: 'Navigation',
+    headerTitle: 'Navigation Panel',
+    icon: Icons.view_sidebar,
+    searchGroups: NavigationSection.searchGroups,
+    builder:
+        ({
+          required theme,
+          required searchQuery,
+          required matchesSearch,
+          bool attachesToAbove = false,
+        }) => NavigationSection(
+          theme: theme,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          attachesToAbove: attachesToAbove,
+        ),
+  ),
+  _SettingsSectionDefinition(
     id: 'cards',
     railLabel: 'Game Card',
-    pageTitle: 'Game Card Visual Settings',
     headerTitle: 'Game Card Visual',
     icon: Icons.style,
-    searchGroups: [
-      CardDisplaySection.chipsSearchGroup,
-      CardDisplaySection.displayRulesSearchGroup,
-      CardDisplaySection.viewOptionsSearchGroup,
-    ],
+    searchGroups: const [],
+    platformSearchGroups: CardDisplaySection.searchGroupsFor,
     builder:
         ({
           required theme,
@@ -136,12 +164,11 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'database',
     railLabel: 'Database',
-    pageTitle: 'Database & Security',
-    headerTitle: 'Database & Security',
+    headerTitle: 'Database',
     icon: Icons.storage,
     searchGroups: [
-      DatabaseSection.encryptionSearchGroup,
       DatabaseSection.dataManagementSearchGroup,
+      DatabaseSection.databaseSyncSearchGroup,
       DatabaseSection.keyVisibilitySearchGroup,
     ],
     builder:
@@ -160,14 +187,21 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'tags',
     railLabel: 'Tags',
-    pageTitle: 'Tag Management',
     headerTitle: 'Tags',
     icon: Icons.label,
     searchGroups: [
       TagsSection.customTagsSearchGroup,
       TagsSection.steamTagsSearchGroup,
-      TagsSection.maintenanceSearchGroup,
     ],
+    extraMatch: (ref, matchesSearch) =>
+        TagsSection.isMaintenanceAvailable(
+          cleanupDone: ref.watch(legacyDefaultTagsCleanupDoneProvider),
+          customTagNames: ref
+              .watch(tagsProvider)
+              .where((tag) => !tag.isSteamTag)
+              .map((tag) => tag.name),
+        ) &&
+        TagsSection.maintenanceSearchGroup.indexTexts.any(matchesSearch),
     builder:
         ({
           required theme,
@@ -184,7 +218,6 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'notifications',
     railLabel: 'Notifications',
-    pageTitle: 'Notification Settings',
     headerTitle: 'Notifications',
     icon: Icons.notifications,
     searchGroups: [NotificationsSection.typesSearchGroup],
@@ -204,7 +237,6 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'updates',
     railLabel: 'Updates',
-    pageTitle: 'Update Settings',
     headerTitle: 'Updates',
     icon: Icons.download_rounded,
     searchGroups: UpdatesSection.searchGroups,
@@ -224,10 +256,13 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'advanced',
     railLabel: 'Advanced',
-    pageTitle: 'Advanced Settings',
     headerTitle: 'Advanced',
     icon: Icons.settings_applications,
-    searchGroups: [AdvancedSection.systemSearchGroup],
+    searchGroups: [
+      AdvancedSection.displaySearchGroup,
+      AdvancedSection.systemSearchGroup,
+      AdvancedSection.experimentalSearchGroup,
+    ],
     builder:
         ({
           required theme,
@@ -268,12 +303,6 @@ final double _settingsRailExpandedButtonWidth =
     _settingsRailIconLabelSpacing +
     _settingsRailMaxLabelWidth +
     _settingsRailLabelWidthBuffer;
-final double _settingsRailExpandedWidth =
-    _settingsRailExpandedButtonWidth +
-    (_settingsRailItemOuterHorizontalPadding * 2);
-final double _settingsRailCollapsedWidth =
-    _settingsRailCollapsedButtonExtent +
-    (_settingsRailItemOuterHorizontalPadding * 2);
 
 double _measureSettingsRailMaxLabelWidth() {
   final painter = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
@@ -303,6 +332,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _searchController = TextEditingController();
+  final _contentScrollController = ScrollController();
 
   @override
   void initState() {
@@ -319,11 +349,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _contentScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (_contentScrollController.hasClients) {
+      _contentScrollController.jumpTo(0);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(settingsPageSearchQueryProvider, (_, _) => _scrollToTop());
+    ref.listen(settingsPageSelectedSectionProvider, (_, _) => _scrollToTop());
     final selectedSection = ref.watch(settingsPageSelectedSectionProvider);
     final searchQuery = ref.watch(settingsPageSearchQueryProvider);
     final isSearching = searchQuery.isNotEmpty;
@@ -335,48 +374,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     bool matchesSearch(String text) => _matchesSearch(searchQuery, text);
 
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final isVeryNarrowLayout =
-            constraints.maxWidth < kVeryNarrowLayoutBreakpoint;
-
-        return Row(
-          children: [
-            _SettingsSectionRail(
-              expandedWidth: _settingsRailExpandedWidth,
-              collapsedWidth: _settingsRailCollapsedWidth,
-              expandedButtonWidth: _settingsRailExpandedButtonWidth,
-              selectedSection: selectedSection,
-              isSearching: isSearching,
-              isVeryNarrowLayout: isVeryNarrowLayout,
-              onSectionSelected: (sectionId) => ref
-                  .read(settingsPageSelectedSectionProvider.notifier)
-                  .setSelectedSection(sectionId),
+      builder: (context, constraints) => Row(
+        children: [
+          _SettingsSectionRail(
+            selectedSection: selectedSection,
+            isSearching: isSearching,
+            isVeryNarrowLayout:
+                constraints.maxWidth < kVeryNarrowLayoutBreakpoint,
+            onSectionSelected: (sectionId) => ref
+                .read(settingsPageSelectedSectionProvider.notifier)
+                .set(sectionId),
+          ),
+          _SettingsPageBody(
+            sectionIndex: _settingsRailSections.indexWhere(
+              (section) => section.$1 == effectiveSection,
             ),
-
-            _SettingsPageBody(
-              searchController: _searchController,
-              searchQuery: searchQuery,
-              onSearchChanged: (value) => ref
-                  .read(settingsPageSearchQueryProvider.notifier)
-                  .setQuery(value.toLowerCase()),
-              buildSectionContent: (theme) => _buildSectionContent(
-                theme,
-                searchQuery,
-                selectedSectionDefinition,
-              ),
-              buildSectionTitle: (theme) => _buildSectionTitle(
-                theme,
-                effectiveSection,
-                searchQuery,
-                selectedSectionDefinition,
-              ),
-              allSections: effectiveSection == 'all' ? _settingsSections : null,
-              matchesSearch: matchesSearch,
-              showOnlyMatches: searchQuery.isNotEmpty,
-            ),
-          ],
-        );
-      },
+            scrollController: _contentScrollController,
+            searchController: _searchController,
+            searchQuery: searchQuery,
+            onSearchChanged: (value) => ref
+                .read(settingsPageSearchQueryProvider.notifier)
+                .set(value.toLowerCase()),
+            sections: effectiveSection == 'all'
+                ? _settingsSections
+                : [?selectedSectionDefinition],
+            matchesSearch: matchesSearch,
+            showOnlyMatches: searchQuery.isNotEmpty,
+          ),
+        ],
+      ),
     );
   }
 
@@ -395,55 +421,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     return null;
   }
-
-  Widget _buildSectionTitle(
-    AppThemeData theme,
-    String effectiveSection,
-    String searchQuery,
-    _SettingsSectionDefinition? selectedSectionDefinition,
-  ) {
-    final title = effectiveSection == 'all'
-        ? (searchQuery.isNotEmpty ? 'Search Results' : 'All Settings')
-        : selectedSectionDefinition?.pageTitle ?? 'Settings';
-
-    return Text(
-      title,
-      style: TextStyle(
-        color: theme.textPrimary,
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
-      ),
-    );
-  }
-
-  Widget _buildSectionContent(
-    AppThemeData theme,
-    String searchQuery,
-    _SettingsSectionDefinition? selectedSectionDefinition,
-  ) {
-    return selectedSectionDefinition?.buildSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: (text) => _matchesSearch(searchQuery, text),
-        ) ??
-        const SizedBox.shrink();
-  }
 }
 
 class _SettingsSectionRail extends ConsumerWidget {
   const _SettingsSectionRail({
-    required this.expandedWidth,
-    required this.collapsedWidth,
-    required this.expandedButtonWidth,
     required this.selectedSection,
     required this.isSearching,
     required this.isVeryNarrowLayout,
     required this.onSectionSelected,
   });
 
-  final double expandedWidth;
-  final double collapsedWidth;
-  final double expandedButtonWidth;
   final String selectedSection;
   final bool isSearching;
   final bool isVeryNarrowLayout;
@@ -457,19 +444,22 @@ class _SettingsSectionRail extends ConsumerWidget {
         isVeryNarrowLayout ||
         platform == TargetPlatform.android ||
         platform == TargetPlatform.iOS;
-    final sectionsCollapsed =
+    final collapsed =
         forceCollapsed ||
         ref.watch(
           appShellSettingsProvider.select(
             (s) => s.settingsSectionPanelCollapsed,
           ),
         );
-
     return RepaintBoundary(
       child: AnimatedContainer(
-        duration: kNavPanelMotionAnimation,
+        duration: forceCollapsed ? Duration.zero : kNavPanelMotionAnimation,
         curve: kNavPanelMotionCurve,
-        width: sectionsCollapsed ? collapsedWidth : expandedWidth,
+        width:
+            (collapsed
+                ? _settingsRailCollapsedButtonExtent
+                : _settingsRailExpandedButtonWidth) +
+            _settingsRailItemOuterHorizontalPadding * 2,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.surface,
@@ -478,7 +468,7 @@ class _SettingsSectionRail extends ConsumerWidget {
               BoxShadow(
                 color: theme.border.withValues(alpha: 0.06),
                 blurRadius: 8,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -486,20 +476,19 @@ class _SettingsSectionRail extends ConsumerWidget {
             children: [
               Expanded(
                 child: ListView.builder(
+                  key: const ValueKey('settings-section-navigation'),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: _settingsRailSections.length,
                   itemBuilder: (context, index) {
                     final (id, label, icon) = _settingsRailSections[index];
-                    final isSelected = !isSearching && selectedSection == id;
-
                     return _SettingsSectionButton(
                       key: ValueKey<String>('settings-rail-$id'),
                       theme: theme,
                       icon: icon,
                       label: label,
-                      expandedButtonWidth: expandedButtonWidth,
-                      isSelected: isSelected,
-                      isCollapsed: sectionsCollapsed,
+                      expandedButtonWidth: _settingsRailExpandedButtonWidth,
+                      isSelected: !isSearching && selectedSection == id,
+                      isCollapsed: collapsed,
                       isEnabled: !isSearching,
                       onTap: () => onSectionSelected(id),
                     );
@@ -509,16 +498,58 @@ class _SettingsSectionRail extends ConsumerWidget {
               if (!forceCollapsed)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                  child: _SettingsRailCollapseButton(
-                    theme: theme,
-                    isCollapsed: sectionsCollapsed,
-                    expandedButtonWidth: expandedButtonWidth,
-                    onTap: () => ref
-                        .read(settingsProvider.notifier)
-                        .setSetting(
-                          SettingsKeys.settingsSectionPanelCollapsed,
-                          !sectionsCollapsed,
+                  child: Tooltip(
+                    message: collapsed
+                        ? 'Expand section list'
+                        : 'Collapse section list',
+                    child: HoverPressBuilder(
+                      onTap: () => ref
+                          .read(settingsProvider.notifier)
+                          .setSetting(
+                            SettingsKeys.settingsSectionPanelCollapsed,
+                            !collapsed,
+                          ),
+                      builder: (context, hovered, _) => AnimatedContainer(
+                        duration: kNavPanelMotionAnimation,
+                        curve: kNavPanelMotionCurve,
+                        width: collapsed
+                            ? _settingsRailCollapsedButtonExtent
+                            : _settingsRailExpandedButtonWidth,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: _settingsRailButtonHorizontalPadding,
+                          vertical: _settingsRailButtonVerticalPadding,
                         ),
+                        decoration: BoxDecoration(
+                          color: hovered
+                              ? theme.navItemHover
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(
+                            math.min(
+                              theme.cornerRadius * 1.25,
+                              _settingsRailButtonHeight / 2,
+                            ),
+                          ),
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: kNavPanelMotionAnimation,
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale: animation,
+                                  child: child,
+                                ),
+                              ),
+                          child: Icon(
+                            collapsed
+                                ? Icons.chevron_right
+                                : Icons.chevron_left,
+                            key: ValueKey(collapsed),
+                            color: theme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -529,83 +560,25 @@ class _SettingsSectionRail extends ConsumerWidget {
   }
 }
 
-class _SettingsRailCollapseButton extends StatelessWidget {
-  const _SettingsRailCollapseButton({
-    required this.theme,
-    required this.isCollapsed,
-    required this.expandedButtonWidth,
-    required this.onTap,
-  });
-
-  final AppThemeData theme;
-  final bool isCollapsed;
-  final double expandedButtonWidth;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final buttonWidth = isCollapsed
-        ? _settingsRailCollapsedButtonExtent
-        : expandedButtonWidth;
-    final borderRadius = BorderRadius.circular(
-      math.min(theme.cornerRadius * 1.25, _settingsRailButtonHeight / 2),
-    );
-
-    return Tooltip(
-      message: isCollapsed ? 'Expand section list' : 'Collapse section list',
-      child: HoverPressBuilder(
-        onTap: onTap,
-        builder: (context, hovered, _) => AnimatedContainer(
-          duration: kNavPanelMotionAnimation,
-          curve: kNavPanelMotionCurve,
-          width: buttonWidth,
-          padding: const EdgeInsets.symmetric(
-            horizontal: _settingsRailButtonHorizontalPadding,
-            vertical: _settingsRailButtonVerticalPadding,
-          ),
-          decoration: BoxDecoration(
-            color: hovered ? theme.navItemHover : Colors.transparent,
-            borderRadius: borderRadius,
-          ),
-          child: AnimatedSwitcher(
-            duration: kNavPanelMotionAnimation,
-            switchInCurve: Curves.easeInOut,
-            switchOutCurve: Curves.easeInOut,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(scale: animation, child: child),
-            ),
-            child: Icon(
-              isCollapsed ? Icons.chevron_right : Icons.chevron_left,
-              key: ValueKey<bool>(isCollapsed),
-              color: theme.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SettingsPageBody extends ConsumerWidget {
   const _SettingsPageBody({
+    required this.sectionIndex,
+    required this.scrollController,
     required this.searchController,
     required this.searchQuery,
     required this.onSearchChanged,
-    required this.buildSectionContent,
-    required this.buildSectionTitle,
-    this.allSections,
-    this.matchesSearch,
+    required this.sections,
+    required this.matchesSearch,
     this.showOnlyMatches = false,
   });
 
+  final int sectionIndex;
+  final ScrollController scrollController;
   final TextEditingController searchController;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
-  final Widget Function(AppThemeData theme) buildSectionContent;
-  final Widget Function(AppThemeData theme) buildSectionTitle;
-  final List<_SettingsSectionDefinition>? allSections;
-  final bool Function(String)? matchesSearch;
+  final List<_SettingsSectionDefinition> sections;
+  final bool Function(String) matchesSearch;
   final bool showOnlyMatches;
 
   @override
@@ -623,26 +596,30 @@ class _SettingsPageBody extends ConsumerWidget {
       ),
     );
 
-    if (allSections != null) {
-      // Pre-filter visible sections for lazy rendering
-      final visibleSections = allSections!
-          .where(
-            (s) => s.shouldShow(
-              ref: ref,
-              searchQuery: searchQuery,
-              matchesSearch: matchesSearch!,
-              showOnlyMatches: showOnlyMatches,
-            ),
-          )
-          .toList(growable: false);
+    // Filter whole sections before arranging their connected groupboxes.
+    final visibleSections = sections
+        .where(
+          (s) => s.shouldShow(
+            ref: ref,
+            platform: Theme.of(context).platform,
+            searchQuery: searchQuery,
+            matchesSearch: matchesSearch,
+            showOnlyMatches: showOnlyMatches,
+          ),
+        )
+        .toList(growable: false);
 
-      return Expanded(
-        child: Column(
-          children: [
-            searchField,
-            Expanded(
+    return Expanded(
+      child: Column(
+        children: [
+          searchField,
+          Expanded(
+            child: AppTabTransition(
+              key: const ValueKey('settings-section-transition'),
+              index: sectionIndex,
               child: RepaintBoundary(
                 child: CustomScrollView(
+                  controller: scrollController,
                   key: const ValueKey<String>('settings-content-scroll'),
                   slivers: [
                     if (visibleSections.isEmpty)
@@ -671,72 +648,58 @@ class _SettingsPageBody extends ConsumerWidget {
                     else
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                        sliver: SliverList.builder(
-                          itemCount: visibleSections.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: buildSectionTitle(theme),
-                              );
-                            }
-                            final section = visibleSections[index - 1];
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                        sliver: SliverToBoxAdapter(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => SettingsSectionGrid(
+                              columns: settingsSectionColumnCount(
+                                constraints.maxWidth,
+                              ),
+                              spacing: kSettingsSectionSpacing,
                               children: [
-                                _SettingsSearchSectionHeader(
-                                  key: ValueKey<String>(
-                                    'settings-section-header-${section.headerTitle}',
+                                for (final section in visibleSections)
+                                  RepaintBoundary(
+                                    key: ValueKey(
+                                      'settings-section-card-${section.id}',
+                                    ),
+                                    child: SettingsSectionFamily(
+                                      header: GroupBoxFamilyTitle(
+                                        key: ValueKey<String>(
+                                          'settings-section-header-${section.headerTitle}',
+                                        ),
+                                        theme: theme,
+                                        title: section.headerTitle,
+                                        icon: section.icon,
+                                        trailingBuilder: switch (section.id) {
+                                          'appearance' =>
+                                            (bool expanded) =>
+                                                ThemeHeaderActions(
+                                                  expanded: expanded,
+                                                ),
+                                          'database' =>
+                                            (bool expanded) =>
+                                                DatabaseHeaderActions(
+                                                  expanded: expanded,
+                                                ),
+                                          _ => null,
+                                        },
+                                        searchQuery: searchQuery,
+                                        isSearchMatch: showOnlyMatches,
+                                      ),
+                                      child: section.buildSection(
+                                        theme: theme,
+                                        searchQuery: searchQuery,
+                                        matchesSearch: matchesSearch,
+                                        attachesToAbove: false,
+                                      ),
+                                    ),
                                   ),
-                                  theme: theme,
-                                  title: section.headerTitle,
-                                  searchQuery: searchQuery,
-                                  isSearchMatch: showOnlyMatches,
-                                ),
-                                section.buildSection(
-                                  theme: theme,
-                                  searchQuery: searchQuery,
-                                  matchesSearch: matchesSearch!,
-                                  attachesToAbove: true,
-                                ),
-                                const SizedBox(height: 32),
                               ],
-                            );
-                          },
+                            ),
+                          ),
                         ),
                       ),
                   ],
                 ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Expanded(
-      child: Column(
-        children: [
-          searchField,
-          Expanded(
-            child: RepaintBoundary(
-              child: CustomScrollView(
-                key: const ValueKey<String>('settings-content-scroll'),
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          buildSectionTitle(theme),
-                          const SizedBox(height: 20),
-                          buildSectionContent(theme),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -853,7 +816,6 @@ class _SettingsSectionButtonState extends State<_SettingsSectionButton> {
         horizontalSpacing: _settingsRailIconLabelSpacing,
         horizontalMainAxisSize: MainAxisSize.max,
         horizontalMainAxisAlignment: MainAxisAlignment.start,
-        duration: kMediumAnimation,
       ),
     );
 
@@ -863,151 +825,6 @@ class _SettingsSectionButtonState extends State<_SettingsSectionButton> {
         vertical: _settingsRailItemOuterVerticalPadding,
       ),
       child: button,
-    );
-  }
-}
-
-/// Header widget for section groups in the All/Search settings view
-class _SettingsSearchSectionHeader extends StatefulWidget {
-  const _SettingsSearchSectionHeader({
-    super.key,
-    required this.theme,
-    required this.title,
-    required this.searchQuery,
-    required this.isSearchMatch,
-  });
-
-  final AppThemeData theme;
-  final String title;
-  final String searchQuery;
-  final bool isSearchMatch;
-
-  @override
-  State<_SettingsSearchSectionHeader> createState() =>
-      _SettingsSearchSectionHeaderState();
-}
-
-class _SettingsSearchSectionHeaderState
-    extends State<_SettingsSearchSectionHeader>
-    with SingleTickerProviderStateMixin {
-  static const Duration _searchFadeDelay = Duration(seconds: 1);
-  static const Duration _searchFadeDuration = Duration(milliseconds: 650);
-
-  late final AnimationController _highlightController;
-  Timer? _fadeTimer;
-
-  bool get _shouldHighlight =>
-      widget.searchQuery.trim().isNotEmpty && widget.isSearchMatch;
-
-  @override
-  void initState() {
-    super.initState();
-    _highlightController = AnimationController(
-      vsync: this,
-      duration: _searchFadeDuration,
-      value: 0,
-    );
-    _syncHighlightWithSearch();
-  }
-
-  @override
-  void didUpdateWidget(covariant _SettingsSearchSectionHeader oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.searchQuery != widget.searchQuery ||
-        oldWidget.isSearchMatch != widget.isSearchMatch) {
-      _syncHighlightWithSearch();
-    }
-  }
-
-  void _syncHighlightWithSearch() {
-    _fadeTimer?.cancel();
-
-    if (!_shouldHighlight) {
-      _highlightController.animateTo(0);
-      return;
-    }
-
-    _highlightController.value = 1;
-    _fadeTimer = Timer(_searchFadeDelay, () {
-      if (!mounted) return;
-      _highlightController.animateTo(0);
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeTimer?.cancel();
-    _highlightController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _highlightController,
-      builder: (context, _) {
-        final highlightValue = Curves.easeOutCubic.transform(
-          _highlightController.value,
-        );
-        final borderColor =
-            Color.lerp(
-              widget.theme.border,
-              widget.theme.accent,
-              highlightValue.clamp(0.0, 1.0),
-            ) ??
-            widget.theme.border;
-        final backgroundColor = Color.alphaBlend(
-          widget.theme.accent.withValues(alpha: 0.12 * highlightValue),
-          widget.theme.accent.withValues(alpha: 0.35),
-        );
-        final iconAndTextColor =
-            Color.lerp(
-              widget.theme.accent,
-              Colors.white,
-              0.22 * highlightValue,
-            ) ??
-            widget.theme.accent;
-
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(widget.theme.cornerRadius),
-            ),
-            border: Border(
-              top: BorderSide(color: borderColor),
-              left: BorderSide(color: borderColor),
-              right: BorderSide(color: borderColor),
-            ),
-            boxShadow: highlightValue <= 0
-                ? const []
-                : [
-                    BoxShadow(
-                      color: widget.theme.accent.withValues(
-                        alpha: 0.18 * highlightValue,
-                      ),
-                      blurRadius: 14,
-                      spreadRadius: 1.5,
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 20, color: iconAndTextColor),
-              const SizedBox(width: kElementHSpacing),
-              Text(
-                widget.title,
-                style: TextStyle(
-                  color: iconAndTextColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

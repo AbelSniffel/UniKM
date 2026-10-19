@@ -2,37 +2,114 @@
 /// Matches the original Python AddGamesPage
 library;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/platform_patterns.dart';
+import '../../core/settings/settings_model.dart';
 import '../../core/utils/batch_parser.dart';
 import '../../core/utils/duplicate_key_checker.dart';
-import '../../core/utils/steam_result_mapper.dart';
 import '../../core/utils/steam_tag_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
-import '../pages/settings_sections/settings_common.dart';
-import '../widgets/app_tag_chip.dart';
-import '../widgets/tag_list.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
-import '../widgets/platform_icon.dart';
-import '../widgets/page_header_title.dart';
-import '../widgets/app_date_field.dart';
-import '../widgets/game_cover_image.dart';
+import '../widgets/platform_menu_button.dart';
+import '../widgets/batch_games_editor.dart';
+import '../widgets/deadline_chip.dart';
+import '../widgets/footer_wrap.dart';
+import '../widgets/game_editor_layout.dart';
+import '../widgets/cover_image_card.dart';
+import '../widgets/game_options_row.dart';
 import '../../core/services/steam_service.dart';
-import '../dialogs/deadline_picker_dialog.dart';
 import '../dialogs/steam_lookup_dialog.dart';
 import '../widgets/dialog_helpers.dart';
 import '../../models/game.dart';
+import '../controllers/game_editor_fields.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Action to take when a duplicate key is found
-enum _DuplicateAction { cancel, addAnyway, overwrite }
+enum DuplicateAction { addAnyway, skip }
+
+/// Shared duplicate-key warning with a compact, scrollable list.
+Future<DuplicateAction?> showDuplicateKeyDialog(
+  BuildContext context,
+  AppThemeData theme,
+  List<MapEntry<String, Game>> duplicates,
+) => showAppDialog<DuplicateAction>(
+  context: context,
+  builder: (ctx) => ThemedAlertDialog(
+    theme: theme,
+    maxWidth: kCompactDialogWidth,
+    title: DialogHeader(
+      icon: Icons.warning_amber_rounded,
+      iconColor: theme.error,
+      iconSize: 28,
+      title: 'Duplicate Keys Found',
+      theme: theme,
+    ),
+    content: SectionGroupBox(
+      title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
+      titleIcon: Icons.key,
+      titleLocation: SectionTitleLocation.top,
+      theme: theme,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: (MediaQuery.sizeOf(ctx).height * 0.45).clamp(100, 320),
+        ),
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: duplicates.length,
+          separatorBuilder: (_, _) => Divider(height: 1, color: theme.border),
+          itemBuilder: (_, index) {
+            final entry = duplicates[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.value.title,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      height: 1.15,
+                    ),
+                  ),
+                  Text(
+                    entry.key,
+                    style: TextStyle(
+                      color: theme.textSecondary,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      height: 1.15,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+    actions: [
+      OutlinedButton(
+        onPressed: () => Navigator.pop(ctx, DuplicateAction.addAnyway),
+        child: const Text('Add Anyway'),
+      ),
+      ElevatedButton(
+        onPressed: () => Navigator.pop(ctx, DuplicateAction.skip),
+        child: const Text('Skip'),
+      ),
+    ],
+  ),
+);
 
 /// Add games page
 class AddGamesPage extends ConsumerStatefulWidget {
@@ -50,6 +127,7 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
   void initState() {
     super.initState();
     _tabController = TabController(
+      animationDuration: kTabTransition,
       length: 2,
       vsync: this,
       initialIndex: ref.read(addGamesSelectedTabProvider),
@@ -64,9 +142,9 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
 
     final selectedTab = ref.read(addGamesSelectedTabProvider);
     if (selectedTab != _tabController.index) {
-      ref.read(addGamesSelectedTabProvider.notifier).setIndex(
-        _tabController.index,
-      );
+      ref
+          .read(addGamesSelectedTabProvider.notifier)
+          .setIndex(_tabController.index);
     }
   }
 
@@ -84,39 +162,16 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header
-        Container(
+        Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          decoration: BoxDecoration(
-            color: theme.background,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              PageHeaderTitle(
-                title: 'Add New Games',
-                icon: Icons.add_circle,
-                theme: theme,
-              ),
-              const SizedBox(height: 6),
-              TabBar(
-                controller: _tabController,
-                labelColor: theme.accent,
-                unselectedLabelColor: theme.textSecondary,
-                indicator: theme.tabIndicator,
-                indicatorSize: TabBarIndicatorSize.tab,
-                tabs: const [
-                  Tab(text: 'Single Entry'),
-                  Tab(text: 'Multiple Entries'),
-                ],
-              ),
-            ],
+          child: AppTabBar(
+            theme: theme,
+            controller: _tabController,
+            tabs: const [AppTab('Single Game'), AppTab('Multiple Games')],
           ),
         ),
-
-        // Content
         Expanded(
-          child: TabBarView(
+          child: AppTabView(
             controller: _tabController,
             children: [
               _SingleEntryTab(theme: theme),
@@ -139,20 +194,17 @@ class _SingleEntryTab extends ConsumerStatefulWidget {
   ConsumerState<_SingleEntryTab> createState() => _SingleEntryTabState();
 }
 
-class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
+class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _keyController = TextEditingController();
-  final _notesController = TextEditingController();
-  final _coverImageController = TextEditingController();
+  final _fields = GameEditorFields();
+  final _coverCardKey = GlobalKey();
+  final _editorLayoutKey = GlobalKey<GameEditorLayoutState>();
 
   String _platform = kAutoDetectPlatformValue;
   bool _hasDeadline = false;
   DateTime? _deadlineDate;
   bool _isDlc = false;
+  bool _isUsed = false;
   Set<int> _selectedTagIds = {};
   bool _isSubmitting = false;
 
@@ -160,12 +212,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
   List<Tag> _fetchedSteamTags = [];
   bool _isFetchingSteamData = false;
 
-  // Fetched preview data
-  String? _fetchedSteamTitle;
-  String? _fetchedAppId;
-  String? _fetchedCoverImagePath;
-  int? _fetchedReviewScore;
-  int? _fetchedReviewCount;
+  SteamSearchResult? _steamPreview;
   DateTime? _singleSteamCacheAt;
 
   @override
@@ -176,61 +223,56 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _keyController.dispose();
-    _notesController.dispose();
-    _coverImageController.dispose();
+    _fields.dispose();
     super.dispose();
   }
 
   void _loadDraftFromProvider() {
     final draft = ref.read(addGamesSingleEntryDraftProvider);
-    _titleController.text = draft.title;
-    _keyController.text = draft.gameKey;
-    _notesController.text = draft.notes;
-    _coverImageController.text = draft.coverImage;
+    _fields.load(
+      title: draft.title,
+      gameKey: draft.gameKey,
+      notes: draft.notes,
+      coverImage: draft.coverImage,
+    );
     _platform = draft.platform;
     _hasDeadline = draft.hasDeadline;
     _deadlineDate = draft.deadlineDate;
     _isDlc = draft.isDlc;
+    _isUsed = draft.isUsed;
     _selectedTagIds = Set<int>.from(draft.selectedTagIds);
     _fetchedSteamTags = List<Tag>.from(draft.fetchedSteamTags);
-    _fetchedSteamTitle = draft.fetchedSteamTitle;
-    _fetchedAppId = draft.fetchedAppId;
-    _fetchedCoverImagePath = draft.fetchedCoverImagePath;
-    _fetchedReviewScore = draft.fetchedReviewScore;
-    _fetchedReviewCount = draft.fetchedReviewCount;
+    _steamPreview = draft.steamPreview;
     _singleSteamCacheAt = draft.singleSteamCacheAt;
   }
 
   void _saveDraft() {
-    ref.read(addGamesSingleEntryDraftProvider.notifier).replace(
-      AddGamesSingleEntryDraft(
-        title: _titleController.text,
-        gameKey: _keyController.text,
-        notes: _notesController.text,
-        coverImage: _coverImageController.text,
-        platform: _platform,
-        hasDeadline: _hasDeadline,
-        deadlineDate: _deadlineDate,
-        isDlc: _isDlc,
-        selectedTagIds: Set<int>.from(_selectedTagIds),
-        fetchedSteamTags: List<Tag>.from(_fetchedSteamTags),
-        fetchedSteamTitle: _fetchedSteamTitle,
-        fetchedAppId: _fetchedAppId,
-        fetchedCoverImagePath: _fetchedCoverImagePath,
-        fetchedReviewScore: _fetchedReviewScore,
-        fetchedReviewCount: _fetchedReviewCount,
-        singleSteamCacheAt: _singleSteamCacheAt,
-      ),
-    );
+    ref
+        .read(addGamesSingleEntryDraftProvider.notifier)
+        .set(
+          AddGamesSingleEntryDraft(
+            title: _fields.title.text,
+            gameKey: _fields.gameKey.text,
+            notes: _fields.notes.text,
+            coverImage: _fields.coverImage.text,
+            platform: _platform,
+            hasDeadline: _hasDeadline,
+            deadlineDate: _deadlineDate,
+            isDlc: _isDlc,
+            isUsed: _isUsed,
+            selectedTagIds: Set<int>.from(_selectedTagIds),
+            fetchedSteamTags: List<Tag>.from(_fetchedSteamTags),
+            steamPreview: _steamPreview,
+            singleSteamCacheAt: _singleSteamCacheAt,
+          ),
+        );
   }
 
   bool get _usesAutoDetectPlatform => _platform == kAutoDetectPlatformValue;
 
   GamePlatform get _resolvedGamePlatform {
     if (_usesAutoDetectPlatform) {
-      return PlatformDetector.detectPlatform(_keyController.text);
+      return PlatformDetector.detectPlatform(_fields.gameKey.text);
     }
 
     return GamePlatform.fromDisplayName(_platform);
@@ -240,15 +282,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
     return _resolvedGamePlatform.displayName;
   }
 
-  bool get _isSteamPlatform =>
-      _resolvedGamePlatform == GamePlatform.steam;
-
-  bool get _hasFetchedSteamPreview =>
-      _fetchedSteamTitle != null ||
-      _fetchedAppId != null ||
-      _fetchedReviewScore != null ||
-      _fetchedReviewCount != null ||
-      _fetchedCoverImagePath != null;
+  bool get _isSteamPlatform => _resolvedGamePlatform == GamePlatform.steam;
 
   String get _gameKeyPlatformTooltip {
     final prefix = _usesAutoDetectPlatform
@@ -270,84 +304,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
     return DuplicateKeyChecker.findExistingByKey(key, games);
   }
 
-  /// Show dialog when duplicate key is detected
-  Future<_DuplicateAction?> _showDuplicateDialog(Game existing) async {
-    final theme = widget.theme;
-    return showDialog<_DuplicateAction>(
-      context: context,
-      builder: (ctx) => ThemedAlertDialog(
-        theme: theme,
-        maxWidth: 400,
-        title: DialogHeader(
-          icon: Icons.warning_amber_rounded,
-          iconColor: theme.warning,
-          iconSize: 28,
-          title: 'Duplicate Key Found',
-          theme: theme,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'A game with this key already exists:',
-              style: TextStyle(color: theme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.background,
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-                border: Border.all(color: theme.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    existing.title,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    existing.gameKey,
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: kDialogSpacing),
-            Text(
-              'What would you like to do?',
-              style: TextStyle(color: theme.textSecondary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _DuplicateAction.addAnyway),
-            child: Text('Add Anyway', style: TextStyle(color: theme.accent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: theme.accent),
-            onPressed: () => Navigator.pop(ctx, _DuplicateAction.overwrite),
-            child: Text(
-              'Overwrite',
-              style: TextStyle(color: theme.textPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _submit() async {
     if (ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
       NotificationManager.instance.warning(
@@ -355,112 +311,81 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
       );
       return;
     }
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      _editorLayoutKey.currentState?.showDetails();
+      return;
+    }
 
-    final gameKey = _keyController.text.trim();
+    final gameKey = _fields.gameKey.text.trim();
     final resolvedPlatform = _resolvedPlatform;
+
+    final database = ref.read(databaseProvider);
+    final isSteam = resolvedPlatform == GamePlatform.steam.displayName;
 
     // Check for duplicate key
     final existingGame = _findExistingGameByKey(gameKey);
     if (existingGame != null) {
-      final action = await _showDuplicateDialog(existingGame);
-      if (action == null || action == _DuplicateAction.cancel) {
-        return; // User cancelled
-      }
-      if (action == _DuplicateAction.overwrite) {
-        // Delete the existing game first
-        await ref.read(gamesProvider.notifier).deleteGame(existingGame.id);
-      }
-      // For addAnyway, we just continue to add the new game
+      final action = await showDuplicateKeyDialog(context, widget.theme, [
+        MapEntry(existingGame.gameKey, existingGame),
+      ]);
+      if (action != DuplicateAction.addAnyway) return;
     }
 
+    if (!mounted || !identical(ref.read(databaseProvider), database)) return;
     setState(() => _isSubmitting = true);
 
     try {
       final result = await ref
           .read(gamesProvider.notifier)
           .addGame(
-            title: _titleController.text.trim(),
+            title: _fields.title.text.trim(),
             gameKey: gameKey,
             platform: resolvedPlatform,
-            notes: _notesController.text.trim(),
-            coverImage: _coverImageController.text.trim(),
+            notes: _fields.notes.text.trim(),
+            coverImage: _fields.coverImage.text.trim(),
+            steamAppId: isSteam ? (_steamPreview?.appId ?? '') : '',
+            reviewScore: isSteam ? (_steamPreview?.reviewScore ?? 0) : 0,
+            reviewCount: isSteam ? (_steamPreview?.reviewCount ?? 0) : 0,
             hasDeadline: _hasDeadline,
             deadlineDate: _hasDeadline ? _deadlineDate : null,
             isDlc: _isDlc,
-            tagIds: _selectedTagIds.toList(),
+            isUsed: _isUsed,
+            tagIds: {
+              ..._selectedTagIds,
+              if (isSteam) ..._fetchedSteamTags.map((tag) => tag.id),
+            }.toList(),
           );
 
+      if (!mounted || !identical(ref.read(databaseProvider), database)) return;
       if (result != null) {
-        var shouldRefreshCreatedGame = false;
-
-        // Attach any fetched Steam tags to the newly created game. Steam tags
-        // are managed separately from the custom tag selector.
-        if (resolvedPlatform == GamePlatform.steam.displayName &&
-            _fetchedSteamTags.isNotEmpty) {
-          final db = ref.read(requireDatabaseProvider);
-          for (final tag in _fetchedSteamTags) {
-            await db.addTagToGame(result.id, tag.id);
-          }
-          await persistEncryptedDbIfNeeded(ref);
-          // Refresh tag state once new Steam tags are attached.
-          await ref.read(tagsProvider.notifier).refresh();
-          shouldRefreshCreatedGame = true;
-        }
-
-        // Persist any fetched steam metadata (AppID, image, reviews)
-        if (resolvedPlatform == GamePlatform.steam.displayName &&
-            (_fetchedAppId != null ||
-                _fetchedCoverImagePath != null ||
-                _fetchedReviewScore != null)) {
-          final updated = result.copyWith(
-            steamAppId: _fetchedAppId ?? result.steamAppId,
-            coverImage: _fetchedCoverImagePath ?? result.coverImage,
-            reviewScore: _fetchedReviewScore ?? result.reviewScore,
-            reviewCount: _fetchedReviewCount ?? result.reviewCount,
-            isDlc: _isDlc,
-          );
-          await ref.read(gamesProvider.notifier).updateGame(updated);
-          shouldRefreshCreatedGame = true;
-        }
-
-        if (shouldRefreshCreatedGame) {
-          await ref.read(gamesProvider.notifier).refreshGame(result.id);
-        }
-
         NotificationManager.instance.success('Game added: ${result.title}');
         _clearForm();
       }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   void _clearForm() {
-    _titleController.clear();
-    _keyController.clear();
-    _notesController.clear();
-    _coverImageController.clear();
+    _editorLayoutKey.currentState?.showDetails();
+    _fields.clear();
     setState(() {
       _platform = kAutoDetectPlatformValue;
       _hasDeadline = false;
       _deadlineDate = null;
       _isDlc = false;
+      _isUsed = false;
       _selectedTagIds = {};
       _fetchedSteamTags = [];
-      _fetchedSteamTitle = null;
       _isFetchingSteamData = false;
-      _fetchedAppId = null;
-      _fetchedCoverImagePath = null;
-      _fetchedReviewScore = null;
-      _fetchedReviewCount = null;
+      _steamPreview = null;
       _singleSteamCacheAt = null;
     });
-    ref.read(addGamesSingleEntryDraftProvider.notifier).clear();
+    ref.read(addGamesSingleEntryDraftProvider.notifier).reset();
   }
 
   Future<void> _loadSingleEntryCacheAt() async {
-    final title = _titleController.text.trim();
+    final title = _fields.title.text.trim();
     if (title.isEmpty) return;
     _singleSteamCacheAt = await getCachedAtForTitle(title);
     if (mounted) {
@@ -472,42 +397,30 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
   void _resetSteamPreview() {
     setState(() {
       _fetchedSteamTags = [];
-      _fetchedSteamTitle = null;
-      _fetchedAppId = null;
-      _fetchedCoverImagePath = null;
-      _fetchedReviewScore = null;
-      _fetchedReviewCount = null;
+      _steamPreview = null;
     });
     _saveDraft();
   }
 
   void _applySteamPreview({
-    required String steamTitle,
+    required SteamSearchResult result,
     required List<Tag> steamTags,
-    required SteamPreviewData preview,
+    String? coverImage,
     DateTime? cacheAt,
   }) {
     setState(() {
       _fetchedSteamTags = steamTags;
-      _fetchedSteamTitle = steamTitle;
-      _fetchedAppId = preview.appId;
-      _fetchedCoverImagePath = preview.coverImagePath;
-      _fetchedReviewScore = preview.reviewScore;
-      _fetchedReviewCount = preview.reviewCount;
-      _isDlc = preview.isDlc;
-      if (_fetchedCoverImagePath != null) {
-        _coverImageController.text = _fetchedCoverImagePath!;
-      }
-      if (cacheAt != null) {
-        _singleSteamCacheAt = cacheAt;
-      }
+      _steamPreview = result;
+      _isDlc = result.isDlc;
+      if (coverImage != null) _fields.coverImage.text = coverImage;
+      if (cacheAt != null) _singleSteamCacheAt = cacheAt;
     });
     _saveDraft();
   }
 
   /// Fetch full Steam data (tags, image, reviews) for the current title and prepare a preview
   Future<void> _fetchSteamData() async {
-    final title = _titleController.text.trim();
+    final title = _fields.title.text.trim();
     if (title.isEmpty) {
       NotificationManager.instance.info('Enter a title to fetch Steam data');
       return;
@@ -551,11 +464,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
           useLibraryImage: false,
         );
       }
-      final preview = SteamResultMapper.toPreviewData(
-        result,
-        downloadedImagePath: imagePath,
-      );
-
       // Create/get steam tags for preview
       final created = await SteamTagUtils.ensureSteamTags(
         db: db,
@@ -567,9 +475,9 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
 
       if (!mounted) return;
       _applySteamPreview(
-        steamTitle: result.name,
+        result: result,
         steamTags: created,
-        preview: preview,
+        coverImage: imagePath ?? result.imageUrl,
         cacheAt: resolution.usedCache ? resolution.cachedAt : null,
       );
 
@@ -587,410 +495,128 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    final theme = widget.theme;
     final customTags = ref.watch(customTagsProvider);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: SingleChildScrollView(
+          child: Padding(
             padding: const EdgeInsets.all(20),
             child: Form(
               key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Basic info section
-                  SectionGroupBox(
-                    title: 'Game Information',
-                    theme: widget.theme,
-                    titleIcon: Icons.videogame_asset,
-                    groupPosition: SectionGroupPosition.first,
-                    alternateBackground: false,
-                    child: Column(
-                      children: [
-                        // Title
-                        TextFormField(
-                          controller: _titleController,
-                          style: TextStyle(color: widget.theme.textPrimary),
-                          decoration: const InputDecoration(
-                            labelText: 'Game Title *',
-                            hintText: 'Enter game title',
-                          ),
-                          onChanged: (_) {
-                            _loadSingleEntryCacheAt();
-                            _saveDraft();
-                          },
-                          validator: (value) => value?.isEmpty == true
-                              ? 'Title is required'
-                              : null,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Key
-                        TextFormField(
-                          controller: _keyController,
-                          style: TextStyle(color: widget.theme.textPrimary),
-                          decoration: InputDecoration(
-                            labelText: 'Game Key *',
-                            hintText: 'Enter activation key',
-                            suffixIcon: Tooltip(
-                              message: _gameKeyPlatformTooltip,
-                              child: IgnorePointer(
-                                child: SizedBox(
-                                  width: 42,
-                                  child: Center(
-                                    child: PlatformIcon(
-                                      platform: _resolvedGamePlatform,
-                                      color: widget.theme.accent,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          onChanged: _handleKeyChanged,
-                          validator: (value) =>
-                              value?.isEmpty == true ? 'Key is required' : null,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Platform
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(_platform),
-                          initialValue: _platform,
-                          isExpanded: true,
-                          menuMaxHeight: 320,
-                          borderRadius: BorderRadius.circular(
-                            widget.theme.cornerRadius,
-                          ),
-                          style: TextStyle(color: widget.theme.textPrimary),
-                          dropdownColor: widget.theme.surface,
-                          decoration: const InputDecoration(
-                            labelText: 'Platform',
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: kAutoDetectPlatformValue,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.auto_fix_high,
-                                    color: widget.theme.textPrimary,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: kElementHSpacing),
-                                  const Text('Auto-detect'),
-                                ],
-                              ),
-                            ),
-                            ...GamePlatform.values.map((p) {
-                              return DropdownMenuItem(
-                                value: p.displayName,
-                                child: Row(
-                                  children: [
-                                    PlatformIcon(
-                                      platform: p,
-                                      color: widget.theme.textPrimary,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: kElementHSpacing),
-                                    Text(p.displayName),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _platform = value);
-                              _saveDraft();
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Cover image URL
-                        TextFormField(
-                          controller: _coverImageController,
-                          style: TextStyle(color: widget.theme.textPrimary),
-                          decoration: InputDecoration(
-                            labelText: 'Cover Image URL',
-                            hintText: 'https://...',
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                Icons.image,
-                                color: widget.theme.textHint,
-                              ),
-                              tooltip: 'Pick image',
-                              onPressed: () async {
-                                try {
-                                    final result = await FilePicker
-                                      .pickFiles(
-                                        dialogTitle: 'Pick cover image',
-                                        type: FileType.image,
-                                        allowMultiple: false,
-                                      );
-                                  final selectedPath =
-                                      result?.files.single.path;
-                                  if (selectedPath != null &&
-                                      selectedPath.isNotEmpty) {
-                                    setState(() {
-                                      _coverImageController.text = selectedPath;
-                                    });
-                                    _saveDraft();
-                                  }
-                                } catch (e) {
-                                  NotificationManager.instance.error(
-                                    'Failed to pick image: $e',
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                          onChanged: (_) => _saveDraft(),
-                        ),
-                      ],
-                    ),
+              child: GameEditorLayout(
+                key: _editorLayoutKey,
+                theme: theme,
+                titleController: _fields.title,
+                notesController: _fields.notes,
+                onNotesChanged: _saveDraft,
+                cover: CoverImageCard(
+                  key: _coverCardKey,
+                  theme: theme,
+                  isDlc: _isDlc,
+                  isUsed: _isUsed,
+                  hasDeadline: _hasDeadline,
+                  deadlineDate: _deadlineDate,
+                  controller: _fields.coverImage,
+                  onChanged: _saveDraft,
+                ),
+                informationBuilder: (position) => GameEditorInformation(
+                  theme: theme,
+                  groupPosition: position,
+                  platformSelector: PlatformMenuButton(
+                    theme: theme,
+                    value: _platform,
+                    detectedPlatform: _resolvedGamePlatform,
+                    tooltip: '$_gameKeyPlatformTooltip. Choose platform',
+                    onSelected: (value) {
+                      setState(() => _platform = value);
+                      _saveDraft();
+                    },
                   ),
-
-                  // Options section
-                  SectionGroupBox(
-                    title: 'Options',
-                    theme: widget.theme,
-                    titleIcon: Icons.settings,
-                    groupPosition: SectionGroupPosition.middle,
-                    alternateBackground: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            AppOptionChip(
-                              theme: widget.theme,
-                              label: 'DLC',
-                              isSelected: _isDlc,
-                              onTap: () {
-                                setState(() => _isDlc = !_isDlc);
-                                _saveDraft();
-                              },
-                            ),
-                            AppOptionChip(
-                              theme: widget.theme,
-                              label: 'Deadline',
-                              isSelected: _hasDeadline,
-                              onTap: () {
-                                setState(() => _hasDeadline = !_hasDeadline);
-                                _saveDraft();
-                              },
-                            ),
-                            if (_hasDeadline)
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: kDeadlineSelectorWidth,
-                                ),
-                                child: AppDateField(
-                                  theme: widget.theme,
-                                  date: _deadlineDate,
-                                  placeholder: 'Select date',
-                                  onTap: () async {
-                                    final date =
-                                        await showDeadlinePickerDialog(
-                                      context: context,
-                                      theme: widget.theme,
-                                      initialDate:
-                                          _deadlineDate ?? DateTime.now(),
-                                      firstDate: DateTime.now(),
-                                    );
-                                    if (date != null) {
-                                      setState(() => _deadlineDate = date);
-                                      _saveDraft();
-                                    }
-                                  },
-                                ),
-                              ),
-                          ],
+                  titleController: _fields.title,
+                  keyController: _fields.gameKey,
+                  titleLabel: 'Title *',
+                  keyLabel: 'Game Key *',
+                  titleValidator: (value) =>
+                      value == null || value.trim().isEmpty
+                      ? 'Title is required'
+                      : null,
+                  keyValidator: (value) => value == null || value.trim().isEmpty
+                      ? 'Key is required'
+                      : null,
+                  onTitleChanged: (_) {
+                    _loadSingleEntryCacheAt();
+                    _saveDraft();
+                  },
+                  onKeyChanged: _handleKeyChanged,
+                ),
+                optionsBuilder: (position) => _buildOptions(theme, position),
+                wideDetails: _isSteamPlatform
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: _buildSteamMetadata(
+                          theme,
+                          groupPosition: SectionGroupPosition.only,
                         ),
-                      ],
-                    ),
-                  ),
-
-                  // Tags section (custom tags only)
-                  SectionGroupBox(
-                    title: 'Custom Tags',
-                    theme: widget.theme,
-                    titleIcon: Icons.label,
-                    groupPosition: SectionGroupPosition.middle,
-                    alternateBackground: false,
-                    child: customTags.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              'No custom tags created yet',
-                              style: TextStyle(color: widget.theme.textHint),
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : SizedBox(
-                            height: 200,
-                            child: TagList(
-                              tags: customTags,
-                              theme: widget.theme,
-                              selectedTagIds: _selectedTagIds,
-                              onTagToggled: (tagId) {
-                                setState(() {
-                                  if (_selectedTagIds.contains(tagId)) {
-                                    _selectedTagIds.remove(tagId);
-                                  } else {
-                                    _selectedTagIds.add(tagId);
-                                  }
-                                });
-                                _saveDraft();
-                              },
-                              showSearch: true,
-                            ),
-                          ),
-                  ),
-
-                  if (_isSteamPlatform)
-                    SectionGroupBox(
-                      title: 'Fetched Steam Data',
-                      description: 'Image, reviews and tags',
-                      theme: widget.theme,
-                      titleIcon: Icons.cloud,
-                      groupPosition: SectionGroupPosition.middle,
-                      alternateBackground: true,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_hasFetchedSteamPreview)
-                            Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(
-                                    widget.theme.cornerRadius,
-                                  ),
-                                  child: SizedBox(
-                                    width: 120,
-                                    height: 56,
-                                    child: GameCoverImage(
-                                      theme: widget.theme,
-                                      coverImage: _fetchedCoverImagePath,
-                                      placeholderIcon: Icons.gamepad,
-                                      onError: () {
-                                        if (!mounted ||
-                                            _fetchedCoverImagePath == null) {
-                                          return;
-                                        }
-                                        setState(
-                                          () => _fetchedCoverImagePath = null,
-                                        );
-                                        _saveDraft();
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (_fetchedSteamTitle != null)
-                                        Text(
-                                          _fetchedSteamTitle!,
-                                          style: TextStyle(
-                                            color: widget.theme.textPrimary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      if (_fetchedReviewScore != null)
-                                        Text(
-                                          'Reviews: $_fetchedReviewScore% · ${_fetchedReviewCount ?? 0} reviews',
-                                          style: TextStyle(
-                                            color: widget.theme.textPrimary,
-                                          ),
-                                        ),
-                                      if (_fetchedAppId != null) ...[
-                                        Text(
-                                          'AppID: ${_fetchedAppId!}',
-                                          style: TextStyle(
-                                            color: widget.theme.textSecondary,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (_singleSteamCacheAt != null)
-                                          Text(
-                                            'Cached: ${DateFormat('dd/MM/yyyy HH:mm').format(_singleSteamCacheAt!)}',
-                                            style: TextStyle(
-                                              color:
-                                                  widget.theme.textSecondary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (_fetchedSteamTags.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(
-                                'Fetched Steam data will appear here',
-                                style: TextStyle(color: widget.theme.textHint),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          if (_fetchedSteamTags.isNotEmpty)
-                            const SizedBox(height: 12),
-                          TagList(
-                            tags: _fetchedSteamTags,
-                            theme: widget.theme,
-                            allSelected: true,
-                          ),
-                        ],
+                      )
+                    : null,
+                detailsBuilder: (information) => SingleChildScrollView(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ?information,
+                      _buildOptions(
+                        theme,
+                        information == null
+                            ? (_isSteamPlatform
+                                  ? SectionGroupPosition.first
+                                  : SectionGroupPosition.only)
+                            : (_isSteamPlatform
+                                  ? SectionGroupPosition.middle
+                                  : SectionGroupPosition.last),
                       ),
-                    ),
-
-                  // Notes section
-                  SectionGroupBox(
-                    title: 'Notes',
-                    theme: widget.theme,
-                    titleIcon: Icons.notes,
-                    groupPosition: SectionGroupPosition.last,
-                    alternateBackground: !_isSteamPlatform,
-                    child: TextFormField(
-                      controller: _notesController,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        hintText: 'Add any notes about this game...',
-                        border: widget.theme.resolveInputBorder(showTopBorder: true),
-                        constraints: const BoxConstraints(minHeight: 0),
-                      ),
-                      onChanged: (_) => _saveDraft(),
-                    ),
+                      if (_isSteamPlatform) _buildSteamMetadata(theme),
+                    ],
                   ),
-                ],
+                ),
+                tags: GameEditorTags(
+                  theme: theme,
+                  customTags: customTags,
+                  selectedTagIds: _selectedTagIds,
+                  onTagToggled: (tagId) {
+                    setState(() {
+                      if (_selectedTagIds.contains(tagId)) {
+                        _selectedTagIds.remove(tagId);
+                      } else {
+                        _selectedTagIds.add(tagId);
+                      }
+                    });
+                    _saveDraft();
+                  },
+                  steamTags: _isSteamPlatform ? _fetchedSteamTags : const [],
+                ),
               ),
             ),
           ),
         ),
-        // Pinned Submit buttons at bottom
         Container(
+          key: const ValueKey('single-entry-footer'),
+          width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
           decoration: BoxDecoration(
-            color: widget.theme.surface,
-            border: Border(top: BorderSide(color: widget.theme.border)),
+            color: theme.surface,
+            border: Border(top: BorderSide(color: theme.border)),
           ),
-          child: Row(
-            mainAxisAlignment: _isSteamPlatform
-                ? MainAxisAlignment.spaceBetween
-                : MainAxisAlignment.end,
+          child: Wrap(
+            alignment: _isSteamPlatform
+                ? WrapAlignment.spaceBetween
+                : WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: kElementHSpacing,
+            runSpacing: kElementVSpacing,
             children: [
               if (_isSteamPlatform)
                 OutlinedButton.icon(
@@ -1001,16 +627,16 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
                           height: 18,
                           child: AppCircularProgressIndicator(),
                         )
-                      : const Icon(Icons.cloud_download),
-                  label: const Text('Fetch Steam Data'),
+                      : const FaIcon(FontAwesomeIcons.steam, size: 18),
+                  label: const Text('Fetch'),
                 ),
-              Row(
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: kElementHSpacing,
+                runSpacing: kElementVSpacing,
                 children: [
-                  TextButton(
-                    onPressed: _clearForm,
-                    child: const Text('Clear'),
-                  ),
-                  const SizedBox(width: kElementHSpacing),
+                  TextButton(onPressed: _clearForm, child: const Text('Clear')),
                   ElevatedButton.icon(
                     onPressed: _isSubmitting ? null : _submit,
                     icon: _isSubmitting
@@ -1030,6 +656,94 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab>
       ],
     );
   }
+
+  Widget _buildOptions(AppThemeData theme, SectionGroupPosition position) =>
+      SectionGroupBox(
+        title: 'Options',
+        theme: theme,
+        titleIcon: Icons.tune,
+        groupPosition: position,
+        alternateBackground: true,
+        child: SingleChildScrollView(
+          child: GameOptionsRow(
+            theme: theme,
+            isDlc: _isDlc,
+            onDlcChanged: (value) {
+              setState(() => _isDlc = value);
+              _saveDraft();
+            },
+            deadline: DeadlineChip(
+              theme: theme,
+              hasDeadline: _hasDeadline,
+              date: _deadlineDate,
+              onEnabledChanged: (value) {
+                setState(() => _hasDeadline = value);
+                _saveDraft();
+              },
+              onDateChanged: (value) {
+                setState(() => _deadlineDate = value);
+                _saveDraft();
+              },
+            ),
+            isUsed: _isUsed,
+            onUsedChanged: (value) {
+              setState(() => _isUsed = value);
+              _saveDraft();
+            },
+          ),
+        ),
+      );
+
+  Widget _buildSteamMetadata(
+    AppThemeData theme, {
+    SectionGroupPosition groupPosition = SectionGroupPosition.last,
+  }) => SectionGroupBox(
+    title: 'Metadata',
+    theme: theme,
+    titleIcon: Icons.schedule,
+    groupPosition: groupPosition,
+    child: Column(
+      children: [
+        if (_steamPreview != null)
+          _steamMetadataRow(theme, 'Steam Title', _steamPreview!.name),
+        _steamMetadataRow(
+          theme,
+          'Steam AppID',
+          _steamPreview?.appId ?? 'Not set',
+        ),
+        _steamMetadataRow(
+          theme,
+          'Reviews',
+          _steamPreview?.reviewScore == null
+              ? 'No reviews'
+              : '${_steamPreview?.reviewScore}% · ${NumberFormat.compact().format(_steamPreview?.reviewCount ?? 0)} reviews',
+        ),
+        _steamMetadataRow(
+          theme,
+          'Cache',
+          _singleSteamCacheAt == null
+              ? 'No cached data'
+              : DateFormat('dd/MM/yyyy HH:mm').format(_singleSteamCacheAt!),
+        ),
+      ],
+    ),
+  );
+
+  Widget _steamMetadataRow(AppThemeData theme, String label, String value) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 95,
+              child: Text(label, style: TextStyle(color: theme.textSecondary)),
+            ),
+            Expanded(
+              child: Text(value, style: TextStyle(color: theme.textPrimary)),
+            ),
+          ],
+        ),
+      );
 }
 
 /// Batch add tab
@@ -1042,12 +756,8 @@ class _BatchAddTab extends ConsumerStatefulWidget {
   ConsumerState<_BatchAddTab> createState() => _BatchAddTabState();
 }
 
-class _BatchAddTabState extends ConsumerState<_BatchAddTab>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  final _textController = TextEditingController();
+class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
+  final _textController = BatchGamesEditingController();
   String _platform = kAutoDetectPlatformValue;
   bool _hasDeadline = false;
   DateTime? _deadlineDate;
@@ -1086,17 +796,19 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
   }
 
   void _saveDraft() {
-    ref.read(addGamesBatchDraftProvider.notifier).replace(
-      AddGamesBatchDraft(
-        text: _textController.text,
-        platform: _platform,
-        hasDeadline: _hasDeadline,
-        deadlineDate: _deadlineDate,
-        parsedGames: List<ParsedBatchEntry>.from(_parsedGames),
-        steamResults: Map<String, SteamSearchResult?>.from(_steamResults),
-        steamErrors: Map<String, String?>.from(_steamErrors),
-      ),
-    );
+    ref
+        .read(addGamesBatchDraftProvider.notifier)
+        .set(
+          AddGamesBatchDraft(
+            text: _textController.text,
+            platform: _platform,
+            hasDeadline: _hasDeadline,
+            deadlineDate: _deadlineDate,
+            parsedGames: List<ParsedBatchEntry>.from(_parsedGames),
+            steamResults: Map<String, SteamSearchResult?>.from(_steamResults),
+            steamErrors: Map<String, String?>.from(_steamErrors),
+          ),
+        );
   }
 
   void _clearBatchInput() {
@@ -1149,6 +861,13 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
         try {
           final result = await steamService.searchGame(game.title);
           if (!mounted) return;
+          if (!_parsedGames.any(
+            (entry) =>
+                entry.key == game.key &&
+                entry.platform == GamePlatform.steam.displayName,
+          )) {
+            continue;
+          }
           setState(() {
             _steamResults[game.key] = result;
             if (result == null) {
@@ -1158,6 +877,13 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
           });
         } catch (e) {
           if (!mounted) return;
+          if (!_parsedGames.any(
+            (entry) =>
+                entry.key == game.key &&
+                entry.platform == GamePlatform.steam.displayName,
+          )) {
+            continue;
+          }
           setState(() {
             _steamResults[game.key] = null;
             _steamErrors[game.key] = e.toString();
@@ -1181,102 +907,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
     );
   }
 
-  /// Show dialog when duplicate keys are detected in batch
-  Future<_DuplicateAction?> _showBatchDuplicateDialog(
-    Map<String, Game> duplicates,
-  ) async {
-    final theme = widget.theme;
-    return showDialog<_DuplicateAction>(
-      context: context,
-      builder: (ctx) => ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.warning_amber_rounded,
-          iconColor: theme.warning,
-          iconSize: 28,
-          title: 'Duplicate Keys Found',
-          theme: theme,
-        ),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${duplicates.length} game(s) with matching keys already exist:',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: duplicates.length,
-                  itemBuilder: (context, index) {
-                    final entry = duplicates.entries.elementAt(index);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.background,
-                        borderRadius: BorderRadius.circular(theme.cornerRadius),
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry.value.title,
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            entry.key,
-                            style: TextStyle(
-                              color: theme.textHint,
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: kDialogSpacing),
-              Text(
-                'What would you like to do with duplicates?',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _DuplicateAction.addAnyway),
-            child: Text(
-              'Skip Duplicates',
-              style: TextStyle(color: theme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: theme.accent),
-            onPressed: () => Navigator.pop(ctx, _DuplicateAction.overwrite),
-            child: Text(
-              'Overwrite All',
-              style: TextStyle(color: theme.textPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _import() async {
     if (ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
       NotificationManager.instance.warning(
@@ -1288,19 +918,16 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
 
     // Check for duplicates
     final duplicates = _findDuplicateKeys(_parsedGames);
-    _DuplicateAction? action;
+    DuplicateAction? action;
 
     if (duplicates.isNotEmpty) {
-      action = await _showBatchDuplicateDialog(duplicates);
-      if (action == null || action == _DuplicateAction.cancel) {
+      action = await showDuplicateKeyDialog(
+        context,
+        widget.theme,
+        duplicates.entries.toList(),
+      );
+      if (action == null) {
         return; // User cancelled
-      }
-
-      if (action == _DuplicateAction.overwrite) {
-        // Delete all existing duplicates first
-        for (final existing in duplicates.values) {
-          await ref.read(gamesProvider.notifier).deleteGame(existing.id);
-        }
       }
     }
 
@@ -1314,7 +941,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
 
       for (final game in _parsedGames) {
         // Skip duplicates if user chose to skip
-        if (action == _DuplicateAction.addAnyway &&
+        if (action == DuplicateAction.skip &&
             duplicates.containsKey(game.key)) {
           skipped++;
           continue;
@@ -1334,7 +961,8 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
 
           // Apply fetched Steam data if available
           final steamResult = _steamResults[game.key];
-          if (steamResult != null) {
+          if (steamResult != null &&
+              game.platform == GamePlatform.steam.displayName) {
             String? imagePath;
             try {
               imagePath = await steamService.downloadImage(
@@ -1383,7 +1011,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
     return Column(
       children: [
         Expanded(
@@ -1398,205 +1025,78 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
                   theme: widget.theme,
                   titleIcon: Icons.content_paste,
                   groupPosition: SectionGroupPosition.first,
+                  titleLocation: SectionTitleLocation.top,
+                  headerCrossAxisAlignment: CrossAxisAlignment.center,
+                  trailing: PlatformMenuButton(
+                    theme: widget.theme,
+                    value: _platform,
+                    tooltip: _platform == kAutoDetectPlatformValue
+                        ? 'Platform Override: Disabled'
+                        : 'Platform Override: $_platform',
+                    onSelected: (value) {
+                      setState(() => _platform = value);
+                      _parseInput();
+                    },
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
+                      BatchGamesEditor(
                         controller: _textController,
-                        maxLines: 10,
+                        theme: widget.theme,
+                        platformOverride: _platform == kAutoDetectPlatformValue
+                            ? null
+                            : GamePlatform.fromDisplayName(_platform),
                         onChanged: (_) => _parseInput(),
-                        decoration: InputDecoration(
-                          constraints: const BoxConstraints(minHeight: 0),
-                          hintText:
-                              'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
-                          hintStyle: TextStyle(color: widget.theme.textHint),
-                          border: widget.theme.resolveInputBorder(
-                            showTopBorder: true,
-                          ),
-                        ),
                       ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey(_platform),
-                        initialValue: _platform,
-                        isExpanded: true,
-                        menuMaxHeight: 320,
-                        borderRadius: BorderRadius.circular(
-                          widget.theme.cornerRadius,
-                        ),
-                        style: TextStyle(color: widget.theme.textPrimary),
-                        dropdownColor: widget.theme.surface,
-                        decoration: const InputDecoration(
-                          labelText: 'Platform',
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: kAutoDetectPlatformValue,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.auto_fix_high,
-                                  color: widget.theme.textPrimary,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: kElementHSpacing),
-                                const Text('Auto-detect'),
-                              ],
+                      if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Tooltip(
+                            message: _steamErrors.values
+                                .whereType<String>()
+                                .join('\n'),
+                            child: Text(
+                              'Steam data: ${_steamResults.values.where((result) => result != null).length} loaded'
+                              '${_steamErrors.isEmpty ? "" : ", ${_steamErrors.length} failed"}',
+                              style: TextStyle(
+                                color: widget.theme.textSecondary,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                          ...GamePlatform.values.map((p) {
-                            return DropdownMenuItem(
-                              value: p.displayName,
-                              child: Row(
-                                children: [
-                                  PlatformIcon(
-                                    platform: p,
-                                    color: widget.theme.textPrimary,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: kElementHSpacing),
-                                  Text(p.displayName),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _platform = value);
-                            _parseInput();
-                          }
-                        },
-                      ),
+                        ),
                     ],
                   ),
                 ),
                 SectionGroupBox(
-                  title: '',
-                  showTitle: false,
+                  title: 'Options',
                   theme: widget.theme,
-                  groupPosition: _parsedGames.isNotEmpty
-                      ? SectionGroupPosition.middle
-                      : SectionGroupPosition.last,
+                  titleIcon: Icons.tune,
+                  groupPosition: SectionGroupPosition.last,
                   alternateBackground: true,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      ToggleSettingRow(
+                      DeadlineChip(
                         theme: widget.theme,
-                        label: 'Deadline',
-                        value: _hasDeadline,
-                        onChanged: (value) {
+                        hasDeadline: _hasDeadline,
+                        date: _deadlineDate,
+                        firstDate: DateTime.now(),
+                        onEnabledChanged: (value) {
                           setState(() => _hasDeadline = value);
                           _saveDraft();
                         },
-                        trailing: _hasDeadline
-                            ? AppDateField(
-                                theme: widget.theme,
-                                date: _deadlineDate,
-                                maxWidth: kDeadlineSelectorWidth,
-                                placeholder: 'Select date',
-                                onTap: () async {
-                                  final date = await showDeadlinePickerDialog(
-                                    context: context,
-                                    theme: widget.theme,
-                                    initialDate:
-                                        _deadlineDate ?? DateTime.now(),
-                                    firstDate: DateTime.now(),
-                                  );
-                                  if (date != null) {
-                                    setState(() => _deadlineDate = date);
-                                    _saveDraft();
-                                  }
-                                },
-                              )
-                            : null,
+                        onDateChanged: (value) {
+                          setState(() => _deadlineDate = value);
+                          _saveDraft();
+                        },
                       ),
                     ],
                   ),
                 ),
-                if (_parsedGames.isNotEmpty) ...[
-                  SectionGroupBox(
-                    title: 'Preview (${_parsedGames.length} games)',
-                    theme: widget.theme,
-                    titleIcon: Icons.preview,
-                    groupPosition: SectionGroupPosition.last,
-                    child: Container(
-                      constraints: const BoxConstraints(maxHeight: 300),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _parsedGames.length,
-                        itemBuilder: (context, index) {
-                          final game = _parsedGames[index];
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              Icons.videogame_asset,
-                              color: widget.theme.accent,
-                            ),
-                            title: Text(
-                              game.title,
-                              style: TextStyle(color: widget.theme.textPrimary),
-                            ),
-                            subtitle: Text(
-                              '${game.platform} • ${game.key}',
-                              style: TextStyle(
-                                color: widget.theme.textSecondary,
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_steamResults.containsKey(game.key) ||
-                                    _steamErrors.containsKey(game.key)) ...[
-                                  if (_steamResults[game.key] != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 4),
-                                      child: Icon(
-                                        Icons.check_circle,
-                                        color: widget.theme.accent,
-                                        size: 18,
-                                      ),
-                                    )
-                                  else
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 4),
-                                      child: Tooltip(
-                                        message:
-                                            _steamErrors[game.key] ??
-                                            'Fetch failed',
-                                        child: const Icon(
-                                          Icons.error,
-                                          color: Colors.red,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.close,
-                                    color: widget.theme.textHint,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _parsedGames.removeAt(index);
-                                      _steamResults.remove(game.key);
-                                      _steamErrors.remove(game.key);
-                                    });
-                                    _saveDraft();
-                                  },
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1608,32 +1108,20 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
             color: widget.theme.surface,
             border: Border(top: BorderSide(color: widget.theme.border)),
           ),
-          child: Row(
-            mainAxisAlignment: (_parsedGames.isNotEmpty && _hasSteamGames)
-                ? MainAxisAlignment.spaceBetween
-                : MainAxisAlignment.end,
-            children: [
-              if (_parsedGames.isNotEmpty && _hasSteamGames)
-                OutlinedButton.icon(
-                  onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
-                  icon: _isFetchingSteam
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: AppCircularProgressIndicator(),
-                        )
-                      : const Icon(Icons.cloud_download),
-                  label: const Text('Fetch Steam Data'),
-                ),
-              Row(
+          width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final actions = Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: kElementHSpacing,
+                runSpacing: kElementVSpacing,
                 children: [
-                  if (_parsedGames.isNotEmpty) ...[
+                  if (_parsedGames.isNotEmpty)
                     TextButton(
                       onPressed: _clearBatchInput,
                       child: const Text('Clear'),
                     ),
-                    const SizedBox(width: kElementHSpacing),
-                  ],
                   ElevatedButton.icon(
                     onPressed: _parsedGames.isEmpty || _isImporting
                         ? null
@@ -1648,8 +1136,24 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab>
                     label: Text('Save ${_parsedGames.length} Games'),
                   ),
                 ],
-              ),
-            ],
+              );
+              return FooterWrap(
+                leading: _parsedGames.isNotEmpty && _hasSteamGames
+                    ? OutlinedButton.icon(
+                        onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
+                        icon: _isFetchingSteam
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: AppCircularProgressIndicator(),
+                              )
+                            : const FaIcon(FontAwesomeIcons.steam, size: 18),
+                        label: const Text('Fetch'),
+                      )
+                    : const SizedBox.shrink(),
+                trailing: actions,
+              );
+            },
           ),
         ),
       ],

@@ -1,58 +1,34 @@
 import '../constants/platform_patterns.dart';
 
-final List<_KeyPattern> _trailingKeyPatterns = [
-  _KeyPattern(RegExp(r'https?://\S+$', caseSensitive: false)),
-  _KeyPattern(
-    RegExp(
-      r'[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$',
-      caseSensitive: false,
-    ),
-  ),
-  _KeyPattern(RegExp(r'[A-F0-9]{32}$', caseSensitive: false)),
-  _KeyPattern(
-    RegExp(
-      r'[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$',
-      caseSensitive: false,
-    ),
-  ),
-  _KeyPattern(
-    RegExp(
-      r'[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$',
-      caseSensitive: false,
-    ),
-  ),
-  _KeyPattern(
-    RegExp(r'[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$', caseSensitive: false),
-  ),
-  _KeyPattern(
-    RegExp(
-      r'[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$',
-      caseSensitive: false,
-    ),
-  ),
-  _KeyPattern(
-    RegExp(r'[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', caseSensitive: false),
-  ),
-  _KeyPattern(
-    RegExp(r'[A-Z0-9]{8,16}$', caseSensitive: false),
-    allowAdjacentTitleText: false,
-  ),
-];
-
 final RegExp _titleTrailing = RegExp(r'[\s:;\-,|]+$');
 
-class _KeyPattern {
-  const _KeyPattern(this.pattern, {this.allowAdjacentTitleText = true});
-
-  final RegExp pattern;
-  final bool allowAdjacentTitleText;
-}
-
-class _ParsedLineParts {
-  const _ParsedLineParts({required this.title, required this.key});
+/// Parsed values and source offsets shared by batch import and its inline editor.
+class BatchLineParts {
+  const BatchLineParts({
+    required this.title,
+    required this.key,
+    required this.titleEnd,
+    required this.keyStart,
+  });
 
   final String title;
   final String key;
+  final int titleEnd;
+  final int keyStart;
+}
+
+BatchLineParts? parseBatchLine(String raw) {
+  final line = raw.trim();
+  if (line.isEmpty || line.startsWith('#')) return null;
+  final parts = _parseBatchLine(line);
+  if (parts == null) return null;
+  final leading = raw.length - raw.trimLeft().length;
+  return BatchLineParts(
+    title: parts.title,
+    key: parts.key,
+    titleEnd: parts.titleEnd + leading,
+    keyStart: parts.keyStart + leading,
+  );
 }
 
 /// Result from parsing a batch line
@@ -81,10 +57,7 @@ List<ParsedBatchEntry> parseBatchText(
   if (text.isEmpty) return games;
 
   for (final raw in text.split('\n')) {
-    final line = raw.trim();
-    if (line.isEmpty || line.startsWith('#')) continue;
-
-    final parsed = _parseBatchLine(line);
+    final parsed = parseBatchLine(raw);
     if (parsed != null && parsed.key.isNotEmpty) {
       final detected = PlatformDetector.detectPlatform(parsed.key);
       final platform = detected != GamePlatform.other
@@ -103,7 +76,7 @@ List<ParsedBatchEntry> parseBatchText(
   return games;
 }
 
-_ParsedLineParts? _parseBatchLine(String line) {
+BatchLineParts? _parseBatchLine(String line) {
   final explicit =
       _trySplitFixedSeparator(line) ?? _trySplitValidatedSeparator(line);
   if (explicit != null) {
@@ -113,17 +86,19 @@ _ParsedLineParts? _parseBatchLine(String line) {
   final trailing = _extractTrailingKey(line);
   if (trailing != null) {
     final title = _cleanTitle(line.substring(0, trailing.start));
-    return _ParsedLineParts(
+    return BatchLineParts(
       title: title.isEmpty ? 'Unknown Game' : title,
       key: trailing.group(0)!.trim(),
+      titleEnd: title.length,
+      keyStart: trailing.start,
     );
   }
 
   return null;
 }
 
-_ParsedLineParts? _trySplitFixedSeparator(String line) {
-  _ParsedLineParts? fallback;
+BatchLineParts? _trySplitFixedSeparator(String line) {
+  BatchLineParts? fallback;
 
   for (final separator in ['\t', ' | ', '|']) {
     var index = line.lastIndexOf(separator);
@@ -135,7 +110,12 @@ _ParsedLineParts? _trySplitFixedSeparator(String line) {
         continue;
       }
 
-      final candidate = _ParsedLineParts(title: title, key: key);
+      final candidate = BatchLineParts(
+        title: title,
+        key: key,
+        titleEnd: title.length,
+        keyStart: line.length - key.length,
+      );
       if (_looksLikeRecognizedKey(key)) {
         return candidate;
       }
@@ -147,14 +127,19 @@ _ParsedLineParts? _trySplitFixedSeparator(String line) {
   return fallback;
 }
 
-_ParsedLineParts? _trySplitValidatedSeparator(String line) {
+BatchLineParts? _trySplitValidatedSeparator(String line) {
   for (final separator in [':', ' - ']) {
     var index = line.lastIndexOf(separator);
     while (index > 0) {
       final title = _cleanTitle(line.substring(0, index));
       final key = line.substring(index + separator.length).trim();
       if (title.isNotEmpty && _looksLikeRecognizedKey(key)) {
-        return _ParsedLineParts(title: title, key: key);
+        return BatchLineParts(
+          title: title,
+          key: key,
+          titleEnd: title.length,
+          keyStart: line.length - key.length,
+        );
       }
       index = line.lastIndexOf(separator, index - 1);
     }
@@ -164,14 +149,15 @@ _ParsedLineParts? _trySplitValidatedSeparator(String line) {
 }
 
 RegExpMatch? _extractTrailingKey(String line) {
-  for (final keyPattern in _trailingKeyPatterns) {
-    final match = keyPattern.pattern.firstMatch(line);
+  for (final pattern in PlatformDetector.trailingKeyPatterns) {
+    final match = pattern.firstMatch(line);
     if (match == null) continue;
 
     final start = match.start;
+    // A matching suffix inside a longer token is not a complete game key.
     if (start > 0 &&
-        !keyPattern.allowAdjacentTitleText &&
-        _isWordCharacter(line.codeUnitAt(start - 1))) {
+        (_isWordCharacter(line.codeUnitAt(start - 1)) ||
+            line.codeUnitAt(start - 1) == 45)) {
       continue;
     }
 

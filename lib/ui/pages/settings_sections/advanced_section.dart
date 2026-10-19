@@ -4,12 +4,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/dev_window.dart';
 import 'settings_common.dart';
+import 'settings_control_cards.dart';
 
 /// Advanced settings section
 class AdvancedSection extends ConsumerWidget {
@@ -26,6 +28,12 @@ class AdvancedSection extends ConsumerWidget {
   final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
+  static const SettingTextSpec frameRateSpec = SettingTextSpec(
+    label: 'Frame Rate',
+    description:
+        'Target frame rate for rendering. Auto uses the display default. '
+        'Higher values require display and compositor support.',
+  );
   static const SettingTextSpec devWindowSpec = SettingTextSpec(
     label: 'Developer Window',
     description:
@@ -33,39 +41,106 @@ class AdvancedSection extends ConsumerWidget {
   );
   static const SettingTextSpec resetSettingsSpec = SettingTextSpec(
     label: 'Reset settings',
-    description: 'Restore all settings to defaults',
+    description:
+        'Restore all settings, library filters, and sorting to defaults',
+  );
+  static const SettingTextSpec interactionCardsSpec = SettingTextSpec(
+    label: 'Interaction cards',
+    description:
+        'Use compact interactive cards instead of full-width settings rows',
+  );
+
+  static const SettingsSearchGroup displaySearchGroup = SettingsSearchGroup(
+    title: 'Display',
+    settings: [frameRateSpec],
   );
 
   static const SettingsSearchGroup systemSearchGroup = SettingsSearchGroup(
     title: 'System',
     settings: [devWindowSpec, resetSettingsSpec],
   );
+  static const SettingsSearchGroup experimentalSearchGroup =
+      SettingsSearchGroup(
+        title: 'Experimental',
+        settings: [interactionCardsSpec],
+        extraTexts: ['Legacy layout', 'Card style'],
+      );
 
   static List<String> get sectionSearchTexts => [
     'Advanced Settings',
+    ...displaySearchGroup.indexTexts,
     ...systemSearchGroup.indexTexts,
+    ...experimentalSearchGroup.indexTexts,
+  ];
+
+  static const _frameRateOptions = <MapEntry<String, String>>[
+    MapEntry('auto', 'Auto'),
+    MapEntry('60', '60 fps'),
+    MapEntry('90', '90 fps'),
+    MapEntry('120', '120 fps'),
+    MapEntry('144', '144 fps'),
+    MapEntry('240', '240 fps'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsNotifier = ref.read(settingsProvider.notifier);
-
-    final isSearching = searchQuery.trim().isNotEmpty;
-    final showSystem = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: systemSearchGroup,
+    final currentFrameRate = ref.watch(
+      settingsProvider.select(
+        (s) => s[SettingsKeys.frameRatePreference] as String? ?? 'auto',
+      ),
     );
-
-    if (isSearching && !showSystem) {
-      return const SizedBox.shrink();
-    }
 
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          visible: showSystem,
+          theme: theme,
+          group: experimentalSearchGroup,
+          titleIcon: Icons.science_outlined,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          childBuilder: () => SettingsControlWrap(
+            children: [
+              SettingsToggleCard(
+                theme: theme,
+                label: interactionCardsSpec.label,
+                description: interactionCardsSpec.description,
+                value: ref.watch(experimentalInteractionCardsProvider),
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.experimentalInteractionCards,
+                  value,
+                ),
+              ),
+            ],
+          ),
+        ),
+        buildSearchableSectionEntry(
+          theme: theme,
+          group: displaySearchGroup,
+          titleIcon: Icons.speed,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          childBuilder: () => SettingsControlWrap(
+            children: [
+              SettingsChoiceCard<String>(
+                theme: theme,
+                label: frameRateSpec.label,
+                description: frameRateSpec.description,
+                value: currentFrameRate,
+                choices: [
+                  for (final option in _frameRateOptions)
+                    SettingsChoice(option.key, option.value),
+                ],
+                onChanged: (value) => settingsNotifier.setSetting(
+                  SettingsKeys.frameRatePreference,
+                  value,
+                ),
+              ),
+            ],
+          ),
+        ),
+        buildSearchableSectionEntry(
           theme: theme,
           group: systemSearchGroup,
           titleIcon: Icons.settings,
@@ -88,20 +163,29 @@ class AdvancedSection extends ConsumerWidget {
                 theme: theme,
                 spec: resetSettingsSpec,
                 child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.secondary,
+                  ),
                   onPressed: () async {
                     final confirmed = await showConfirmDialog(
                       context: context,
                       theme: theme,
                       title: 'Reset Settings?',
+                      titleIcon: Icons.warning_amber_rounded,
                       message:
-                          'This will reset all settings to their default values. '
-                          'Your games and data will not be affected.',
+                          'This will reset all settings, library filters, and sorting to their default values. '
+                          'Your database choice, games, and data will be kept.',
                       confirmLabel: 'Reset',
                       destructive: true,
                     );
                     if (confirmed) {
+                      if (!context.mounted) return;
+                      final gamesNotifier = ref.read(gamesProvider.notifier);
                       await settingsNotifier.resetToDefaults();
+                      gamesNotifier.clearAllFilters();
+                      await gamesNotifier.setSortMode(
+                        DefaultSettings.gameSortMode,
+                      );
                       NotificationManager.instance.success(
                         'Settings reset to defaults',
                       );

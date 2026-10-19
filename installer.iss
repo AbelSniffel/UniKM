@@ -2,8 +2,8 @@
 
 [Setup]
 AppName=UniKM
-AppVersion=1.3.0
-VersionInfoVersion=1.3.0
+AppVersion=1.4.0
+VersionInfoVersion=1.4.0
 DefaultDirName={pf}\UniKM
 DefaultGroupName=UniKM
 OutputDir=dist

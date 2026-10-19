@@ -1,4 +1,4 @@
-/// Animated toggle button for switching between grid and list view
+/// Game Library button that shows and switches the current grid/list view.
 library;
 
 import 'package:flutter/material.dart';
@@ -16,12 +16,14 @@ class AnimatedViewModeToggle extends StatefulWidget {
     required this.selectedListViewMode,
     required this.onToggle,
     required this.onSelectListViewMode,
+    required this.onSelectGridView,
   });
 
   final AppThemeData theme;
   final bool isGridView;
   final ListViewDensityMode selectedListViewMode;
   final VoidCallback onToggle;
+  final VoidCallback onSelectGridView;
   final ValueChanged<ListViewDensityMode> onSelectListViewMode;
 
   @override
@@ -43,25 +45,30 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
     final action = await showAppMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
-        Rect.fromLTWH(
-          globalPosition.dx,
-          globalPosition.dy,
-          1,
-          1,
-        ),
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
       items: [
+        CheckedPopupMenuItem<String>(
+          value: GameListViewMode.grid.name,
+          checked: widget.isGridView,
+          child: const Text('Grid view'),
+        ),
         for (final mode in availableModes)
           CheckedPopupMenuItem<String>(
             value: mode.name,
-            checked: widget.selectedListViewMode == mode,
-              child: Text('${mode.displayName} list view'),
+            checked: !widget.isGridView && widget.selectedListViewMode == mode,
+            child: Text('${mode.displayName} list view'),
           ),
       ],
     );
 
-    if (action == null) {
+    if (!mounted || action == null) {
+      return;
+    }
+
+    if (action == GameListViewMode.grid.name) {
+      widget.onSelectGridView();
       return;
     }
 
@@ -70,13 +77,14 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
       orElse: () => widget.selectedListViewMode,
     );
 
-    if (selectedMode != widget.selectedListViewMode) {
+    if (widget.isGridView || selectedMode != widget.selectedListViewMode) {
       widget.onSelectListViewMode(selectedMode);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentViewIcon = widget.isGridView ? Icons.apps : Icons.view_list;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapDown: (details) => _showContextMenu(details.globalPosition),
@@ -99,8 +107,8 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
             child: ScaleTransition(scale: anim, child: child),
           ),
           child: Icon(
-            widget.isGridView ? Icons.apps : Icons.view_list,
-            key: ValueKey<bool>(widget.isGridView),
+            currentViewIcon,
+            key: ValueKey<IconData>(currentViewIcon),
             color: widget.theme.accent,
             size: size,
           ),

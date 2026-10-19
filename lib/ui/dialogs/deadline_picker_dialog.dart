@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/section_groupbox.dart';
+import '../../core/settings/settings_model.dart';
 
 const _deadlineExactDateFieldKey = ValueKey('deadline_exact_date_input');
 const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
@@ -29,7 +31,7 @@ Future<DateTime?> showDeadlinePickerDialog({
     latestDate,
   );
 
-  return showDialog<DateTime>(
+  return showAppDialog<DateTime>(
     context: context,
     useRootNavigator: useRootNavigator,
     builder: (dialogContext) => _DeadlinePickerDialog(
@@ -105,8 +107,16 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
   DateTime get _currentDateOnly => DateUtils.dateOnly(widget.currentDate);
 
   int _daysUntilFromCurrentDate(DateTime date) {
-    final normalizedDate = DateUtils.dateOnly(date);
-    return normalizedDate.difference(_currentDateOnly).inDays;
+    // Count calendar days independently of daylight-saving time changes.
+    return DateTime.utc(date.year, date.month, date.day)
+        .difference(
+          DateTime.utc(
+            _currentDateOnly.year,
+            _currentDateOnly.month,
+            _currentDateOnly.day,
+          ),
+        )
+        .inDays;
   }
 
   void _syncDayAmountFromSelectedDate() {
@@ -168,11 +178,14 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
     }
 
     final candidate = DateTime(year, month, day);
-    if (candidate.year != year || candidate.month != month || candidate.day != day) {
+    if (candidate.year != year ||
+        candidate.month != month ||
+        candidate.day != day) {
       return (date: null, error: 'Date is invalid');
     }
 
-    if (candidate.isBefore(widget.firstDate) || candidate.isAfter(widget.lastDate)) {
+    if (candidate.isBefore(widget.firstDate) ||
+        candidate.isAfter(widget.lastDate)) {
       return (date: null, error: 'Date falls outside the allowed range');
     }
 
@@ -192,8 +205,10 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       return;
     }
 
-    final computedDate = DateUtils.dateOnly(
-      _currentDateOnly.add(Duration(days: parsedDays)),
+    final computedDate = DateTime(
+      _currentDateOnly.year,
+      _currentDateOnly.month,
+      _currentDateOnly.day + parsedDays,
     );
 
     if (computedDate.isBefore(widget.firstDate) ||
@@ -225,12 +240,19 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd/MM/yyyy').format(_selectedDate);
+    final textScale =
+        MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 3).scale(14) /
+        14;
+    // Keep all six possible weeks visible with compact rows, allowing extra
+    // room for larger text just as the Material calendar does.
+    final calendarHeight =
+        304.0 + (textScale > 1.3 ? 7 * (textScale - 1) * 8 : 0);
 
     return ThemedAlertDialog(
       theme: widget.theme,
-      maxWidth: 420,
+      maxWidth: 460,
       title: DialogHeader(
-        icon: Icons.calendar_today,
+        icon: Icons.schedule,
         title: 'Select Deadline',
         theme: widget.theme,
       ),
@@ -238,73 +260,112 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CalendarDatePicker(
-            key: ValueKey(
-              'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
+          SectionGroupBox(
+            title: 'Calendar',
+            titleIcon: Icons.calendar_month_outlined,
+            titleLocation: SectionTitleLocation.top,
+            theme: widget.theme,
+            headerCrossAxisAlignment: CrossAxisAlignment.center,
+            stackTrailingWhenCompact: textScale > 1.3,
+            headerBottomPadding: 0,
+            trailing: Semantics(
+              label: 'Selected deadline: $formattedDate',
+              child: Container(
+                key: const ValueKey('deadline-selected-date'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: widget.theme.accent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(
+                    widget.theme.cornerRadius,
+                  ),
+                ),
+                child: Text(
+                  formattedDate,
+                  style: TextStyle(
+                    color: widget.theme.accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
-            initialDate: _selectedDate,
-            firstDate: widget.firstDate,
-            lastDate: widget.lastDate,
-            onDateChanged: _setSelectedDate,
+            child: SizedBox(
+              height: calendarHeight,
+              child: CalendarDatePicker(
+                key: ValueKey(
+                  'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
+                ),
+                initialDate: _selectedDate,
+                firstDate: widget.firstDate,
+                lastDate: widget.lastDate,
+                currentDate: widget.currentDate,
+                onDateChanged: _setSelectedDate,
+              ),
+            ),
           ),
           const SizedBox(height: kDialogSpacing),
-          TextField(
-            key: _deadlineExactDateFieldKey,
-            controller: _exactDateController,
-            keyboardType: TextInputType.datetime,
-            inputFormatters: [_DeadlineDateInputFormatter()],
-            onChanged: _handleExactDateChanged,
-            style: TextStyle(color: widget.theme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Exact date',
-              hintText: 'dd/MM/yyyy',
-              errorText: _exactDateError,
-              prefixIcon: Icon(
-                Icons.edit_calendar_outlined,
-                color: widget.theme.textHint,
-                size: 18,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: _deadlineDaysFieldKey,
-            controller: _dayAmountController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: _handleDayAmountChanged,
-            style: TextStyle(color: widget.theme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Expires in days',
-              hintText: 'Enter day amount',
-              errorText: _dayAmountError,
-              suffixText: 'days',
-              prefixIcon: Icon(
-                Icons.timelapse_outlined,
-                color: widget.theme.textHint,
-                size: 18,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Selected deadline: $formattedDate',
-            style: TextStyle(
-              color: widget.theme.textSecondary,
-              fontSize: 12,
+          SectionGroupBox(
+            title: 'Quick Entry',
+            titleIcon: Icons.edit_calendar_outlined,
+            titleLocation: SectionTitleLocation.top,
+            theme: widget.theme,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  key: _deadlineExactDateFieldKey,
+                  controller: _exactDateController,
+                  keyboardType: TextInputType.datetime,
+                  inputFormatters: [_DeadlineDateInputFormatter()],
+                  onChanged: _handleExactDateChanged,
+                  style: TextStyle(color: widget.theme.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'Exact date',
+                    hintText: 'dd/MM/yyyy',
+                    errorText: _exactDateError,
+                    prefixIcon: Icon(
+                      Icons.edit_calendar_outlined,
+                      color: widget.theme.textHint,
+                      size: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: _deadlineDaysFieldKey,
+                  controller: _dayAmountController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: _handleDayAmountChanged,
+                  style: TextStyle(color: widget.theme.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'Expires in days',
+                    hintText: 'Enter day amount',
+                    errorText: _dayAmountError,
+                    suffixText: 'days',
+                    prefixIcon: Icon(
+                      Icons.timelapse_outlined,
+                      color: widget.theme.textHint,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        ElevatedButton.icon(
+        ElevatedButton(
           onPressed: () => Navigator.of(context).pop(_selectedDate),
-          icon: const Icon(Icons.check),
-          label: const Text('Set deadline'),
+          child: const Text('Set deadline'),
         ),
       ],
     );

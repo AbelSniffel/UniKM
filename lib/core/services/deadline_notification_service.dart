@@ -1,4 +1,4 @@
-﻿/// Service that fires deadline reminders as in-app toasts and OS notifications.
+/// Service that fires deadline reminders as in-app toasts and OS notifications.
 library;
 
 import 'dart:async';
@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../models/game.dart';
+import '../../features/library/application/deadline_schedule.dart';
+import '../../shared/platform/android_deadline_scheduler.dart';
 import '../../providers/games_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../ui/widgets/notification_system.dart';
@@ -89,17 +91,15 @@ class DeadlineNotificationService {
         if (Platform.isAndroid) {
           await _plugin
               .resolvePlatformSpecificImplementation<
-                  AndroidFlutterLocalNotificationsPlugin>()
+                AndroidFlutterLocalNotificationsPlugin
+              >()
               ?.requestNotificationsPermission();
         } else if (Platform.isIOS) {
           await _plugin
               .resolvePlatformSpecificImplementation<
-                  IOSFlutterLocalNotificationsPlugin>()
-              ?.requestPermissions(
-                alert: true,
-                badge: false,
-                sound: false,
-              );
+                IOSFlutterLocalNotificationsPlugin
+              >()
+              ?.requestPermissions(alert: true, badge: false, sound: false);
         }
       }
       _initialized = true;
@@ -116,84 +116,65 @@ class DeadlineNotificationService {
   Future<void> checkDeadlines(List<Game> games, {required bool enabled}) async {
     if (!enabled) return;
 
-    final expired = games.where((g) => g.hasDeadline && g.isExpired).toList();
-    final today = games.where(_isDueToday).toList();
-    final soon = games.where(_isDueSoon).toList();
+    final groups = [
+      (
+        games.where((g) => g.hasDeadline && g.isExpired).toList(),
+        _osIdExpired,
+        'Expired',
+        'Expired',
+      ),
+      (
+        games.where((g) => g.daysUntilDeadline == 0).toList(),
+        _osIdToday,
+        'Due Today',
+        'Expiring Today',
+      ),
+      (
+        games.where(_isDueSoon).toList(),
+        _osIdSoon,
+        'Expiring Soon',
+        'Expiring Soon',
+      ),
+    ];
+    String title(int count, String state) =>
+        count == 1 ? 'Key $state' : '$count Keys $state';
 
-    // In-app toasts (always shown when games are found).
-    if (expired.isNotEmpty) {
-      final count = expired.length;
+    // Show all in-app groups before dispatching any OS notifications.
+    for (final (entries, _, state, _) in groups) {
+      if (entries.isEmpty) continue;
       NotificationManager.instance.warning(
-        _notificationNameList(expired),
-        title: count == 1 ? 'Key Expired' : '$count Keys Expired',
+        _notificationNameList(entries),
+        title: title(entries.length, state),
         autoDismissAfter: _deadlineToastDuration,
       );
     }
 
-    if (today.isNotEmpty) {
-      final count = today.length;
-      NotificationManager.instance.warning(
-        _notificationNameList(today),
-        title: count == 1 ? 'Key Due Today' : '$count Keys Due Today',
-        autoDismissAfter: _deadlineToastDuration,
-      );
-    }
-
-    if (soon.isNotEmpty) {
-      final count = soon.length;
-      NotificationManager.instance.warning(
-        _notificationNameList(soon),
-        title: count == 1 ? 'Key Expiring Soon' : '$count Keys Expiring Soon',
-        autoDismissAfter: _deadlineToastDuration,
-      );
-    }
-
-    // OS notifications (once per game per day, grouped).
-    final newExpired = expired
-        .where((g) => !_notifiedGameIds.contains(g.id))
-        .toList();
-    final newToday = today
-        .where((g) => !_notifiedGameIds.contains(g.id))
-        .toList();
-    final newSoon = soon
-        .where((g) => !_notifiedGameIds.contains(g.id))
-        .toList();
-
-    if (newExpired.isNotEmpty) {
-      for (final g in newExpired) {
-        _notifiedGameIds.add(g.id);
-      }
-      final count = newExpired.length;
+    // Capture all pending groups before awaiting OS dispatch, preserving the
+    // per-check snapshot and once-per-game deduplication across async calls.
+    final pending = [
+      for (final (entries, id, _, state) in groups)
+        (
+          entries.where((g) => !_notifiedGameIds.contains(g.id)).toList(),
+          id,
+          state,
+        ),
+    ];
+    for (final (entries, id, state) in pending) {
+      if (entries.isEmpty) continue;
+      _notifiedGameIds.addAll(entries.map((g) => g.id));
       await _showOsNotification(
-        id: _osIdExpired,
-        title: count == 1 ? 'Key Expired' : '$count Keys Expired',
-        body: _notificationNameList(newExpired),
+        id: id,
+        title: title(entries.length, state),
+        body: _notificationNameList(entries),
       );
     }
+  }
 
-    if (newToday.isNotEmpty) {
-      for (final g in newToday) {
-        _notifiedGameIds.add(g.id);
-      }
-      final count = newToday.length;
-      await _showOsNotification(
-        id: _osIdToday,
-        title: count == 1 ? 'Key Expiring Today' : '$count Keys Expiring Today',
-        body: _notificationNameList(newToday),
-      );
-    }
-
-    if (newSoon.isNotEmpty) {
-      for (final g in newSoon) {
-        _notifiedGameIds.add(g.id);
-      }
-      final count = newSoon.length;
-      await _showOsNotification(
-        id: _osIdSoon,
-        title: count == 1 ? 'Key Expiring Soon' : '$count Keys Expiring Soon',
-        body: _notificationNameList(newSoon),
-      );
-    }
+  Future<void> updateSchedule(List<Game> games, {required bool enabled}) async {
+    if (!Platform.isAndroid) return;
+    await AndroidDeadlineScheduler.replace(
+      enabled ? buildDeadlineSchedule(games, DateTime.now()) : const [],
+    );
   }
 
   /// Reads current state from [ref] and runs a deadline check.
@@ -225,12 +206,6 @@ class DeadlineNotificationService {
       _notifiedGameIds.clear();
       runCheck(ref);
     });
-  }
-
-  /// Cancels the periodic timer.
-  void stopPeriodicCheck() {
-    _periodicTimer?.cancel();
-    _periodicTimer = null;
   }
 
   /// Clears the per-day dedup set (e.g. after a database switch).
@@ -391,7 +366,10 @@ class DeadlineNotificationService {
     try {
       if (Platform.isWindows) {
         await _showWindowsToast(title: title, body: body);
-      } else if (Platform.isLinux || Platform.isMacOS || Platform.isAndroid || Platform.isIOS) {
+      } else if (Platform.isLinux ||
+          Platform.isMacOS ||
+          Platform.isAndroid ||
+          Platform.isIOS) {
         await _showPluginNotification(id: id, title: title, body: body);
       }
     } catch (_) {}
@@ -459,20 +437,8 @@ class DeadlineNotificationService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  int? _daysUntilDeadline(Game game) {
-    if (!game.hasDeadline || game.deadlineDate == null) {
-      return null;
-    }
-    return game.daysUntilDeadline;
-  }
-
-  bool _isDueToday(Game game) {
-    final daysUntilDeadline = _daysUntilDeadline(game);
-    return daysUntilDeadline != null && daysUntilDeadline == 0;
-  }
-
   bool _isDueSoon(Game game) {
-    final daysUntilDeadline = _daysUntilDeadline(game);
+    final daysUntilDeadline = game.daysUntilDeadline;
     return daysUntilDeadline != null &&
         daysUntilDeadline > 0 &&
         daysUntilDeadline <= 7;

@@ -2,27 +2,78 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/database/database.dart';
 import '../core/models/device_sync_models.dart';
 import '../core/services/device_sync_service.dart';
+import '../features/sync/domain/peer_sync_queue.dart';
 import 'database_providers.dart';
 
 final deviceSyncServiceProvider = Provider<DeviceSyncService>((ref) {
-  return DeviceSyncService(ref: ref);
+  final service = DeviceSyncService(ref: ref);
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
+/// The last sync with this peer in the currently open database.
+final syncPeerLastSyncProvider = FutureProvider.autoDispose
+    .family<DateTime?, String>((ref, peerId) async {
+      final database = ref.watch(databaseProvider);
+      final latest = ref.watch(
+        deviceSyncProvider.select(
+          (snapshot) =>
+              (snapshot.value?.lastSyncAt, snapshot.value?.lastTrustedPeerId),
+        ),
+      );
+      if (database == null) return latest.$2 == peerId ? latest.$1 : null;
+      final checkpoint = await database.getPeerSyncCheckpoint(peerId);
+      final timestamp = checkpoint?['lastSyncAt'] as int?;
+      if (timestamp != null && timestamp > 0) {
+        return DateTime.fromMillisecondsSinceEpoch(timestamp);
+      }
+      return null;
+    });
+
 class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
-  /// Single periodic timer that drives both peer discovery and sync-code polling.
+  /// Slow recovery checks complement direct change and availability events.
   Timer? _backgroundTimer;
+  Timer? _queueTimer;
+  final PeerSyncQueue _syncQueue = PeerSyncQueue();
 
   /// Subscription to the service's event stream for atomic UI state updates.
   StreamSubscription<SyncEvent>? _eventsSub;
+  StreamSubscription<int>? _databaseChangesSub;
+  AppDatabase? _watchedDatabase;
+  bool _hasObservedDatabase = false;
+  int? _lastDatabaseRevision;
+  Completer<void>? _automaticCycleDone;
+
+  bool _foreground = true;
+
+  Future<void> setForeground(bool foreground) async {
+    _foreground = foreground;
+    final service = ref.read(deviceSyncServiceProvider);
+    if (!foreground) {
+      _backgroundTimer?.cancel();
+      _backgroundTimer = null;
+      _queueTimer?.cancel();
+      _queueTimer = null;
+      await service.setForeground(false);
+    } else {
+      await service.setForeground(true);
+      if (!ref.mounted || !_foreground) return;
+      await refreshSnapshot();
+      if (ref.mounted && _foreground) await _runBackgroundCycle();
+    }
+  }
 
   bool _autoSyncInFlight = false;
+  bool _manualSyncInFlight = false;
   bool _discoverInFlight = false;
-  static const Duration _autoSyncDebounce = Duration(seconds: 12);
-  DateTime? _lastAutoSyncAttemptAt;
+  Completer<void>? _backgroundDiscoveryDone;
+  static const Duration _recoveryInterval = Duration(seconds: 30);
 
   String? _windowsFirewallGuidance(WindowsFirewallCheckResult? result) {
     if (result == null) {
@@ -47,16 +98,41 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     return null;
   }
 
+  String? _linuxFirewallGuidance(LinuxFirewallCheckResult? result) {
+    if (result == null) {
+      return null;
+    }
+    if (!result.available || !result.active) {
+      // No firewall tool detected or firewall is not active — nothing blocking.
+      return null;
+    }
+    if (!result.fullyAllowed) {
+      final missing = <String>[];
+      if (!result.udpPortAllowed) missing.add('UDP 45871 (discovery)');
+      if (!result.tcpPortAllowed) missing.add('TCP 45872 (data transfer)');
+      return 'Firewall may be blocking Device Sync ports: ${missing.join(", ")}. '
+          'Use Grant Firewall Access to allow these ports.';
+    }
+    return null;
+  }
+
   @override
   Future<DeviceSyncSnapshot> build() async {
     ref.onDispose(() {
       _backgroundTimer?.cancel();
       _backgroundTimer = null;
+      _queueTimer?.cancel();
+      _queueTimer = null;
       _eventsSub?.cancel();
       _eventsSub = null;
+      _databaseChangesSub?.cancel();
+      _databaseChangesSub = null;
+      _watchedDatabase = null;
     });
 
     final service = ref.read(deviceSyncServiceProvider);
+    ref.listen(databaseProvider, (previous, next) => _watchDatabase(next));
+    _watchDatabase(ref.read(databaseProvider));
 
     // Subscribe to service events so state updates are atomic and decoupled
     // from the transport layer.
@@ -64,7 +140,24 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
       final current = state.value;
       if (current == null) return;
 
-      if (event is PeerTrustedEvent) {
+      if (event is SyncChangeAvailableEvent) {
+        if (event.peerId == null) {
+          _markAllPeersDirty();
+        } else {
+          _markPeerDirty(event.peerId!, resetBackoff: true);
+        }
+      } else if (event is PeerAvailableEvent) {
+        final peer = event.peer;
+        state = AsyncData(
+          current.copyWith(
+            discoveredPeers: [
+              ...current.discoveredPeers.where((item) => item.id != peer.id),
+              peer,
+            ],
+          ),
+        );
+        _markPeerDirty(peer.id, immediate: true, resetBackoff: true);
+      } else if (event is PeerTrustedEvent) {
         final peer = event.peer;
         final updated = [
           ...current.trustedPeers.where((p) => p.id != peer.id),
@@ -78,6 +171,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
           ),
         );
         _ensureBackgroundTimer(state.value ?? current);
+        _markPeerDirty(peer.id, immediate: true, resetBackoff: true);
       } else if (event is PeerRemovedEvent) {
         final updated = current.trustedPeers
             .where((p) => p.id != event.peerId)
@@ -99,17 +193,33 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
           ),
         );
         _ensureBackgroundTimer(state.value ?? current);
+      } else if (event is PeerOfflineEvent) {
+        final wasDiscovered = current.discoveredPeers.any(
+          (peer) => peer.id == event.peerId,
+        );
+        if (!wasDiscovered) return;
+        state = AsyncData(
+          current.copyWith(
+            discoveredPeers: current.discoveredPeers
+                .where((peer) => peer.id != event.peerId)
+                .toList(growable: false),
+            status: current.status == DeviceSyncStatus.connected
+                ? DeviceSyncStatus.idle
+                : current.status,
+            statusMessage: 'Device is offline.',
+          ),
+        );
       } else if (event is SyncDataAppliedEvent) {
         final result = event.result;
         final conflictNote = result.hasConflicts
-            ? ' (${result.conflicts} conflict${result.conflicts > 1 ? 's' : ''} kept local)'
+            ? ' (${result.conflicts} competing edit${result.conflicts > 1 ? 's' : ''} detected)'
             : '';
         state = AsyncData(
           current.copyWith(
             status: DeviceSyncStatus.connected,
             pendingPairRequests: service.getPendingPairRequests(),
             statusMessage:
-                'Sync data received. ${result.inserted} added, ${result.updated} updated$conflictNote.',
+                'Sync data received. ${result.inserted} added, ${result.updated} updated, ${result.deleted} removed$conflictNote.',
           ),
         );
       } else if (event is SyncTransferActivityEvent) {
@@ -117,12 +227,15 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
           current.copyWith(
             status: event.active
                 ? DeviceSyncStatus.syncing
-                : DeviceSyncStatus.connected,
+                : current.dbMismatchPeerIds.isEmpty
+                ? DeviceSyncStatus.connected
+                : DeviceSyncStatus.error,
             statusMessage: event.active
                 ? (event.message ?? 'Sync in progress...')
                 : 'Sync completed.',
           ),
         );
+        if (!event.active) _scheduleQueuedSync();
       } else if (event is PairRequestReceivedEvent) {
         state = AsyncData(
           current.copyWith(
@@ -179,20 +292,31 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     final snapshot = await service.loadSnapshot();
     _ensureBackgroundTimer(snapshot);
     if (snapshot.enabled) {
-      unawaited(_runBackgroundCycle());
-      unawaited(Future<void>.microtask(recheckWindowsFirewallAccess));
+      // AsyncNotifier publishes the returned snapshot before this turn runs.
+      unawaited(Future<void>.delayed(Duration.zero, _runBackgroundCycle));
+      unawaited(Future<void>.microtask(recheckFirewallAccess));
     }
     return snapshot;
   }
 
   Future<void> refreshSnapshot() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final previous = state.value;
+    final refreshed = await AsyncValue.guard(
       () => ref.read(deviceSyncServiceProvider).loadSnapshot(),
     );
-    final latest = state.value;
+    if (!ref.mounted) return;
+    final loaded = refreshed.value;
+    // Keep the latest live peer list, including offline events received while
+    // the settings snapshot was loading. Discovery will refresh it next.
+    final livePeers = state.value?.discoveredPeers ?? previous?.discoveredPeers;
+    final latest = loaded?.copyWith(
+      discoveredPeers: loaded.enabled ? (livePeers ?? const []) : const [],
+    );
     if (latest != null) {
+      state = AsyncData(latest);
       _ensureBackgroundTimer(latest);
+    } else if (previous == null) {
+      state = refreshed;
     }
   }
 
@@ -213,19 +337,29 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
       _ensureBackgroundTimer(next);
       if (value && ref.read(databaseProvider) != null) {
         unawaited(_runBackgroundCycle());
-        unawaited(recheckWindowsFirewallAccess());
+        unawaited(recheckFirewallAccess());
       }
     }
   }
 
-  Future<void> recheckWindowsFirewallAccess() async {
+  Future<void> recheckFirewallAccess() async {
     final current = state.value;
     if (current == null) return;
 
-    final result = await ref
-        .read(deviceSyncServiceProvider)
-        .checkWindowsFirewallAccess();
-    final guidance = _windowsFirewallGuidance(result);
+    String? guidance;
+
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      final result = await ref
+          .read(deviceSyncServiceProvider)
+          .checkWindowsFirewallAccess();
+      guidance = _windowsFirewallGuidance(result);
+    } else if (defaultTargetPlatform == TargetPlatform.linux) {
+      final result = await ref
+          .read(deviceSyncServiceProvider)
+          .checkLinuxFirewallAccess();
+      guidance = _linuxFirewallGuidance(result);
+    }
+
     final latest = state.value ?? current;
 
     state = AsyncData(
@@ -246,11 +380,36 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
   }
 
   Future<bool> grantWindowsFirewallAccess() async {
-    final granted = await ref
-        .read(deviceSyncServiceProvider)
-        .grantWindowsFirewallAccess();
-    await recheckWindowsFirewallAccess();
+    return grantFirewallAccess();
+  }
+
+  Future<bool> grantLinuxFirewallAccess() async {
+    return grantFirewallAccess();
+  }
+
+  Future<bool> grantFirewallAccess() async {
+    bool granted;
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      granted = await ref
+          .read(deviceSyncServiceProvider)
+          .grantWindowsFirewallAccess();
+    } else if (defaultTargetPlatform == TargetPlatform.linux) {
+      granted = await ref
+          .read(deviceSyncServiceProvider)
+          .grantLinuxFirewallAccess();
+    } else {
+      return false;
+    }
+    await recheckFirewallAccess();
     return granted;
+  }
+
+  Future<bool> clearLinuxFirewallAccess() async {
+    final cleared = await ref
+        .read(deviceSyncServiceProvider)
+        .clearLinuxFirewallAccess();
+    await recheckFirewallAccess();
+    return cleared;
   }
 
   Future<void> setAutoOnStartup(bool value) async {
@@ -261,42 +420,124 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     }
   }
 
-  void _ensureBackgroundTimer(DeviceSyncSnapshot snapshot) {
-    if (!snapshot.enabled) {
-      _backgroundTimer?.cancel();
-      _backgroundTimer = null;
+  void _watchDatabase(AppDatabase? database) {
+    if (identical(database, _watchedDatabase)) return;
+    _databaseChangesSub?.cancel();
+    _watchedDatabase = database;
+    _lastDatabaseRevision = null;
+    if (database == null) {
+      _databaseChangesSub = null;
+      _queueTimer?.cancel();
+      _queueTimer = null;
       return;
     }
-    if (_backgroundTimer != null) return;
-    _backgroundTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      unawaited(_runBackgroundCycle());
-    });
+    final isDatabaseSwitch = _hasObservedDatabase;
+    _hasObservedDatabase = true;
+    _databaseChangesSub = database.watchSyncRevision().listen(
+      (revision) {
+        if (!ref.mounted || !identical(database, _watchedDatabase)) return;
+        final previous = _lastDatabaseRevision;
+        _lastDatabaseRevision = revision;
+        if (previous == null) {
+          _markAllPeersDirty(immediate: true);
+          if (isDatabaseSwitch && state.value?.enabled == true && _foreground) {
+            unawaited(_announceDatabaseChange());
+          }
+          return;
+        }
+        if (revision == previous) return;
+        _markAllPeersDirty();
+        final current = state.value;
+        if (current?.enabled == true && _foreground) {
+          unawaited(_announceDatabaseChange());
+        }
+      },
+      onError: (Object _, StackTrace _) {
+        // Periodic anti-entropy still recovers if a database watch is interrupted.
+      },
+    );
   }
 
-  /// Single coordinator cycle: runs peer discovery followed by sync-code
-  /// polling. Both tasks are fire-and-forget so they do not block each other.
-  Future<void> _runBackgroundCycle() async {
-    // Don't run any sync logic while the database is null — either still
-    // booting, switching databases, or the user cancelled a password prompt.
-    final db = ref.read(databaseProvider);
-    if (db == null) return;
-
-    unawaited(_backgroundDiscover());
-    final current = state.value;
-    if (current != null && current.trustedPeers.isNotEmpty) {
-      unawaited(_pollSyncCode());
+  Future<void> _announceDatabaseChange() async {
+    try {
+      await ref.read(deviceSyncServiceProvider).notifyLocalDataChanged();
+    } catch (_) {
+      // Direct notifications are a latency optimization. The dirty queue and
+      // periodic checks retain the work when a notification cannot be delivered.
     }
+  }
+
+  void _ensureBackgroundTimer(DeviceSyncSnapshot snapshot) {
+    _syncQueue.replacePeers(snapshot.trustedPeers.map((peer) => peer.id));
+    if (!snapshot.enabled || !_foreground) {
+      _backgroundTimer?.cancel();
+      _backgroundTimer = null;
+      _queueTimer?.cancel();
+      _queueTimer = null;
+      if (!snapshot.enabled) _syncQueue.clear();
+      return;
+    }
+    _backgroundTimer ??= Timer.periodic(_recoveryInterval, (_) {
+      unawaited(_runBackgroundCycle());
+    });
+    _scheduleQueuedSync();
+  }
+
+  void _markAllPeersDirty({bool immediate = false}) {
+    final current = state.value;
+    if (current == null || !current.enabled) return;
+    _replaceCompatiblePeers(current);
+    _syncQueue.markAllDirty(DateTime.now(), immediate: immediate);
+    _scheduleQueuedSync();
+  }
+
+  void _markPeerDirty(
+    String peerId, {
+    bool immediate = false,
+    bool resetBackoff = false,
+  }) {
+    final current = state.value;
+    if (current == null || !current.enabled) return;
+    _replaceCompatiblePeers(current);
+    _syncQueue.markDirty(
+      peerId,
+      DateTime.now(),
+      immediate: immediate,
+      resetBackoff: resetBackoff,
+    );
+    _scheduleQueuedSync();
+  }
+
+  void _replaceCompatiblePeers(DeviceSyncSnapshot snapshot) {
+    final incompatibleIds = snapshot.discoveredPeers
+        .where((peer) => !peer.isSyncCompatible)
+        .map((peer) => peer.id)
+        .toSet();
+    _syncQueue.replacePeers(
+      snapshot.trustedPeers
+          .where((peer) => !incompatibleIds.contains(peer.id))
+          .map((peer) => peer.id),
+    );
+  }
+
+  /// Change events wake this queue immediately; this cycle only repairs missed
+  /// packets, offline peers, and topology changes at a much slower interval.
+  Future<void> _runBackgroundCycle() async {
+    if (!_foreground || !ref.mounted || state.value?.enabled != true) return;
+    if (ref.read(databaseProvider) == null) return;
+    unawaited(_backgroundDiscover());
+    _markAllPeersDirty(immediate: true);
   }
 
   Future<void> _backgroundDiscover() async {
     final current = state.value;
-    if (current == null || !current.enabled) return;
-
-    if (_discoverInFlight) return;
+    if (current == null || !current.enabled || _discoverInFlight) return;
     _discoverInFlight = true;
-
+    final done = Completer<void>();
+    _backgroundDiscoveryDone = done;
     try {
       final peers = await ref.read(deviceSyncServiceProvider).discoverPeers();
+      if (!ref.mounted || !_foreground || state.value?.enabled != true) return;
       final latest = state.value ?? current;
       state = AsyncData(
         latest.copyWith(
@@ -310,232 +551,200 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
       // Keep the previous discovery snapshot on transient network errors.
     } finally {
       _discoverInFlight = false;
+      done.complete();
+      if (identical(_backgroundDiscoveryDone, done)) {
+        _backgroundDiscoveryDone = null;
+      }
     }
   }
 
-  Future<void> _pollSyncCode() async {
+  void _scheduleQueuedSync({Duration? minimumDelay}) {
+    _queueTimer?.cancel();
+    _queueTimer = null;
+    if (!ref.mounted ||
+        !_foreground ||
+        state.value?.enabled != true ||
+        _autoSyncInFlight ||
+        _manualSyncInFlight ||
+        ref.read(databaseProvider) == null) {
+      return;
+    }
+    final readyAt = _syncQueue.nextReadyAt;
+    if (readyAt == null) return;
+    var delay = readyAt.difference(DateTime.now());
+    if (delay.isNegative) delay = Duration.zero;
+    if (minimumDelay != null && delay < minimumDelay) delay = minimumDelay;
+    _queueTimer = Timer(delay, () {
+      _queueTimer = null;
+      unawaited(_drainSyncQueue());
+    });
+  }
+
+  Future<void> _drainSyncQueue() async {
+    if (!ref.mounted ||
+        !_foreground ||
+        state.value?.enabled != true ||
+        _autoSyncInFlight ||
+        _manualSyncInFlight ||
+        ref.read(databaseProvider) == null) {
+      return;
+    }
+    final service = ref.read(deviceSyncServiceProvider);
+    if (service.isReceiverSyncInFlight) {
+      _scheduleQueuedSync(minimumDelay: const Duration(seconds: 1));
+      return;
+    }
+    _autoSyncInFlight = true;
+    final done = Completer<void>();
+    _automaticCycleDone = done;
+    try {
+      while (ref.mounted &&
+          _foreground &&
+          state.value?.enabled == true &&
+          !_manualSyncInFlight &&
+          ref.read(databaseProvider) != null &&
+          !service.isReceiverSyncInFlight) {
+        final work = _syncQueue.takeNext(DateTime.now());
+        if (work == null) break;
+        var outcome = PeerSyncOutcome.failed;
+        try {
+          outcome = await _reconcilePeer(work.peerId);
+        } catch (error) {
+          if (ref.mounted) {
+            final latest = state.value;
+            if (latest != null) {
+              state = AsyncData(
+                latest.copyWith(
+                  status: DeviceSyncStatus.error,
+                  clearActiveSyncPeerId: true,
+                  statusMessage: 'Device sync will retry: $error',
+                ),
+              );
+            }
+          }
+        } finally {
+          _syncQueue.complete(work, DateTime.now(), outcome);
+        }
+      }
+    } finally {
+      _autoSyncInFlight = false;
+      done.complete();
+      if (identical(done, _automaticCycleDone)) _automaticCycleDone = null;
+      _scheduleQueuedSync(
+        minimumDelay: service.isReceiverSyncInFlight
+            ? const Duration(seconds: 1)
+            : null,
+      );
+    }
+  }
+
+  Future<PeerSyncOutcome> _reconcilePeer(String peerId) async {
     final current = state.value;
     if (current == null ||
-        !current.enabled ||
-        current.trustedPeers.isEmpty ||
-        _autoSyncInFlight ||
-        // Don't initiate sync while the database is null (mid-switch or
-        // still booting).
-        ref.read(databaseProvider) == null ||
-        // If this device is currently acting as a receiver, suppress any
-        // competing initiator sync.  Without this guard the background timer
-        // could detect a revision mismatch mid-receive, launch a concurrent
-        // initiator sync, and have its re-anchor overwrite the revision ID
-        // the receiver path is about to adopt — causing an infinite loop.
-        ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
-      return;
+        current.discoveredPeers.any(
+          (peer) => peer.id == peerId && !peer.isSyncCompatible,
+        ) ||
+        !current.trustedPeers.any((peer) => peer.id == peerId)) {
+      return PeerSyncOutcome.settled;
     }
-
+    final peer = current.trustedPeers.firstWhere((peer) => peer.id == peerId);
     final service = ref.read(deviceSyncServiceProvider);
+    final result = await service.checkSyncCode(peerId: peerId);
+    if (!ref.mounted) return PeerSyncOutcome.deferred;
     final latest = state.value ?? current;
-    final pending = service.getPendingPairRequests();
-
-    final syncTargets = <TrustedSyncPeer>[];
-    var unreachableCount = 0;
-    var remoteInitiatorCount = 0;
-    final nextMismatch = Set<String>.from(
-      latest.dbMismatchPeerIds,
-    )..removeWhere((id) => current.trustedPeers.every((peer) => peer.id != id));
-
-    for (final trustedPeer in current.trustedPeers) {
-      final result = await service.checkSyncCode(peerId: trustedPeer.id);
-
-      if (!result.reachable) {
-        unreachableCount++;
-        continue;
-      }
-
-      if (result.dbNameMismatch) {
-        nextMismatch.add(trustedPeer.id);
-        continue;
-      }
-
-      // A reachable peer without mismatch should immediately clear any stale
-      // mismatch badge from prior checks.
-      nextMismatch.remove(trustedPeer.id);
-
-      // If the peer is currently receiving/applying sync data, let it finish
-      // before making any initiator decision.
-      if (result.remoteReceiverSyncInFlight) {
-        remoteInitiatorCount++;
-        continue;
-      }
-
-      if (result.matches) {
-        continue;
-      }
-
-      final bool shouldBackOff;
-      if (!result.localHasChanges && result.remoteHasChanges) {
-        shouldBackOff = true;
-      } else if (result.localHasChanges && !result.remoteHasChanges) {
-        shouldBackOff = false;
-      } else {
-        final remoteId = result.peer?.id ?? trustedPeer.id;
-        shouldBackOff =
-            remoteId.isNotEmpty && current.deviceId.compareTo(remoteId) > 0;
-      }
-
-      if (shouldBackOff) {
-        remoteInitiatorCount++;
-        continue;
-      }
-
-      syncTargets.add(trustedPeer);
+    if (!latest.trustedPeers.any((peer) => peer.id == peerId)) {
+      return PeerSyncOutcome.settled;
     }
-
-    final mismatchCount = nextMismatch.length;
-
-    if (mismatchCount > 0) {
+    if (!result.reachable) {
       state = AsyncData(
-        (state.value ?? latest).copyWith(
+        latest.copyWith(
+          status: DeviceSyncStatus.idle,
+          statusMessage:
+              '${peer.name} is offline. Sync will resume when it reconnects.',
+        ),
+      );
+      return PeerSyncOutcome.failed;
+    }
+    final mismatches = Set<String>.from(latest.dbMismatchPeerIds)
+      ..removeWhere((id) => !latest.trustedPeers.any((peer) => peer.id == id));
+    if (result.dbNameMismatch) {
+      mismatches.add(peerId);
+      state = AsyncData(
+        latest.copyWith(
           status: DeviceSyncStatus.error,
-          pendingPairRequests: pending,
+          dbMismatchPeerIds: mismatches,
           statusMessage:
-              'Database mismatch detected on $mismatchCount paired device(s). '
-              'Auto-sync skipped for those devices.',
-          dbMismatchPeerIds: nextMismatch,
+              'DB mismatch: ${peer.name} is using "${result.remoteDbName}" '
+              'but this device uses "${result.localDbName}". '
+              'Both devices must use the same active database file.',
         ),
       );
-      if (syncTargets.isEmpty) {
-        return;
-      }
+      return PeerSyncOutcome.settled;
     }
-
-    if (syncTargets.isEmpty) {
-      final discoveredPeerIds = (state.value ?? latest).discoveredPeers
-          .map((peer) => peer.id)
-          .toSet();
-      final unreachableDiscovered = current.trustedPeers
-          .where((peer) => discoveredPeerIds.contains(peer.id))
-          .length;
-
-      if (unreachableCount > 0 && unreachableDiscovered == 0) {
-        state = AsyncData(
-          (state.value ?? latest).copyWith(
-            status: DeviceSyncStatus.error,
-            pendingPairRequests: pending,
-            statusMessage:
-                'Trusted device is offline. Sync will resume when it is reachable.',
-            dbMismatchPeerIds: nextMismatch,
-          ),
-        );
-        return;
-      }
-
-      if (remoteInitiatorCount > 0) {
-        state = AsyncData(
-          (state.value ?? latest).copyWith(
-            status: DeviceSyncStatus.syncing,
-            pendingPairRequests: pending,
-            statusMessage:
-                'Changes detected. Waiting for $remoteInitiatorCount paired device(s) to initiate sync...',
-            dbMismatchPeerIds: nextMismatch,
-          ),
-        );
-        return;
-      }
-
+    mismatches.remove(peerId);
+    state = AsyncData(latest.copyWith(dbMismatchPeerIds: mismatches));
+    if (service.isReceiverSyncInFlight || result.remoteReceiverSyncInFlight) {
+      return PeerSyncOutcome.deferred;
+    }
+    if (result.matches) {
       state = AsyncData(
         (state.value ?? latest).copyWith(
-          status: DeviceSyncStatus.connected,
-          pendingPairRequests: pending,
-          statusMessage: 'Paired devices are in sync.',
-          dbMismatchPeerIds: nextMismatch,
+          status: mismatches.isEmpty
+              ? DeviceSyncStatus.connected
+              : DeviceSyncStatus.error,
+          statusMessage: mismatches.isEmpty
+              ? '${peer.name} is up to date.'
+              : 'Database mismatch detected on ${mismatches.length} paired device(s).',
         ),
       );
-      return;
+      return PeerSyncOutcome.settled;
     }
-
-    final now = DateTime.now();
-    final lastAttempt = _lastAutoSyncAttemptAt;
-    if (lastAttempt != null &&
-        now.difference(lastAttempt) < _autoSyncDebounce) {
-      state = AsyncData(
-        (state.value ?? latest).copyWith(
-          status: DeviceSyncStatus.syncing,
-          pendingPairRequests: pending,
-          statusMessage:
-              'Changes detected on ${syncTargets.length} device(s). Waiting before next auto-sync...',
-          dbMismatchPeerIds: nextMismatch,
-        ),
-      );
-      return;
+    if (!shouldInitiatePeerSync(
+      localDeviceId: latest.deviceId,
+      peerDeviceId: result.peer?.id ?? peerId,
+      localHasChanges: result.localHasChanges,
+      remoteHasChanges: result.remoteHasChanges,
+    )) {
+      return PeerSyncOutcome.deferred;
     }
-
+    if (!_foreground || !latest.enabled || ref.read(databaseProvider) == null) {
+      return PeerSyncOutcome.deferred;
+    }
     state = AsyncData(
       (state.value ?? latest).copyWith(
         status: DeviceSyncStatus.syncing,
-        pendingPairRequests: pending,
-        statusMessage:
-            'Changes detected. Auto-syncing ${syncTargets.length} paired device(s)...',
-        dbMismatchPeerIds: nextMismatch,
+        activeSyncPeerId: peerId,
+        statusMessage: 'Syncing with ${peer.name}...',
       ),
     );
-
-    _autoSyncInFlight = true;
-    _lastAutoSyncAttemptAt = now;
-    try {
-      final failures = <String>[];
-      for (final peer in syncTargets) {
-        // Show which specific device is currently syncing.
-        final syncing = state.value ?? latest;
-        state = AsyncData(syncing.copyWith(activeSyncPeerId: peer.id));
-        try {
-          await service.performManualSync(peerId: peer.id);
-        } catch (error) {
-          failures.add('${peer.name}: $error');
-        }
-      }
-
-      final refreshed = await service.loadSnapshot();
-      // Preserve the current discoveredPeers — loadSnapshot() always returns
-      // an empty list because discovery state lives only in memory.
-      final liveDiscovered = state.value?.discoveredPeers ?? const [];
-      if (failures.isNotEmpty) {
-        state = AsyncData(
-          refreshed.copyWith(
-            status: DeviceSyncStatus.error,
-            discoveredPeers: liveDiscovered,
-            pendingPairRequests: service.getPendingPairRequests(),
-            statusMessage:
-                'Auto-sync completed with ${failures.length} failure(s): ${failures.join(' | ')}',
-          ),
-        );
-        return;
-      }
-
-      state = AsyncData(
-        refreshed.copyWith(
-          status: DeviceSyncStatus.connected,
-          clearActiveSyncPeerId: true,
-          discoveredPeers: liveDiscovered,
-          pendingPairRequests: service.getPendingPairRequests(),
-          statusMessage: 'Auto-sync completed successfully.',
-        ),
-      );
-    } catch (error) {
-      final latestOnError = state.value ?? latest;
-      state = AsyncData(
-        latestOnError.copyWith(
-          status: DeviceSyncStatus.error,
-          clearActiveSyncPeerId: true,
-          statusMessage: 'Auto-sync failed: $error',
-        ),
-      );
-    } finally {
-      _autoSyncInFlight = false;
-    }
+    await service.performAutomaticSync(peerId: peerId, preflight: result);
+    if (!ref.mounted) return PeerSyncOutcome.settled;
+    final refreshed = await service.loadSnapshot();
+    if (!ref.mounted) return PeerSyncOutcome.settled;
+    final afterTransfer = state.value ?? latest;
+    state = AsyncData(
+      refreshed.copyWith(
+        status: afterTransfer.dbMismatchPeerIds.isEmpty
+            ? DeviceSyncStatus.connected
+            : DeviceSyncStatus.error,
+        clearActiveSyncPeerId: true,
+        discoveredPeers: afterTransfer.discoveredPeers,
+        dbMismatchPeerIds: afterTransfer.dbMismatchPeerIds,
+        pendingPairRequests: service.getPendingPairRequests(),
+        statusMessage: 'Synced with ${peer.name}.',
+      ),
+    );
+    _ensureBackgroundTimer(state.value!);
+    return PeerSyncOutcome.settled;
   }
 
   Future<void> discoverPeers() async {
+    // A manual refresh starts a fresh scan after any background scan finishes.
+    await _backgroundDiscoveryDone?.future;
+    if (!ref.mounted) return;
     final current = state.value;
-    if (current == null) return;
+    if (current == null || !current.enabled || _discoverInFlight) return;
+    _discoverInFlight = true;
 
     state = AsyncData(
       current.copyWith(
@@ -568,6 +777,8 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
           statusMessage: 'Device discovery failed: $error',
         ),
       );
+    } finally {
+      _discoverInFlight = false;
     }
   }
 
@@ -602,6 +813,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
         ),
       );
       _ensureBackgroundTimer(state.value ?? current);
+      _markPeerDirty(trusted.id, immediate: true, resetBackoff: true);
     } on DeviceSyncException catch (error) {
       final text = error.toString().toLowerCase();
       if (text.contains('timed out')) {
@@ -709,13 +921,18 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     bool isPull = false,
     bool fullScan = false,
   }) async {
-    final current = state.value;
-    if (current == null) return;
-
-    if (_autoSyncInFlight) {
+    if (state.value == null || _manualSyncInFlight) return;
+    // Reserve the transport before waiting, so automatic work finishes its
+    // current peer and yields. A user's requested sync is never silently lost.
+    _manualSyncInFlight = true;
+    _queueTimer?.cancel();
+    _queueTimer = null;
+    await _automaticCycleDone?.future;
+    if (!ref.mounted) {
+      _manualSyncInFlight = false;
       return;
     }
-    _autoSyncInFlight = true;
+    final current = state.value!;
 
     state = AsyncData(
       current.copyWith(
@@ -784,17 +1001,9 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
       );
       rethrow;
     } finally {
-      _autoSyncInFlight = false;
+      _manualSyncInFlight = false;
+      _scheduleQueuedSync();
     }
-  }
-
-  /// Adds [peerId] to the in-memory mismatch set so the UI immediately
-  /// shows the mismatch badge, even before the background poll detects it.
-  void addDbMismatch(String peerId) {
-    final current = state.value;
-    if (current == null) return;
-    final next = Set<String>.from(current.dbMismatchPeerIds)..add(peerId);
-    state = AsyncData(current.copyWith(dbMismatchPeerIds: next));
   }
 }
 

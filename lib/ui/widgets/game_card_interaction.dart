@@ -11,15 +11,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../dialogs/game_details_dialog.dart';
+import '../dialogs/game_editor_dialog.dart';
 import '../widgets/notification_system.dart';
 
 /// Mixin that adds pointer-tracking and selection-orchestration logic to any
 /// [ConsumerState].  The host state must implement [cardGame].
-mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
+mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
+    on ConsumerState<T> {
   /// The [Game] this card represents.  Implemented by [_GameCardState] as
   /// `widget.game`.
   Game get cardGame;
+  bool get dragSelectionHandledByParent => false;
   static const double _dragStartSlop = 6.0;
 
   // ── Pointer tracking state ─────────────────────────────────────────────────
@@ -50,7 +52,9 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
 
   void handleTap() {
     final notifier = ref.read(gamesProvider.notifier);
-    final selectedIds = ref.read(gamesProvider.select((s) => s.selectedGameIds));
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
     final lastId = ref.read(lastSelectedGameIdProvider);
     final isMultiSelectModeEnabled = ref.read(selectionMultiSelectModeProvider);
 
@@ -61,13 +65,17 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
       notifier.selectRange(lastId, cardGame.id);
     } else if (ctrlDown) {
       notifier.toggleGameSelection(cardGame.id);
-      ref.read(lastSelectedGameIdProvider.notifier).setLastSelectedGameId(cardGame.id);
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .set(cardGame.id);
     } else {
       if (!selectedIds.contains(cardGame.id) || selectedIds.length != 1) {
         notifier.clearSelection();
         notifier.selectGame(cardGame.id);
       }
-      ref.read(lastSelectedGameIdProvider.notifier).setLastSelectedGameId(cardGame.id);
+      ref
+          .read(lastSelectedGameIdProvider.notifier)
+          .set(cardGame.id);
     }
   }
 
@@ -85,7 +93,9 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
       return;
     }
     final allGames = ref.read(gamesProvider.select((s) => s.filteredGames));
-    final selectedIds = ref.read(gamesProvider.select((s) => s.selectedGameIds));
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
 
     final List<int> idsToPass;
     if (selectedIds.contains(cardGame.id) && selectedIds.length > 1) {
@@ -97,7 +107,7 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
       idsToPass = [cardGame.id];
     }
 
-    showGameDetailsDialog(
+    showGameEditorDialog(
       context,
       cardGame,
       gameIds: idsToPass,
@@ -111,12 +121,15 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
 
     _primaryPointerHandledByLongPress = true;
     ref.read(gamesProvider.notifier).toggleGameSelection(cardGame.id);
-    ref.read(lastSelectedGameIdProvider.notifier).setLastSelectedGameId(cardGame.id);
+    ref
+        .read(lastSelectedGameIdProvider.notifier)
+        .set(cardGame.id);
   }
 
   // ── Drag-selection ────────────────────────────────────────────────────────
 
   void handleDragSelectionEvent(PointerEvent event) {
+    if (dragSelectionHandledByParent) return;
     if (event.kind != PointerDeviceKind.mouse) return;
     if ((event.buttons & kPrimaryMouseButton) == 0) return;
 
@@ -125,7 +138,9 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
     if (dragState.visitedIds.contains(cardGame.id)) return;
 
     final notifier = ref.read(gamesProvider.notifier);
-    final selectedIds = ref.read(gamesProvider.select((s) => s.selectedGameIds));
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
 
     if (isShiftPressed || isCtrlPressed) {
       notifier.toggleGameSelection(cardGame.id);
@@ -147,7 +162,9 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
     }
 
     ref.read(dragSelectionProvider.notifier).markVisited(cardGame.id);
-    ref.read(lastSelectedGameIdProvider.notifier).setLastSelectedGameId(cardGame.id);
+    ref
+        .read(lastSelectedGameIdProvider.notifier)
+        .set(cardGame.id);
   }
 
   // ── Pointer event handlers ────────────────────────────────────────────────
@@ -175,12 +192,13 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget> on ConsumerStat
         (event.position - downPosition).distance > _dragStartSlop) {
       _primaryPointerExceededSlop = true;
 
-      if (event.kind == PointerDeviceKind.mouse &&
+      if (!dragSelectionHandledByParent &&
+          event.kind == PointerDeviceKind.mouse &&
           (isCtrlPressed || ref.read(selectionMultiSelectModeProvider))) {
         final dragNotifier = ref.read(dragSelectionProvider.notifier);
         final dragState = ref.read(dragSelectionProvider);
         if (!dragState.isActive) {
-          dragNotifier.start(startId: cardGame.id);
+          dragNotifier.start();
           handleDragSelectionEvent(event);
         }
       }

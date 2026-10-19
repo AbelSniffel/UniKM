@@ -6,27 +6,118 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:drift/drift.dart' show InsertMode, Value;
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../providers/app_providers.dart';
 import '../database/database.dart';
 import '../models/device_sync_models.dart';
 import 'sync_entry_fingerprint.dart';
 import 'steam_service.dart';
 
 class SyncPayloadCodec {
-  SyncPayloadCodec({required this.ref});
+  SyncPayloadCodec({
+    required this.getDatabase,
+    this.exportSteamCache = exportSteamCacheSnapshotForSync,
+  });
 
-  final Ref ref;
+  final AppDatabase? Function() getDatabase;
+  final Future<Map<String, dynamic>> Function() exportSteamCache;
 
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
-  // -------------------------------------------------------------------------
-  // Build
-  // -------------------------------------------------------------------------
+  int? _digestRevision;
+  String? _digest;
+  String? _digestOrigin;
+  AppDatabase? _digestDatabase;
+  final _recordSignatures = <String, String>{};
+
+  /// Hashes only journalled changes after the initial snapshot. Health checks
+  /// reuse the completed digest while the database revision is unchanged.
+  Future<String> getDatasetDigest() async {
+    final db = getDatabase();
+    if (db == null) return '';
+    return _getDatasetDigest(db);
+  }
+
+  Future<String> _getDatasetDigest(AppDatabase db) {
+    return db.transaction(() async {
+      final revision = await db.getLocalSyncRevision();
+      final origin = await db.getSyncDatabaseOrigin();
+      final sameDatabase =
+          identical(_digestDatabase, db) && _digestOrigin == origin;
+      if (sameDatabase && _digestRevision == revision && _digest != null) {
+        return _digest!;
+      }
+      final reset =
+          !sameDatabase ||
+          _digestRevision == null ||
+          revision < _digestRevision!;
+      if (reset) _recordSignatures.clear();
+      final records = await db.getSyncRecords(
+        sinceRevision: reset ? 0 : _digestRevision!,
+      );
+      final games = await db.getGamesByIds([
+        for (final record in records)
+          if (record['deletedAt'] == 0 && record['id'] is int)
+            record['id'] as int,
+      ]);
+      final tags = await db.getTagsForGames(
+        games.map((game) => game.id).toList(),
+      );
+      final byId = {for (final game in games) game.id: game};
+      final tagVersions = await db.getSyncTagVersions();
+      for (final record in records) {
+        final syncId = record['syncId'] as String;
+        final game = byId[record['id']];
+        final deleted = (record['deletedAt'] as int) > 0;
+        if (!deleted && game == null) {
+          _recordSignatures.remove(syncId);
+          continue;
+        }
+        final gameTags = deleted
+            ? const <TagEntry>[]
+            : tags[game!.id] ?? const <TagEntry>[];
+        final tagSignatures =
+            gameTags
+                .map(
+                  (tag) => jsonEncode([
+                    tag.name,
+                    tagVersions[tag.id]?['changeClock'],
+                    tagVersions[tag.id]?['changeOrigin'],
+                  ]),
+                )
+                .toList()
+              ..sort();
+        final content = deleted
+            ? 'deleted'
+            : await SyncEntryFingerprint.fromGameEntry(game!, gameTags);
+        _recordSignatures[syncId] = jsonEncode([
+          syncId,
+          record['changeClock'],
+          record['changeOrigin'],
+          content,
+          tagSignatures,
+        ]);
+      }
+      if (!reset) {
+        // Identity adoption can remove the prior sync record without changing
+        // any game fields. Prune metadata-only removals without rehashing the
+        // unchanged rows in the library.
+        final currentIds = await db.getSyncRecordIds();
+        _recordSignatures.removeWhere((id, _) => !currentIds.contains(id));
+      }
+      final signatures = _recordSignatures.values.toList()..sort();
+      final digest = await SyncEntryFingerprint.hashBytes(
+        utf8.encode(jsonEncode(signatures)),
+      );
+      _digestRevision = revision;
+      _digestDatabase = db;
+      _digestOrigin = origin;
+      _digest = digest;
+      return digest;
+    });
+  }
 
   Future<Map<String, dynamic>> buildDeltaPayload({
     required String syncRevisionId,
@@ -35,15 +126,17 @@ class SyncPayloadCodec {
     required int localRevision,
     String? deviceName,
     bool includeAllGames = false,
+    bool includeSteamCache = true,
   }) async {
-    final isFullDataset = includeAllGames || baseSyncAtMillis <= 0;
-    final db = ref.read(databaseProvider);
+    final db = getDatabase();
+    final full = includeAllGames || baseRevision <= 0;
     if (db == null) {
       return {
         'mode': 'delta',
-        'fullDataset': isFullDataset,
+        'fullDataset': full,
+        'syncProtocol': 3,
         'syncRevisionId': syncRevisionId,
-        'localRevision': localRevision,
+        'localRevision': 0,
         'dbTimestampMillis': 0,
         'baseRevision': baseRevision,
         'baseSyncAt': baseSyncAtMillis,
@@ -51,475 +144,593 @@ class SyncPayloadCodec {
         'tombstones': const <Map<String, dynamic>>[],
       };
     }
-
-    final allGames = await db.getAllGames();
-    final since = DateTime.fromMillisecondsSinceEpoch(baseSyncAtMillis);
-    final changedGames = isFullDataset
-        ? allGames
-        : allGames.where((g) => g.updatedAt.isAfter(since)).toList(growable: false);
-    final gameIds = changedGames.map((g) => g.id).toList(growable: false);
-    final tagsMap = gameIds.isEmpty
-        ? <int, List<TagEntry>>{}
-        : await db.getTagsForGames(gameIds);
-    final tombstones = await db.getGameTombstonesSinceRevision(
-      isFullDataset ? 0 : baseRevision,
-    );
-
-    final gamesJson = <Map<String, dynamic>>[];
-    for (final game in changedGames) {
-      final gameTags = tagsMap[game.id] ?? const <TagEntry>[];
-      final coverPayload = await _serializeCoverImageForTransfer(
-        rawCoverImagePath: game.coverImage,
-        gameKey: game.gameKey,
+    // The cursor and records describe the same snapshot. A later edit must
+    // never fall behind a checkpoint for an earlier payload.
+    return db.transaction(() async {
+      final snapshotRevision = await db.getLocalSyncRevision();
+      final full =
+          includeAllGames ||
+          baseRevision <= 0 ||
+          baseRevision > snapshotRevision;
+      final records = await db.getSyncRecords(
+        sinceRevision: full ? 0 : baseRevision,
       );
-      final entrySyncId = await SyncEntryFingerprint.fromGameEntry(game, gameTags);
-
-      gamesJson.add({
-        'id': game.id,
-        'title': game.title,
-        'gameKey': game.gameKey,
-        'platform': game.platform,
-        'dateAdded': game.dateAdded.toIso8601String(),
-        'updatedAt': game.updatedAt.toIso8601String(),
-        'notes': game.notes,
-        'isUsed': game.isUsed,
-        'coverImage': game.coverImage,
-        'hasCoverImage': game.coverImage.trim().isNotEmpty,
-        'coverImageFile': coverPayload,
-        'hasDeadline': game.hasDeadline,
-        'deadlineDate': game.deadlineDate?.toIso8601String(),
-        'isDlc': game.isDlc,
-        'steamAppId': game.steamAppId,
-        'developer': game.developer,
-        'reviewScore': game.reviewScore,
-        'reviewCount': game.reviewCount,
-        'entrySyncId': entrySyncId,
-        'tags': gameTags
-            .map(
-              (t) => {
-                'name': t.name,
-                'colorHex': t.color,
-                'isSteamTag': t.isSteamTag,
-              },
-            )
+      final liveById = <int, Map<String, dynamic>>{
+        for (final record in records)
+          if (record['deletedAt'] == 0 && record['id'] is int)
+            record['id'] as int: record,
+      };
+      final changed = await db.getGamesByIds(liveById.keys);
+      final tags = await db.getTagsForGames(
+        changed.map((game) => game.id).toList(),
+      );
+      final tagVersions = await db.getSyncTagVersions();
+      final serialized = <Map<String, dynamic>>[];
+      for (final game in changed) {
+        final record = liveById[game.id]!;
+        final gameTags = tags[game.id] ?? const <TagEntry>[];
+        serialized.add({
+          'id': game.id,
+          'syncId': record['syncId'],
+          'changeClock': record['changeClock'],
+          'changeOrigin': record['changeOrigin'],
+          'title': game.title,
+          'gameKey': game.gameKey,
+          'platform': game.platform,
+          'dateAdded': game.dateAdded.toUtc().toIso8601String(),
+          'updatedAt': game.updatedAt.toUtc().toIso8601String(),
+          'notes': game.notes,
+          'isUsed': game.isUsed,
+          'coverImage': game.coverImage,
+          'hasCoverImage': game.coverImage.trim().isNotEmpty,
+          'coverDigest': await SyncEntryFingerprint.coverIdentity(
+            game.coverImage,
+          ),
+          'coverImageFile': await _serializeCoverImageForTransfer(
+            rawCoverImagePath: game.coverImage,
+            gameKey: game.gameKey,
+          ),
+          'hasDeadline': game.hasDeadline,
+          'deadlineDate': game.deadlineDate?.toUtc().toIso8601String(),
+          'isDlc': game.isDlc,
+          'steamAppId': game.steamAppId,
+          'developer': game.developer,
+          'reviewScore': game.reviewScore,
+          'reviewCount': game.reviewCount,
+          'entrySyncId': await SyncEntryFingerprint.fromGameEntry(
+            game,
+            gameTags,
+          ),
+          'tags': gameTags
+              .map(
+                (tag) => {
+                  'name': tag.name,
+                  'colorHex': tag.color,
+                  'isSteamTag': tag.isSteamTag,
+                  ...?tagVersions[tag.id],
+                },
+              )
+              .toList(growable: false),
+        });
+      }
+      return {
+        'mode': 'delta',
+        'fullDataset': full,
+        'syncProtocol': 3,
+        'syncRevisionId': syncRevisionId,
+        'localRevision': snapshotRevision,
+        'dbTimestampMillis': await db.getSyncDbTimestampMillis(),
+        'contentDigest': await _getDatasetDigest(db),
+        'baseRevision': baseRevision,
+        'baseSyncAt': baseSyncAtMillis,
+        if (deviceName != null && deviceName.isNotEmpty)
+          'deviceName': deviceName,
+        if (includeSteamCache) 'steamCache': await exportSteamCache(),
+        'games': serialized,
+        'tombstones': records
+            .where((record) => (record['deletedAt'] as int) > 0)
             .toList(growable: false),
-      });
-    }
-
-    final steamCache = await exportSteamCacheSnapshotForSync();
-    return {
-      'mode': 'delta',
-      'fullDataset': isFullDataset,
-      'syncRevisionId': syncRevisionId,
-      'localRevision': localRevision,
-      'dbTimestampMillis': await db.getSyncDbTimestampMillis(),
-      'baseRevision': baseRevision,
-      'baseSyncAt': baseSyncAtMillis,
-      if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName,
-      'steamCache': steamCache,
-      'games': gamesJson,
-      'tombstones': tombstones,
-    };
+      };
+    });
   }
 
-  // -------------------------------------------------------------------------
-  // Apply
-  // -------------------------------------------------------------------------
+  static bool _modern(Map<String, dynamic> data) =>
+      (data['syncId'] as String? ?? '').isNotEmpty &&
+      (data['changeClock'] as num? ?? 0) > 0 &&
+      (data['changeOrigin'] as String? ?? '').isNotEmpty;
 
-  /// Apply an incoming list of game records to the local database using a
-  /// last-write-wins strategy with conflict detection.
-  ///
-  /// A *conflict* occurs when both sides modified the same game after
-  /// [lastSyncAt].  Conflicting games are kept as-is locally rather than being
-  /// silently overwritten.
-  ///
-  /// Uses a two-pass batch approach:
-  /// 1. Classify — parse all incoming games and compare against local state.
-  /// 2. Execute — batch-insert, batch-update, and batch-set tags in bulk.
-  Future<SyncImportResult> applyPayload(
-    List<Map<String, dynamic>> gamesJson, {
-    DateTime? lastSyncAt,
-  }) async {
-    final db = ref.read(databaseProvider);
-    if (db == null) {
-      return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
-    }
+  static String _legacyIdentity(Map<String, dynamic> data) {
+    final key = base64Url.encode(utf8.encode(data['gameKey'] as String? ?? ''));
+    final added = DateTime.tryParse(
+      data['dateAdded'] as String? ?? '',
+    )?.millisecondsSinceEpoch;
+    return 'legacy-wire:${data['id']}:$key:${added == null ? 0 : added ~/ 1000}';
+  }
 
-    // ── Phase 1: Pre-cache existing state (3 queries total) ──────────────
-    final allExisting = await db.getAllGames();
-    final existingById = <int, GameEntry>{
-      for (final g in allExisting) g.id: g,
-    };
-    final existingTagsMap = allExisting.isEmpty
-        ? <int, List<TagEntry>>{}
-        : await db.getTagsForGames(
-            allExisting.map((g) => g.id).toList(growable: false),
-          );
-
-    // ── Phase 2: Parse & classify every incoming game ────────────────────
-    // Intermediate structs for the classify pass (no DB I/O).
-    final inserts = <_IncomingGame>[];
-    final updates = <_IncomingGame>[];
-    var conflicts = 0;
-
-    // Collect all unique tag specs from ALL games first, so we can
-    // resolve them in a single batch later.
-    final allTagSpecs = <({String name, String color, bool isSteamTag})>[];
-
-    for (final data in gamesJson) {
-      final incomingId = (data['id'] as num?)?.toInt();
-      final gameKey = (data['gameKey'] as String?)?.trim() ?? '';
-      if (incomingId == null && gameKey.isEmpty) continue;
-
-      final title = (data['title'] as String?) ?? '';
-      final platform = (data['platform'] as String?) ?? 'Steam';
-      final dateAdded = DateTime.tryParse(data['dateAdded'] as String? ?? '') ??
-          DateTime.now();
-      final updatedAt = DateTime.tryParse(data['updatedAt'] as String? ?? '') ??
-          dateAdded;
-      final notes = (data['notes'] as String?) ?? '';
-      final isUsed = (data['isUsed'] as bool?) ?? false;
-      final hasCoverImage = (data['hasCoverImage'] as bool?) ?? false;
-      final hasDeadline = (data['hasDeadline'] as bool?) ?? false;
-      final deadlineDate =
-          DateTime.tryParse(data['deadlineDate'] as String? ?? '');
-      final isDlc = (data['isDlc'] as bool?) ?? false;
-      final steamAppId = (data['steamAppId'] as String?) ?? '';
-      final developer = (data['developer'] as String?) ?? '';
-      final reviewScore = (data['reviewScore'] as int?) ?? 0;
-      final reviewCount = (data['reviewCount'] as int?) ?? 0;
-      final tagsRaw = (data['tags'] as List<dynamic>?) ?? const [];
-
-      // Collect tag specs for batch resolution.
-      for (final tagRaw in tagsRaw) {
-        if (tagRaw is! Map) continue;
-        final tagMap = Map<String, dynamic>.from(tagRaw);
-        final tagName = (tagMap['name'] as String?)?.trim() ?? '';
-        if (tagName.isEmpty) continue;
-        allTagSpecs.add((
-          name: tagName,
-          color: (tagMap['colorHex'] as String?) ?? '#0078d4',
-          isSteamTag: (tagMap['isSteamTag'] as bool?) ?? false,
-        ));
-      }
-
-      // Resolve cover image (file I/O — must stay per-entry).
-      String? syncedCoverImagePath;
-      final coverImageFile = data['coverImageFile'];
-      if (coverImageFile is Map) {
-        syncedCoverImagePath = await _persistIncomingCoverImage(
-          gameKey: gameKey,
-          payload: Map<String, dynamic>.from(coverImageFile),
-        );
-      }
-      final incomingLegacyCoverPath = (data['coverImage'] as String?) ?? '';
-
-      final resolvedCoverImage = await _resolveTranslatedCoverImagePath(
-        gameKey: gameKey,
-        hasCoverImage: hasCoverImage,
-        syncedCoverImagePath: syncedCoverImagePath,
-        incomingLegacyCoverPath: incomingLegacyCoverPath,
-        existingCoverImagePath:
-            incomingId != null ? existingById[incomingId]?.coverImage ?? '' : '',
-      );
-
-      final game = _IncomingGame(
-        incomingId: incomingId,
-        gameKey: gameKey,
-        title: title,
-        platform: platform,
-        dateAdded: dateAdded,
-        updatedAt: updatedAt,
-        notes: notes,
-        isUsed: isUsed,
-        resolvedCoverImage: resolvedCoverImage,
-        hasDeadline: hasDeadline,
-        deadlineDate: deadlineDate,
-        isDlc: isDlc,
-        steamAppId: steamAppId,
-        developer: developer,
-        reviewScore: reviewScore,
-        reviewCount: reviewCount,
-        tagsRaw: tagsRaw,
-      );
-
-      final existing =
-          incomingId != null ? existingById[incomingId] : null;
-
-      if (existing == null) {
-        inserts.add(game);
-      } else if (_isIdentical(game, existing, existingTagsMap)) {
-        // Identical content — skip DB writes.
-      } else if (updatedAt.isAfter(existing.updatedAt)) {
-        final localEditedSinceLastSync =
-            lastSyncAt != null && existing.updatedAt.isAfter(lastSyncAt);
-        if (localEditedSinceLastSync) {
-          conflicts++;
-        } else {
-          updates.add(game);
-        }
-      } else {
-        // Local is equal or newer — keep it.
-      }
-    }
-
-    // ── Phase 3: Batch-resolve all tags (2 queries total) ────────────────
-    final uniqueTagSpecs = allTagSpecs
-        .fold<Map<String, ({String name, String color, bool isSteamTag})>>(
-          {},
-          (map, spec) => map..putIfAbsent(spec.name.toLowerCase(), () => spec),
-        )
-        .values
-        .toList(growable: false);
-    final tagEntries = await db.batchGetOrCreateTags(uniqueTagSpecs);
-
-    // ── Phase 4: Batch-insert new games ──────────────────────────────────
-    int inserted = 0;
-    final insertGameTagMap = <int, List<int>>{};
-    final insertsWithId = <GamesCompanion>[];
-    final insertsWithoutId = <GamesCompanion>[];
-
-    for (final game in inserts) {
-      final tagIds = _resolveTagIds(game.tagsRaw, tagEntries);
-      final companion = GamesCompanion(
-        id: game.incomingId != null ? Value(game.incomingId!) : const Value.absent(),
-        title: Value(game.title),
-        gameKey: Value(game.gameKey),
-        platform: Value(game.platform),
-        dateAdded: Value(game.dateAdded),
-        updatedAt: Value(game.updatedAt),
-        notes: Value(game.notes),
-        isUsed: Value(game.isUsed),
-        coverImage: Value(game.resolvedCoverImage),
-        hasDeadline: Value(game.hasDeadline),
-        deadlineDate: Value(game.deadlineDate),
-        isDlc: Value(game.isDlc),
-        steamAppId: Value(game.steamAppId),
-        developer: Value(game.developer),
-        reviewScore: Value(game.reviewScore),
-        reviewCount: Value(game.reviewCount),
-      );
-
-      if (game.incomingId != null) {
-        insertsWithId.add(companion);
-      } else {
-        insertsWithoutId.add(companion);
-      }
-
-      // Tag IDs will be set after we know the generated IDs.
-      // For ID-bearing inserts we know the ID already.
-      if (game.incomingId != null) {
-        insertGameTagMap[game.incomingId!] = tagIds;
-        inserted++;
-      }
-    }
-
-    // Batch insert games with known IDs (insertOrReplace).
-    if (insertsWithId.isNotEmpty) {
-      await db.batch((b) {
-        b.insertAll(db.games, insertsWithId, mode: InsertMode.insertOrReplace);
-      });
-    }
-
-    // Insert games without IDs one-by-one (need generated ID for tag map).
-    for (var i = 0; i < insertsWithoutId.length; i++) {
-      final gameId = await db.insertGame(insertsWithoutId[i]);
-      final tagIds = _resolveTagIds(inserts[insertsWithId.length + i].tagsRaw, tagEntries);
-      insertGameTagMap[gameId] = tagIds;
-      inserted++;
-    }
-
-    // Batch set tags for all inserts.
-    if (insertGameTagMap.isNotEmpty) {
-      await db.batchSetTagsForGames(insertGameTagMap);
-    }
-
-    // ── Phase 5: Batch-update existing games ─────────────────────────────
-    int updated = 0;
-    final updateEntries = <GameEntry>[];
-    final updateGameTagMap = <int, List<int>>{};
-
-    for (final game in updates) {
-      final existing = existingById[game.incomingId!]!;
-      updateEntries.add(GameEntry(
-        id: existing.id,
-        title: game.title,
-        gameKey: game.gameKey,
-        platform: game.platform,
-        dateAdded: game.dateAdded,
-        updatedAt: game.updatedAt,
-        notes: game.notes,
-        isUsed: game.isUsed,
-        coverImage: game.resolvedCoverImage,
-        hasDeadline: game.hasDeadline,
-        deadlineDate: game.deadlineDate,
-        isDlc: game.isDlc,
-        steamAppId: game.steamAppId,
-        developer: game.developer,
-        reviewScore: game.reviewScore,
-        reviewCount: game.reviewCount,
-      ));
-      updateGameTagMap[existing.id] = _resolveTagIds(game.tagsRaw, tagEntries);
-      updated++;
-    }
-
-    // Batch update games.
-    if (updateEntries.isNotEmpty) {
-      await db.batchUpdateGames(updateEntries);
-    }
-
-    // Batch set tags for all updates.
-    if (updateGameTagMap.isNotEmpty) {
-      await db.batchSetTagsForGames(updateGameTagMap);
-    }
-
-    // ── Phase 6: Trigger provider refresh and return ─────────────────────
-    final currentDb = ref.read(databaseProvider);
-    if (currentDb != null) {
-      ref.read(databaseNotifierProvider.notifier).setDatabase(currentDb);
-    }
-
-    return SyncImportResult(
-      inserted: inserted,
-      updated: updated,
-      conflicts: conflicts,
+  static int _compareVersions(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final clock = (a['changeClock'] as num).toInt().compareTo(
+      (b['changeClock'] as num).toInt(),
     );
+    return clock != 0
+        ? clock
+        : (a['changeOrigin'] as String).compareTo(b['changeOrigin'] as String);
   }
 
-  /// Check if an incoming game is identical to an existing local game,
-  /// avoiding expensive SHA-256 fingerprinting when possible.
-  static bool _isIdentical(
-    _IncomingGame incoming,
-    GameEntry existing,
-    Map<int, List<TagEntry>> existingTagsMap,
-  ) {
-    if (incoming.title != existing.title) return false;
-    if (incoming.gameKey != existing.gameKey) return false;
-    if (incoming.platform != existing.platform) return false;
-    if (incoming.notes != existing.notes) return false;
-    if (incoming.isUsed != existing.isUsed) return false;
-    if (incoming.resolvedCoverImage != existing.coverImage) return false;
-    if (incoming.hasDeadline != existing.hasDeadline) return false;
-    if (incoming.isDlc != existing.isDlc) return false;
-    if (incoming.steamAppId != existing.steamAppId) return false;
-    if (incoming.developer != existing.developer) return false;
-    if (incoming.reviewScore != existing.reviewScore) return false;
-    if (incoming.reviewCount != existing.reviewCount) return false;
-
-    // Compare deadlines.
-    if (incoming.deadlineDate != existing.deadlineDate) return false;
-
-    // Compare tags as sorted name lists.
-    final incomingTagNames = incoming.tagsRaw
-        .whereType<Map>()
-        .map((t) => (t['name'] as String?)?.trim() ?? '')
-        .where((n) => n.isNotEmpty)
-        .toList()
-      ..sort();
-    final localTags = existingTagsMap[existing.id] ?? const <TagEntry>[];
-    final localTagNames = localTags.map((t) => t.name).toList()..sort();
-    if (incomingTagNames.length != localTagNames.length) return false;
-    for (var i = 0; i < incomingTagNames.length; i++) {
-      if (incomingTagNames[i] != localTagNames[i]) return false;
+  Future<Map<String, TagEntry>> _mergeIncomingTags(
+    AppDatabase db,
+    List<Map<String, dynamic>> games,
+  ) async {
+    final candidates = <String, Map<String, dynamic>>{};
+    for (final game in games) {
+      for (final raw
+          in (game['tags'] as List<dynamic>? ?? []).whereType<Map>()) {
+        final name = (raw['name'] as String? ?? '').trim();
+        if (name.isEmpty) continue;
+        final spec = <String, dynamic>{
+          'name': name,
+          'colorHex': raw['colorHex'] as String? ?? '#0078d4',
+          'isSteamTag': raw['isSteamTag'] as bool? ?? false,
+          'changeClock': raw['changeClock'] ?? game['changeClock'] ?? 1,
+          'changeOrigin':
+              raw['changeOrigin'] ?? game['changeOrigin'] ?? 'legacy',
+        };
+        final previous = candidates[name.toLowerCase()];
+        if (previous == null ||
+            _compareVersions(spec, previous) > 0 ||
+            _compareVersions(spec, previous) == 0 &&
+                jsonEncode([
+                      spec['name'],
+                      spec['colorHex'],
+                      spec['isSteamTag'],
+                    ]).compareTo(
+                      jsonEncode([
+                        previous['name'],
+                        previous['colorHex'],
+                        previous['isSteamTag'],
+                      ]),
+                    ) >
+                    0) {
+          candidates[name.toLowerCase()] = spec;
+        }
+      }
     }
-
-    return true;
-  }
-
-  /// Resolve tag names from raw JSON to tag IDs using pre-resolved map.
-  static List<int> _resolveTagIds(
-    List<dynamic> tagsRaw,
-    Map<String, TagEntry> tagEntries,
-  ) {
-    final ids = <int>[];
-    for (final tagRaw in tagsRaw) {
-      if (tagRaw is! Map) continue;
-      final tagMap = Map<String, dynamic>.from(tagRaw);
-      final name = (tagMap['name'] as String?)?.trim() ?? '';
-      if (name.isEmpty) continue;
-      final entry = tagEntries[name.toLowerCase()];
-      if (entry != null) ids.add(entry.id);
+    if (candidates.isEmpty) return {};
+    final existing = {
+      for (final tag in await db.getAllTags()) tag.name.toLowerCase(): tag,
+    };
+    final versions = await db.getSyncTagVersions();
+    final gameVersions = await db.getSyncRecords(
+      attachedTagIds: [
+        for (final name in candidates.keys)
+          if (existing[name] != null) existing[name]!.id,
+      ],
+    );
+    final resolved = await db.batchGetOrCreateTags(
+      candidates.values
+          .map(
+            (spec) => (
+              name: spec['name'] as String,
+              color: spec['colorHex'] as String,
+              isSteamTag: spec['isSteamTag'] as bool,
+            ),
+          )
+          .toList(),
+    );
+    var touched = false;
+    for (final entry in candidates.entries) {
+      final local = existing[entry.key];
+      final candidate = entry.value;
+      final version = local == null ? null : versions[local.id];
+      if (version != null) {
+        final compared = _compareVersions(candidate, version);
+        if (compared < 0) continue;
+        if (compared == 0 &&
+            jsonEncode([
+                  candidate['name'],
+                  candidate['colorHex'],
+                  candidate['isSteamTag'],
+                ]).compareTo(
+                  jsonEncode([local!.name, local.color, local.isSteamTag]),
+                ) <=
+                0) {
+          continue;
+        }
+      }
+      var tag = resolved[entry.key]!;
+      final updated = tag.copyWith(
+        name: candidate['name'] as String,
+        color: candidate['colorHex'] as String,
+        isSteamTag: candidate['isSteamTag'] as bool,
+      );
+      if (updated != tag) {
+        await db.updateTag(updated);
+        tag = updated;
+      }
+      await db.acceptRemoteTagVersion(
+        tag.id,
+        (candidate['changeClock'] as num).toInt(),
+        candidate['changeOrigin'] as String,
+      );
+      resolved[entry.key] = tag;
+      touched = true;
     }
-    return ids;
+    if (touched) await db.restoreSyncRecordVersions(gameVersions);
+    return resolved;
   }
 
+  /// Modern records converge by stable identity and deterministic logical
+  /// versions. Received changes retain their version when relayed to a third
+  /// device. Legacy peers still use their timestamp/conflict rules.
   Future<SyncImportResult> applyDeltaPayload(
     List<Map<String, dynamic>> gamesJson, {
     List<Map<String, dynamic>> tombstones = const [],
     DateTime? lastSyncAt,
   }) async {
-    final db = ref.read(databaseProvider);
+    final db = getDatabase();
     if (db == null) {
       return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
     }
-
-    int deleted = 0;
-    int conflicts = 0;
-
-    // ── Phase 1: Classify tombstones ────────────────────────────────────
-    if (tombstones.isNotEmpty) {
-      final allExisting = await db.getAllGames();
-      final existingById = <int, GameEntry>{
-        for (final g in allExisting) g.id: g,
+    return db.transaction(() async {
+      final tagEntries = await _mergeIncomingTags(db, gamesJson);
+      final records = await db.getSyncRecords();
+      final recordsBySync = {
+        for (final record in records) record['syncId'] as String: record,
       };
-
-      final deletableIds = <int>[];
+      final targetIds = <int>{
+        for (final record in [...gamesJson, ...tombstones])
+          if (record['id'] is num) (record['id'] as num).toInt(),
+        for (final record in [...gamesJson, ...tombstones])
+          if (recordsBySync[record['syncId']]?['id'] is int)
+            recordsBySync[record['syncId']]!['id'] as int,
+        for (final record in gamesJson)
+          if (!_modern(record) &&
+              recordsBySync[_legacyIdentity(record)]?['id'] is int)
+            recordsBySync[_legacyIdentity(record)]!['id'] as int,
+      };
+      final games = await db.getGamesByIds(targetIds);
+      final gamesById = {for (final game in games) game.id: game};
+      final tagsById = await db.getTagsForGames(
+        games.map((game) => game.id).toList(),
+      );
+      var deleted = 0;
+      var inserted = 0;
+      var updated = 0;
+      var conflicts = 0;
+      var nextLocalId = await db.getNextGameIdForSync();
+      final inserts = <GamesCompanion>[];
+      final updates = <GameEntry>[];
+      final tagsToSet = <int, List<int>>{};
+      final remoteRecords = <Map<String, dynamic>>[];
 
       for (final tombstone in tombstones) {
-        final tombstoneId = (tombstone['id'] as num?)?.toInt();
-        if (tombstoneId == null || tombstoneId <= 0) continue;
-
-        final deletedAtMillis =
-            (tombstone['deletedAt'] as num?)?.toInt() ?? 0;
-        final deletedAt = deletedAtMillis <= 0
-            ? DateTime.fromMillisecondsSinceEpoch(0)
-            : DateTime.fromMillisecondsSinceEpoch(deletedAtMillis);
-        final existing = existingById[tombstoneId];
-        if (existing == null) {
-          // Already gone locally — count as deleted.
-          deletableIds.add(tombstoneId);
-          deleted++;
-          continue;
+        final modern = _modern(tombstone);
+        final incomingId = (tombstone['id'] as num?)?.toInt();
+        final syncId = tombstone['syncId'] as String?;
+        final localRecord = modern ? recordsBySync[syncId] : null;
+        var localId = modern
+            ? (localRecord?['deletedAt'] == 0
+                  ? (localRecord?['id'] as int?)
+                  : null)
+            : incomingId;
+        final key = tombstone['gameKey'] as String? ?? '';
+        // Version-8 tombstones have no creation date with which to recover
+        // their bootstrap identity. Restrict fallback matching to those.
+        if (localId == null &&
+            (syncId?.startsWith('legacy-delete:') ?? false)) {
+          final candidate = gamesById[incomingId];
+          final candidateRecords = records.where(
+            (record) => record['id'] == incomingId && record['deletedAt'] == 0,
+          );
+          if (candidate != null &&
+              candidate.gameKey == key &&
+              candidateRecords.isNotEmpty &&
+              (candidateRecords.first['syncId'] as String).startsWith(
+                'legacy:',
+              ) &&
+              _compareVersions(tombstone, candidateRecords.first) >= 0) {
+            localId = candidate.id;
+          }
         }
-
-        if (existing.updatedAt.isAfter(deletedAt)) {
-          // Local copy is newer — conflict, keep local.
+        final local = gamesById[localId];
+        final deletedAt = (tombstone['deletedAt'] as num?)?.toInt() ?? 0;
+        if (modern && localRecord != null) {
+          final compared = _compareVersions(tombstone, localRecord);
+          if (compared < 0 || compared == 0 && localRecord['deletedAt'] != 0) {
+            continue;
+          }
+        }
+        if (!modern && (incomingId == null || incomingId <= 0)) continue;
+        if (!modern &&
+            local != null &&
+            local.updatedAt.millisecondsSinceEpoch > deletedAt) {
           conflicts++;
           continue;
         }
-
-        deletableIds.add(tombstoneId);
-        deleted++;
+        if (!modern &&
+            local != null &&
+            key.isNotEmpty &&
+            local.gameKey != key) {
+          continue;
+        }
+        if (local != null) {
+          await db.batchDeleteGameTags([local.id]);
+          await (db.delete(
+            db.games,
+          )..where((game) => game.id.equals(local.id))).go();
+          gamesById.remove(local.id);
+          deleted++;
+        }
+        if (modern) {
+          await db.acceptRemoteSyncRecord(
+            syncId: syncId!,
+            localGameId: localId,
+            gameKey: key,
+            changeClock: (tombstone['changeClock'] as num).toInt(),
+            changeOrigin: tombstone['changeOrigin'] as String,
+            deletedAt: deletedAt > 0 ? deletedAt : 1,
+          );
+          recordsBySync[syncId] = {
+            ...tombstone,
+            'id': localId,
+            'deletedAt': deletedAt > 0 ? deletedAt : 1,
+          };
+        } else if (local != null) {
+          await db.recordGameDeletionTombstones(
+            [local.id],
+            gameKeysById: {local.id: local.gameKey},
+            deletedAtMillis: deletedAt,
+          );
+        }
       }
 
-      // ── Phase 2: Batch-delete tombstoned games ──────────────────────
-      if (deletableIds.isNotEmpty) {
-        await db.transaction(() async {
-          await db.batchDeleteGameTags(deletableIds);
-          await (db.delete(db.games)
-                ..where((g) => g.id.isIn(deletableIds)))
-              .go();
-        });
+      // Highest version wins within a packet too, regardless of record order.
+      final incomingByIdentity = <String, Map<String, dynamic>>{};
+      for (final data in gamesJson) {
+        final identity = _modern(data)
+            ? data['syncId'] as String
+            : 'wire:${data['id']}:${data['gameKey']}:${data['dateAdded']}';
+        final previous = incomingByIdentity[identity];
+        if (previous == null ||
+            !_modern(data) ||
+            _compareVersions(data, previous) > 0 ||
+            _compareVersions(data, previous) == 0 &&
+                (await SyncEntryFingerprint.fromPayload(data)).compareTo(
+                      await SyncEntryFingerprint.fromPayload(previous),
+                    ) >
+                    0) {
+          incomingByIdentity[identity] = data;
+        }
       }
-    }
-
-    // ── Phase 3: Batch-apply upserts ──────────────────────────────────
-    final upsertResult = await applyPayload(gamesJson, lastSyncAt: lastSyncAt);
-
-    // When this device receives only upserts (no tombstones), the local
-    // revision must still advance so other trusted peers can detect that this
-    // database changed and pull the propagated updates.
-    if (tombstones.isEmpty &&
-        (upsertResult.inserted > 0 || upsertResult.updated > 0)) {
-      await db.markLocalDataChanged();
-    }
-
-    return SyncImportResult(
-      inserted: upsertResult.inserted + deleted,
-      updated: upsertResult.updated,
-      conflicts: upsertResult.conflicts + conflicts,
-    );
+      for (final rawData in incomingByIdentity.values) {
+        // A tag is shared by several games. Use its independently resolved
+        // metadata when comparing records, so an older colour cannot force
+        // repeated repair of an otherwise identical game.
+        final data = {
+          ...rawData,
+          'tags': [
+            for (final tag
+                in (rawData['tags'] as List<dynamic>? ?? []).whereType<Map>())
+              if (tagEntries[(tag['name'] as String? ?? '')
+                      .trim()
+                      .toLowerCase()]
+                  case final TagEntry localTag)
+                {
+                  'name': localTag.name,
+                  'colorHex': localTag.color,
+                  'isSteamTag': localTag.isSteamTag,
+                },
+          ],
+        };
+        final incomingId = (data['id'] as num?)?.toInt();
+        final key = (data['gameKey'] as String? ?? '').trim();
+        if (key.isEmpty) continue;
+        final modern = _modern(data);
+        final syncId = data['syncId'] as String?;
+        var localRecord = modern ? recordsBySync[syncId] : null;
+        GameEntry? existing;
+        if (modern) {
+          if (localRecord != null && localRecord['deletedAt'] == 0) {
+            existing = gamesById[localRecord['id']];
+          }
+          if (localRecord == null && (syncId?.startsWith('legacy:') ?? false)) {
+            final candidate = gamesById[incomingId];
+            final created = DateTime.tryParse(
+              data['dateAdded'] as String? ?? '',
+            );
+            if (candidate != null &&
+                candidate.gameKey == key &&
+                created != null &&
+                candidate.dateAdded.millisecondsSinceEpoch ~/ 1000 ==
+                    created.millisecondsSinceEpoch ~/ 1000) {
+              existing = candidate;
+              localRecord = records.firstWhere(
+                (record) =>
+                    record['id'] == candidate.id && record['deletedAt'] == 0,
+              );
+            }
+          }
+          if (localRecord != null && _compareVersions(data, localRecord) < 0) {
+            continue;
+          }
+        } else {
+          localRecord = recordsBySync[_legacyIdentity(data)];
+          final candidate = gamesById[incomingId];
+          if (candidate != null && candidate.gameKey == key) {
+            existing = candidate;
+          }
+          existing ??= gamesById[recordsBySync[_legacyIdentity(data)]?['id']];
+        }
+        final dateAdded =
+            DateTime.tryParse(data['dateAdded'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final changedAt =
+            DateTime.tryParse(data['updatedAt'] as String? ?? '') ?? dateAdded;
+        if (!modern &&
+            localRecord != null &&
+            (localRecord['deletedAt'] as int? ?? 0) > 0 &&
+            changedAt.millisecondsSinceEpoch <=
+                (localRecord['deletedAt'] as int)) {
+          continue;
+        }
+        final incomingHash = await SyncEntryFingerprint.fromPayload(data);
+        final localHash = existing == null
+            ? null
+            : await SyncEntryFingerprint.fromGameEntry(
+                existing,
+                tagsById[existing.id] ?? [],
+              );
+        final sameContent = incomingHash == localHash;
+        if (modern &&
+            localRecord != null &&
+            _compareVersions(data, localRecord) == 0) {
+          if (sameContent ||
+              localHash != null && incomingHash.compareTo(localHash) <= 0) {
+            continue;
+          }
+          if (localRecord['deletedAt'] != 0) continue;
+        }
+        if (!modern && existing != null) {
+          // Legacy packets may format timestamps differently and historically
+          // omitted content metadata; keep their last-write-wins semantics.
+          if (sameContent) continue;
+          if (!changedAt.isAfter(existing.updatedAt)) continue;
+          if (lastSyncAt != null && existing.updatedAt.isAfter(lastSyncAt)) {
+            conflicts++;
+            continue;
+          }
+        }
+        if (modern &&
+            existing != null &&
+            !sameContent &&
+            localRecord != null &&
+            data['changeClock'] == localRecord['changeClock'] &&
+            data['changeOrigin'] != localRecord['changeOrigin']) {
+          conflicts++;
+        }
+        var localId = existing?.id;
+        if (!sameContent) {
+          if (localId == null) {
+            localId =
+                incomingId != null &&
+                    incomingId > 0 &&
+                    !gamesById.containsKey(incomingId)
+                ? incomingId
+                : nextLocalId;
+            if (localId >= nextLocalId) nextLocalId = localId + 1;
+          }
+          String? persistedCover;
+          if (data['coverImageFile'] is Map) {
+            persistedCover = await _persistIncomingCoverImage(
+              gameKey: key,
+              payload: Map<String, dynamic>.from(data['coverImageFile'] as Map),
+            );
+          }
+          final cover = await _resolveTranslatedCoverImagePath(
+            gameKey: key,
+            hasCoverImage:
+                data['hasCoverImage'] as bool? ??
+                (data['coverImage'] as String? ?? '').isNotEmpty,
+            syncedCoverImagePath: persistedCover,
+            incomingLegacyCoverPath: data['coverImage'] as String? ?? '',
+            existingCoverImagePath: existing?.coverImage ?? '',
+          );
+          final companion = GamesCompanion(
+            id: Value(localId),
+            title: Value(data['title'] as String? ?? ''),
+            gameKey: Value(key),
+            platform: Value(data['platform'] as String? ?? 'Steam'),
+            dateAdded: Value(dateAdded),
+            updatedAt: Value(changedAt),
+            notes: Value(data['notes'] as String? ?? ''),
+            isUsed: Value(data['isUsed'] as bool? ?? false),
+            coverImage: Value(cover),
+            hasDeadline: Value(data['hasDeadline'] as bool? ?? false),
+            deadlineDate: Value(
+              DateTime.tryParse(data['deadlineDate'] as String? ?? ''),
+            ),
+            isDlc: Value(data['isDlc'] as bool? ?? false),
+            steamAppId: Value(data['steamAppId'] as String? ?? ''),
+            developer: Value(data['developer'] as String? ?? ''),
+            reviewScore: Value((data['reviewScore'] as num?)?.toInt() ?? 0),
+            reviewCount: Value((data['reviewCount'] as num?)?.toInt() ?? 0),
+          );
+          if (existing == null) {
+            inserts.add(companion);
+            inserted++;
+          } else {
+            updates.add(_entryFromCompanion(companion));
+            updated++;
+          }
+          final rawTags = (data['tags'] as List<dynamic>? ?? [])
+              .whereType<Map>()
+              .toList();
+          final resolvedTags = <TagEntry>[
+            for (final tag in rawTags)
+              if (tagEntries[(tag['name'] as String? ?? '')
+                      .trim()
+                      .toLowerCase()]
+                  case final TagEntry entry)
+                entry,
+          ];
+          tagsToSet[localId] = resolvedTags
+              .map((tag) => tag.id)
+              .toSet()
+              .toList();
+          gamesById[localId] = _entryFromCompanion(companion);
+          tagsById[localId] = resolvedTags;
+        }
+        if (modern && localId != null) {
+          remoteRecords.add({...data, 'id': localId, 'deletedAt': 0});
+          recordsBySync[syncId!] = {...data, 'id': localId, 'deletedAt': 0};
+        } else if (!modern && existing == null && localId != null) {
+          final legacyId = _legacyIdentity(data);
+          final record = <String, dynamic>{
+            'syncId': legacyId,
+            'id': localId,
+            'gameKey': key,
+            'changeClock': changedAt.millisecondsSinceEpoch > 0
+                ? changedAt.millisecondsSinceEpoch
+                : 1,
+            'changeOrigin': 'legacy-wire',
+            'deletedAt': 0,
+          };
+          remoteRecords.add(record);
+          recordsBySync[legacyId] = record;
+        }
+      }
+      if (inserts.isNotEmpty) {
+        await db.batch((batch) => batch.insertAll(db.games, inserts));
+      }
+      await db.batchUpdateGames(updates);
+      await db.batchSetTagsForGames(tagsToSet);
+      await db.acceptRemoteSyncRecords(remoteRecords);
+      return SyncImportResult(
+        inserted: inserted,
+        deleted: deleted,
+        updated: updated,
+        conflicts: conflicts,
+      );
+    });
   }
+
+  static GameEntry _entryFromCompanion(GamesCompanion game) => GameEntry(
+    id: game.id.value,
+    title: game.title.value,
+    gameKey: game.gameKey.value,
+    platform: game.platform.value,
+    dateAdded: game.dateAdded.value,
+    updatedAt: game.updatedAt.value,
+    notes: game.notes.value,
+    isUsed: game.isUsed.value,
+    coverImage: game.coverImage.value,
+    hasDeadline: game.hasDeadline.value,
+    deadlineDate: game.deadlineDate.value,
+    isDlc: game.isDlc.value,
+    steamAppId: game.steamAppId.value,
+    developer: game.developer.value,
+    reviewScore: game.reviewScore.value,
+    reviewCount: game.reviewCount.value,
+  );
 
   // -------------------------------------------------------------------------
   // Cover image serialisation helpers
@@ -552,10 +763,7 @@ class SyncPayloadCodec {
     final fileName = sourceName.isNotEmpty
         ? sourceName
         : '${safeKey.isEmpty ? 'cover' : safeKey}${ext.isEmpty ? '.img' : ext}';
-    return {
-      'fileName': fileName,
-      'bytesBase64': base64Encode(bytes),
-    };
+    return {'fileName': fileName, 'bytesBase64': base64Encode(bytes)};
   }
 
   Future<String?> _persistIncomingCoverImage({
@@ -575,12 +783,11 @@ class SyncPayloadCodec {
 
     final imagesDir = await _resolveManagedImagesDirectory();
     final incomingName = (payload['fileName'] as String?)?.trim() ?? '';
-    final fallbackName =
-        '${gameKey.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')}_${DateTime.now().millisecondsSinceEpoch}.img';
+    final ext = p.extension(p.basename(incomingName));
     final safeName =
-        p.basename(incomingName.isEmpty ? fallbackName : incomingName);
+        '${await SyncEntryFingerprint.hashBytes(bytes)}${ext.isEmpty ? '.img' : ext}';
     final target = File(p.join(imagesDir.path, safeName));
-    await target.writeAsBytes(bytes, flush: true);
+    if (!await target.exists()) await target.writeAsBytes(bytes, flush: true);
     return target.path;
   }
 
@@ -593,7 +800,8 @@ class SyncPayloadCodec {
   }) async {
     if (!hasCoverImage) return '';
 
-    if (syncedCoverImagePath != null && syncedCoverImagePath.trim().isNotEmpty) {
+    if (syncedCoverImagePath != null &&
+        syncedCoverImagePath.trim().isNotEmpty) {
       return syncedCoverImagePath.trim();
     }
 
@@ -619,7 +827,7 @@ class SyncPayloadCodec {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
     if (raw.startsWith('assets/')) return raw;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return '';
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
 
     final sourceFile = _fileFromRawPath(raw);
     if (sourceFile != null && await sourceFile.exists()) {
@@ -639,7 +847,9 @@ class SyncPayloadCodec {
     }
     if (_looksLikePathForCurrentPlatform(raw)) return File(raw);
     // Legacy support for cross-platform paths (basename extraction only).
-    if (_windowsPathPattern.hasMatch(raw) || raw.startsWith('/')) return File(raw);
+    if (_windowsPathPattern.hasMatch(raw) || raw.startsWith('/')) {
+      return File(raw);
+    }
     return null;
   }
 
@@ -653,8 +863,9 @@ class SyncPayloadCodec {
 
   Future<File?> _findManagedImageByName(String rawPath) async {
     final uri = Uri.tryParse(rawPath);
-    final sourcePath =
-        (uri != null && uri.scheme.toLowerCase() == 'file') ? uri.path : rawPath;
+    final sourcePath = (uri != null && uri.scheme.toLowerCase() == 'file')
+        ? uri.path
+        : rawPath;
     final fileName = p.basename(sourcePath);
     if (fileName.trim().isEmpty) return null;
 
@@ -683,15 +894,15 @@ class SyncPayloadCodec {
     }
 
     final ext = p.extension(sourceFile.path);
-    final safeKey = gameKey.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-    final fallback =
-        'cover_${DateTime.now().millisecondsSinceEpoch}${ext.isEmpty ? '.img' : ext}';
-    final fileName = safeKey.isEmpty
-        ? fallback
-        : '$safeKey${ext.isEmpty ? '.img' : ext}';
+    final digest = await SyncEntryFingerprint.hashBytes(
+      await sourceFile.readAsBytes(),
+    );
+    final fileName = '$digest${ext.isEmpty ? '.img' : ext}';
 
     final target = File(p.join(syncDir.path, fileName));
-    await sourceFile.copy(target.path);
+    if (!await target.exists()) {
+      await sourceFile.copy(target.path);
+    }
     return target.path;
   }
 
@@ -708,46 +919,4 @@ class SyncPayloadCodec {
     if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
     return imagesDir;
   }
-}
-
-/// Intermediate struct for an incoming game during the classify pass.
-/// Avoids repeated JSON field extraction inside loops.
-class _IncomingGame {
-  const _IncomingGame({
-    required this.incomingId,
-    required this.gameKey,
-    required this.title,
-    required this.platform,
-    required this.dateAdded,
-    required this.updatedAt,
-    required this.notes,
-    required this.isUsed,
-    required this.resolvedCoverImage,
-    required this.hasDeadline,
-    required this.deadlineDate,
-    required this.isDlc,
-    required this.steamAppId,
-    required this.developer,
-    required this.reviewScore,
-    required this.reviewCount,
-    required this.tagsRaw,
-  });
-
-  final int? incomingId;
-  final String gameKey;
-  final String title;
-  final String platform;
-  final DateTime dateAdded;
-  final DateTime updatedAt;
-  final String notes;
-  final bool isUsed;
-  final String resolvedCoverImage;
-  final bool hasDeadline;
-  final DateTime? deadlineDate;
-  final bool isDlc;
-  final String steamAppId;
-  final String developer;
-  final int reviewScore;
-  final int reviewCount;
-  final List<dynamic> tagsRaw;
 }

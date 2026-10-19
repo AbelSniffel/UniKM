@@ -9,8 +9,8 @@
 /// one [AnimationController] that lives on [_TagListState] — zero per-chip
 /// controllers means zero overhead during normal redraws.
 ///
-/// Replaces [FlowTagSelector] and all manual SingleChildScrollView+Wrap
-/// patterns across the app with a single optimized widget.
+/// Consolidates tag display and selection patterns across the app in a single
+/// optimized widget.
 library;
 
 import 'dart:async';
@@ -24,7 +24,7 @@ import 'app_search_field.dart';
 import 'app_tag_chip.dart';
 import 'app_progress_indicator.dart';
 
-/// A performant, reusable tag list that supports search, selection, deletion,
+/// A performant, reusable tag list that supports search, selection,
 /// scrolling, and virtualized rendering for large tag collections.
 class TagList extends StatefulWidget {
   const TagList({
@@ -34,7 +34,6 @@ class TagList extends StatefulWidget {
     this.selectedTagIds,
     this.allSelected = false,
     this.onTagToggled,
-    this.onTagDeleted,
     this.showSearch = false,
     this.maxHeight,
     this.scrollable = false,
@@ -54,10 +53,6 @@ class TagList extends StatefulWidget {
 
   /// Called when a tag chip is tapped. Receives the tag ID.
   final ValueChanged<int>? onTagToggled;
-
-  /// Called when the delete button on a tag chip is tapped. Receives the tag ID.
-  /// When non-null, each chip shows a delete icon.
-  final ValueChanged<int>? onTagDeleted;
 
   /// Whether to show a search field above the tag list.
   /// When true, the widget must be placed inside a parent with bounded height
@@ -284,9 +279,6 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
       isSelected: _isSelected(tag),
       onTap: widget.onTagToggled != null
           ? () => widget.onTagToggled!(tag.id)
-          : null,
-      onDelete: widget.onTagDeleted != null
-          ? () => widget.onTagDeleted!(tag.id)
           : null,
     );
   }

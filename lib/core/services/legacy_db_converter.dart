@@ -16,47 +16,37 @@ class LegacyDbConversionResult {
   final List<String> actions;
 }
 
-class PreparedImportDatabase {
-  const PreparedImportDatabase({
-    required this.preparedPath,
-    required this.conversion,
-    required this.sourceWasCopied,
-  });
+// One source for required columns, SQL defaults, and NULL repair. Keep the
+// insertion order so conversion reports remain stable for existing databases.
+const _layoutColumns = <String, Map<String, (String, String?)>>{
+  'games': {
+    'platform': ('TEXT', "'Steam'"),
+    'notes': ('TEXT', "''"),
+    'is_used': ('INTEGER', '0'),
+    'cover_image': ('TEXT', "''"),
+    'has_deadline': ('INTEGER', '0'),
+    'deadline_date': ('INTEGER', null),
+    'is_dlc': ('INTEGER', '0'),
+    'steam_app_id': ('TEXT', "''"),
+    'review_score': ('INTEGER', '0'),
+    'review_count': ('INTEGER', '0'),
+    'date_added': ('INTEGER', '0'),
+    'updated_at': ('INTEGER', '0'),
+  },
+  'tags': {
+    'color': ('TEXT', "'#0078d4'"),
+    'is_steam_tag': ('INTEGER', '0'),
+  },
+};
 
-  final String preparedPath;
-  final LegacyDbConversionResult conversion;
-  final bool sourceWasCopied;
-
-  Future<void> dispose() async {
-    if (!sourceWasCopied) return;
-
-    final file = File(preparedPath);
-    final dir = file.parent;
-    try {
-      if (dir.existsSync()) {
-        await dir.delete(recursive: true);
-      }
-    } catch (_) {}
-  }
-}
-
-Future<PreparedImportDatabase> prepareDatabaseForImport(String sourceDbPath) async {
-  final sourceFile = File(sourceDbPath);
-  if (!sourceFile.existsSync()) {
-    throw ArgumentError('Source database file does not exist: $sourceDbPath');
-  }
-
-  final tempDir = await Directory.systemTemp.createTemp('UniKM_import_');
-  final preparedPath = '${tempDir.path}${Platform.pathSeparator}prepared_import.db';
-  await sourceFile.copy(preparedPath);
-
-  final conversion = await convertLegacyDbToCurrentLayoutIfNeeded(preparedPath);
-  return PreparedImportDatabase(
-    preparedPath: preparedPath,
-    conversion: conversion,
-    sourceWasCopied: true,
-  );
-}
+final _nullDefaults = {
+  for (final table in _layoutColumns.entries)
+    table.key: {
+      if (table.key == 'tags') 'name': "''",
+      for (final column in table.value.entries)
+        if (column.value.$2 case final String value) column.key: value,
+    },
+};
 
 Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
   String dbPath,
@@ -87,20 +77,8 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
       !_tableExists(db, 'tags') ||
       !_tableExists(db, 'game_tags') ||
       !_tableExists(db, 'backups') ||
-      !gameColumns.contains('platform') ||
-      !gameColumns.contains('notes') ||
-      !gameColumns.contains('is_used') ||
-      !gameColumns.contains('cover_image') ||
-      !gameColumns.contains('has_deadline') ||
-      !gameColumns.contains('deadline_date') ||
-      !gameColumns.contains('is_dlc') ||
-      !gameColumns.contains('steam_app_id') ||
-      !gameColumns.contains('review_score') ||
-      !gameColumns.contains('review_count') ||
-      !gameColumns.contains('date_added') ||
-      !gameColumns.contains('updated_at') ||
-      !tagColumns.contains('color') ||
-      !tagColumns.contains('is_steam_tag');
+      !gameColumns.containsAll(_layoutColumns['games']!.keys) ||
+      !tagColumns.containsAll(_layoutColumns['tags']!.keys);
 
     final hasPendingLegacyData =
       _hasPendingPlatformMigration(db, gameColumns) ||
@@ -112,21 +90,11 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
       _hasPendingReviewCountMigration(db, gameColumns) ||
       _hasPendingBuiltinTagMigration(db, tagColumns);
 
-    final needsNullSanitization =
-      _hasNullValues(db, 'games', 'platform') ||
-      _hasNullValues(db, 'games', 'notes') ||
-      _hasNullValues(db, 'games', 'is_used') ||
-      _hasNullValues(db, 'games', 'cover_image') ||
-      _hasNullValues(db, 'games', 'has_deadline') ||
-      _hasNullValues(db, 'games', 'is_dlc') ||
-      _hasNullValues(db, 'games', 'steam_app_id') ||
-      _hasNullValues(db, 'games', 'review_score') ||
-      _hasNullValues(db, 'games', 'review_count') ||
-      _hasNullValues(db, 'games', 'date_added') ||
-      _hasNullValues(db, 'games', 'updated_at') ||
-      _hasNullValues(db, 'tags', 'name') ||
-      _hasNullValues(db, 'tags', 'color') ||
-      _hasNullValues(db, 'tags', 'is_steam_tag');
+    final needsNullSanitization = _nullDefaults.entries.any(
+      (table) => table.value.keys.any(
+        (column) => _hasNullValues(db, table.key, column),
+      ),
+    );
 
     final needsTimestampNormalization =
         _hasTextTimestampValues(db, 'games', 'date_added') ||
@@ -161,91 +129,24 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         actions.add('Created missing game_tags table');
       }
 
-      if (_ensureColumn(db, 'games', 'platform', "TEXT NOT NULL DEFAULT 'Steam'")) {
-        actions.add('Added games.platform');
-      }
-      if (_ensureColumn(db, 'games', 'notes', "TEXT NOT NULL DEFAULT ''")) {
-        actions.add('Added games.notes');
-      }
-      if (_ensureColumn(db, 'games', 'is_used', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.is_used');
-      }
-      if (_ensureColumn(db, 'games', 'cover_image', "TEXT NOT NULL DEFAULT ''")) {
-        actions.add('Added games.cover_image');
-      }
-      if (_ensureColumn(db, 'games', 'has_deadline', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.has_deadline');
-      }
-      if (_ensureColumn(db, 'games', 'deadline_date', 'INTEGER')) {
-        actions.add('Added games.deadline_date');
-      }
-      if (_ensureColumn(db, 'games', 'is_dlc', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.is_dlc');
-      }
-      if (_ensureColumn(db, 'games', 'steam_app_id', "TEXT NOT NULL DEFAULT ''")) {
-        actions.add('Added games.steam_app_id');
-      }
-      if (_ensureColumn(db, 'games', 'review_score', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.review_score');
-      }
-      if (_ensureColumn(db, 'games', 'review_count', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.review_count');
-      }
-      if (_ensureColumn(db, 'games', 'date_added', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.date_added');
-      }
-      if (_ensureColumn(db, 'games', 'updated_at', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added games.updated_at');
+      for (final table in _layoutColumns.entries) {
+        for (final column in table.value.entries) {
+          final (type, defaultSql) = column.value;
+          final definition = defaultSql == null
+              ? type
+              : '$type NOT NULL DEFAULT $defaultSql';
+          if (_ensureColumn(db, table.key, column.key, definition)) {
+            actions.add('Added ${table.key}.${column.key}');
+          }
+        }
       }
 
-      if (_ensureColumn(db, 'tags', 'color', "TEXT NOT NULL DEFAULT '#0078d4'")) {
-        actions.add('Added tags.color');
-      }
-      if (_ensureColumn(db, 'tags', 'is_steam_tag', 'INTEGER NOT NULL DEFAULT 0')) {
-        actions.add('Added tags.is_steam_tag');
-      }
-
-      if (_setDefaultForNulls(db, 'games', 'platform', "'Steam'")) {
-        actions.add('Filled NULL games.platform with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'notes', "''")) {
-        actions.add('Filled NULL games.notes with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'is_used', '0')) {
-        actions.add('Filled NULL games.is_used with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'cover_image', "''")) {
-        actions.add('Filled NULL games.cover_image with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'has_deadline', '0')) {
-        actions.add('Filled NULL games.has_deadline with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'is_dlc', '0')) {
-        actions.add('Filled NULL games.is_dlc with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'steam_app_id', "''")) {
-        actions.add('Filled NULL games.steam_app_id with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'review_score', '0')) {
-        actions.add('Filled NULL games.review_score with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'review_count', '0')) {
-        actions.add('Filled NULL games.review_count with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'date_added', '0')) {
-        actions.add('Filled NULL games.date_added with default');
-      }
-      if (_setDefaultForNulls(db, 'games', 'updated_at', '0')) {
-        actions.add('Filled NULL games.updated_at with default');
-      }
-      if (_setDefaultForNulls(db, 'tags', 'name', "''")) {
-        actions.add('Filled NULL tags.name with default');
-      }
-      if (_setDefaultForNulls(db, 'tags', 'color', "'#0078d4'")) {
-        actions.add('Filled NULL tags.color with default');
-      }
-      if (_setDefaultForNulls(db, 'tags', 'is_steam_tag', '0')) {
-        actions.add('Filled NULL tags.is_steam_tag with default');
+      for (final table in _nullDefaults.entries) {
+        for (final column in table.value.entries) {
+          if (_setDefaultForNulls(db, table.key, column.key, column.value)) {
+            actions.add('Filled NULL ${table.key}.${column.key} with default');
+          }
+        }
       }
 
       final refreshedGameColumns = _getTableColumns(db, 'games');
