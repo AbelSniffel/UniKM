@@ -1,7 +1,7 @@
 /// Import/Export dialogs for database operations
 library;
 
-import '../widgets/window_drop_target.dart';
+import '../widgets/file_drop_field.dart';
 
 import '../../features/transfer/application/library_import.dart';
 import '../../features/transfer/application/library_export.dart';
@@ -11,7 +11,6 @@ import '../../features/transfer/application/sqlite_import_reader.dart';
 import '../../features/transfer/application/import_image_checkpoint.dart';
 import 'dart:io';
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -30,10 +29,11 @@ import '../../core/services/steamkm1_import.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import 'legacy_conversion_dialog.dart';
-import '../pages/settings_sections/settings_common.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import 'database_unlock_dialog.dart';
 import '../widgets/app_progress_indicator.dart';
-import '../widgets/app_tag_chip.dart';
+import '../widgets/app_action_button.dart';
+import '../widgets/app_radio_list_tile.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
@@ -81,14 +81,11 @@ Future<void> _markImportSyncDirty(WidgetRef ref, AppDatabase db) async {
 }
 
 Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) {
-  return RadioListTile<String>(
+  return AppRadioListTile<String>(
+    theme: theme,
     value: option.value,
-    activeColor: theme.accent,
-    title: Text(option.title, style: TextStyle(color: theme.textPrimary)),
-    subtitle: Text(
-      option.subtitle,
-      style: TextStyle(color: theme.textSecondary),
-    ),
+    title: option.title,
+    subtitle: option.subtitle,
   );
 }
 
@@ -123,16 +120,16 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   bool _includeNotes = true;
   bool _isExporting = false;
 
-  Widget _buildExportOptionChip({
+  Widget _buildExportOptionButton({
     required AppThemeData theme,
     required String label,
     required bool value,
     required VoidCallback onTap,
   }) {
-    return AppOptionChip(
+    return AppActionButton(
       theme: theme,
       label: label,
-      isSelected: value,
+      selected: value,
       onTap: onTap,
     );
   }
@@ -176,34 +173,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     await File(encPath).copy(destinationPath);
   }
 
-  Future<bool> _completeShareIfNeeded(
-    PlatformSaveTarget target, {
-    required String subject,
-  }) async {
-    if (!target.shouldShareAfterWrite) {
-      return true;
-    }
-
-    final shared = await PlatformFileActions.shareFile(
-      target.file,
-      subject: subject,
-    );
-
-    if (shared) {
-      return true;
-    }
-
-    try {
-      if (await target.file.exists()) {
-        await target.file.delete();
-      }
-    } catch (_) {
-      // Best effort cleanup only.
-    }
-
-    return false;
-  }
-
   Future<void> _export() async {
     final ext = _exportFormat;
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -224,65 +193,37 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     setState(() => _isExporting = true);
 
     try {
+      final subject = _exportFormat == 'enc'
+          ? 'UniKM encrypted database export'
+          : 'UniKM database export';
+      final String successMessage;
       if (_exportFormat == 'db') {
         await _exportSqliteBackup(result);
-        final completed = await _completeShareIfNeeded(
-          target,
-          subject: 'UniKM database export',
-        );
-        if (!completed) {
-          return;
-        }
-        NotificationManager.instance.success(
-          'Exported database to ${p.basename(result)}',
-        );
-        if (mounted) Navigator.pop(context);
-        return;
-      }
-
-      if (_exportFormat == 'enc') {
+        successMessage = 'Exported database to ${p.basename(result)}';
+      } else if (_exportFormat == 'enc') {
         await _exportEncryptedDatabase(result);
-        final completed = await _completeShareIfNeeded(
-          target,
-          subject: 'UniKM encrypted database export',
-        );
-        if (!completed) {
-          return;
-        }
-        NotificationManager.instance.success(
-          'Exported encrypted database to ${p.basename(result)}',
-        );
-        if (mounted) Navigator.pop(context);
-        return;
+        successMessage = 'Exported encrypted database to ${p.basename(result)}';
+      } else {
+        final games = ref.read(gamesProvider).games;
+        final tags = ref.read(tagsProvider);
+        final filteredGames = _includeUsed
+            ? games
+            : games.where((game) => !game.isUsed).toList();
+        final exportData = LibraryBackupExporter(
+          includeTags: _includeTags,
+          includeNotes: _includeNotes,
+        ).encode(filteredGames, tags, _exportFormat);
+        await target.file.writeAsString(exportData);
+        successMessage =
+            'Exported ${filteredGames.length} games to ${p.basename(result)}';
       }
 
-      // Get all games
-      final gamesState = ref.read(gamesProvider);
-      final games = gamesState.games;
-      final tags = ref.read(tagsProvider);
-
-      final filteredGames = _includeUsed
-          ? games
-          : games.where((game) => !game.isUsed).toList();
-      final exportData = LibraryBackupExporter(
-        includeTags: _includeTags,
-        includeNotes: _includeNotes,
-      ).encode(filteredGames, tags, _exportFormat);
-
-      // Write file
-      await File(result).writeAsString(exportData);
-
-      final completed = await _completeShareIfNeeded(
+      final completed = await PlatformFileActions.completeExport(
         target,
-        subject: 'UniKM database export',
+        subject: subject,
       );
-      if (!completed) {
-        return;
-      }
-
-      NotificationManager.instance.success(
-        'Exported ${filteredGames.length} games to ${p.basename(result)}',
-      );
+      if (!completed) return;
+      NotificationManager.instance.success(successMessage);
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -354,20 +295,20 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildExportOptionChip(
+                  _buildExportOptionButton(
                     theme: theme,
                     label: 'Used Keys',
                     value: _includeUsed,
                     onTap: () => setState(() => _includeUsed = !_includeUsed),
                   ),
                   if (_exportFormat != 'txt') ...[
-                    _buildExportOptionChip(
+                    _buildExportOptionButton(
                       theme: theme,
                       label: 'Tags',
                       value: _includeTags,
                       onTap: () => setState(() => _includeTags = !_includeTags),
                     ),
-                    _buildExportOptionChip(
+                    _buildExportOptionButton(
                       theme: theme,
                       label: 'Notes',
                       value: _includeNotes,
@@ -475,8 +416,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   int _previewCount = 0;
-  bool _isDragging = false;
-  bool _isHovering = false;
   bool _allowDuplicates = false;
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
@@ -515,7 +454,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   Future<void> _handleSelectedFilePath(String path) async {
     if (_isImporting) return;
     final revision = ++_fileSelectionRevision;
-    setState(() => _isDragging = false);
     final kind = await _classifyImportFile(path);
     if (!mounted || revision != _fileSelectionRevision) return;
     if (kind == _ImportFileKind.unsupported) {
@@ -528,7 +466,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     setState(() {
       _selectedFile = path;
       _previewCount = 0;
-      _isDragging = false;
     });
 
     await _scanFileForCount(File(path), revision);
@@ -540,7 +477,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     setState(() {
       _selectedFile = null;
       _previewCount = 0;
-      _isDragging = false;
     });
   }
 
@@ -1173,7 +1109,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final supportsDragAndDrop = PlatformFileActions.supportsDragAndDrop;
 
     return ThemedAlertDialog(
       theme: theme,
@@ -1196,106 +1131,20 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Focus(
-                  autofocus: false,
-                  child: MouseRegion(
-                    onEnter: (_) => setState(() => _isHovering = true),
-                    onExit: (_) => setState(() => _isHovering = false),
-                    child: WindowDropTarget(
-                      enable: supportsDragAndDrop && !_isImporting,
-                      onDragDone: (details) async {
-                        setState(() => _isDragging = false);
-                        if (details.files.length != 1 ||
-                            details.files.single is DropItemDirectory) {
-                          NotificationManager.instance.error(
-                            'Drop one supported database import file.',
-                          );
-                          return;
-                        }
-                        await _handleSelectedFilePath(
-                          details.files.single.path,
-                        );
-                      },
-                      onDragEntered: (_) => setState(() => _isDragging = true),
-                      onDragExited: (_) => setState(() => _isDragging = false),
-                      child: InkWell(
-                        onTap: _isImporting ? null : _selectFile,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _isDragging
-                                ? theme.accent.withValues(alpha: 0.1)
-                                : _isHovering
-                                ? theme.accent.withValues(alpha: 0.05)
-                                : theme.inputBackground,
-                            borderRadius: BorderRadius.circular(
-                              theme.cornerRadius,
-                            ),
-                            border: Border.all(
-                              color: _isDragging
-                                  ? theme.accent
-                                  : _isHovering
-                                  ? theme.accent.withValues(alpha: 0.5)
-                                  : (_selectedFile != null
-                                        ? theme.accent
-                                        : theme.border),
-                              width: _isDragging ? 2 : 1,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isDragging
-                                    ? Icons.file_download
-                                    : (_selectedFile != null
-                                          ? Icons.check_circle
-                                          : Icons.folder_open),
-                                color: _isDragging
-                                    ? theme.accent
-                                    : (_selectedFile != null
-                                          ? theme.accent
-                                          : theme.textSecondary),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _selectedFile != null
-                                      ? p.basename(_selectedFile!)
-                                      : (_isDragging && supportsDragAndDrop
-                                            ? 'Drop file here...'
-                                            : supportsDragAndDrop
-                                            ? 'Click to select or drag file here...'
-                                            : 'Tap to select a file...'),
-                                  style: TextStyle(
-                                    color: _isDragging
-                                        ? theme.accent
-                                        : (_selectedFile != null
-                                              ? theme.textPrimary
-                                              : theme.textHint),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (_selectedFile != null)
-                                IconButton(
-                                  tooltip: 'Clear selection',
-                                  style: theme.compactIconButtonStyle,
-                                  onPressed: _isImporting
-                                      ? null
-                                      : _clearFileSelection,
-                                  icon: const Icon(Icons.close, size: 20),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: kElementVSpacing),
-                Text(
-                  'Supported: SQLite databases (including files without an extension), .enc, .json, .csv, .txt, and compatible .bak backups',
-                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                FileDropField(
+                  key: const ValueKey('import-source-file-target'),
+                  theme: theme,
+                  description:
+                      'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
+                  selectedName: _selectedFile == null
+                      ? null
+                      : p.basename(_selectedFile!),
+                  enabled: !_isImporting,
+                  onBrowse: _selectFile,
+                  onFileSelected: _handleSelectedFilePath,
+                  onClear: _clearFileSelection,
+                  invalidDropMessage:
+                      'Drop one supported database import file.',
                 ),
                 if (_selectedFile != null && _previewCount > 0) ...[
                   const SizedBox(height: kElementVSpacing),
@@ -1330,12 +1179,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
           const SizedBox(height: kDialogSpacing),
 
-          // Import mode and options in connected groupboxes
           SectionGroupBox(
             title: 'Import Mode',
             titleIcon: Icons.swap_horiz,
             theme: theme,
-            groupPosition: SectionGroupPosition.first,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1355,23 +1202,17 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
               ],
             ),
           ),
-          SectionGroupBox(
-            title: 'Options',
-            titleIcon: Icons.settings,
+          const SizedBox(height: kDialogSpacing),
+          SettingsToggleCard(
             theme: theme,
-            groupPosition: SectionGroupPosition.last,
-            alternateBackground: true,
-            child: ToggleSettingRow(
-              theme: theme,
-              label: 'Allow duplicate keys',
-              value: _allowDuplicates,
-              onChanged: (value) => setState(() => _allowDuplicates = value),
-            ),
+            label: 'Allow duplicate keys',
+            value: _allowDuplicates,
+            onChanged: (value) => setState(() => _allowDuplicates = value),
           ),
 
           if (_importMode == 'replace') ...[
             const SizedBox(height: 12),
-            DialogBanner.caution(
+            DialogBanner.warning(
               theme: theme,
               message: 'Replace mode will delete all existing data!',
             ),

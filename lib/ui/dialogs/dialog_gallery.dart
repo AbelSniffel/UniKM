@@ -349,14 +349,12 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final cardStyle = (
-      ref.watch(experimentalInteractionCardsProvider),
       ref.watch(settingsCardIndicatorStyleProvider),
       ref.watch(toggleStyleProvider),
     );
     final appearanceSettings = <String, dynamic>{
-      SettingsKeys.experimentalInteractionCards: cardStyle.$1,
-      SettingsKeys.settingsCardIndicatorStyle: cardStyle.$2,
-      SettingsKeys.toggleStyle: cardStyle.$3,
+      SettingsKeys.settingsCardIndicatorStyle: cardStyle.$1,
+      SettingsKeys.toggleStyle: cardStyle.$2,
     };
     final entries = buildDialogGalleryCatalog();
     // Reuse widget instances while the viewer transforms. Panning should only

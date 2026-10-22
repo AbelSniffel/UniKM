@@ -3,15 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/app_providers.dart';
 
 class AppCircularProgressIndicator extends ConsumerWidget {
-  const AppCircularProgressIndicator({
-    super.key,
-    this.color,
-    this.backgroundColor,
-    this.strokeWidth,
-  });
+  const AppCircularProgressIndicator({super.key, this.color, this.strokeWidth});
 
   final Color? color;
-  final Color? backgroundColor;
   final double? strokeWidth;
 
   @override
@@ -20,7 +14,7 @@ class AppCircularProgressIndicator extends ConsumerWidget {
 
     return CircularProgressIndicator(
       color: color ?? theme.accent,
-      backgroundColor: backgroundColor ?? theme.accent.withValues(alpha: 0.2),
+      backgroundColor: theme.accent.withValues(alpha: 0.2),
       strokeWidth: strokeWidth ?? theme.progressIndicatorStrokeWidth,
     );
   }

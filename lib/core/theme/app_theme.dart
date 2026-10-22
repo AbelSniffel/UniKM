@@ -332,9 +332,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   Color get cardCoverPlaceholder =>
       blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.10);
 
-  /// Tag chip background
-  Color get tagBackground => surface;
-
   // ===========================================================================
   // PRE-COMPUTED LIST CARD GRADIENT COLORS (for performance)
   // ===========================================================================
@@ -350,19 +347,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
 
   /// Compute all expensive HSL/blend operations once per theme instance.
   _AppThemeCache _buildGradientCache() {
-    // Pre-compute the default tag chip color (when no override is provided).
-    // Mirrors the logic in GameCard._buildTagChip's else-branch.
-    final baseBg = tagBackground.withValues(alpha: 1.0);
-    final baseBgHsl = HSLColor.fromColor(baseBg);
-    const satThreshold = 0.12;
-    final tagChipDefaultColor = baseBgHsl.saturation < satThreshold
-        ? Color.lerp(
-            baseBg,
-            _applySaturation(baseAccent, 1.05).withValues(alpha: 0.95),
-            0.72,
-          )!
-        : baseBg;
-
     return _AppThemeCache(
       listCardDefaultGradient: [
         baseAccent.withValues(alpha: 0.40),
@@ -376,16 +360,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         baseAccent.withValues(alpha: 1),
         baseSecondary.withValues(alpha: 1),
       ],
-
-      tagChipDefaultColor: tagChipDefaultColor,
     );
-  }
-
-  /// Apply saturation to a color
-  Color _applySaturation(Color color, double factor) {
-    final h = HSLColor.fromColor(color);
-    final newS = (h.saturation * factor).clamp(0.0, 1.0);
-    return h.withSaturation(newS).toColor();
   }
 
   /// Gradient colors for list card hover state — memoized, allocated once per theme.
@@ -399,11 +374,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   /// Gradient colors for list card default state — memoized, allocated once per theme.
   List<Color> get listCardDefaultGradient =>
       _cachedGradients.listCardDefaultGradient;
-
-  /// Default tag chip background color for the theme (no tag-color override).
-  /// Pre-computed once per theme via HSL saturation check, same logic as
-  /// GameCard._buildTagChip's else-branch.
-  Color get tagChipDefaultColor => _cachedGradients.tagChipDefaultColor;
 
   /// Status colors
   Color get success => const Color(0xFF28A745);
@@ -623,15 +593,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         color: accent,
         circularTrackColor: accent.withValues(alpha: 0.15),
         linearTrackColor: surface,
-      ),
-
-      // Chips
-      chipTheme: ChipThemeData(
-        backgroundColor: tagBackground,
-        labelStyle: TextStyle(color: textPrimary),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-        ),
       ),
 
       popupMenuTheme: PopupMenuThemeData(
@@ -1034,19 +995,15 @@ class AppNavigationButton extends StatefulWidget {
     this.alignment = Alignment.center,
     this.borderRadiusMultiplier = 1.25,
     this.selectedBackgroundColor,
-    this.hoverBackgroundColor,
-    this.disabledBackgroundColor,
     this.minWidth = 40,
     this.minHeight = 26,
     this.horizontalSpacing = 6,
-    this.verticalSpacing = 0,
     this.horizontalMainAxisSize = MainAxisSize.min,
     this.horizontalMainAxisAlignment = MainAxisAlignment.center,
     this.duration = Duration.zero,
     this.variant = AppNavigationButtonVariant.navigation,
     this.iconSize = kIconSize,
     this.labelVisible = true,
-    this.reserveLabelSpace = true,
     this.labelFadeDuration = Duration.zero,
     this.labelFadeCurve = Curves.easeOut,
     this.hasNotification = false,
@@ -1066,19 +1023,15 @@ class AppNavigationButton extends StatefulWidget {
   final AlignmentGeometry alignment;
   final double borderRadiusMultiplier;
   final Color? selectedBackgroundColor;
-  final Color? hoverBackgroundColor;
-  final Color? disabledBackgroundColor;
   final double minWidth;
   final double minHeight;
   final double horizontalSpacing;
-  final double verticalSpacing;
   final MainAxisSize horizontalMainAxisSize;
   final MainAxisAlignment horizontalMainAxisAlignment;
   final Duration duration;
   final AppNavigationButtonVariant variant;
   final double iconSize;
   final bool labelVisible;
-  final bool reserveLabelSpace;
   final Duration labelFadeDuration;
   final Curve labelFadeCurve;
   final bool hasNotification;
@@ -1168,7 +1121,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   }
 
   double _labelVisibilityT() {
-    if (widget.labelText == null || !widget.reserveLabelSpace) {
+    if (widget.labelText == null) {
       return widget.labelVisible ? 1.0 : 0.0;
     }
     if (widget.labelFadeDuration == Duration.zero) {
@@ -1195,7 +1148,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
 
   Widget? _buildLabel({required TextStyle labelStyle}) {
     final labelText = widget.labelText;
-    if (labelText == null || !widget.reserveLabelSpace) {
+    if (labelText == null) {
       return null;
     }
 
@@ -1251,18 +1204,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         : widget.horizontalMainAxisSize == MainAxisSize.max
         ? <Widget>[Flexible(fit: FlexFit.loose, child: horizontalLabel!)]
         : <Widget>[horizontalLabel!];
-    final verticalLabelChildren = label == null
-        ? null
-        : <Widget>[
-            Padding(
-              padding: EdgeInsets.only(
-                top: icon == null
-                    ? 0
-                    : widget.verticalSpacing * labelVisibilityT,
-              ),
-              child: label,
-            ),
-          ];
 
     if (widget.isHorizontal) {
       return Row(
@@ -1274,7 +1215,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [...?iconChildren, ...?verticalLabelChildren],
+        children: [...?iconChildren, ?label],
       );
     }
   }
@@ -1308,11 +1249,11 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
               labelVisibilityT,
             )!;
         final backgroundColor = !widget.isEnabled
-            ? (widget.disabledBackgroundColor ?? Colors.transparent)
+            ? Colors.transparent
             : Color.lerp(
                     Color.lerp(
                       Colors.transparent,
-                      widget.hoverBackgroundColor ?? widget.theme.navItemHover,
+                      widget.theme.navItemHover,
                       hoverT,
                     ),
                     widget.selectedBackgroundColor ??
@@ -1388,38 +1329,24 @@ class AppLinearProgressBar extends StatelessWidget {
     required this.theme,
     required this.value,
     this.label,
-    this.minHeight = 26,
-    this.progressColor,
-    this.trackColor,
-    this.borderRadius,
-    this.labelStyle,
   });
 
   final AppThemeData theme;
   final double? value;
   final String? label;
-  final double minHeight;
-  final Color? progressColor;
-  final Color? trackColor;
-  final BorderRadius? borderRadius;
-  final TextStyle? labelStyle;
 
   @override
   Widget build(BuildContext context) {
-    final barRadius = BorderRadius.circular(theme.cornerRadius);
-    final fillColor = progressColor ?? theme.accent;
-    final backgroundColor = trackColor ?? theme.accent.withValues(alpha: 0.35);
-
     return ClipRRect(
-      borderRadius: barRadius,
+      borderRadius: BorderRadius.circular(theme.cornerRadius),
       child: Stack(
         alignment: Alignment.center,
         children: [
           LinearProgressIndicator(
             value: value,
-            minHeight: minHeight,
-            backgroundColor: backgroundColor,
-            valueColor: AlwaysStoppedAnimation(fillColor),
+            minHeight: 26,
+            backgroundColor: theme.accent.withValues(alpha: 0.35),
+            valueColor: AlwaysStoppedAnimation(theme.accent),
           ),
           if (label != null)
             IgnorePointer(
@@ -1429,13 +1356,11 @@ class AppLinearProgressBar extends StatelessWidget {
                   label!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      labelStyle ??
-                      TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
@@ -1453,13 +1378,11 @@ class _AppThemeCache {
     required this.listCardHoverGradient,
     required this.listCardSelectedGradient,
     required this.listCardDefaultGradient,
-    required this.tagChipDefaultColor,
   });
 
   final List<Color> listCardHoverGradient;
   final List<Color> listCardSelectedGradient;
   final List<Color> listCardDefaultGradient;
-  final Color tagChipDefaultColor;
 }
 
 // =============================================================================

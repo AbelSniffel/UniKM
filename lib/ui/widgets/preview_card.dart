@@ -24,20 +24,12 @@ class PreviewCardWrap extends StatelessWidget {
     required this.children,
     this.spacing = 8,
     this.runSpacing = 8,
-    this.minimumCardWidth = kInteractionCardMinWidth,
-    this.maximumCardWidth = kInteractionCardMaxWidth,
-  }) : assert(minimumCardWidth > 0),
-       assert(maximumCardWidth >= minimumCardWidth),
-       assert(spacing >= 0),
+  }) : assert(spacing >= 0),
        assert(runSpacing >= 0);
 
   final List<Widget> children;
   final double spacing;
   final double runSpacing;
-
-  /// Preferred minimum for wrapping; cards can shrink in narrower windows.
-  final double minimumCardWidth;
-  final double maximumCardWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -45,27 +37,13 @@ class PreviewCardWrap extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        if (!availableWidth.isFinite) {
-          return Wrap(
-            spacing: spacing,
-            runSpacing: runSpacing,
-            children: [
-              for (final child in children)
-                SizedBox(
-                  key: child.key,
-                  width: maximumCardWidth,
-                  child: RepaintBoundary(child: child),
-                ),
-            ],
-          );
-        }
-        final width = settingsCardWidth(
-          availableWidth: availableWidth,
-          cardCount: children.length,
-          minimumCardWidth: minimumCardWidth,
-          maximumCardWidth: maximumCardWidth,
-          spacing: spacing,
-        );
+        final width = availableWidth.isFinite
+            ? settingsCardWidth(
+                availableWidth: availableWidth,
+                cardCount: children.length,
+                spacing: spacing,
+              )
+            : kInteractionCardMaxWidth;
         final cards = [
           for (final child in children)
             SizedBox(

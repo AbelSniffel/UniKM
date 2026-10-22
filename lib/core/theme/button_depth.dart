@@ -16,7 +16,7 @@ ButtonStyle withButtonDepth(ButtonStyle base, {required bool outlined}) =>
         Colors.black.withValues(alpha: outlined ? 0.12 : 0.18),
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      backgroundBuilder: (context, states, child) => _ButtonDepthLayer(
+      backgroundBuilder: (context, states, child) => ButtonDepthLayer(
         outlined: outlined,
         pressed: states.contains(WidgetState.pressed),
         disabled: states.contains(WidgetState.disabled),
@@ -47,8 +47,10 @@ OutlinedBorder _resolveShape(
   return base.shape?.resolve(states) ?? const StadiumBorder();
 }
 
-class _ButtonDepthLayer extends StatelessWidget {
-  const _ButtonDepthLayer({
+/// Raised lighting that can stay mounted while a toggle shows inset lighting.
+class ButtonDepthLayer extends StatelessWidget {
+  const ButtonDepthLayer({
+    super.key,
     required this.outlined,
     required this.pressed,
     required this.disabled,

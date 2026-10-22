@@ -12,7 +12,6 @@ class CornerRibbon extends StatelessWidget {
     this.bandHeight = 22.5,
     this.bandWidth = 130,
     this.offset = 9,
-    this.onTap,
   });
 
   final String label;
@@ -21,7 +20,6 @@ class CornerRibbon extends StatelessWidget {
   final double bandHeight;
   final double bandWidth;
   final double offset;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -60,12 +58,7 @@ class CornerRibbon extends StatelessWidget {
     );
     return ClipPath(
       clipper: const _CornerRibbonClipper(),
-      child: onTap == null
-          ? ColoredBox(color: color, child: content)
-          : Material(
-              color: color,
-              child: InkWell(onTap: onTap, child: content),
-            ),
+      child: ColoredBox(color: color, child: content),
     );
   }
 }

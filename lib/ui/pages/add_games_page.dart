@@ -455,15 +455,10 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
         return;
       }
 
-      String? imagePath;
-      if (!resolution.usedCache) {
-        // Use the wide Steam header image first (better fit for the UI preview).
-        // Fallback to library image is handled by SteamService.downloadImage.
-        imagePath = await steamService.downloadImage(
-          result.appId,
-          useLibraryImage: false,
-        );
-      }
+      final imagePath = await steamService.downloadImage(
+        result.appId,
+        imageUrl: result.imageUrl,
+      );
       // Create/get steam tags for preview
       final created = await SteamTagUtils.ensureSteamTags(
         db: db,
@@ -477,7 +472,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
       _applySteamPreview(
         result: result,
         steamTags: created,
-        coverImage: imagePath ?? result.imageUrl,
+        coverImage: imagePath,
         cacheAt: resolution.usedCache ? resolution.cachedAt : null,
       );
 
@@ -968,6 +963,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
               imagePath = await steamService.downloadImage(
                 steamResult.appId,
                 useLibraryImage: false,
+                imageUrl: steamResult.imageUrl,
               );
             } catch (_) {}
 

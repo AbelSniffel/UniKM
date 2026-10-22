@@ -180,7 +180,7 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  OutlinedButton(
+                  ElevatedButton(
                     onPressed: _saving ? null : _addTag,
                     child: const Text('Add'),
                   ),
@@ -226,6 +226,7 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
                           tags: tags,
                           theme: theme,
                           allSelected: true,
+                          deleteOnTap: true,
                           scrollable: true,
                           onTagToggled: (tagId) {
                             final tag = tags.firstWhere(

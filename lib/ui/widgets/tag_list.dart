@@ -1,27 +1,32 @@
 /// Reusable, performant tag list widget.
 ///
-/// All paths use [Wrap] for correct layout (accurate chip widths, no overflow).
+/// Tags keep Wrap spacing; scrollable lists mount only nearby rows.
 ///
 /// Performance during resize: the scrollable path detects horizontal width
 /// changes via [LayoutBuilder] and hides the Wrap one frame after the change
 /// (skipping per-pixel re-layout passes). Once the width has been stable for
 /// ~150 ms the Wrap is shown again with a single whole-list fade-in, driven by
-/// one [AnimationController] that lives on [_TagListState] — zero per-chip
-/// controllers means zero overhead during normal redraws.
+/// one [AnimationController] that lives on [_TagListState], rather than
+/// starting a separate resize fade for every tag.
 ///
 /// Consolidates tag display and selection patterns across the app in a single
 /// optimized widget.
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:collection/collection.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:unikm/core/constants/app_constants.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import 'app_search_field.dart';
-import 'app_tag_chip.dart';
+import 'app_tag_button.dart';
+import 'app_action_button.dart';
 import 'app_progress_indicator.dart';
 
 /// A performant, reusable tag list that supports search, selection,
@@ -33,6 +38,7 @@ class TagList extends StatefulWidget {
     required this.theme,
     this.selectedTagIds,
     this.allSelected = false,
+    this.deleteOnTap = false,
     this.onTagToggled,
     this.showSearch = false,
     this.maxHeight,
@@ -50,6 +56,9 @@ class TagList extends StatefulWidget {
 
   /// When true, all tags appear selected. Ignored when [selectedTagIds] is set.
   final bool allSelected;
+
+  /// The existing click callback deletes a custom tag rather than filtering it.
+  final bool deleteOnTap;
 
   /// Called when a tag chip is tapped. Receives the tag ID.
   final ValueChanged<int>? onTagToggled;
@@ -82,12 +91,22 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   double? _stableWidth;
   bool _tagsVisible = true;
   bool _hidePending = false;
-  // Actual rendered height of the Wrap content, measured post-frame.
+  // Full content height, computed from cached row metrics.
   // Used to preserve the container size while tags are hidden so the
   // layout doesn't collapse or show excess empty space.
   double? _lastKnownHeight;
-  // Key attached to the Wrap so we can read its RenderBox height after layout.
-  final GlobalKey _wrapKey = GlobalKey();
+  final _buttons = <int, AppTagButton>{};
+  final _textSizes = <String, Size>{};
+  TextStyle? _measureStyle;
+  TextScaler? _measureScaler;
+  TextDirection? _measureDirection;
+  Locale? _measureLocale;
+  bool? _measureStatusHidden;
+  List<Tag> _rowTags = const [];
+  double? _rowWidth;
+  double _rowHeight = 32;
+  List<List<Tag>> _rows = const [];
+  List<double> _rowHeights = const [];
 
   // Single AnimationController driving the whole-list fade-in after resize.
   // One controller for all chips = zero overhead during normal rebuilds.
@@ -115,6 +134,17 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(TagList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!const ListEquality<Tag>().equals(oldWidget.tags, widget.tags)) {
+      final ids = widget.tags.map((tag) => tag.id).toSet();
+      final names = widget.tags.map((tag) => tag.name).toSet();
+      _buttons.removeWhere((id, _) => !ids.contains(id));
+      _textSizes.removeWhere((name, _) => !names.contains(name));
+    }
+  }
+
   /// Shows tags again after a resize has settled, triggering the fade-in.
   void _showTags(double newWidth) {
     if (!mounted) return;
@@ -137,7 +167,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     if (widget.selectedTagIds != null) {
       return widget.selectedTagIds!.contains(tag.id);
     }
-    return widget.allSelected;
+    return widget.onTagToggled == null || widget.allSelected;
   }
 
   @override
@@ -186,6 +216,9 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
+          if (!constraints.hasBoundedWidth) {
+            return SingleChildScrollView(child: _buildWrap(tags));
+          }
           final width = constraints.maxWidth;
 
           if (_stableWidth == null) {
@@ -224,35 +257,137 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
             );
           }
 
-          // Single FadeTransition over the entire Wrap — one controller for
-          // the whole list, no per-chip animation overhead on redraws.
-          //
-          // Measure the Wrap's actual rendered height after this frame so that
-          // when tags are hidden we preserve the real content height (not the
-          // max-constraint height which makes short lists look too tall).
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || !_tagsVisible) return;
-            final box =
-                _wrapKey.currentContext?.findRenderObject() as RenderBox?;
-            if (box != null && box.hasSize && box.size.height > 0) {
-              _lastKnownHeight = box.size.height;
-            }
-          });
-
+          final rows = _layoutRows(context, tags, width);
+          final contentHeight =
+              _rowHeights.fold(0.0, (sum, height) => sum + height) +
+              math.max(0, rows.length - 1) * _runSpacing;
+          _lastKnownHeight = contentHeight;
+          // Give the viewport a finite height without shrinkWrap: shrinkWrap
+          // would lay out every row and recreate the offscreen button cost.
+          final height = contentHeight.clamp(
+            constraints.minHeight,
+            constraints.maxHeight,
+          );
           return FadeTransition(
             opacity: _fadeAnimation,
-            child: SingleChildScrollView(
-              child: Wrap(
-                key: _wrapKey,
-                spacing: _spacing,
-                runSpacing: _runSpacing,
-                children: tags.map(_buildChip).toList(),
+            child: SizedBox(
+              height: height,
+              child: ListView.custom(
+                padding: EdgeInsets.zero,
+                scrollCacheExtent: ScrollCacheExtent.pixels(
+                  _rowHeight + _runSpacing,
+                ),
+                childrenDelegate: _TagRowDelegate(
+                  totalExtent: contentHeight,
+                  childCount: rows.length,
+                  builder: (context, index) => Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == rows.length - 1 ? 0 : _runSpacing,
+                    ),
+                    child: Wrap(
+                      spacing: _spacing,
+                      children: rows[index].map(_buildButton).toList(),
+                    ),
+                  ),
+                ),
               ),
             ),
           );
         },
       ),
     );
+  }
+
+  /// Cache flow layout by text metrics, not theme colors or selection. Only
+  /// visible rows mount Material/ink/animation trees; every tag stays searchable.
+  List<List<Tag>> _layoutRows(
+    BuildContext context,
+    List<Tag> tags,
+    double width,
+  ) {
+    final style = Theme.of(
+      context,
+    ).textTheme.labelLarge!.copyWith(color: Colors.black);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    final statusHidden = widget.onTagToggled == null;
+    final metricsChanged =
+        style != _measureStyle ||
+        scaler != _measureScaler ||
+        direction != _measureDirection ||
+        locale != _measureLocale ||
+        statusHidden != _measureStatusHidden;
+    if (metricsChanged) {
+      _measureStyle = style;
+      _measureScaler = scaler;
+      _measureDirection = direction;
+      _measureLocale = locale;
+      _measureStatusHidden = statusHidden;
+      _textSizes.clear();
+    }
+    if (!metricsChanged &&
+        width == _rowWidth &&
+        const ListEquality<Tag>().equals(tags, _rowTags)) {
+      return _rows;
+    }
+    final painter = TextPainter(
+      textDirection: direction,
+      textScaler: scaler,
+      locale: locale,
+      maxLines: 1,
+    );
+    try {
+      final rows = <List<Tag>>[];
+      final heights = <double>[];
+      var row = <Tag>[];
+      var rowHeight = 32.0;
+      var occupied = 0.0;
+      for (final tag in tags) {
+        final textSize = _textSizes.putIfAbsent(tag.name, () {
+          painter.text = TextSpan(text: tag.name, style: style);
+          painter.layout();
+          return painter.size;
+        });
+        final tagWidth = math.min(
+          width,
+          textSize.width +
+              AppActionButton.toggleHorizontalPadding * 2 +
+              (statusHidden
+                  ? 0
+                  : AppActionButton.statusSize + AppActionButton.statusSpacing),
+        );
+        if (row.isNotEmpty && occupied + _spacing + tagWidth > width) {
+          rows.add(row);
+          heights.add(rowHeight);
+          row = [];
+          rowHeight = 32;
+          occupied = 0;
+        }
+        occupied += (row.isEmpty ? 0 : _spacing) + tagWidth;
+        row.add(tag);
+        rowHeight = math.max(
+          rowHeight,
+          math.max(
+                statusHidden ? 0 : AppActionButton.statusSize,
+                textSize.height,
+              ) +
+              14,
+        );
+      }
+      if (row.isNotEmpty) {
+        rows.add(row);
+        heights.add(rowHeight);
+      }
+      _rowHeights = heights;
+      _rowHeight = heights.fold(32.0, math.max);
+      _rowTags = List.of(tags);
+      _rowWidth = width;
+      _rows = rows;
+      return rows;
+    } finally {
+      painter.dispose();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -263,22 +398,33 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     return Wrap(
       spacing: _spacing,
       runSpacing: _runSpacing,
-      children: tags.map(_buildChip).toList(),
+      children: tags.map(_buildButton).toList(),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Chip builder
+  // Button builder
   // ---------------------------------------------------------------------------
 
-  Widget _buildChip(Tag tag) {
-    return AppTagChip(
+  Widget _buildButton(Tag tag) {
+    final selected = _isSelected(tag);
+    final cached = _buttons[tag.id];
+    if (cached != null &&
+        cached.tag == tag &&
+        cached.deleteOnTap == widget.deleteOnTap &&
+        cached.theme == widget.theme &&
+        cached.isSelected == selected &&
+        (cached.onTap == null) == (widget.onTagToggled == null)) {
+      return cached;
+    }
+    return _buttons[tag.id] = AppTagButton(
       key: ValueKey(tag.id),
       tag: tag,
       theme: widget.theme,
-      isSelected: _isSelected(tag),
+      isSelected: selected,
+      deleteOnTap: widget.deleteOnTap,
       onTap: widget.onTagToggled != null
-          ? () => widget.onTagToggled!(tag.id)
+          ? () => widget.onTagToggled?.call(tag.id)
           : null,
     );
   }
@@ -289,4 +435,24 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
 
   static const _spacing = kElementHSpacing;
   static const _runSpacing = kElementVSpacing;
+}
+
+/// Supply the exact extent already known from flow layout, so scroll positions
+/// do not change as the final (unpadded) row enters the viewport.
+class _TagRowDelegate extends SliverChildBuilderDelegate {
+  _TagRowDelegate({
+    required NullableIndexedWidgetBuilder builder,
+    required int childCount,
+    required this.totalExtent,
+  }) : super(builder, childCount: childCount);
+
+  final double totalExtent;
+
+  @override
+  double? estimateMaxScrollOffset(
+    int firstIndex,
+    int lastIndex,
+    double leadingScrollOffset,
+    double trailingScrollOffset,
+  ) => totalExtent;
 }

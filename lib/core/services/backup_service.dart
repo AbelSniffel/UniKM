@@ -63,15 +63,10 @@ class BackupResult {
 
 /// Result of a restore operation
 class RestoreResult {
-  const RestoreResult({
-    required this.success,
-    this.error,
-    this.requiresRestart,
-  });
+  const RestoreResult({required this.success, this.error});
 
   final bool success;
   final String? error;
-  final bool? requiresRestart;
 }
 
 /// Backup service for managing database backups
@@ -352,7 +347,7 @@ class BackupService {
       // restore. Conversely, encrypted restores must not retain plaintext.
       final obsolete = File(info.isEncrypted ? basePath : '$basePath.enc');
       if (await obsolete.exists()) await obsolete.delete();
-      return const RestoreResult(success: true, requiresRestart: false);
+      return const RestoreResult(success: true);
     } on InvalidPasswordException {
       return const RestoreResult(
         success: false,

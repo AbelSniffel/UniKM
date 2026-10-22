@@ -13,16 +13,17 @@ class TagWidthCache {
   // remove + re-insert on a cache hit bumps the entry to the MRU end in O(1),
   // replacing the previous O(n) _accessOrder List scan.
   static final _cache =
-      <(String, TextStyle, TextDirection, TextScaler), double>{};
+      <(String, TextStyle, TextDirection, TextScaler, Locale?), double>{};
 
   /// Measure text width with O(1) LRU caching.
   static double measureTextWidth(
     String text,
     TextStyle style,
     TextDirection direction,
-    TextScaler textScaler,
-  ) {
-    final key = (text, style, direction, textScaler);
+    TextScaler textScaler, {
+    Locale? locale,
+  }) {
+    final key = (text, style, direction, textScaler, locale);
 
     final cached = _cache[key];
     if (cached != null) {
@@ -43,6 +44,7 @@ class TagWidthCache {
       maxLines: 1,
       textDirection: direction,
       textScaler: textScaler,
+      locale: locale,
     )..layout();
 
     final width = painter.width;

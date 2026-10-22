@@ -71,7 +71,7 @@ class ApplySteamMetadata {
       try {
         imagePath = await downloadImage(result.appId);
       } catch (_) {
-        // Preserve the existing URL fallback when cover download fails.
+        // Keep the current cover if artwork cannot be downloaded.
       }
     }
     _checkSession();
@@ -99,9 +99,7 @@ class ApplySteamMetadata {
           developer: options.applyDeveloper ? result.developer : null,
           reviewScore: options.applyReviews ? result.reviewScore : null,
           reviewCount: options.applyReviews ? result.reviewCount : null,
-          coverImage: options.applyImage
-              ? (imagePath ?? result.imageUrl)
-              : null,
+          coverImage: options.applyImage ? imagePath : null,
           updatedAt: DateTime.now(),
         ),
         tagIds: tagIds,

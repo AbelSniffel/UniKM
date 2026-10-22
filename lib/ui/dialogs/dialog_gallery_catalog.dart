@@ -199,6 +199,16 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     (c) => showSteamFetchOptionsDialog(c, title: galleryGame.title),
   ),
   DialogGalleryEntry(
+    'steam-cache-choice',
+    'Steam cache choice',
+    (c) => showSteamFetchOptionsDialog(
+      c,
+      title: galleryGame.title,
+      showApplyOptions: false,
+    ),
+    cachedSteam: true,
+  ),
+  DialogGalleryEntry(
     'steam-cache',
     'Steam cached data',
     (c) => showSteamFetchOptionsDialog(c, title: galleryGame.title),

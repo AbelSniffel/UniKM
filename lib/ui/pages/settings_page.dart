@@ -41,7 +41,6 @@ class _SettingsSectionDefinition {
     required this.builder,
     this.extraMatch,
     this.platformSearchGroups,
-    this.availableSearchGroups,
   });
 
   final String id;
@@ -53,7 +52,6 @@ class _SettingsSectionDefinition {
   platformSearchGroups;
   final _SettingsSectionBuilder builder;
   final _SectionExtraMatch? extraMatch;
-  final List<SettingsSearchGroup> Function(WidgetRef)? availableSearchGroups;
 
   bool shouldShow({
     required WidgetRef ref,
@@ -67,12 +65,8 @@ class _SettingsSectionDefinition {
     }
 
     return matchesAnySettingsSearchGroup(
-          query: searchQuery,
           matchesSearch: matchesSearch,
-          groups:
-              availableSearchGroups?.call(ref) ??
-              platformSearchGroups?.call(platform) ??
-              searchGroups,
+          groups: platformSearchGroups?.call(platform) ?? searchGroups,
         ) ||
         (extraMatch?.call(ref, matchesSearch) ?? false);
   }
@@ -99,9 +93,6 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Appearance',
     icon: Icons.palette,
     searchGroups: AppearanceSection.searchGroups,
-    availableSearchGroups: (ref) => AppearanceSection.searchGroupsFor(
-      interactionCards: ref.watch(experimentalInteractionCardsProvider),
-    ),
     extraMatch: (ref, matchesSearch) {
       ref.watch(customThemesJsonProvider);
       return ref
@@ -261,7 +252,8 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     searchGroups: [
       AdvancedSection.displaySearchGroup,
       AdvancedSection.systemSearchGroup,
-      AdvancedSection.experimentalSearchGroup,
+      if (AdvancedSection.showExperimentalSettings)
+        AdvancedSection.experimentalSearchGroup,
     ],
     builder:
         ({
@@ -502,50 +494,53 @@ class _SettingsSectionRail extends ConsumerWidget {
                     message: collapsed
                         ? 'Expand section list'
                         : 'Collapse section list',
-                    child: HoverPressBuilder(
-                      onTap: () => ref
-                          .read(settingsProvider.notifier)
-                          .setSetting(
-                            SettingsKeys.settingsSectionPanelCollapsed,
-                            !collapsed,
+                    child: HoverBuilder(
+                      cursor: SystemMouseCursors.click,
+                      builder: (context, hovered) => GestureDetector(
+                        onTap: () => ref
+                            .read(settingsProvider.notifier)
+                            .setSetting(
+                              SettingsKeys.settingsSectionPanelCollapsed,
+                              !collapsed,
+                            ),
+                        child: AnimatedContainer(
+                          duration: kNavPanelMotionAnimation,
+                          curve: kNavPanelMotionCurve,
+                          width: collapsed
+                              ? _settingsRailCollapsedButtonExtent
+                              : _settingsRailExpandedButtonWidth,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: _settingsRailButtonHorizontalPadding,
+                            vertical: _settingsRailButtonVerticalPadding,
                           ),
-                      builder: (context, hovered, _) => AnimatedContainer(
-                        duration: kNavPanelMotionAnimation,
-                        curve: kNavPanelMotionCurve,
-                        width: collapsed
-                            ? _settingsRailCollapsedButtonExtent
-                            : _settingsRailExpandedButtonWidth,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: _settingsRailButtonHorizontalPadding,
-                          vertical: _settingsRailButtonVerticalPadding,
-                        ),
-                        decoration: BoxDecoration(
-                          color: hovered
-                              ? theme.navItemHover
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(
-                            math.min(
-                              theme.cornerRadius * 1.25,
-                              _settingsRailButtonHeight / 2,
+                          decoration: BoxDecoration(
+                            color: hovered
+                                ? theme.navItemHover
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(
+                              math.min(
+                                theme.cornerRadius * 1.25,
+                                _settingsRailButtonHeight / 2,
+                              ),
                             ),
                           ),
-                        ),
-                        child: AnimatedSwitcher(
-                          duration: kNavPanelMotionAnimation,
-                          transitionBuilder: (child, animation) =>
-                              FadeTransition(
-                                opacity: animation,
-                                child: ScaleTransition(
-                                  scale: animation,
-                                  child: child,
+                          child: AnimatedSwitcher(
+                            duration: kNavPanelMotionAnimation,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: ScaleTransition(
+                                    scale: animation,
+                                    child: child,
+                                  ),
                                 ),
-                              ),
-                          child: Icon(
-                            collapsed
-                                ? Icons.chevron_right
-                                : Icons.chevron_left,
-                            key: ValueKey(collapsed),
-                            color: theme.textSecondary,
+                            child: Icon(
+                              collapsed
+                                  ? Icons.chevron_right
+                                  : Icons.chevron_left,
+                              key: ValueKey(collapsed),
+                              color: theme.textSecondary,
+                            ),
                           ),
                         ),
                       ),

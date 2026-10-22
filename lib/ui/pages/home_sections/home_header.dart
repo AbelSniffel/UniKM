@@ -16,7 +16,7 @@ import '../../dialogs/device_sync_dialog.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/app_tab_bar.dart';
 import '../../widgets/app_progress_indicator.dart';
-import '../../widgets/app_tag_chip.dart';
+import '../../widgets/app_action_button.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/page_bar_surface.dart';
 import '../../widgets/popup_menu_helpers.dart';
@@ -560,35 +560,35 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           spacing: 6,
           runSpacing: 6,
           children: [
-            AppOptionChip(
+            AppActionButton(
               label: 'Deadline',
               theme: theme,
-              isSelected: state.showDeadlineOnly,
+              selected: state.showDeadlineOnly,
               onTap: () =>
                   notifier.setShowDeadlineOnly(!state.showDeadlineOnly),
             ),
-            AppOptionChip(
+            AppActionButton(
               label: 'DLC',
               theme: theme,
-              isSelected: state.showDlcOnly,
+              selected: state.showDlcOnly,
               onTap: () => notifier.setShowDlcOnly(!state.showDlcOnly),
             ),
-            AppOptionChip(
+            AppActionButton(
               label: 'Used',
               theme: theme,
-              isSelected: state.showUsedOnly,
+              selected: state.showUsedOnly,
               onTap: () => notifier.setShowUsedOnly(!state.showUsedOnly),
             ),
-            AppOptionChip(
+            AppActionButton(
               label: 'No Tags',
               theme: theme,
-              isSelected: state.showNoTagsOnly,
+              selected: state.showNoTagsOnly,
               onTap: () => notifier.setShowNoTagsOnly(!state.showNoTagsOnly),
             ),
-            AppOptionChip(
+            AppActionButton(
               label: 'No Pictures',
               theme: theme,
-              isSelected: state.showNoPicturesOnly,
+              selected: state.showNoPicturesOnly,
               onTap: () =>
                   notifier.setShowNoPicturesOnly(!state.showNoPicturesOnly),
             ),

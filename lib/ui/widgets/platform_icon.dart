@@ -48,19 +48,17 @@ class PlatformIcon extends StatelessWidget {
     required this.platform,
     required this.color,
     this.size,
-    this.minHeight,
   });
 
   final GamePlatform platform;
   final Color color;
   final double? size;
-  final double? minHeight;
 
   @override
   Widget build(BuildContext context) {
     return FaIcon(
       platformIconFor(platform),
-      size: size ?? platformIconSizeFor(platform, minHeight: minHeight),
+      size: size ?? platformIconSizeFor(platform),
       color: color,
     );
   }

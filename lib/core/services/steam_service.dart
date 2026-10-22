@@ -436,7 +436,9 @@ class SteamService {
   DateTime? _lastRequestAt;
   final Duration _minRequestInterval = const Duration(milliseconds: 350);
 
-  SteamService() : _dio = Dio() {
+  SteamService({Dio? dio, Directory? imagesDirectory})
+    : _dio = dio ?? Dio(),
+      _imagesDir = imagesDirectory {
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 15);
     // Use a more permissive User-Agent and Accept headers like the Sonnet implementation
@@ -640,7 +642,8 @@ class SteamService {
     // Similarity includes edit-distance scoring: compute it once per candidate
     // rather than on both sides of every comparison during sorting.
     final ranked = [
-      for (final item in alternatives) (item, _scoreCandidate(cleanSearch, item)),
+      for (final item in alternatives)
+        (item, _scoreCandidate(cleanSearch, item)),
     ]..sort((a, b) => b.$2.compareTo(a.$2));
 
     for (final (candidate, _) in ranked.take(8)) {
@@ -699,6 +702,7 @@ class SteamService {
   Future<String?> downloadImage(
     String appId, {
     bool useLibraryImage = false,
+    String? imageUrl,
   }) async {
     if (_imagesDir == null) await init();
     if (_imagesDir == null) return null;
@@ -710,37 +714,45 @@ class SteamService {
       return localPath;
     }
 
-    try {
-      final url = useLibraryImage
-          ? SteamApi.libraryImage(appId)
-          : SteamApi.headerImage(appId);
-
-      final response = await _getWithRetry<List<int>>(
-        url,
-        retries: 1,
-        options: Options(
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(seconds: 8),
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        await File(localPath).writeAsBytes(response.data!);
-        return localPath;
+    // Resolve current artwork even for old cached results: newer apps use
+    // hashed store_item_assets paths rather than the legacy CDN layout.
+    final urls = <String>{};
+    if (!useLibraryImage) {
+      try {
+        final response = await _getWithRetry(
+          SteamApi.appDetails,
+          queryParameters: {'appids': appId},
+        );
+        final header = response.data?[appId]?['data']?['header_image'];
+        if (header is String && header.isNotEmpty) urls.add(header);
+      } catch (_) {
+        // Cached artwork and legacy URLs remain usable when metadata is offline.
       }
-
-      if (!useLibraryImage) {
-        return downloadImage(appId, useLibraryImage: true);
-      }
-    } catch (e) {
-      developer.log(
-        'Image download failed for AppID $appId: $e',
-        name: 'SteamService',
-      );
-      // Try fallback image
-      if (!useLibraryImage) {
-        return downloadImage(appId, useLibraryImage: true);
+      if (imageUrl != null && imageUrl.isNotEmpty) urls.add(imageUrl);
+      urls.add(SteamApi.headerImage(appId));
+    }
+    urls.add(SteamApi.libraryImage(appId));
+    for (final url in urls) {
+      try {
+        final response = await _getWithRetry<List<int>>(
+          url,
+          retries: 1,
+          options: Options(
+            responseType: ResponseType.bytes,
+            receiveTimeout: const Duration(seconds: 8),
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+        final bytes = response.data;
+        if (response.statusCode == 200 && bytes != null && bytes.isNotEmpty) {
+          await File(localPath).writeAsBytes(bytes);
+          return localPath;
+        }
+      } catch (e) {
+        developer.log(
+          'Image download failed for AppID $appId: $e',
+          name: 'SteamService',
+        );
       }
     }
 
@@ -956,6 +968,7 @@ class SteamService {
       final tags = <String>[];
       final seen = <String>{};
       final dataSources = <SteamDataSource>[];
+      String? headerImage;
 
       if (fetchTags) {
         final steamspyTags = await _fetchSteamSpyTags(appId);
@@ -990,6 +1003,7 @@ class SteamService {
         if (appData != null && appData['success'] == true) {
           final details = appData['data'] as Map<String, dynamic>;
           dataSources.add(SteamDataSource.storeDetails);
+          headerImage = details['header_image'] as String?;
           gameName = details['name'] as String? ?? gameName;
           isDlc = (details['type'] == 'dlc');
           final developers = (details['developers'] as List<dynamic>?)
@@ -1060,7 +1074,7 @@ class SteamService {
       final result = SteamSearchResult(
         appId: appId,
         name: gameName,
-        imageUrl: SteamApi.headerImage(appId),
+        imageUrl: headerImage ?? SteamApi.headerImage(appId),
         tags: tags,
         reviewScore: reviewScore,
         reviewCount: reviewCount,

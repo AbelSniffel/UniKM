@@ -84,15 +84,10 @@ class AppearanceSection extends ConsumerWidget {
         extraTexts: [for (final style in ToggleStyle.values) style.displayName],
       );
 
-  static List<SettingsSearchGroup> get searchGroups =>
-      searchGroupsFor(interactionCards: true);
-
-  static List<SettingsSearchGroup> searchGroupsFor({
-    required bool interactionCards,
-  }) => [
+  static List<SettingsSearchGroup> get searchGroups => [
     themeSearchGroup,
     controlStylesSearchGroup,
-    if (interactionCards) cardStylesSearchGroup,
+    cardStylesSearchGroup,
   ];
 
   static List<String> get sectionSearchTexts => [
@@ -143,13 +138,11 @@ class AppearanceSection extends ConsumerWidget {
       matchesSearch: matchesSearch,
       group: controlStylesSearchGroup,
     );
-    final showCardStylesSection =
-        ref.watch(experimentalInteractionCardsProvider) &&
-        shouldShowSettingsGroup(
-          query: searchQuery,
-          matchesSearch: matchesSearch,
-          group: cardStylesSearchGroup,
-        );
+    final showCardStylesSection = shouldShowSettingsGroup(
+      query: searchQuery,
+      matchesSearch: matchesSearch,
+      group: cardStylesSearchGroup,
+    );
     if (isSearching &&
         !showThemeSection &&
         !showToggleSection &&
@@ -353,21 +346,11 @@ Future<void> _exportTheme(
         .exportThemesToJson(themes: [selectedTheme]);
     await target.file.writeAsString(content);
 
-    if (target.shouldShareAfterWrite) {
-      final shared = await PlatformFileActions.shareFile(
-        target.file,
-        subject: 'UniKM theme export',
-      );
-      if (!shared) {
-        try {
-          if (await target.file.exists()) {
-            await target.file.delete();
-          }
-        } catch (_) {
-          // Best effort cleanup only.
-        }
-        return;
-      }
+    if (!await PlatformFileActions.completeExport(
+      target,
+      subject: 'UniKM theme export',
+    )) {
+      return;
     }
 
     NotificationManager.instance.success(
@@ -380,13 +363,8 @@ Future<void> _exportTheme(
 
 /// Import/export actions shared by the Appearance and search-result headers.
 class ThemeHeaderActions extends ConsumerWidget {
-  const ThemeHeaderActions({
-    super.key,
-    this.encapsulated = true,
-    this.expanded = false,
-  });
+  const ThemeHeaderActions({super.key, this.expanded = false});
 
-  final bool encapsulated;
   final bool expanded;
 
   @override
@@ -410,7 +388,6 @@ class ThemeHeaderActions extends ConsumerWidget {
     ];
     return SettingsHeaderActions(
       theme: theme,
-      encapsulated: encapsulated,
       expanded: expanded,
       children: buttons,
     );

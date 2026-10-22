@@ -98,6 +98,7 @@ final showSyncDeviceIdProvider = _setting<bool>(
   DefaultSettings.showSyncDeviceId,
 );
 
+// Retained for saved-setting compatibility; the UI always uses cards.
 final experimentalInteractionCardsProvider = _setting<bool>(
   SettingsKeys.experimentalInteractionCards,
   DefaultSettings.experimentalInteractionCards,

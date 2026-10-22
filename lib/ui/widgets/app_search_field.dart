@@ -29,14 +29,11 @@ class AppSearchField extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.hintText = 'Search...',
-    this.showClearButton = true,
     this.onCleared,
     this.contentPadding,
     this.backgroundColor,
     this.onSubmitted,
     this.prefixIcon,
-    this.suffix,
-    this.showTopBorder = false,
   });
 
   final AppThemeData theme;
@@ -44,10 +41,6 @@ class AppSearchField extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final String hintText;
-
-  /// Whether to show a clear ✕ button when the field is not empty.
-  /// Requires [controller] to be provided to detect non-empty state.
-  final bool showClearButton;
 
   /// Called after the field is cleared. If null, only the controller
   /// is cleared and [onChanged] is called with `''`.
@@ -65,12 +58,6 @@ class AppSearchField extends StatefulWidget {
 
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon;
-
-  /// Persistent trailing content displayed beside the clear button.
-  final Widget? suffix;
-
-  /// Whether the themed animated top border should be shown for this field.
-  final bool showTopBorder;
 
   @override
   State<AppSearchField> createState() => _AppSearchFieldState();
@@ -116,7 +103,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
   @override
   Widget build(BuildContext context) {
     final controller = _effectiveController;
-    final showClear = widget.showClearButton && controller.text.isNotEmpty;
+    final showClear = controller.text.isNotEmpty;
 
     final effectiveContentPadding =
         widget.contentPadding ??
@@ -144,35 +131,31 @@ class _AppSearchFieldState extends State<AppSearchField> {
           minWidth: 38,
           minHeight: 36,
         ),
-        suffixIcon: showClear || widget.suffix != null
+        suffixIcon: showClear
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.suffix != null) widget.suffix!,
-                  if (showClear)
-                    IconButton(
-                      tooltip: 'Clear search',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 38,
-                        minHeight: 36,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.clear, color: widget.theme.textHint),
-                      onPressed: () {
-                        controller.clear();
-                        widget.onChanged('');
-                        widget.onCleared?.call();
-                      },
+                  IconButton(
+                    tooltip: 'Clear search',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 38,
+                      minHeight: 36,
                     ),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.clear, color: widget.theme.textHint),
+                    onPressed: () {
+                      controller.clear();
+                      widget.onChanged('');
+                      widget.onCleared?.call();
+                    },
+                  ),
                 ],
               )
             : null,
         filled: true,
         fillColor: widget.backgroundColor,
-        border: widget.theme.resolveInputBorder(
-          showTopBorder: widget.showTopBorder,
-        ),
+        border: widget.theme.resolveInputBorder(),
         contentPadding: effectiveContentPadding,
       ),
     );

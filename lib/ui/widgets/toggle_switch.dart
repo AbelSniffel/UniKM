@@ -33,7 +33,6 @@ class AppToggleSwitch extends ConsumerWidget {
     required this.theme,
     this.style,
     this.label,
-    this.labelPosition = ToggleLabelPosition.left,
   });
 
   final bool value;
@@ -43,7 +42,6 @@ class AppToggleSwitch extends ConsumerWidget {
   /// Optional override. When null, uses the global `SettingsKeys.toggleStyle`.
   final ToggleStyle? style;
   final String? label;
-  final ToggleLabelPosition labelPosition;
 
   /// Whether the toggle is disabled (onChanged is null)
   bool get isDisabled => onChanged == null;
@@ -131,14 +129,10 @@ class AppToggleSwitch extends ConsumerWidget {
           );
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: labelPosition == ToggleLabelPosition.left
-          ? [labelWidget, const SizedBox(width: 6), toggle]
-          : [toggle, const SizedBox(width: 6), labelWidget],
+      children: [labelWidget, const SizedBox(width: 6), toggle],
     );
   }
 }
-
-enum ToggleLabelPosition { left, right }
 
 class _DotToggle extends StatefulWidget {
   const _DotToggle({

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 /// state for toggle buttons. All shading stays inside the
 /// live card outline, so layout, hit testing, and child ink remain unchanged.
 class SettingsCardInset extends StatelessWidget {
+  /// One shared shadow strength for settings cards and compact toggle surfaces.
+  static const defaultDepthStrength = 0.5;
+
   const SettingsCardInset({
     super.key,
     required this.active,
@@ -13,7 +16,8 @@ class SettingsCardInset extends StatelessWidget {
     this.raisedWhenInactive = false,
     this.overlay,
     this.shadeOverlay = true,
-  });
+    this.depthStrength = defaultDepthStrength,
+  }) : assert(depthStrength >= 0 && depthStrength <= 1);
 
   final bool active;
   final double borderRadius;
@@ -26,6 +30,9 @@ class SettingsCardInset extends StatelessWidget {
 
   /// Lit indicators can sit above the depth lighting instead of being dimmed.
   final bool shadeOverlay;
+
+  /// Scales the depth lighting while preserving its shape and blur.
+  final double depthStrength;
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
@@ -42,10 +49,10 @@ class SettingsCardInset extends StatelessWidget {
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, depth, child) {
-      final painter = depth != 0
+      final painter = depth != 0 && depthStrength > 0
           ? _SettingsCardInsetPainter(
               radius: borderRadius,
-              depth: depth,
+              depth: depth * depthStrength,
               surfaceColor: surfaceColor,
             )
           : null;

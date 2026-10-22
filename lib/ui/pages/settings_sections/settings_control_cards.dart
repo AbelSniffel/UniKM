@@ -14,8 +14,8 @@ import '../../widgets/settings_card_layout.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/toggle_switch.dart';
 
-/// Uses full-width settings rows by default, or compact cards when enabled.
-class SettingsControlWrap extends ConsumerWidget {
+/// Responsive settings cards with shared widths across each row.
+class SettingsControlWrap extends StatelessWidget {
   const SettingsControlWrap({
     super.key,
     required this.children,
@@ -26,9 +26,8 @@ class SettingsControlWrap extends ConsumerWidget {
   final double minimumCardWidth;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
-    final useCards = ref.watch(experimentalInteractionCardsProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 8.0;
@@ -36,14 +35,12 @@ class SettingsControlWrap extends ConsumerWidget {
         if (!width.isFinite) {
           return Wrap(spacing: gap, runSpacing: gap, children: children);
         }
-        final cardWidth = useCards
-            ? settingsCardWidth(
-                availableWidth: width,
-                cardCount: children.length,
-                minimumCardWidth: minimumCardWidth,
-                spacing: gap,
-              )
-            : width;
+        final cardWidth = settingsCardWidth(
+          availableWidth: width,
+          cardCount: children.length,
+          minimumCardWidth: minimumCardWidth,
+          spacing: gap,
+        );
         return Wrap(
           spacing: gap,
           runSpacing: gap,
@@ -72,7 +69,6 @@ class SettingsToggleCard extends ConsumerWidget {
     required this.value,
     required this.onChanged,
     this.description,
-    this.labelColor,
     this.indicatorStyle,
   });
 
@@ -81,17 +77,14 @@ class SettingsToggleCard extends ConsumerWidget {
   final String? description;
   final bool value;
   final ValueChanged<bool>? onChanged;
-  final Color? labelColor;
 
   /// Optional override for live style previews.
   final SettingsCardIndicatorStyle? indicatorStyle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final useCards = ref.watch(experimentalInteractionCardsProvider);
-    final SettingsCardIndicatorStyle style = useCards
-        ? (indicatorStyle ?? ref.watch(settingsCardIndicatorStyleProvider))
-        : SettingsCardIndicatorStyle.switchControl;
+    final SettingsCardIndicatorStyle style =
+        indicatorStyle ?? ref.watch(settingsCardIndicatorStyleProvider);
     return Semantics(
       button: true,
       toggled: value,
@@ -106,7 +99,6 @@ class SettingsToggleCard extends ConsumerWidget {
         theme: theme,
         label: label,
         description: description,
-        labelColor: labelColor,
         active: value,
         isToggle: true,
         indicatorStyle: style,
@@ -144,7 +136,6 @@ class SettingsActionCard extends StatelessWidget {
     required this.onTap,
     this.description,
     this.actionIcon,
-    this.labelColor,
   });
 
   final AppThemeData theme;
@@ -152,7 +143,6 @@ class SettingsActionCard extends StatelessWidget {
   final String? description;
   final String actionLabel;
   final IconData? actionIcon;
-  final Color? labelColor;
   final VoidCallback? onTap;
 
   @override
@@ -165,7 +155,6 @@ class SettingsActionCard extends StatelessWidget {
         theme: theme,
         label: label,
         description: description,
-        labelColor: labelColor,
         active: false,
         enabled: onTap != null,
         onTap: onTap,
@@ -275,13 +264,7 @@ class SettingsChoiceCard<T> extends StatelessWidget {
     final card = context.findRenderObject() as RenderBox;
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final origin = card.localToGlobal(Offset.zero);
-    final useCards = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(experimentalInteractionCardsProvider);
-    final menuWidth = useCards
-        ? card.size.width
-        : card.size.width.clamp(0.0, kInteractionCardMaxWidth);
+    final menuWidth = card.size.width;
     final selected = await showAppMenu<T>(
       context: context,
       position: RelativeRect.fromRect(
@@ -314,7 +297,7 @@ class SettingsChoiceCard<T> extends StatelessWidget {
   }
 }
 
-class _SettingsControlCard extends ConsumerStatefulWidget {
+class _SettingsControlCard extends StatefulWidget {
   const _SettingsControlCard({
     required this.theme,
     required this.label,
@@ -323,7 +306,6 @@ class _SettingsControlCard extends ConsumerStatefulWidget {
     required this.enabled,
     required this.trailing,
     this.onTap,
-    this.labelColor,
     this.isToggle = false,
     this.indicatorStyle = SettingsCardIndicatorStyle.switchControl,
   });
@@ -337,14 +319,12 @@ class _SettingsControlCard extends ConsumerStatefulWidget {
   final bool isToggle;
   final SettingsCardIndicatorStyle indicatorStyle;
   final VoidCallback? onTap;
-  final Color? labelColor;
 
   @override
-  ConsumerState<_SettingsControlCard> createState() =>
-      _SettingsControlCardState();
+  State<_SettingsControlCard> createState() => _SettingsControlCardState();
 }
 
-class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
+class _SettingsControlCardState extends State<_SettingsControlCard> {
   bool _hovered = false;
   bool _pressed = false;
   bool _focused = false;
@@ -352,17 +332,6 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    if (!ref.watch(experimentalInteractionCardsProvider)) {
-      return _SettingsControlRow(
-        theme: theme,
-        label: widget.label,
-        description: widget.description,
-        labelColor: widget.labelColor,
-        enabled: widget.enabled,
-        onTap: widget.onTap,
-        trailing: widget.trailing,
-      );
-    }
     final radius = BorderRadius.circular(theme.cornerRadius);
     final indicatorSize =
         widget.isToggle &&
@@ -370,6 +339,7 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
         ? SettingsCardIndicator.size
         : null;
     final highlighted = widget.enabled && (_hovered || _pressed || _focused);
+    final borderColor = highlighted ? theme.accent : theme.border;
     final material = Material(
       animationDuration: const Duration(milliseconds: 140),
       color: theme.background.withValues(alpha: widget.enabled ? 0.65 : 0.45),
@@ -377,10 +347,7 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
         borderRadius: radius,
         side: !widget.enabled || indicatorSize != null
             ? BorderSide.none
-            : BorderSide(
-                color: highlighted ? theme.accent : theme.border,
-                width: highlighted ? 1.5 : 1,
-              ),
+            : BorderSide(color: borderColor, width: highlighted ? 1.5 : 1),
       ),
       child: InkWell(
         borderRadius: radius,
@@ -412,12 +379,7 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
                     LayoutBuilder(
                       builder: (context, constraints) => ConstrainedBox(
                         constraints: BoxConstraints(
-                          minHeight: indicatorSize == null
-                              ? 0
-                              : (indicatorSize.height - 10).clamp(
-                                  0.0,
-                                  double.infinity,
-                                ),
+                          minHeight: widget.isToggle ? kElementHeight : 0,
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -431,9 +393,7 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
                                       widget.label,
                                       overflow: TextOverflow.visible,
                                       style: TextStyle(
-                                        color:
-                                            widget.labelColor ??
-                                            theme.textPrimary,
+                                        color: theme.textPrimary,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -480,7 +440,7 @@ class _SettingsControlCardState extends ConsumerState<_SettingsControlCard> {
             foregroundPainter: widget.enabled
                 ? _SettingsIndicatorBorderPainter(
                     radius: theme.cornerRadius,
-                    color: highlighted ? theme.accent : theme.border,
+                    color: borderColor,
                     indicatorSize: indicatorSize,
                     omitIndicator:
                         widget.indicatorStyle ==
@@ -569,89 +529,4 @@ class _SettingsIndicatorBorderPainter extends CustomPainter {
       oldDelegate.color != color ||
       oldDelegate.indicatorSize != indicatorSize ||
       oldDelegate.omitIndicator != omitIndicator;
-}
-
-/// Legacy settings presentation: the entire row is clickable, with its control
-/// at the right edge and no card border, fill, or selection glow.
-class _SettingsControlRow extends StatelessWidget {
-  const _SettingsControlRow({
-    required this.theme,
-    required this.label,
-    required this.description,
-    required this.enabled,
-    required this.onTap,
-    required this.trailing,
-    required this.labelColor,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
-  final bool enabled;
-  final VoidCallback? onTap;
-  final Widget trailing;
-  final Color? labelColor;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
-      mouseCursor: enabled
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.forbidden,
-      onTap: enabled ? onTap : null,
-      hoverColor: theme.accent.withValues(alpha: 0.08),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Opacity(
-          opacity: enabled ? 1 : 0.42,
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                color: labelColor ?? theme.textPrimary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (description?.trim().isNotEmpty == true) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          description!,
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: constraints.maxWidth * 0.45,
-                  ),
-                  child: trailing,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }

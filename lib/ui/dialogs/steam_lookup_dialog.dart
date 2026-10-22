@@ -45,20 +45,89 @@ Future<bool?> showSteamLookupDialog(
   );
 }
 
-/// Share the settings cards and their responsive layout, including text scaling.
+/// Both fetch choices and result previews edit the same immutable options.
 class _SteamOptionsGrid extends StatelessWidget {
-  const _SteamOptionsGrid({required this.children});
+  const _SteamOptionsGrid({
+    required this.theme,
+    required this.options,
+    required this.onChanged,
+    this.result,
+  });
 
-  final List<Widget> children;
+  final AppThemeData theme;
+  final SteamApplyOptions options;
+  final ValueChanged<SteamApplyOptions> onChanged;
+  final SteamSearchResult? result;
 
   @override
-  Widget build(BuildContext context) => SettingsControlWrap(
-    minimumCardWidth:
-        kInteractionCardMinWidth *
-        MediaQuery.textScalerOf(context).scale(14) /
-        14,
-    children: children,
-  );
+  Widget build(BuildContext context) {
+    final result = this.result;
+    final reviews = [
+      if (result?.reviewScore != null) '${result!.reviewScore}% positive',
+      if (result?.reviewCount != null)
+        '${NumberFormat.compact().format(result!.reviewCount)} reviews',
+    ].join(' · ');
+    Widget option(
+      String label,
+      String description,
+      bool value,
+      SteamApplyOptions Function(bool) update,
+    ) => SettingsToggleCard(
+      theme: theme,
+      label: label,
+      description: description,
+      value: value,
+      onChanged: (value) => onChanged(update(value)),
+    );
+    return SettingsControlWrap(
+      minimumCardWidth:
+          kInteractionCardMinWidth *
+          MediaQuery.textScalerOf(context).scale(14) /
+          14,
+      children: [
+        option(
+          'AppID',
+          result == null ? 'Save Steam AppID' : 'Save AppID ${result.appId}',
+          options.applyAppId,
+          (v) => options.copyWith(applyAppId: v),
+        ),
+        if (result == null || result.tags.isNotEmpty)
+          option(
+            'Tags',
+            result == null
+                ? 'Add Steam tags'
+                : 'Add ${result.tags.length} Steam tags',
+            options.applyTags,
+            (v) => options.copyWith(applyTags: v),
+          ),
+        option(
+          'Cover Image',
+          result == null
+              ? 'Download Steam header image'
+              : 'Steam header artwork',
+          options.applyImage,
+          (v) => options.copyWith(applyImage: v),
+        ),
+        option(
+          'Developer',
+          result == null
+              ? 'Add game developer name'
+              : result.developer?.trim().isNotEmpty == true
+              ? result.developer!
+              : 'No developer supplied',
+          options.applyDeveloper,
+          (v) => options.copyWith(applyDeveloper: v),
+        ),
+        if (result == null || reviews.isNotEmpty)
+          option(
+            'Reviews',
+            result == null ? 'Score and review count' : reviews,
+            options.applyReviews,
+            (v) => options.copyWith(applyReviews: v),
+          ),
+      ],
+    );
+  }
 }
 
 List<Tag> _steamPreviewTags(List<String> names) {
@@ -134,7 +203,8 @@ Future<String?> _applySteamResultToGameWithRead(
       isCurrent: () =>
           read(databaseNotifierProvider).revision == session.revision &&
           !(isCancelled?.call() ?? false),
-      downloadImage: (appId) => steamService.downloadImage(appId),
+      downloadImage: (appId) =>
+          steamService.downloadImage(appId, imageUrl: result.imageUrl),
     ).apply(game.id, result, options);
     await persistEncryptedDbIfNeeded(refLike, database: db);
     return null;
@@ -185,11 +255,7 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
 
   final theme = container.read(themeProvider);
 
-  bool applyAppId = true;
-  bool applyTags = true;
-  bool applyImage = true;
-  bool applyDeveloper = true;
-  bool applyReviews = true;
+  var options = SteamApplyOptions.defaults;
   final choice = await showAppDialog<String>(
     context: context,
     barrierDismissible: false,
@@ -235,44 +301,9 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
                       theme: theme,
                       titleIcon: Icons.tune,
                       child: _SteamOptionsGrid(
-                        children: [
-                          SettingsToggleCard(
-                            theme: theme,
-                            label: 'AppID',
-                            description: 'Save Steam AppID',
-                            value: applyAppId,
-                            onChanged: (v) => setState2(() => applyAppId = v),
-                          ),
-                          SettingsToggleCard(
-                            theme: theme,
-                            label: 'Tags',
-                            description: 'Add Steam tags',
-                            value: applyTags,
-                            onChanged: (v) => setState2(() => applyTags = v),
-                          ),
-                          SettingsToggleCard(
-                            theme: theme,
-                            label: 'Cover Image',
-                            description: 'Download Steam header image',
-                            value: applyImage,
-                            onChanged: (v) => setState2(() => applyImage = v),
-                          ),
-                          SettingsToggleCard(
-                            theme: theme,
-                            label: 'Developer',
-                            description: 'Add game developer name',
-                            value: applyDeveloper,
-                            onChanged: (v) =>
-                                setState2(() => applyDeveloper = v),
-                          ),
-                          SettingsToggleCard(
-                            theme: theme,
-                            label: 'Reviews',
-                            description: 'Score and review count',
-                            value: applyReviews,
-                            onChanged: (v) => setState2(() => applyReviews = v),
-                          ),
-                        ],
+                        theme: theme,
+                        options: options,
+                        onChanged: (value) => setState2(() => options = value),
                       ),
                     ),
                   ],
@@ -303,14 +334,6 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
       'options': SteamApplyOptions.defaults,
     };
   }
-
-  final options = SteamApplyOptions(
-    applyAppId: applyAppId,
-    applyTags: applyTags,
-    applyImage: applyImage,
-    applyDeveloper: applyDeveloper,
-    applyReviews: applyReviews,
-  );
 
   if (choice == 'cache') {
     return {'choice': 'cache', 'cached': cached, 'options': options};
@@ -683,14 +706,10 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   bool _isSearching = false;
   bool _isApplying = false;
   SteamSearchResult? _result;
+  final _coverDownloads = <String, Future<String?>>{};
   String? _error;
 
-  // Options for what to apply
-  bool _applyAppId = true;
-  bool _applyTags = true;
-  bool _applyImage = true;
-  bool _applyDeveloper = true;
-  bool _applyReviews = true;
+  var _options = SteamApplyOptions.defaults;
 
   @override
   void initState() {
@@ -743,19 +762,11 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     setState(() => _isApplying = true);
 
     try {
-      final options = SteamApplyOptions(
-        applyAppId: _applyAppId,
-        applyTags: _applyTags,
-        applyImage: _applyImage,
-        applyDeveloper: _applyDeveloper,
-        applyReviews: _applyReviews,
-      );
-
       final error = await applySteamResultToGame(
         ref,
         widget.game,
         _result!,
-        options,
+        _options,
         expectedRevision: _sessionRevision,
       );
 
@@ -882,13 +893,6 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 
   Widget _buildResultState(AppThemeData theme) {
     final result = _result!;
-    final reviewCount = result.reviewCount;
-    final reviews = [
-      if (result.reviewScore != null) '${result.reviewScore}% positive',
-      if (reviewCount != null)
-        '${NumberFormat.compact().format(reviewCount)} reviews',
-    ].join(' · ');
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -935,47 +939,10 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           groupPosition: SectionGroupPosition.last,
           alternateBackground: true,
           child: _SteamOptionsGrid(
-            children: [
-              _buildOption(
-                theme,
-                'AppID',
-                'Save AppID ${result.appId}',
-                _applyAppId,
-                (v) => setState(() => _applyAppId = v),
-              ),
-              if (result.tags.isNotEmpty)
-                _buildOption(
-                  theme,
-                  'Tags',
-                  'Add ${result.tags.length} Steam tags',
-                  _applyTags,
-                  (v) => setState(() => _applyTags = v),
-                ),
-              _buildOption(
-                theme,
-                'Cover Image',
-                'Steam header artwork',
-                _applyImage,
-                (v) => setState(() => _applyImage = v),
-              ),
-              _buildOption(
-                theme,
-                'Developer',
-                result.developer?.trim().isNotEmpty == true
-                    ? result.developer!
-                    : 'No developer supplied',
-                _applyDeveloper,
-                (v) => setState(() => _applyDeveloper = v),
-              ),
-              if (reviews.isNotEmpty)
-                _buildOption(
-                  theme,
-                  'Reviews',
-                  reviews,
-                  _applyReviews,
-                  (v) => setState(() => _applyReviews = v),
-                ),
-            ],
+            theme: theme,
+            options: _options,
+            result: result,
+            onChanged: (value) => setState(() => _options = value),
           ),
         ),
       ],
@@ -996,7 +963,23 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
             child: SizedBox(
               width: imageWidth,
               height: imageWidth * 215 / 460,
-              child: GameCoverImage(theme: theme, coverImage: result.imageUrl),
+              child: AppDialogPreviewScope.maybeOf(context) != null
+                  ? GameCoverImage(theme: theme, coverImage: result.imageUrl)
+                  : FutureBuilder<String?>(
+                      future: _coverDownloads.putIfAbsent(
+                        result.appId,
+                        () => ref
+                            .read(steamServiceProvider)
+                            .downloadImage(
+                              result.appId,
+                              imageUrl: result.imageUrl,
+                            ),
+                      ),
+                      builder: (context, snapshot) => GameCoverImage(
+                        theme: theme,
+                        coverImage: snapshot.data,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: 12),
@@ -1052,20 +1035,4 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       ),
     ),
   );
-
-  Widget _buildOption(
-    AppThemeData theme,
-    String label,
-    String description,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
-    return SettingsToggleCard(
-      theme: theme,
-      label: label,
-      description: description,
-      value: value,
-      onChanged: onChanged,
-    );
-  }
 }

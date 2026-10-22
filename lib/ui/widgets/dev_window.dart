@@ -11,6 +11,7 @@ import '../../providers/app_providers.dart';
 import '../pages/update_page.dart';
 import '../dialogs/dialog_gallery.dart';
 import '../../core/theme/app_theme.dart';
+import 'app_action_button.dart';
 import 'app_fps_counter.dart';
 import 'app_tab_bar.dart';
 import 'notification_system.dart';
@@ -223,13 +224,14 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       String label,
       IconData icon,
       VoidCallback? onTap, {
-      bool selected = false,
-    }) => _DevAction(
+      bool? selected,
+    }) => AppActionButton(
       label: label,
       icon: icon,
       theme: theme,
       onTap: onTap,
       selected: selected,
+      expandLabel: true,
     );
     Widget section(String title, List<Widget> actions) =>
         _DevSection(title: title, theme: theme, children: actions);
@@ -582,51 +584,6 @@ class _DevSection extends StatelessWidget {
             );
           },
         ),
-      ],
-    ),
-  );
-}
-
-class _DevAction extends StatelessWidget {
-  const _DevAction({
-    required this.label,
-    required this.icon,
-    required this.theme,
-    required this.onTap,
-    this.selected = false,
-  });
-  final String label;
-  final IconData icon;
-  final AppThemeData theme;
-  final VoidCallback? onTap;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) => OutlinedButton(
-    onPressed: onTap,
-    style: OutlinedButton.styleFrom(
-      foregroundColor: selected ? theme.accent : theme.textPrimary,
-      backgroundColor: selected
-          ? theme.accent.withValues(alpha: 0.12)
-          : theme.background.withValues(alpha: 0.35),
-      side: BorderSide(color: selected ? theme.accent : theme.border),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      minimumSize: const Size(0, 32),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.standard,
-    ),
-    child: Row(
-      children: [
-        Icon(icon, size: 16),
-        const SizedBox(width: 6),
-        Expanded(child: Text(label)),
-        if (selected) ...[
-          const SizedBox(width: 4),
-          const Icon(Icons.check, size: 14),
-        ],
       ],
     ),
   );

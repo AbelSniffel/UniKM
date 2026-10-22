@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/theme/app_theme.dart';
-import 'database_unlock_dialog.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/password_field.dart';
@@ -160,7 +159,7 @@ class _EnableEncryptionDialogState
                   validator: confirmPassword(_passwordController),
                 ),
                 const SizedBox(height: kDialogSpacing),
-                DialogBanner.caution(
+                DialogBanner.warning(
                   theme: widget.theme,
                   message:
                       'WARNING: If you forget your password, your data cannot be recovered!',
@@ -438,7 +437,7 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (disabling) ...[
-                  DialogBanner.danger(
+                  DialogBanner.warning(
                     theme: theme,
                     message:
                         'Your database will be stored in plain text '
@@ -460,22 +459,6 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Dialog to prompt for password when opening an encrypted database
-class UnlockDatabaseDialog {
-  const UnlockDatabaseDialog._();
-
-  static Future<String?> show(BuildContext context, AppThemeData theme) {
-    return DatabaseUnlockDialog.show(
-      context,
-      theme,
-      title: 'Unlock Database',
-      message:
-          'Your database is encrypted. Please enter your password to unlock it.',
-      barrierDismissible: true,
     );
   }
 }

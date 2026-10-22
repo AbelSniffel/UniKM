@@ -57,7 +57,6 @@ class SectionGroupBox extends ConsumerWidget {
     this.stackTrailingWhenCompact = false,
     this.headerCrossAxisAlignment = CrossAxisAlignment.start,
     this.headerBottomPadding = 12,
-    this.borderColor,
     this.contentFit = FlexFit.tight,
     this.searchQuery = '',
     this.isSearchMatch = false,
@@ -86,7 +85,6 @@ class SectionGroupBox extends ConsumerWidget {
 
   /// Gap below a top title, before the body content.
   final double headerBottomPadding;
-  final Color? borderColor;
   final String searchQuery;
   final bool isSearchMatch;
 
@@ -175,7 +173,7 @@ class SectionGroupBox extends ConsumerWidget {
     SectionTitleLocation location, {
     bool spaced = false,
   }) {
-    final baseBorderColor = borderColor ?? theme.border;
+    final baseBorderColor = theme.border;
     final effectiveBorderColor =
         Color.lerp(
           baseBorderColor,
@@ -576,61 +574,4 @@ class _SelectiveBorderPainter extends CustomPainter {
       old.showBottom != showBottom ||
       old.roundTopCorners != roundTopCorners ||
       old.roundBottomCorners != roundBottomCorners;
-}
-
-/// Inner groupbox for nested sections
-class InnerGroupBox extends StatelessWidget {
-  const InnerGroupBox({
-    super.key,
-    required this.theme,
-    required this.child,
-    this.title,
-    this.padding = const EdgeInsets.all(12),
-  });
-
-  final AppThemeData theme;
-  final Widget child;
-  final String? title;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(theme.cornerRadius / 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (title != null)
-            Padding(
-              padding: EdgeInsets.only(
-                left: padding.left,
-                right: padding.right,
-                top: padding.top,
-              ),
-              child: Text(
-                title!,
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          Padding(
-            padding: title != null
-                ? EdgeInsets.only(
-                    left: padding.left,
-                    right: padding.right,
-                    bottom: padding.bottom,
-                    top: 8,
-                  )
-                : padding,
-            child: child,
-          ),
-        ],
-      ),
-    );
-  }
 }

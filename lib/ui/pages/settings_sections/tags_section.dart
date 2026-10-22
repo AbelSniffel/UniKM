@@ -204,13 +204,11 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
         .length;
 
     final showCustomTags = matchesSettingsSearchGroup(
-      query: widget.searchQuery,
       matchesSearch: widget.matchesSearch,
       group: TagsSection.customTagsSearchGroup,
     );
 
     final showSteamTags = matchesSettingsSearchGroup(
-      query: widget.searchQuery,
       matchesSearch: widget.matchesSearch,
       group: TagsSection.steamTagsSearchGroup,
     );
@@ -221,7 +219,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           customTagNames: customTags.map((tag) => tag.name),
         ) &&
         matchesSettingsSearchGroup(
-          query: widget.searchQuery,
           matchesSearch: widget.matchesSearch,
           group: TagsSection.maintenanceSearchGroup,
         );
@@ -286,6 +283,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                     tags: customTags,
                     theme: widget.theme,
                     allSelected: true,
+                    deleteOnTap: true,
                     onTagToggled: (tagId) {
                       final tag = customTags.firstWhere((t) => t.id == tagId);
                       _deleteTag(tag.id, tag.name);

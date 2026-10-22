@@ -15,12 +15,10 @@ class ThemeImportResult {
   const ThemeImportResult({
     required this.importedCount,
     required this.invalidCount,
-    this.activatedThemeId,
   });
 
   final int importedCount;
   final int invalidCount;
-  final String? activatedThemeId;
 }
 
 // =============================================================================
@@ -202,7 +200,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     return ThemeImportResult(
       importedCount: importedCount,
       invalidCount: invalidCount,
-      activatedThemeId: lastImportedId,
     );
   }
 

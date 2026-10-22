@@ -1,9 +1,8 @@
 /// Backup and restore dialogs for database management
 library;
 
-import '../widgets/window_drop_target.dart';
+import '../widgets/file_drop_field.dart';
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../widgets/app_tab_bar.dart';
@@ -20,7 +19,7 @@ import '../widgets/section_groupbox.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../providers/app_providers.dart';
-import '../pages/settings_sections/settings_common.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
@@ -87,8 +86,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   bool _createBackupFirst = true;
   final _passwordController = TextEditingController();
   bool _isRestoring = false;
-  bool _isDragging = false;
-  bool _isHovering = false;
 
   @override
   void initState() {
@@ -222,7 +219,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
         !lower.endsWith('.enc') &&
         !(p.extension(path).isEmpty && await isLikelySqliteFile(path))) {
       if (!mounted || revision != _fileSelectionRevision) return;
-      setState(() => _isDragging = false);
       NotificationManager.instance.error(
         'Unsupported file type. Select a SQLite database or .enc file.',
       );
@@ -234,7 +230,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     );
     if (!mounted || revision != _fileSelectionRevision) return;
     setState(() {
-      _isDragging = false;
       _selectedBackupPath = path;
       _selectedBackupName = p.basename(path);
       _isEncryptedBackup = info.isEncrypted;
@@ -249,7 +244,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
       _selectedBackupPath = null;
       _selectedBackupName = null;
       _isEncryptedBackup = false;
-      _isDragging = false;
     });
   }
 
@@ -302,7 +296,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     final theme = ref.watch(themeProvider);
     final backupSettings = ref.watch(backupSettingsProvider);
     final maxBackups = backupSettings.maxCount;
-    final supportsDragAndDrop = PlatformFileActions.supportsDragAndDrop;
 
     return ThemedAlertDialog(
       theme: theme,
@@ -434,147 +427,21 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Focus(
-                              autofocus: false,
-                              child: MouseRegion(
-                                onEnter: (_) =>
-                                    setState(() => _isHovering = true),
-                                onExit: (_) =>
-                                    setState(() => _isHovering = false),
-                                child: WindowDropTarget(
-                                  enable:
-                                      supportsDragAndDrop &&
-                                      _tabController.index == 1 &&
-                                      !_isRestoring,
-                                  onDragDone: (details) async {
-                                    setState(() => _isDragging = false);
-                                    if (details.files.length != 1 ||
-                                        details.files.single
-                                            is DropItemDirectory) {
-                                      NotificationManager.instance.error(
-                                        'Drop one .db or .enc backup file.',
-                                      );
-                                      return;
-                                    }
-                                    await _handleFilePath(
-                                      details.files.single.path,
-                                    );
-                                  },
-                                  onDragEntered: (_) =>
-                                      setState(() => _isDragging = true),
-                                  onDragExited: (_) =>
-                                      setState(() => _isDragging = false),
-                                  child: GestureDetector(
-                                    onTap: _selectBackupFile,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: _isDragging
-                                            ? theme.accent.withValues(
-                                                alpha: 0.1,
-                                              )
-                                            : _isHovering
-                                            ? theme.accent.withValues(
-                                                alpha: 0.05,
-                                              )
-                                            : theme.surface,
-                                        borderRadius: BorderRadius.circular(
-                                          theme.cornerRadius,
-                                        ),
-                                        border: Border.all(
-                                          color: _isDragging
-                                              ? theme.accent
-                                              : _isHovering
-                                              ? theme.accent.withValues(
-                                                  alpha: 0.5,
-                                                )
-                                              : (_selectedBackupPath != null
-                                                    ? theme.accent
-                                                    : theme.border),
-                                          width: _isDragging ? 2 : 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            _isDragging
-                                                ? Icons.file_download
-                                                : (_selectedBackupPath != null
-                                                      ? (_isEncryptedBackup
-                                                            ? Icons.lock
-                                                            : Icons.storage)
-                                                      : Icons.file_open),
-                                            color: _isDragging
-                                                ? theme.accent
-                                                : (_selectedBackupPath != null
-                                                      ? theme.accent
-                                                      : theme.textSecondary),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  _selectedBackupName ??
-                                                      (_isDragging &&
-                                                              supportsDragAndDrop
-                                                          ? 'Drop file here...'
-                                                          : supportsDragAndDrop
-                                                          ? 'Click to select or drag file here...'
-                                                          : 'Tap to select a backup file...'),
-                                                  style: TextStyle(
-                                                    color: _isDragging
-                                                        ? theme.accent
-                                                        : (_selectedBackupPath !=
-                                                                  null
-                                                              ? theme
-                                                                    .textPrimary
-                                                              : theme
-                                                                    .textSecondary),
-                                                  ),
-                                                ),
-                                                if (_selectedBackupPath ==
-                                                        null &&
-                                                    !_isDragging) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Supports .db, .enc and extensionless SQLite files',
-                                                    style: TextStyle(
-                                                      color: theme.textHint,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                          if (_selectedBackupPath != null)
-                                            IconButton(
-                                              tooltip: 'Clear selection',
-                                              style:
-                                                  theme.compactIconButtonStyle,
-                                              onPressed: _isRestoring
-                                                  ? null
-                                                  : _clearFileSelection,
-                                              icon: const Icon(
-                                                Icons.close,
-                                                size: 20,
-                                              ),
-                                            )
-                                          else
-                                            Icon(
-                                              Icons.folder_open,
-                                              color: theme.textSecondary,
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            FileDropField(
+                              theme: theme,
+                              description:
+                                  'Supports .db, .enc and extensionless SQLite files',
+                              selectedName: _selectedBackupName,
+                              selectedIcon: _isEncryptedBackup
+                                  ? Icons.lock
+                                  : Icons.storage,
+                              enabled: !_isRestoring,
+                              active: _tabController.index == 1,
+                              onBrowse: _selectBackupFile,
+                              onFileSelected: _handleFilePath,
+                              onClear: _clearFileSelection,
+                              invalidDropMessage:
+                                  'Drop one .db or .enc backup file.',
                             ),
                             if (_isEncryptedBackup) ...[
                               const SizedBox(height: 12),
@@ -584,10 +451,9 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                               ),
                             ],
                             const SizedBox(height: kElementVSpacing),
-                            ToggleSettingRow(
+                            SettingsToggleCard(
                               theme: theme,
                               label: 'Backup current database',
-                              description: 'Recommended for safety',
                               value: _createBackupFirst,
                               onChanged: (value) =>
                                   setState(() => _createBackupFirst = value),
@@ -703,10 +569,9 @@ Future<bool> showRestoreConfirmDialog(
                   ),
                 ),
                 const SizedBox(height: kDialogSpacing),
-                ToggleSettingRow(
+                SettingsToggleCard(
                   theme: theme,
                   label: 'Backup current database',
-                  description: 'Recommended for safety',
                   value: createBackupFirst,
                   onChanged: (value) =>
                       setState(() => createBackupFirst = value),

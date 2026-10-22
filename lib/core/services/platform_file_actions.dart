@@ -86,17 +86,11 @@ class PlatformFileActions {
     required List<String> allowedExtensions,
   }) async {
     if (!isMobilePlatform) {
-      final outputPath = await _selectDesktopSavePath(
+      return _selectDesktopSavePath(
         dialogTitle: dialogTitle,
         fileName: fileName,
         allowedExtensions: allowedExtensions,
       );
-
-      if (outputPath == null || outputPath.isEmpty) {
-        return null;
-      }
-
-      return outputPath;
     }
 
     return createManagedFilePath(fileName: fileName, subdirectory: 'databases');
@@ -161,6 +155,32 @@ class PlatformFileActions {
       directoryPath: targetDirectoryPath,
       fileName: fileName,
     );
+  }
+
+  /// Share staged exports when required; clean up only after a declined share.
+  static Future<bool> completeExport(
+    PlatformSaveTarget target, {
+    required String subject,
+  }) async {
+    if (!target.shouldShareAfterWrite) {
+      return true;
+    }
+
+    final shared = await shareFile(target.file, subject: subject);
+
+    if (shared) {
+      return true;
+    }
+
+    try {
+      if (await target.file.exists()) {
+        await target.file.delete();
+      }
+    } catch (_) {
+      // Best effort cleanup only.
+    }
+
+    return false;
   }
 
   static Future<bool> shareFile(

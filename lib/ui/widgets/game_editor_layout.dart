@@ -182,7 +182,6 @@ class GameEditorHeader extends StatelessWidget {
     this.options,
     this.maxPanelHeight,
     this.notes,
-    this.emptyTitle = 'New Game',
     this.trailing,
   });
 
@@ -193,7 +192,6 @@ class GameEditorHeader extends StatelessWidget {
   final Widget? options;
   final double? maxPanelHeight;
   final Widget? notes;
-  final String emptyTitle;
   final Widget? trailing;
 
   @override
@@ -211,7 +209,7 @@ class GameEditorHeader extends StatelessWidget {
                 child: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: titleController,
                   builder: (context, value, _) => Text(
-                    value.text.trim().isEmpty ? emptyTitle : value.text,
+                    value.text.trim().isEmpty ? 'New Game' : value.text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

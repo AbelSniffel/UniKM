@@ -1,11 +1,8 @@
-/// Tag-row widget for GameCard.
-///
-/// Owns the per-card tag-fit measurement cache so those 4 state fields and 3
-/// builder methods can be removed from [_GameCardState].
+/// Lightweight, content-sized tag badges for grid and list game cards.
 library;
 
-import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
@@ -13,10 +10,6 @@ import 'game_card_badges.dart';
 import 'game_card_painters.dart';
 import 'tag_width_cache.dart';
 
-/// Animated tag row with built-in show/hide reveal and per-card layout cache.
-///
-/// Drop this directly into grid or list layouts in place of the old
-/// `_buildAnimatedTagsRow` / `_buildTagsRow` / `_buildTagsRowForWidth` trio.
 class GameCardTagsRow extends StatefulWidget {
   const GameCardTagsRow({
     super.key,
@@ -24,17 +17,13 @@ class GameCardTagsRow extends StatefulWidget {
     required this.theme,
     required this.isVisible,
     this.fixedMaxWidth,
-    this.topSpacing = 0.0,
+    this.topSpacing = 0,
   });
 
   final Game game;
   final AppThemeData theme;
   final bool isVisible;
-
-  /// When non-null (grid mode) skips the [LayoutBuilder] measurement pass.
   final double? fixedMaxWidth;
-
-  /// Extra spacing above the tag row.
   final double topSpacing;
 
   @override
@@ -42,235 +31,171 @@ class GameCardTagsRow extends StatefulWidget {
 }
 
 class _GameCardTagsRowState extends State<GameCardTagsRow> {
-  // ── Per-card tag-fit cache (non-reactive, no setState needed) ─────────────
-  String? _lastTagCacheKey;
-  int _cachedTagBestCount = 0;
-  double _cachedTagBestWidth = 0.0;
-  bool _cachedTagCountFits = false;
+  static const _padding = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+  static const _gap = 4.0;
+
+  List<String> _names = const [];
+  String _tooltip = '';
+  (double, TextStyle, TextScaler, TextDirection, Locale?)? _layoutKey;
+  String _label = '';
+  String _count = '';
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _lastTagCacheKey = null;
+  void initState() {
+    super.initState();
+    _updateTags();
   }
 
   @override
   void didUpdateWidget(GameCardTagsRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Invalidate if the game changes (different tag list).
-    if (oldWidget.game.id != widget.game.id ||
+    if (!identical(oldWidget.game.tags, widget.game.tags) &&
         !const ListEquality<Tag>().equals(
           oldWidget.game.tags,
           widget.game.tags,
         )) {
-      _lastTagCacheKey = null;
+      _updateTags();
     }
   }
 
-  // ── Tag row ───────────────────────────────────────────────────────────────
-
-  Widget _buildTagsRow(BuildContext context) {
-    final tagNames = widget.game.tags.map((t) => t.name).toList();
-    if (tagNames.isEmpty) return const SizedBox.shrink();
-
-    if (widget.fixedMaxWidth != null) {
-      return _buildTagsRowForWidth(
-        context,
-        widget.fixedMaxWidth!,
-        tagNames,
-        MediaQuery.textScalerOf(context),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textScaler = MediaQuery.textScalerOf(context);
-        final rawWidth =
-            constraints.hasBoundedWidth && constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
-        final bucketedWidth = (rawWidth / 8).floorToDouble() * 8.0;
-        return _buildTagsRowForWidth(
-          context,
-          bucketedWidth,
-          tagNames,
-          textScaler,
-        );
-      },
-    );
+  void _updateTags() {
+    _names = widget.game.tags.map((tag) => tag.name).toList(growable: false);
+    _tooltip = _names.join('\n');
+    _layoutKey = null;
   }
 
-  Widget _buildTagsRowForWidth(
-    BuildContext context,
-    double maxWidth,
-    List<String> tagNames,
-    TextScaler textScaler,
+  void _fit(
+    double width,
+    TextStyle style,
+    TextScaler scaler,
+    TextDirection direction,
+    Locale? locale,
   ) {
-    final textDirection = Directionality.of(context);
-    final tagStyle = TextStyle(
-      color: widget.theme.textPrimary,
-      fontSize: 11,
-      fontWeight: FontWeight.w300,
+    final key = (width, style, scaler, direction, locale);
+    if (key == _layoutKey) return;
+    _layoutKey = key;
+    double measure(String text) => TagWidthCache.measureTextWidth(
+      text,
+      style,
+      direction,
+      scaler,
+      locale: locale,
     );
-    final countStyle = TextStyle(
-      color: widget.theme.textPrimary,
-      fontSize: 11,
-      fontWeight: FontWeight.w300,
+    final separatorWidth = measure(' · ');
+    final countWidths = <int, double>{};
+    double countWidth(int count) => countWidths.putIfAbsent(
+      count,
+      () => measure('+$count') + _padding.horizontal,
     );
-    final baseTextStyle = DefaultTextStyle.of(context).style;
-    final resolvedTagStyle = baseTextStyle.merge(tagStyle);
-    final resolvedCountStyle = baseTextStyle.merge(countStyle);
-    const chipPadding = EdgeInsets.symmetric(horizontal: 6, vertical: 3);
-    const countPadding = EdgeInsets.symmetric(horizontal: 6, vertical: 3);
-    const gap = 4.0;
+    var bestCount = 0;
+    var textWidth = 0.0;
+    for (var i = 0; i < _names.length; i++) {
+      textWidth += measure(_names[i]) + (i == 0 ? 0 : separatorWidth);
+      final labelWidth = textWidth + _padding.horizontal;
+      // Once the prefix alone exceeds the width, no later prefix can fit.
+      // Do not stop just because the count badge doesn't fit: a final small
+      // tag may fit while removing the count badge altogether.
+      if (labelWidth > width) break;
+      final remaining = _names.length - i - 1;
+      if (labelWidth + (remaining == 0 ? 0 : _gap + countWidth(remaining)) <=
+          width) {
+        bestCount = i + 1;
+      }
+    }
+    _label = _names.take(bestCount).join(' · ');
+    _count = bestCount == _names.length ? '' : '+${_names.length - bestCount}';
+  }
 
-    double measureChip(String text, TextStyle style, EdgeInsets padding) {
-      return TagWidthCache.measureTextWidth(
+  Widget _badge(String text, TextStyle style, Color color) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: kGameCardChipBackgroundAlpha),
+      borderRadius: GameCardBadges.chipBorderRadius(widget.theme, kBadgeHeight),
+    ),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kBadgeHeight),
+      child: Padding(
+        padding: _padding,
+        child: Align(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: Text(
             text,
-            style,
-            textDirection,
-            textScaler,
-          ) +
-          padding.horizontal +
-          2.0;
-    }
+            style: style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    ),
+  );
 
-    final tagFingerprint = widget.game.tags.map((t) => t.id).join(',');
-    final tagKey =
-        '${maxWidth.toStringAsFixed(0)}:${textScaler.scale(1.0).toStringAsFixed(3)}:$tagFingerprint';
-
-    int bestCount;
-    double bestTagsWidth;
-    bool countFits;
-
-    if (tagKey == _lastTagCacheKey) {
-      bestCount = _cachedTagBestCount;
-      bestTagsWidth = _cachedTagBestWidth;
-      countFits = _cachedTagCountFits;
-    } else {
-      final separatorWidth = TagWidthCache.measureTextWidth(
-        ' · ',
-        resolvedTagStyle,
-        textDirection,
-        textScaler,
-      );
-
-      final countWidthCache = <int, double>{};
-      double countChipWidthFor(int remaining) {
-        return countWidthCache.putIfAbsent(
-          remaining,
-          () => measureChip('+$remaining', resolvedCountStyle, countPadding),
-        );
-      }
-
-      bestCount = 0;
-      double runningTextWidth = 0.0;
-      bestTagsWidth = 0.0;
-      for (var i = 0; i < tagNames.length; i++) {
-        // Stop measuring as soon as another tag cannot fit. Long Steam tag
-        // lists should not lay out text that is represented by the count chip.
-        runningTextWidth += TagWidthCache.measureTextWidth(
-          tagNames[i],
-          resolvedTagStyle,
-          textDirection,
-          textScaler,
-        );
-        if (i > 0) runningTextWidth += separatorWidth;
-
-        final visibleCount = i + 1;
-        final remaining = tagNames.length - visibleCount;
-        final tagsWidth = runningTextWidth + chipPadding.horizontal + 2.0;
-
-        double trailingCountWidth = 0.0;
-        if (remaining > 0) {
-          trailingCountWidth = countChipWidthFor(remaining) + gap;
-        }
-
-        if (tagsWidth + trailingCountWidth <= maxWidth) {
-          bestCount = visibleCount;
-          bestTagsWidth = tagsWidth;
-        } else {
-          break;
-        }
-      }
-
-      final remainingForFit = tagNames.length - bestCount;
-      countFits = remainingForFit > 0
-          ? (countChipWidthFor(remainingForFit) +
-                    (bestTagsWidth > 0 ? bestTagsWidth + gap : 0.0) <=
-                maxWidth)
-          : false;
-
-      _lastTagCacheKey = tagKey;
-      _cachedTagBestCount = bestCount;
-      _cachedTagBestWidth = bestTagsWidth;
-      _cachedTagCountFits = countFits;
-    }
-
-    final showTagsText = bestCount > 0;
-    final remainingCount = tagNames.length - bestCount;
-    final displayTags = showTagsText
-        ? tagNames.take(bestCount).join(' · ')
-        : '';
-    final displayCount = remainingCount > 0 ? '+$remainingCount' : '';
-    final representativeTag = widget.game.tags.first;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (showTagsText)
-            Flexible(
-              fit: FlexFit.loose,
-              child: buildTagChip(
-                widget.theme,
-                displayTags,
-                padding: chipPadding,
-                overrideBackground: representativeTag.isSteamTag
-                    ? widget.theme.accent
-                    : representativeTag.color,
-                overrideTextColor: widget.theme.primaryButtonText,
-              ),
-            ),
-          if (remainingCount > 0 && countFits) ...[
-            if (showTagsText) const SizedBox(width: gap),
-            buildTagChip(
-              widget.theme,
-              displayCount,
-              padding: countPadding,
-              weight: FontWeight.w600,
-              overrideBackground: representativeTag.isSteamTag
-                  ? widget.theme.accent
-                  : representativeTag.color,
-              overrideTextColor: widget.theme.primaryButtonText,
-            ),
+  Widget _row(BuildContext context, double width) {
+    final style = DefaultTextStyle.of(context).style.copyWith(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    );
+    _fit(
+      width,
+      style,
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+      Localizations.maybeLocaleOf(context),
+    );
+    final firstTag = widget.game.tags.first;
+    final color = firstTag.isSteamTag
+        ? widget.theme.accent
+        : widget.theme.secondary;
+    return Tooltip(
+      message: _tooltip,
+      // Mouse hover can reveal the full list; leave touch long-press to the card.
+      triggerMode: TooltipTriggerMode.manual,
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_label.isNotEmpty)
+              Flexible(child: _badge(_label, style, color)),
+            if (_count.isNotEmpty) ...[
+              if (_label.isNotEmpty) const SizedBox(width: _gap),
+              if (_label.isNotEmpty)
+                _badge(_count, style, color)
+              else
+                Flexible(child: _badge(_count, style, color)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // When hidden, avoid constructing the real widget at all to skip expensive
-    // width measurement. Use a lightweight placeholder instead.
-    final Widget childWidget = widget.isVisible
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.topSpacing > 0) SizedBox(height: widget.topSpacing),
-              _buildTagsRow(context),
-            ],
-          )
-        : const SizedBox.shrink();
-
+    Widget child = const SizedBox.shrink();
+    // Hidden rows never construct badges or measure text. Cache tag data across
+    // ordinary rebuilds, and layout across color-only theme changes.
+    if (widget.isVisible && _names.isNotEmpty) {
+      final row = widget.fixedMaxWidth == null
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.hasBoundedWidth
+                    ? constraints.maxWidth
+                    : MediaQuery.sizeOf(context).width;
+                return _row(context, (width / 8).floorToDouble() * 8);
+              },
+            )
+          : _row(context, widget.fixedMaxWidth!);
+      child = Padding(
+        padding: EdgeInsets.only(top: widget.topSpacing),
+        child: row,
+      );
+    }
     return VisibilityReveal(
       isVisible: widget.isVisible,
-      axisAlignment: 1.0,
+      axisAlignment: 1,
       alignment: Alignment.bottomLeft,
-      child: childWidget,
+      child: child,
     );
   }
 }

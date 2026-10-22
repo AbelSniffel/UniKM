@@ -293,15 +293,20 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
             ),
             child: SizedBox(
               height: calendarHeight,
-              child: CalendarDatePicker(
-                key: ValueKey(
-                  'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
+              child: DatePickerTheme(
+                data: DatePickerTheme.of(
+                  context,
+                ).copyWith(todayBorder: BorderSide.none),
+                child: CalendarDatePicker(
+                  key: ValueKey(
+                    'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
+                  ),
+                  initialDate: _selectedDate,
+                  firstDate: widget.firstDate,
+                  lastDate: widget.lastDate,
+                  currentDate: widget.currentDate,
+                  onDateChanged: _setSelectedDate,
                 ),
-                initialDate: _selectedDate,
-                firstDate: widget.firstDate,
-                lastDate: widget.lastDate,
-                currentDate: widget.currentDate,
-                onDateChanged: _setSelectedDate,
               ),
             ),
           ),

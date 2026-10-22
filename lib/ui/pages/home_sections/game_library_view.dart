@@ -444,8 +444,6 @@ class _GameLibraryDragSelectionLayerState
   static const double _autoScrollEdgeExtent = 72.0;
   static const double _autoScrollMinStep = 4.0;
   static const double _autoScrollMaxStep = 18.0;
-  static const app_selection_overlay.SelectionOverlayStyle _marqueeStyle =
-      app_selection_overlay.kDefaultSelectionOverlayStyle;
 
   int? _paintPointer;
   Offset? _paintDownGlobal;
@@ -908,7 +906,6 @@ class _GameLibraryDragSelectionLayerState
                 currentPosition: _marqueeCurrentLocal!,
                 theme: widget.theme,
                 selectedCount: _marqueeSelectedIds.length,
-                style: _marqueeStyle,
               ),
             ),
         ],

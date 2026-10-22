@@ -44,6 +44,9 @@ class AdvancedSection extends ConsumerWidget {
     description:
         'Restore all settings, library filters, and sorting to defaults',
   );
+  // Reserved for future experimental settings; hidden from UI and search.
+  static const showExperimentalSettings = false;
+
   static const SettingTextSpec interactionCardsSpec = SettingTextSpec(
     label: 'Interaction cards',
     description:
@@ -70,7 +73,7 @@ class AdvancedSection extends ConsumerWidget {
     'Advanced Settings',
     ...displaySearchGroup.indexTexts,
     ...systemSearchGroup.indexTexts,
-    ...experimentalSearchGroup.indexTexts,
+    if (showExperimentalSettings) ...experimentalSearchGroup.indexTexts,
   ];
 
   static const _frameRateOptions = <MapEntry<String, String>>[
@@ -94,27 +97,28 @@ class AdvancedSection extends ConsumerWidget {
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
-        buildSearchableSectionEntry(
-          theme: theme,
-          group: experimentalSearchGroup,
-          titleIcon: Icons.science_outlined,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          childBuilder: () => SettingsControlWrap(
-            children: [
-              SettingsToggleCard(
-                theme: theme,
-                label: interactionCardsSpec.label,
-                description: interactionCardsSpec.description,
-                value: ref.watch(experimentalInteractionCardsProvider),
-                onChanged: (value) => settingsNotifier.setSetting(
-                  SettingsKeys.experimentalInteractionCards,
-                  value,
+        if (showExperimentalSettings)
+          buildSearchableSectionEntry(
+            theme: theme,
+            group: experimentalSearchGroup,
+            titleIcon: Icons.science_outlined,
+            searchQuery: searchQuery,
+            matchesSearch: matchesSearch,
+            childBuilder: () => SettingsControlWrap(
+              children: [
+                SettingsToggleCard(
+                  theme: theme,
+                  label: interactionCardsSpec.label,
+                  description: interactionCardsSpec.description,
+                  value: ref.watch(experimentalInteractionCardsProvider),
+                  onChanged: (value) => settingsNotifier.setSetting(
+                    SettingsKeys.experimentalInteractionCards,
+                    value,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         buildSearchableSectionEntry(
           theme: theme,
           group: displaySearchGroup,

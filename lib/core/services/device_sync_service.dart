@@ -125,6 +125,24 @@ class _PeerPingResult {
     this.remoteSyncProtocol = 0,
   });
 
+  factory _PeerPingResult.fromPong(Map<String, dynamic> payload) =>
+      _PeerPingResult(
+        reachable: true,
+        remoteTrusted: payload['trusted'] == true,
+        remoteDbName: (payload['dbName'] as String?)?.trim(),
+        remoteRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
+        remoteKnownLocalRevision:
+            (payload['peerKnownRevision'] as num?)?.toInt() ?? 0,
+        remoteKnownLocalSyncAtMillis:
+            (payload['peerKnownSyncAt'] as num?)?.toInt() ?? 0,
+        remoteSyncRevisionId: (payload['syncRevisionId'] as String?)?.trim(),
+        remoteDbTimestampMillis:
+            (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0,
+        remoteReceiverSyncInFlight: payload['receiverSyncInFlight'] == true,
+        remoteContentDigest: payload['contentDigest'] as String? ?? '',
+        remoteSyncProtocol: (payload['syncProtocol'] as num?)?.toInt() ?? 0,
+      );
+
   final bool reachable;
   final bool remoteTrusted;
   final String? remoteDbName;
@@ -279,6 +297,9 @@ class DeviceSyncService {
   void _emitSyncEvent(SyncEvent event) {
     if (!_eventController.isClosed && ref.mounted) _eventController.add(event);
   }
+
+  void _reportTransfer(String message) =>
+      _emitSyncEvent(SyncTransferActivityEvent(active: true, message: message));
 
   SyncRevocationLedger get _revocationLedger => SyncRevocationLedger.decode(
     ref.read(settingsProvider)[SettingsKeys.syncRevokedPeersJson] as String?,
@@ -1664,12 +1685,8 @@ class DeviceSyncService {
       }
     }
 
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message:
-            '[${targetPeer.name}] Switching local database to "$normalizedRemoteName" to match remote...',
-      ),
+    _reportTransfer(
+      '[${targetPeer.name}] Switching local database to "$normalizedRemoteName" to match remote...',
     );
 
     final targetFile = File(targetBasePath);
@@ -1785,12 +1802,7 @@ class DeviceSyncService {
       target.transferPort ?? transferPort,
     );
     StreamIterator<String>? lines;
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message: 'Syncing with ${target.name}...',
-      ),
-    );
+    _reportTransfer('Syncing with ${target.name}...');
     try {
       final handshake = await _performClientHandshake(socket, target, localId);
       lines = handshake.lineIter;
@@ -1935,12 +1947,8 @@ class DeviceSyncService {
 
     var ping = await _pingPeer(targetPeer);
     if (!ping.reachable) {
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message:
-              '[${targetPeer.name}] Saved address is unreachable. Refreshing peer address...',
-        ),
+      _reportTransfer(
+        '[${targetPeer.name}] Saved address is unreachable. Refreshing peer address...',
       );
       final rediscovered = await _rediscoverTrustedPeerEndpoint(targetPeer);
       if (rediscovered != null) {
@@ -1965,11 +1973,8 @@ class DeviceSyncService {
     }
 
     // Backup-first safety guard — labeled so users can identify it on restore.
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message: '[${targetPeer.name}] Step 1/4: Creating pre-sync backup...',
-      ),
+    _reportTransfer(
+      '[${targetPeer.name}] Step 1/4: Creating pre-sync backup...',
     );
     await ref.read(backupServiceProvider).createBackup(label: 'pre-sync');
 
@@ -2010,12 +2015,8 @@ class DeviceSyncService {
     final expectedReceiverDbName = (ping.remoteDbName ?? '').trim();
 
     // ── Double-check: re-ping the peer to verify its active DB hasn't changed ──
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message:
-            '[${targetPeer.name}] Verifying remote database is still the same...',
-      ),
+    _reportTransfer(
+      '[${targetPeer.name}] Verifying remote database is still the same...',
     );
     final recheckPing = await _pingPeer(targetPeer);
     requireManualContext();
@@ -2054,12 +2055,8 @@ class DeviceSyncService {
       Socket tcpSocketPull;
       StreamIterator<String>? pullLines;
       try {
-        _emitSyncEvent(
-          SyncTransferActivityEvent(
-            active: true,
-            message:
-                '[${targetPeer.name}] Step 2/4: Connecting to pull data...',
-          ),
+        _reportTransfer(
+          '[${targetPeer.name}] Step 2/4: Connecting to pull data...',
         );
         tcpSocketPull = await _connectSyncSocket(
           targetPeer.host,
@@ -2073,12 +2070,8 @@ class DeviceSyncService {
       }
 
       try {
-        _emitSyncEvent(
-          SyncTransferActivityEvent(
-            active: true,
-            message:
-                '[${targetPeer.name}] Step 3/4: Requesting remote database...',
-          ),
+        _reportTransfer(
+          '[${targetPeer.name}] Step 3/4: Requesting remote database...',
         );
 
         // ── Encrypted handshake ──────────────────────────────────────────
@@ -2090,12 +2083,8 @@ class DeviceSyncService {
         pullLines = lineIter;
         requireManualContext();
 
-        _emitSyncEvent(
-          SyncTransferActivityEvent(
-            active: true,
-            message:
-                '[${targetPeer.name}] Step 4/4: Waiting for remote data...',
-          ),
+        _reportTransfer(
+          '[${targetPeer.name}] Step 4/4: Waiting for remote data...',
         );
 
         // Send encrypted pull request.
@@ -2190,13 +2179,10 @@ class DeviceSyncService {
             : const <Map<String, dynamic>>[];
         final remoteFullDataset = remotePayload['fullDataset'] == true;
 
-        _emitSyncEvent(
-          SyncTransferActivityEvent(
-            active: true,
-            message: remoteFullDataset
-                ? '[${targetPeer.name}] Applying ${games.length} records and ${tombstones.length} deletions...'
-                : '[${targetPeer.name}] Applying ${games.length} changed records and ${tombstones.length} deletions...',
-          ),
+        _reportTransfer(
+          remoteFullDataset
+              ? '[${targetPeer.name}] Applying ${games.length} records and ${tombstones.length} deletions...'
+              : '[${targetPeer.name}] Applying ${games.length} changed records and ${tombstones.length} deletions...',
         );
 
         final remoteRevisionId =
@@ -2277,12 +2263,8 @@ class DeviceSyncService {
 
     final currentRevisionId = _currentSyncCode();
 
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message:
-            '[${targetPeer.name}] Step 2/4: Serialising local data snapshot...',
-      ),
+    _reportTransfer(
+      '[${targetPeer.name}] Step 2/4: Serialising local data snapshot...',
     );
     final builtPayload = await manualCodec.buildDeltaPayload(
       syncRevisionId: currentRevisionId,
@@ -2336,12 +2318,8 @@ class DeviceSyncService {
       followUpPayload['senderDbName'] = manualDatabaseName;
       followUpPayload['requestingPeerId'] = localDeviceId;
 
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message:
-              '[${targetPeer.name}] Mid-sync local edits detected. Sending follow-up delta...',
-        ),
+      _reportTransfer(
+        '[${targetPeer.name}] Mid-sync local edits detected. Sending follow-up delta...',
       );
 
       await _ensureExpectedRemoteDatabaseForPush(
@@ -2404,12 +2382,7 @@ class DeviceSyncService {
 
     Socket tcpSocket;
     try {
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message: '[${targetPeer.name}] Connecting for data transfer...',
-        ),
-      );
+      _reportTransfer('[${targetPeer.name}] Connecting for data transfer...');
       tcpSocket = await _connectSyncSocket(
         targetPeer.host,
         targetPeer.transferPort ?? transferPort,
@@ -2421,13 +2394,10 @@ class DeviceSyncService {
       );
     }
 
-    _emitSyncEvent(
-      SyncTransferActivityEvent(
-        active: true,
-        message: fullDataset
-            ? '[${targetPeer.name}] Sending $gameCount records and $deletedCount deletions...'
-            : '[${targetPeer.name}] Sending $gameCount changed records and $deletedCount deletions...',
-      ),
+    _reportTransfer(
+      fullDataset
+          ? '[${targetPeer.name}] Sending $gameCount records and $deletedCount deletions...'
+          : '[${targetPeer.name}] Sending $gameCount changed records and $deletedCount deletions...',
     );
 
     var confirmedTimestampMillis = 0;
@@ -2446,12 +2416,7 @@ class DeviceSyncService {
       tcpSocket.add(utf8.encode('$encryptedPayload\n'));
       await tcpSocket.flush();
 
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message: '[${targetPeer.name}] Waiting for confirmation...',
-        ),
-      );
+      _reportTransfer('[${targetPeer.name}] Waiting for confirmation...');
 
       const perLineTimeout = Duration(seconds: 15);
       final overallDeadline = DateTime.now().add(const Duration(minutes: 3));
@@ -2472,11 +2437,8 @@ class DeviceSyncService {
           try {
             final probe = jsonDecode(decrypted);
             if (probe is Map<String, dynamic> && probe['keepAlive'] == true) {
-              _emitSyncEvent(
-                SyncTransferActivityEvent(
-                  active: true,
-                  message: '[${targetPeer.name}] Remote is still processing...',
-                ),
+              _reportTransfer(
+                '[${targetPeer.name}] Remote is still processing...',
               );
               continue;
             }
@@ -2765,12 +2727,7 @@ class DeviceSyncService {
       utf8.decoder.bind(socket).transform(const LineSplitter()),
     );
     try {
-      _emitSyncEvent(
-        const SyncTransferActivityEvent(
-          active: true,
-          message: 'Incoming sync: waiting for data...',
-        ),
-      );
+      _reportTransfer('Incoming sync: waiting for data...');
 
       // ── Read first line and detect protocol version ───────────────────────
       bool gotFirst;
@@ -2949,13 +2906,10 @@ class DeviceSyncService {
           peer: authenticatedPeer,
         );
         requirePullContext();
-        _emitSyncEvent(
-          SyncTransferActivityEvent(
-            active: true,
-            message: requestFullDataset
-                ? '[$displayName] Pull request received. Sending full data snapshot...'
-                : '[$displayName] Pull request received. Sending delta snapshot...',
-          ),
+        _reportTransfer(
+          requestFullDataset
+              ? '[$displayName] Pull request received. Sending full data snapshot...'
+              : '[$displayName] Pull request received. Sending delta snapshot...',
         );
         final currentRevisionId = _currentSyncCode();
         final responsePayload =
@@ -3022,13 +2976,9 @@ class DeviceSyncService {
                 }
               }
             }
-            _emitSyncEvent(
-              SyncTransferActivityEvent(
-                active: true,
-                message:
-                    '[$displayName] Switching database to "$senderDbName" '
-                    'to match sender...',
-              ),
+            _reportTransfer(
+              '[$displayName] Switching database to "$senderDbName" '
+              'to match sender...',
             );
             final targetFile = File(targetBasePath);
             if (targetFile.existsSync()) {
@@ -3039,13 +2989,9 @@ class DeviceSyncService {
               );
             }
             switchedBySenderDb = true;
-            _emitSyncEvent(
-              SyncTransferActivityEvent(
-                active: true,
-                message:
-                    '[$displayName] Database switched to "$senderDbName". '
-                    'Applying incoming data...',
-              ),
+            _reportTransfer(
+              '[$displayName] Database switched to "$senderDbName". '
+              'Applying incoming data...',
             );
           }
         }
@@ -3064,12 +3010,8 @@ class DeviceSyncService {
             'syncRevisionId': syncRevisionId,
           });
           await socket.flush();
-          _emitSyncEvent(
-            SyncTransferActivityEvent(
-              active: true,
-              message:
-                  '[$displayName] Sync blocked: active database changed from "$expectedReceiverDbName" to "$activeReceiverDbName".',
-            ),
+          _reportTransfer(
+            '[$displayName] Sync blocked: active database changed from "$expectedReceiverDbName" to "$activeReceiverDbName".',
           );
           _emitSyncEvent(const SyncTransferActivityEvent(active: false));
           return;
@@ -3116,13 +3058,10 @@ class DeviceSyncService {
           : const <Map<String, dynamic>>[];
       final incomingFullDataset = payload['fullDataset'] == true;
 
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message: incomingFullDataset
-              ? '[$displayName] Received ${games.length} records and ${tombstones.length} deletions. Applying...'
-              : '[$displayName] Received ${games.length} changed records and ${tombstones.length} deletions. Applying...',
-        ),
+      _reportTransfer(
+        incomingFullDataset
+            ? '[$displayName] Received ${games.length} records and ${tombstones.length} deletions. Applying...'
+            : '[$displayName] Received ${games.length} changed records and ${tombstones.length} deletions. Applying...',
       );
 
       // Send keep-alive pings every 4 seconds so the initiator doesn't time
@@ -3182,12 +3121,8 @@ class DeviceSyncService {
         keepAliveTimer = null;
       }
 
-      _emitSyncEvent(
-        SyncTransferActivityEvent(
-          active: true,
-          message:
-              '[$displayName] Replaced database: ${result.inserted} game records applied. Confirming...',
-        ),
+      _reportTransfer(
+        '[$displayName] Replaced database: ${result.inserted} game records applied. Confirming...',
       );
 
       // Adopt the initiator's revision ID so both devices share the same sync
@@ -3293,24 +3228,7 @@ class DeviceSyncService {
     }
 
     _pendingPongs.remove(token);
-    pending.completer.complete(
-      _PeerPingResult(
-        reachable: true,
-        remoteTrusted: payload['trusted'] == true,
-        remoteDbName: (payload['dbName'] as String?)?.trim(),
-        remoteRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
-        remoteKnownLocalRevision:
-            (payload['peerKnownRevision'] as num?)?.toInt() ?? 0,
-        remoteKnownLocalSyncAtMillis:
-            (payload['peerKnownSyncAt'] as num?)?.toInt() ?? 0,
-        remoteSyncRevisionId: (payload['syncRevisionId'] as String?)?.trim(),
-        remoteDbTimestampMillis:
-            (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0,
-        remoteReceiverSyncInFlight: payload['receiverSyncInFlight'] == true,
-        remoteContentDigest: payload['contentDigest'] as String? ?? '',
-        remoteSyncProtocol: (payload['syncProtocol'] as num?)?.toInt() ?? 0,
-      ),
-    );
+    pending.completer.complete(_PeerPingResult.fromPong(payload));
   }
 
   Future<void> _handleSyncPing(
@@ -3515,27 +3433,7 @@ class DeviceSyncService {
             return;
           }
 
-          completer.complete(
-            _PeerPingResult(
-              reachable: true,
-              remoteTrusted: payload['trusted'] == true,
-              remoteDbName: (payload['dbName'] as String?)?.trim(),
-              remoteRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
-              remoteKnownLocalRevision:
-                  (payload['peerKnownRevision'] as num?)?.toInt() ?? 0,
-              remoteKnownLocalSyncAtMillis:
-                  (payload['peerKnownSyncAt'] as num?)?.toInt() ?? 0,
-              remoteSyncRevisionId: (payload['syncRevisionId'] as String?)
-                  ?.trim(),
-              remoteDbTimestampMillis:
-                  (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0,
-              remoteReceiverSyncInFlight:
-                  payload['receiverSyncInFlight'] == true,
-              remoteContentDigest: payload['contentDigest'] as String? ?? '',
-              remoteSyncProtocol:
-                  (payload['syncProtocol'] as num?)?.toInt() ?? 0,
-            ),
-          );
+          completer.complete(_PeerPingResult.fromPong(payload));
         }());
       });
     }
@@ -3562,9 +3460,8 @@ class DeviceSyncService {
         } catch (_) {}
       }
     });
-    _PeerPingResult result = const _PeerPingResult(reachable: false);
     try {
-      result = await completer.future.timeout(
+      return await completer.future.timeout(
         _syncPingTimeout,
         onTimeout: () => const _PeerPingResult(reachable: false),
       );
@@ -3574,7 +3471,6 @@ class DeviceSyncService {
       await sub?.cancel();
       if (!useResponderPort) socket.close();
     }
-    return result;
   }
 
   Future<DeviceSyncCodeCheckResult> checkSyncCode({String? peerId}) async {
@@ -3635,24 +3531,6 @@ class DeviceSyncService {
     final localDbName = _currentDatabaseName();
     final localSyncRevisionId = _currentSyncCode();
     final remoteDbName = ping.remoteDbName;
-    if (!ping.reachable) {
-      return DeviceSyncCodeCheckResult(
-        reachable: false,
-        peer: target,
-        localDbName: localDbName,
-        localRevision: localRevision,
-        localKnownRemoteRevision: localKnownRemoteRevision,
-        localKnownRemoteSyncAtMillis: localKnownRemoteSyncAtMillis,
-        localSyncRevisionId: localSyncRevisionId,
-        remoteSyncRevisionId: (ping.remoteSyncRevisionId ?? '').trim(),
-        localDbTimestampMillis: localDbTimestampMillis,
-        remoteDbTimestampMillis: ping.remoteDbTimestampMillis,
-        remoteReceiverSyncInFlight: ping.remoteReceiverSyncInFlight,
-        localContentDigest: localState['contentDigest'] as String? ?? '',
-        remoteContentDigest: ping.remoteContentDigest,
-        remoteSyncProtocol: ping.remoteSyncProtocol,
-      );
-    }
 
     final dbNameMismatch =
         remoteDbName != null &&
@@ -3662,7 +3540,7 @@ class DeviceSyncService {
     final remoteSyncRevisionId = (ping.remoteSyncRevisionId ?? '').trim();
 
     return DeviceSyncCodeCheckResult(
-      reachable: true,
+      reachable: ping.reachable,
       peer: target,
       localDbName: localDbName,
       remoteDbName: remoteDbName,

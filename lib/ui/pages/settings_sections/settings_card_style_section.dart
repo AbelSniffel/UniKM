@@ -7,7 +7,7 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/section_groupbox.dart';
 import 'settings_control_cards.dart';
 
-class SettingsCardStyleSection extends ConsumerStatefulWidget {
+class SettingsCardStyleSection extends ConsumerWidget {
   const SettingsCardStyleSection({
     super.key,
     required this.theme,
@@ -24,37 +24,17 @@ class SettingsCardStyleSection extends ConsumerStatefulWidget {
   final bool isAlternate;
 
   @override
-  ConsumerState<SettingsCardStyleSection> createState() =>
-      _SettingsCardStyleSectionState();
-}
-
-class _SettingsCardStyleSectionState
-    extends ConsumerState<SettingsCardStyleSection> {
-  final _infoKey = GlobalKey<TooltipState>();
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(settingsCardIndicatorStyleProvider);
     return SectionGroupBox(
       title: 'Settings Card Style',
       titleIcon: Icons.tune,
-      theme: widget.theme,
-      searchQuery: widget.searchQuery,
-      isSearchMatch: widget.isSearchMatch,
-      groupPosition: widget.groupPosition,
-      alternateBackground: widget.isAlternate,
+      theme: theme,
+      searchQuery: searchQuery,
+      isSearchMatch: isSearchMatch,
+      groupPosition: groupPosition,
+      alternateBackground: isAlternate,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
-      trailing: Tooltip(
-        key: _infoKey,
-        message:
-            'Available when the experimental Interaction cards setting is enabled in Advanced.',
-        child: IconButton(
-          style: widget.theme.compactIconButtonStyle,
-          icon: const Icon(Icons.info_outline, size: 26),
-          color: widget.theme.accent,
-          onPressed: () => _infoKey.currentState?.ensureTooltipVisible(),
-        ),
-      ),
       child: SettingsControlWrap(
         children: [
           for (final style in SettingsCardIndicatorStyle.values)
@@ -62,7 +42,7 @@ class _SettingsCardStyleSectionState
               key: ValueKey(style),
               message: style.description,
               child: SettingsToggleCard(
-                theme: widget.theme,
+                theme: theme,
                 label: style.displayName,
                 indicatorStyle: style,
                 value: selected == style,

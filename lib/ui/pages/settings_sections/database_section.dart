@@ -22,6 +22,8 @@ import '../../../providers/app_providers.dart';
 import '../../dialogs/backup_dialogs.dart';
 import '../../dialogs/encryption_dialogs.dart';
 import '../../widgets/app_progress_indicator.dart';
+import '../../widgets/app_radio_list_tile.dart';
+import '../../widgets/file_drop_field.dart';
 import '../../dialogs/import_export_dialog.dart';
 import '../../dialogs/device_sync_dialog.dart';
 import '../../widgets/dialog_helpers.dart';
@@ -88,29 +90,19 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          RadioListTile<String>(
+                          AppRadioListTile<String>(
+                            theme: theme,
                             value: 'unencrypted',
-                            activeColor: theme.accent,
-                            title: Text(
-                              'Unencrypted database',
-                              style: TextStyle(color: theme.textPrimary),
-                            ),
-                            subtitle: Text(
-                              'Creates a standard SQLite database file.',
-                              style: TextStyle(color: theme.textSecondary),
-                            ),
+                            title: 'Unencrypted database',
+                            subtitle:
+                                'Creates a standard SQLite database file.',
                           ),
-                          RadioListTile<String>(
+                          AppRadioListTile<String>(
+                            theme: theme,
                             value: 'encrypted',
-                            activeColor: theme.accent,
-                            title: Text(
-                              'Encrypted database',
-                              style: TextStyle(color: theme.textPrimary),
-                            ),
-                            subtitle: Text(
-                              'Creates an encrypted database that requires a password.',
-                              style: TextStyle(color: theme.textSecondary),
-                            ),
+                            title: 'Encrypted database',
+                            subtitle:
+                                'Creates an encrypted database that requires a password.',
                           ),
                         ],
                       ),
@@ -196,13 +188,8 @@ Future<void> _createDatabase(BuildContext context, WidgetRef ref) async {
 
 /// Icon actions shared by the Database header and selected subpage.
 class DatabaseHeaderActions extends ConsumerWidget {
-  const DatabaseHeaderActions({
-    super.key,
-    this.encapsulated = true,
-    this.expanded = false,
-  });
+  const DatabaseHeaderActions({super.key, this.expanded = false});
 
-  final bool encapsulated;
   final bool expanded;
 
   @override
@@ -232,7 +219,6 @@ class DatabaseHeaderActions extends ConsumerWidget {
     ];
     return SettingsHeaderActions(
       theme: theme,
-      encapsulated: encapsulated,
       expanded: expanded,
       children: buttons,
     );
@@ -910,25 +896,30 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
       if (!mounted) return;
       final selectedPath = result?.path;
       if (selectedPath == null || selectedPath.isEmpty) return;
-      final lower = selectedPath.toLowerCase();
-      final hasValidExt = lower.endsWith('.db') || lower.endsWith('.enc');
-      if (!hasValidExt && !await isLikelySqliteFile(selectedPath)) {
-        NotificationManager.instance.error(
-          'Unsupported file type. Please select a .db or .enc file.',
-        );
-        return;
-      }
-      if (!mounted) return;
-      final callback = widget.container.read(databaseSwitchCallbackProvider);
-      if (callback == null) return;
-      Navigator.pop(context);
-      await callback(OpenDatabaseRequest(selectedPath));
+      await _openDatabasePath(selectedPath);
     } finally {
       if (mounted) {
         setState(() => _choosingFile = false);
         _refreshDatabaseFiles();
       }
     }
+  }
+
+  Future<void> _openDatabasePath(String selectedPath) async {
+    if (_isLoading) return;
+    final lower = selectedPath.toLowerCase();
+    final hasValidExt = lower.endsWith('.db') || lower.endsWith('.enc');
+    if (!hasValidExt && !await isLikelySqliteFile(selectedPath)) {
+      NotificationManager.instance.error(
+        'Unsupported file type. Please select a .db or .enc file.',
+      );
+      return;
+    }
+    if (!mounted) return;
+    final callback = widget.container.read(databaseSwitchCallbackProvider);
+    if (callback == null) return;
+    Navigator.pop(context);
+    await callback(OpenDatabaseRequest(selectedPath));
   }
 
   Future<void> _openRecentDatabase(String baseDbPath) async {
@@ -975,158 +966,191 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
         .where((path) => basePath(path) != basePath(_activeDbPath))
         .toList();
 
-    return ThemedAlertDialog(
-      theme: widget.theme,
-      backgroundColor: widget.theme.background,
-      maxWidth: 520,
-      maxHeight: 600,
-      title: DialogHeader(
-        icon: Icons.swap_horiz,
-        title: 'Change Database',
+    final VoidCallback? chooseDefault =
+        _isLoading || _defaultDbPath.isEmpty || _defaultDbPath == _activeDbPath
+        ? null
+        : () async {
+            Navigator.pop(context);
+            await _useDefaultDatabase();
+          };
+    return LayoutBuilder(
+      builder: (context, constraints) => ThemedAlertDialog(
         theme: widget.theme,
-        showCloseButton: false,
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionGroupBox(
-            title: 'Current',
-            titleIcon: Icons.storage,
-            titleLocation: SectionTitleLocation.top,
-            theme: widget.theme,
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: AppCircularProgressIndicator(),
-                  )
-                : DatabaseFileRow(
-                    theme: widget.theme,
-                    title: p.basename(_activeFilePath),
-                    subtitle: _activeFilePath,
-                    isEncrypted:
-                        _databaseFiles[_activeDbPath]?.isEncrypted ?? false,
-                    available: _databaseFiles[_activeDbPath]?.exists ?? false,
-                    highlighted: true,
-                    margin: EdgeInsets.zero,
-                    actions: [
-                      IconButton(
-                        onPressed: _activeFilePath.isEmpty
-                            ? null
-                            : _openCurrentFolder,
-                        tooltip: 'Open database folder',
-                        icon: const Icon(Icons.folder_open),
-                      ),
-                    ],
-                  ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: SectionGroupBox(
-              title: 'Recent',
-              titleIcon: Icons.history,
+        backgroundColor: widget.theme.background,
+        maxWidth: 520,
+        maxHeight: 600,
+        fullscreen: constraints.maxHeight < 480,
+        titleActions: constraints.maxHeight < 480
+            ? [
+                IconButton(
+                  tooltip: 'Use Default',
+                  onPressed: chooseDefault,
+                  icon: const Icon(Icons.restore),
+                ),
+              ]
+            : null,
+        title: DialogHeader(
+          icon: Icons.swap_horiz,
+          title: 'Change Database',
+          theme: widget.theme,
+          showCloseButton: false,
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FileDropField(
+              key: const ValueKey('change-database-drop'),
+              theme: widget.theme,
+              description: 'Supports .db, .enc and extensionless SQLite files',
+              enabled: !_isLoading && !_choosingFile,
+              onBrowse: _openDatabase,
+              onFileSelected: (path) async {
+                if (_choosingFile) return;
+                setState(() => _choosingFile = true);
+                try {
+                  await _openDatabasePath(path);
+                } finally {
+                  if (mounted) setState(() => _choosingFile = false);
+                }
+              },
+              invalidDropMessage: 'Drop one .db or .enc database file.',
+            ),
+            const SizedBox(height: 12),
+            SectionGroupBox(
+              title: 'Current',
+              titleIcon: Icons.storage,
               titleLocation: SectionTitleLocation.top,
               theme: widget.theme,
-              child: recents.isEmpty
-                  ? Text(
-                      'No other recent databases.',
-                      style: TextStyle(color: widget.theme.textSecondary),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: AppCircularProgressIndicator(),
                     )
-                  : Scrollbar(
-                      controller: _scrollController,
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        primary: false,
-                        itemCount: recents.length,
-                        itemBuilder: (context, index) {
-                          final basePath = recents[index];
-                          final file = _databaseFiles[basePath];
-                          final resolvedPath = file?.path ?? basePath;
-                          final sizeBytes = file?.sizeBytes;
-
-                          return GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onSecondaryTapDown: (details) async {
-                              final overlay =
-                                  Overlay.of(context).context.findRenderObject()
-                                      as RenderBox;
-                              final position = RelativeRect.fromRect(
-                                Rect.fromPoints(
-                                  details.globalPosition,
-                                  details.globalPosition,
-                                ),
-                                Offset.zero & overlay.size,
-                              );
-                              final selected = await showAppMenu<String>(
-                                context: context,
-                                position: position,
-                                items: const [
-                                  PopupMenuItem(
-                                    value: 'remove',
-                                    child: Text('Remove from recents'),
-                                  ),
-                                ],
-                              );
-
-                              if (selected == 'remove') {
-                                await _removeRecentDatabasePath(basePath);
-                              }
-                            },
-                            child: DatabaseFileRow(
-                              key: ValueKey(basePath),
-                              theme: widget.theme,
-                              title: p.basename(resolvedPath),
-                              subtitle: sizeBytes == null
-                                  ? resolvedPath
-                                  : '${_formatBytes(sizeBytes)} • $resolvedPath',
-                              isEncrypted: file?.isEncrypted ?? false,
-                              available: file?.exists ?? false,
-                              onTap: file?.exists == true
-                                  ? () async {
-                                      Navigator.pop(context);
-                                      await _openRecentDatabase(resolvedPath);
-                                    }
-                                  : null,
-                              actions: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: widget.theme.secondary,
-                                  ),
-                                  tooltip: 'Remove from recents',
-                                  onPressed: () =>
-                                      _removeRecentDatabasePath(basePath),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                  : DatabaseFileRow(
+                      theme: widget.theme,
+                      title: p.basename(_activeFilePath),
+                      subtitle: _activeFilePath,
+                      isEncrypted:
+                          _databaseFiles[_activeDbPath]?.isEncrypted ?? false,
+                      available: _databaseFiles[_activeDbPath]?.exists ?? false,
+                      highlighted: true,
+                      margin: EdgeInsets.zero,
+                      actions: [
+                        IconButton(
+                          onPressed: _activeFilePath.isEmpty
+                              ? null
+                              : _openCurrentFolder,
+                          tooltip: 'Open database folder',
+                          icon: const Icon(Icons.folder_open),
+                        ),
+                      ],
                     ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Expanded(
+              child: SectionGroupBox(
+                title: 'Recent',
+                titleIcon: Icons.history,
+                titleLocation: SectionTitleLocation.top,
+                theme: widget.theme,
+                child: recents.isEmpty
+                    ? Text(
+                        'No other recent databases.',
+                        style: TextStyle(color: widget.theme.textSecondary),
+                      )
+                    : Scrollbar(
+                        controller: _scrollController,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          primary: false,
+                          itemCount: recents.length,
+                          itemBuilder: (context, index) {
+                            final basePath = recents[index];
+                            final file = _databaseFiles[basePath];
+                            final resolvedPath = file?.path ?? basePath;
+                            final sizeBytes = file?.sizeBytes;
+
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onSecondaryTapDown: (details) async {
+                                final overlay =
+                                    Overlay.of(
+                                          context,
+                                        ).context.findRenderObject()
+                                        as RenderBox;
+                                final position = RelativeRect.fromRect(
+                                  Rect.fromPoints(
+                                    details.globalPosition,
+                                    details.globalPosition,
+                                  ),
+                                  Offset.zero & overlay.size,
+                                );
+                                final selected = await showAppMenu<String>(
+                                  context: context,
+                                  position: position,
+                                  items: const [
+                                    PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove from recents'),
+                                    ),
+                                  ],
+                                );
+
+                                if (selected == 'remove') {
+                                  await _removeRecentDatabasePath(basePath);
+                                }
+                              },
+                              child: DatabaseFileRow(
+                                key: ValueKey(basePath),
+                                theme: widget.theme,
+                                title: p.basename(resolvedPath),
+                                subtitle: sizeBytes == null
+                                    ? resolvedPath
+                                    : '${_formatBytes(sizeBytes)} • $resolvedPath',
+                                isEncrypted: file?.isEncrypted ?? false,
+                                available: file?.exists ?? false,
+                                onTap: file?.exists == true
+                                    ? () async {
+                                        Navigator.pop(context);
+                                        await _openRecentDatabase(resolvedPath);
+                                      }
+                                    : null,
+                                actions: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline,
+                                      color: widget.theme.secondary,
+                                    ),
+                                    tooltip: 'Remove from recents',
+                                    onPressed: () =>
+                                        _removeRecentDatabasePath(basePath),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+        actions: constraints.maxHeight < 480
+            ? null
+            : [
+                OutlinedButton.icon(
+                  onPressed: chooseDefault,
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Use Default'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isLoading || _choosingFile ? null : _openDatabase,
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Open…'),
+                ),
+              ],
       ),
-      actions: [
-        OutlinedButton.icon(
-          onPressed:
-              (_isLoading ||
-                  _defaultDbPath.isEmpty ||
-                  _defaultDbPath == _activeDbPath)
-              ? null
-              : () async {
-                  Navigator.pop(context);
-                  await _useDefaultDatabase();
-                },
-          icon: const Icon(Icons.restore),
-          label: const Text('Use Default'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isLoading || _choosingFile ? null : _openDatabase,
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Open…'),
-        ),
-      ],
     );
   }
 }

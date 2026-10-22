@@ -12,15 +12,11 @@ class GameCoverImage extends StatelessWidget {
     super.key,
     required this.theme,
     required this.coverImage,
-    this.fit = BoxFit.cover,
-    this.placeholderIcon = Icons.videogame_asset_outlined,
     this.onError,
   });
 
   final AppThemeData theme;
   final String? coverImage;
-  final BoxFit fit;
-  final IconData placeholderIcon;
 
   /// Called once if the image fails to load (URL 404, missing file, etc.).
   final VoidCallback? onError;
@@ -53,7 +49,7 @@ class GameCoverImage extends StatelessWidget {
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,
         memCacheWidth: cacheWidth,
-        fit: fit,
+        fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _imageError(),
       );
@@ -77,7 +73,7 @@ class GameCoverImage extends StatelessWidget {
       image: ResizeImage.resizeIfNeeded(cacheWidth, null, provider),
       key: ValueKey(raw),
       gaplessPlayback: true,
-      fit: fit,
+      fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) => _imageError(),
     );
   }
@@ -91,7 +87,11 @@ class GameCoverImage extends StatelessWidget {
     return Container(
       color: theme.cardCoverPlaceholder,
       child: Center(
-        child: Icon(placeholderIcon, size: 52, color: theme.textHint),
+        child: Icon(
+          Icons.videogame_asset_outlined,
+          size: 52,
+          color: theme.textHint,
+        ),
       ),
     );
   }

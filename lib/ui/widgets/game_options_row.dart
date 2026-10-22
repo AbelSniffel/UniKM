@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import 'app_tag_chip.dart';
+import 'app_action_button.dart';
 
 /// Options below the image card in both game editors.
 class GameOptionsRow extends StatelessWidget {
@@ -28,16 +28,16 @@ class GameOptionsRow extends StatelessWidget {
     runSpacing: 8,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
-      AppOptionChip(
+      AppActionButton(
         theme: theme,
         label: 'DLC',
-        isSelected: isDlc,
+        selected: isDlc,
         onTap: () => onDlcChanged(!isDlc),
       ),
-      AppOptionChip(
+      AppActionButton(
         theme: theme,
         label: 'Used',
-        isSelected: isUsed,
+        selected: isUsed,
         onTap: () => onUsedChanged(!isUsed),
       ),
       deadline,

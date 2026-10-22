@@ -324,37 +324,6 @@ class SettingsKeys {
   // Maintenance
   static const String legacyDefaultTagsCleanupDone =
       'legacy_default_tags_cleanup_done';
-
-  /// Keys that are always device-local and must never be synced.
-  static const Set<String> syncExcludedKeys = {
-    databasePath,
-    isEncrypted,
-    recentDatabasePaths,
-    githubApiToken,
-    updateRepo,
-    skippedVersions,
-    developerMode,
-    showSyncDeviceId,
-    experimentalInteractionCards,
-    settingsCardIndicatorStyle,
-    windowWidth,
-    windowHeight,
-    windowX,
-    windowY,
-    windowMaximized,
-    legacyDefaultTagsCleanupDone,
-    syncEnabled,
-    syncAutoOnStartup,
-    syncDeviceId,
-    syncTrustedPeersJson,
-    syncRevokedPeersJson,
-    syncLastTrustedPeerId,
-    syncLastSyncAtIso,
-    syncDbRevisionId,
-    syncDbTimestampMillis,
-    syncStaticPrivateKey,
-    syncStaticPublicKey,
-  };
 }
 
 /// Default settings values
@@ -417,7 +386,7 @@ class DefaultSettings {
       SectionTitleLocation.top;
 
   // Experimental Settings Layout
-  static const bool experimentalInteractionCards = false;
+  static const bool experimentalInteractionCards = true;
 
   // Backup
   static const bool autoBackupEnabled = true;

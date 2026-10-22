@@ -4,7 +4,6 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../widgets/toggle_switch.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../../core/constants/app_constants.dart';
 import 'settings_control_cards.dart';
@@ -30,16 +29,8 @@ bool shouldShowSettingsGroup({
   required bool Function(String) matchesSearch,
   required SettingsSearchGroup group,
 }) {
-  final isSearching = query.trim().isNotEmpty;
-  if (isSearching &&
-      !matchesSettingsSearchGroup(
-        query: query,
-        matchesSearch: matchesSearch,
-        group: group,
-      )) {
-    return false;
-  }
-  return true;
+  return query.trim().isEmpty ||
+      matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group);
 }
 
 /// A convenience wrapper around [SectionGroupBox] that hides itself when
@@ -86,20 +77,13 @@ class SearchableSectionGroupBox extends StatelessWidget {
 
   bool get _isSearching => searchQuery.trim().isNotEmpty;
 
-  bool get _show {
-    if (!_isSearching) return true;
-    if (matchesSettingsSearchGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: group,
-    )) {
-      return true;
-    }
-    if (extraMatch != null && extraMatch!()) {
-      return true;
-    }
-    return false;
-  }
+  bool get _show =>
+      shouldShowSettingsGroup(
+        query: searchQuery,
+        matchesSearch: matchesSearch,
+        group: group,
+      ) ||
+      (extraMatch?.call() ?? false);
 
   /// Computes the effective [SectionGroupPosition] when [attachesToAbove] is
   /// set, mapping [only] → [onlyAttached] and [first] → [firstAttached].
@@ -117,7 +101,6 @@ class SearchableSectionGroupBox extends StatelessWidget {
     if (!_show) return const SizedBox.shrink();
     return SectionGroupBox(
       title: group.title,
-      description: group.description,
       theme: theme,
       titleIcon: titleIcon,
       searchQuery: searchQuery,
@@ -268,40 +251,26 @@ class ThemedTextField extends StatelessWidget {
     this.controller,
     this.hintText,
     this.obscureText = false,
-    this.keyboardType,
-    this.width,
     this.onChanged,
-    this.onSubmitted,
   });
 
   final AppThemeData theme;
   final TextEditingController? controller;
   final String? hintText;
   final bool obscureText;
-  final TextInputType? keyboardType;
-  final double? width;
   final ValueChanged<String>? onChanged;
-  final ValueChanged<String>? onSubmitted;
 
   @override
-  Widget build(BuildContext context) {
-    Widget field = TextField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      style: TextStyle(color: theme.textPrimary),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: TextStyle(color: theme.textHint),
-      ),
-      onChanged: onChanged,
-    );
-
-    if (width != null) {
-      field = SizedBox(width: width, child: field);
-    }
-    return field;
-  }
+  Widget build(BuildContext context) => TextField(
+    controller: controller,
+    obscureText: obscureText,
+    style: TextStyle(color: theme.textPrimary),
+    decoration: InputDecoration(
+      hintText: hintText,
+      hintStyle: TextStyle(color: theme.textHint),
+    ),
+    onChanged: onChanged,
+  );
 }
 
 /// Search descriptor for a settings group.
@@ -310,43 +279,33 @@ class SettingsSearchGroup {
     required this.title,
     this.settings = const [],
     this.extraTexts = const [],
-    this.description,
   });
 
   final String title;
-  final String? description;
   final List<SettingTextSpec> settings;
   final List<String> extraTexts;
 
   List<String> get indexTexts => [
     title,
-    if (description != null && description!.trim().isNotEmpty) description!,
     ...settings.expand((setting) => setting.indexTexts),
     ...extraTexts,
   ];
 }
 
 bool matchesSettingsSearchGroup({
-  required String query,
   required bool Function(String) matchesSearch,
   required SettingsSearchGroup group,
 }) {
-  query.trim();
   return group.indexTexts.any(matchesSearch);
 }
 
 bool matchesAnySettingsSearchGroup({
-  required String query,
   required bool Function(String) matchesSearch,
   required List<SettingsSearchGroup> groups,
 }) {
-  query.trim();
   return groups.any(
-    (group) => matchesSettingsSearchGroup(
-      query: query,
-      matchesSearch: matchesSearch,
-      group: group,
-    ),
+    (group) =>
+        matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group),
   );
 }
 
@@ -374,36 +333,6 @@ class SpecSettingRow extends StatelessWidget {
   }
 }
 
-/// Toggle setting row that takes a canonical [SettingTextSpec].
-class SpecToggleSettingRow extends StatelessWidget {
-  const SpecToggleSettingRow({
-    super.key,
-    required this.theme,
-    required this.spec,
-    required this.value,
-    required this.onChanged,
-    this.showDividerBelow = false,
-  });
-
-  final AppThemeData theme;
-  final SettingTextSpec spec;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool showDividerBelow;
-
-  @override
-  Widget build(BuildContext context) {
-    return ToggleSettingRow(
-      theme: theme,
-      label: spec.label,
-      description: spec.description,
-      value: value,
-      onChanged: onChanged,
-      showDividerBelow: showDividerBelow,
-    );
-  }
-}
-
 typedef SpecToggleSettingEntry = ({
   SettingTextSpec spec,
   bool value,
@@ -420,13 +349,13 @@ Widget buildSpecToggleSettingList({
 
   return SettingsControlWrap(
     children: [
-      for (var index = 0; index < entries.length; index++)
+      for (final entry in entries)
         SettingsToggleCard(
           theme: theme,
-          label: entries[index].spec.label,
-          description: entries[index].spec.description,
-          value: entries[index].value,
-          onChanged: entries[index].onChanged,
+          label: entry.spec.label,
+          description: entry.spec.description,
+          value: entry.value,
+          onChanged: entry.onChanged,
         ),
     ],
   );
@@ -440,23 +369,16 @@ class SettingRow extends StatelessWidget {
     required this.label,
     required this.child,
     this.description,
-    this.labelColor,
     this.onLabelTap,
-    this.stackedBreakpoint,
   });
 
   final AppThemeData theme;
   final String label;
   final String? description;
-  final Color? labelColor;
   final Widget child;
 
   /// Optional callback invoked when the user taps the label/description area
   final VoidCallback? onLabelTap;
-
-  /// When set, stacks the trailing child under the label once the available
-  /// width drops below this breakpoint.
-  final double? stackedBreakpoint;
 
   @override
   Widget build(BuildContext context) {
@@ -466,7 +388,7 @@ class SettingRow extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: labelColor ?? theme.textPrimary,
+            color: theme.textPrimary,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -491,79 +413,14 @@ class SettingRow extends StatelessWidget {
           )
         : labelColumn;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked =
-            stackedBreakpoint != null &&
-            constraints.maxWidth < stackedBreakpoint!;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: stacked
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    expandedLabel,
-                    const SizedBox(height: kElementVSpacing),
-                    Align(alignment: Alignment.centerLeft, child: child),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: expandedLabel),
-                    child,
-                  ],
-                ),
-        );
-      },
-    );
-  }
-}
-
-/// A toggle switch setting row with label, description, and divider option.
-class ToggleSettingRow extends StatelessWidget {
-  const ToggleSettingRow({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.description,
-    this.trailing,
-    this.showDividerBelow = false,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-  final Widget? trailing;
-  final bool showDividerBelow;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SettingRow(
-          theme: theme,
-          label: label,
-          description: description,
-          onLabelTap: onChanged != null ? () => onChanged!(!value) : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (trailing != null) ...[
-                trailing!,
-                const SizedBox(width: kElementHSpacing),
-              ],
-              AppToggleSwitch(value: value, onChanged: onChanged, theme: theme),
-            ],
-          ),
-        ),
-        if (showDividerBelow) const Divider(height: 16),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: expandedLabel),
+          child,
+        ],
+      ),
     );
   }
 }

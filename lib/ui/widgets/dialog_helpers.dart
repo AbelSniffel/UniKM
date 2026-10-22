@@ -157,10 +157,7 @@ class DialogHeader extends StatelessWidget {
     required this.theme,
     this.iconColor,
     this.iconSize,
-    this.spacing = 8,
     this.showCloseButton = false,
-    this.titleStyle,
-    this.trailing,
   });
 
   /// Optional leading icon. When null no icon or spacing is rendered.
@@ -174,19 +171,8 @@ class DialogHeader extends StatelessWidget {
   /// Defaults to 28 when [showCloseButton] is true, else platform default.
   final double? iconSize;
 
-  /// Gap between icon and title. Defaults to 8.
-  final double spacing;
-
   /// If true, adds a themed close `IconButton` at the trailing edge.
   final bool showCloseButton;
-
-  /// Override title text style. When null a sensible default is chosen:
-  /// - With close button: 20 px, w500, [theme.textPrimary].
-  /// - Without: 28 px, w600, [theme.textPrimary].
-  final TextStyle? titleStyle;
-
-  /// Optional widget rendered between the title and the close button.
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -195,19 +181,11 @@ class DialogHeader extends StatelessWidget {
 
     final textWidget = Text(
       title,
-      style:
-          titleStyle ??
-          (showCloseButton
-              ? TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                )
-              : TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                )),
+      style: TextStyle(
+        color: theme.textPrimary,
+        fontSize: 18,
+        fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
+      ),
       overflow: TextOverflow.ellipsis,
     );
 
@@ -215,12 +193,9 @@ class DialogHeader extends StatelessWidget {
       children: [
         if (icon != null) ...[
           Icon(icon!, color: effectiveColor, size: effectiveSize),
-          SizedBox(width: spacing),
+          const SizedBox(width: 8),
         ],
         Expanded(child: textWidget),
-        ?trailing,
-        if (trailing != null && showCloseButton)
-          const SizedBox(width: kElementHSpacing),
         if (showCloseButton)
           IconButton(
             icon: Icon(Icons.close, color: theme.textSecondary),
@@ -235,145 +210,37 @@ class DialogHeader extends StatelessWidget {
 // DialogBanner
 // ---------------------------------------------------------------------------
 
-/// A colored container with icon + message, used for warnings and info tips.
-///
-/// ```dart
-/// DialogBanner.warning(
-///   theme: theme,
-///   message: 'This action cannot be undone.',
-/// )
-/// ```
+/// Shared warning banner for destructive actions and security notices.
 class DialogBanner extends StatelessWidget {
-  const DialogBanner({
+  const DialogBanner.warning({
     super.key,
-    this.color,
-    required this.icon,
     required this.message,
     required this.theme,
-    this.iconSize,
-    this.textColor,
-    this.fontSize = 11,
-    this.padding = const EdgeInsets.all(8),
-    this.spacing = 8,
-    this.showBorder = false,
-    this.backgroundOpacity = 0.1,
   });
 
-  /// Shared themed warning style with [Icons.warning_amber].
-  const factory DialogBanner.warning({
-    Key? key,
-    required AppThemeData theme,
-    required String message,
-    double? iconSize,
-    Color? textColor,
-    double fontSize,
-    EdgeInsets padding,
-    double spacing,
-  }) = _WarningBanner;
-
-  /// Caution uses the same style as every other warning banner.
-  const factory DialogBanner.caution({
-    Key? key,
-    required AppThemeData theme,
-    required String message,
-    double? iconSize,
-    Color? textColor,
-    double fontSize,
-    EdgeInsets padding,
-    double spacing,
-  }) = _WarningBanner;
-
-  /// Danger uses the same style as every other warning banner.
-  const factory DialogBanner.danger({
-    Key? key,
-    required AppThemeData theme,
-    required String message,
-    double? iconSize,
-    Color? textColor,
-    double fontSize,
-    EdgeInsets padding,
-    double spacing,
-  }) = _WarningBanner;
-
-  /// Info banner with [Icons.info_outline] using the theme accent.
-  const factory DialogBanner.info({
-    Key? key,
-    required AppThemeData theme,
-    required String message,
-    double? iconSize,
-    Color? textColor,
-    double fontSize,
-    EdgeInsets padding,
-    double spacing,
-  }) = _InfoBanner;
-
-  final Color? color;
-  final IconData icon;
   final String message;
   final AppThemeData theme;
-  final double? iconSize;
-  final Color? textColor;
-  final double fontSize;
-  final EdgeInsets padding;
-  final double spacing;
-  final bool showBorder;
-  final double backgroundOpacity;
 
   @override
-  Widget build(BuildContext context) {
-    final accent = color ?? theme.baseAccent;
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: backgroundOpacity),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: showBorder
-            ? Border.all(color: accent.withValues(alpha: 0.3))
-            : null,
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: accent, size: iconSize),
-          SizedBox(width: spacing),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: textColor ?? theme.textSecondary,
-                fontSize: fontSize,
-              ),
-            ),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: theme.baseAccent.withValues(alpha: 0.2),
+      borderRadius: BorderRadius.circular(theme.cornerRadius),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.warning_amber, color: theme.baseAccent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(color: theme.textSecondary, fontSize: 11),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WarningBanner extends DialogBanner {
-  const _WarningBanner({
-    super.key,
-    required super.theme,
-    required super.message,
-    super.iconSize,
-    super.textColor,
-    super.fontSize = 11,
-    super.padding = const EdgeInsets.all(8),
-    super.spacing = 8,
-  }) : super(icon: Icons.warning_amber, backgroundOpacity: 0.2);
-}
-
-class _InfoBanner extends DialogBanner {
-  const _InfoBanner({
-    super.key,
-    required super.theme,
-    required super.message,
-    super.iconSize,
-    super.textColor,
-    super.fontSize = 11,
-    super.padding = const EdgeInsets.all(8),
-    super.spacing = 8,
-  }) : super(icon: Icons.info_outline, backgroundOpacity: 0.2);
+        ),
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +274,6 @@ class DialogActionBar extends StatelessWidget {
     this.isLoading = false,
     this.isEnabled = true,
     this.destructive = false,
-    this.cancelOnRight = false,
     this.spinnerSize = 16,
   });
 
@@ -437,9 +303,6 @@ class DialogActionBar extends StatelessWidget {
   /// When true the primary button uses the themed destructive style.
   final bool destructive;
 
-  /// When true, places the cancel button on the right of the primary action.
-  final bool cancelOnRight;
-
   /// Size of the loading spinner. Defaults to 16.
   final double spinnerSize;
 
@@ -462,41 +325,28 @@ class DialogActionBar extends StatelessWidget {
       ),
     );
 
-    final primaryButton = confirmIcon != null
-        ? ElevatedButton.icon(
-            onPressed: effectiveEnabled ? onConfirm : null,
-            style: destructive
-                ? themedFilledButtonStyle(theme, destructive: true)
-                : null,
-            icon: isLoading ? spinnerWidget : Icon(confirmIcon),
-            label: Text(
-              isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel,
-            ),
-          )
-        : ElevatedButton(
-            onPressed: effectiveEnabled ? onConfirm : null,
-            style: destructive
-                ? themedFilledButtonStyle(theme, destructive: true)
-                : null,
-            child: Text(
-              isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel,
-            ),
-          );
+    final primaryButton = ElevatedButton.icon(
+      onPressed: effectiveEnabled ? onConfirm : null,
+      style: destructive
+          ? themedFilledButtonStyle(theme, destructive: true)
+          : null,
+      icon: confirmIcon == null
+          ? null
+          : isLoading
+          ? spinnerWidget
+          : Icon(confirmIcon),
+      label: Text(isLoading ? (loadingLabel ?? confirmLabel) : confirmLabel),
+    );
 
     if (!effectiveShowCancel) {
       return SizedBox(width: double.infinity, child: primaryButton);
     }
 
-    final orderedButtons = cancelOnRight
-        ? <Widget>[primaryButton, cancelButton]
-        : <Widget>[cancelButton, primaryButton];
-
     return Row(
       children: [
-        for (int index = 0; index < orderedButtons.length; index++) ...[
-          if (index > 0) const SizedBox(width: kElementHSpacing),
-          Expanded(child: orderedButtons[index]),
-        ],
+        Expanded(child: cancelButton),
+        const SizedBox(width: kElementHSpacing),
+        Expanded(child: primaryButton),
       ],
     );
   }
@@ -544,11 +394,6 @@ class ThemedAlertDialog extends StatelessWidget {
     this.maxWidth = 600.0,
     this.maxHeight,
     this.fullscreen = false,
-    this.shape,
-    this.insetPadding = const EdgeInsets.symmetric(
-      horizontal: 14.0,
-      vertical: 16.0,
-    ),
   });
 
   final AppThemeData? theme;
@@ -589,9 +434,6 @@ class ThemedAlertDialog extends StatelessWidget {
 
   /// Maximum dialog height. When null defaults to 85 % of the screen height.
   final double? maxHeight;
-
-  final ShapeBorder? shape;
-  final EdgeInsets insetPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -660,20 +502,16 @@ class ThemedAlertDialog extends StatelessWidget {
               spacing: kElementHSpacing,
               runSpacing: kElementVSpacing,
               alignment: WrapAlignment.end,
-              children: [
-                for (int i = 0; i < actions!.length; i++) ...[actions![i]],
-              ],
+              children: actions!,
             ),
           ),
         );
       }
     }
 
-    final effectiveShape =
-        shape ??
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-        );
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(theme.cornerRadius),
+    );
 
     final dialogBox = ConstrainedBox(
       constraints: BoxConstraints(
@@ -705,40 +543,34 @@ class ThemedAlertDialog extends StatelessWidget {
       );
     }
 
-    // When a `below` widget is provided, render a transparent outer Dialog
-    // that holds both the styled dialog box and the below widget in a Column,
-    // so the below widget appears outside (beneath) the dialog surface.
-    if (below != null) {
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        insetPadding: insetPadding,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Material(
-                color: backgroundColor ?? theme.background,
-                shape: effectiveShape,
-                elevation: 6,
-                clipBehavior: Clip.antiAlias,
-                child: dialogBox,
-              ),
-            ),
-            const SizedBox(height: 8),
-            below!,
-          ],
-        ),
-      );
-    }
-
+    // Extra content sits outside the styled surface in a transparent Dialog.
     return Dialog(
-      backgroundColor: backgroundColor ?? theme.background,
-      shape: effectiveShape,
-      insetPadding: insetPadding,
-      child: dialogBox,
+      backgroundColor: below != null
+          ? Colors.transparent
+          : backgroundColor ?? theme.background,
+      shadowColor: below != null ? Colors.transparent : null,
+      surfaceTintColor: below != null ? Colors.transparent : null,
+      elevation: below != null ? 0 : null,
+      shape: below != null ? null : shape,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      child: below == null
+          ? dialogBox
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Material(
+                    color: backgroundColor ?? theme.background,
+                    shape: shape,
+                    elevation: 6,
+                    clipBehavior: Clip.antiAlias,
+                    child: dialogBox,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                below!,
+              ],
+            ),
     );
   }
 }
