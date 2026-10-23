@@ -65,11 +65,6 @@ class UpdatesSection extends ConsumerStatefulWidget {
     ),
   ];
 
-  static List<String> get sectionSearchTexts => [
-    'Update Settings',
-    ...searchGroups.expand((group) => group.indexTexts),
-  ];
-
   @override
   ConsumerState<UpdatesSection> createState() => _UpdatesSectionState();
 }

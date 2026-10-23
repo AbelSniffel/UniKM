@@ -51,19 +51,28 @@ class DatabaseSessionLoader {
   Future<OpenedDatabase> openEncrypted(String path, String password) async {
     final manager = EncryptionManager(path);
     final tempPath = await manager.decryptToTemp(password);
-    final conversion = await convertLegacyDbToCurrentLayoutIfNeeded(tempPath);
-    if (conversion.converted) {
-      await manager.reencryptFromTemp(tempPath, password);
+    try {
+      final conversion = await convertLegacyDbToCurrentLayoutIfNeeded(tempPath);
+      if (conversion.converted) {
+        await manager.reencryptFromTemp(tempPath, password);
+      }
+      return OpenedDatabase(
+        database: await _initialize(tempPath),
+        conversion: conversion,
+        encryptedSession: EncryptedDbSession(
+          baseDbPath: path,
+          tempDbPath: tempPath,
+          password: password,
+        ),
+      );
+    } catch (_) {
+      // Opening failed before any user edits or ownership transfer. The
+      // encrypted source remains available; this private copy is disposable.
+      try {
+        await File(tempPath).parent.delete(recursive: true);
+      } catch (_) {}
+      rethrow;
     }
-    return OpenedDatabase(
-      database: await _initialize(tempPath),
-      conversion: conversion,
-      encryptedSession: EncryptedDbSession(
-        baseDbPath: path,
-        tempDbPath: tempPath,
-        password: password,
-      ),
-    );
   }
 
   Future<AppDatabase> _initialize(String path) async {

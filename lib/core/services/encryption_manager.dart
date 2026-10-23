@@ -200,11 +200,19 @@ class EncryptionManager {
     final plaintext = await decrypt(password);
 
     // Create temp directory
-    final tempDir = Directory.systemTemp.createTempSync('UniKM_db_');
+    final tempDir = await Directory.systemTemp.createTemp('UniKM_db_');
     final tempPath = p.join(tempDir.path, 'keys.db');
 
-    await File(tempPath).writeAsBytes(plaintext);
-    return tempPath;
+    try {
+      await File(tempPath).writeAsBytes(plaintext);
+      return tempPath;
+    } catch (_) {
+      // No session owns this directory until the plaintext write succeeds.
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   /// Re-encrypt from a temporary file

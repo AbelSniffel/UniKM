@@ -252,9 +252,6 @@ class Tag {
   /// Parse and cache color from hex string
   Color get color => _cachedColor ??= parseHexColor(colorHex);
 
-  /// Get contrasting text color (black or white)
-  Color get textColor => contrastColor(color);
-
   /// Copy with new values
   Tag copyWith({int? id, String? name, String? colorHex, bool? isSteamTag}) {
     return Tag(

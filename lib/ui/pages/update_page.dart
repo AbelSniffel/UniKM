@@ -278,9 +278,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
     ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
   }
 
-  /// Get the releases page URL
-  String get releasesPageUrl => _updateService.releasesPageUrl;
-
   void previewState(UpdatePreviewState preview) {
     if (!kDebugMode) return;
 

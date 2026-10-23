@@ -73,13 +73,6 @@ class GamesState {
   final List<Game> filteredGames;
   final LibraryQueryIndex? queryIndex;
 
-  /// Get selected games in display order (matching filteredGames order)
-  List<Game> get selectedGames {
-    if (selectedGameIds.isEmpty) return const [];
-    // Use filteredGames to maintain display order for operations like Steam batch fetch
-    return filteredGames.where((g) => selectedGameIds.contains(g.id)).toList();
-  }
-
   GamesState copyWith({
     List<Game>? games,
     bool? isLoading,
@@ -493,8 +486,9 @@ class GamesNotifier extends Notifier<GamesState> {
       final now = DateTime.now();
 
       await db.transaction(() async {
+        final tagsByGame = await db.getTagsForGames(ids);
         for (final id in ids) {
-          final tagEntries = await db.getTagsForGame(id);
+          final tagEntries = tagsByGame[id] ?? const <TagEntry>[];
           final customTagIds = tagEntries
               .where((tag) => !tag.isSteamTag)
               .map((tag) => tag.id)

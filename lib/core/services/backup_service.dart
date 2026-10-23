@@ -102,7 +102,7 @@ class BackupService {
   ///
   /// Automatically detects whether the database is encrypted and creates
   /// the appropriate backup format.
-  Future<BackupResult> createBackup({String? label}) async {
+  Future<BackupResult> createBackup() async {
     try {
       final basePath = await _getBaseDatabasePath();
       final encryptionManager = EncryptionManager(basePath);
@@ -214,8 +214,8 @@ class BackupService {
           // If parsing fails, use file modification time
         }
 
-        createdAt ??= await entity.lastModified();
         final stat = await entity.stat();
+        createdAt ??= stat.modified;
 
         backups.add(
           BackupInfo(
@@ -321,7 +321,7 @@ class BackupService {
       }
 
       if (createBackupFirst) {
-        final currentBackup = await createBackup(label: 'pre-restore');
+        final currentBackup = await createBackup();
         if (!currentBackup.success) {
           return RestoreResult(
             success: false,

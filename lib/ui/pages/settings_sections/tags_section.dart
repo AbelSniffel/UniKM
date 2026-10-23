@@ -72,13 +72,6 @@ class TagsSection extends ConsumerStatefulWidget {
     required Iterable<String> customTagNames,
   }) => !cleanupDone && customTagNames.any(kLegacyDefaultTagNames.contains);
 
-  static List<String> get sectionSearchTexts => [
-    'Tag Management',
-    ...customTagsSearchGroup.indexTexts,
-    ...steamTagsSearchGroup.indexTexts,
-    ...maintenanceSearchGroup.indexTexts,
-  ];
-
   @override
   ConsumerState<TagsSection> createState() => _TagsSectionState();
 }

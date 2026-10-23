@@ -969,15 +969,22 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Mark multiple games as used/unused in a single update.
+  /// Mark games as used/unused in bounded updates within one transaction.
   ///
   /// Returns the number of rows updated.
   Future<int> setGamesUsed(List<int> ids, bool isUsed) {
     if (ids.isEmpty) return Future.value(0);
     return transaction(() async {
-      final count = await (update(games)..where((g) => g.id.isIn(ids))).write(
-        GamesCompanion(isUsed: Value(isUsed), updatedAt: Value(DateTime.now())),
+      final fields = GamesCompanion(
+        isUsed: Value(isUsed),
+        updatedAt: Value(DateTime.now()),
       );
+      var count = 0;
+      for (final batch in _idBatches(ids)) {
+        count += await (update(
+          games,
+        )..where((g) => g.id.isIn(batch))).write(fields);
+      }
       if (count > 0) await markLocalDataChanged();
       return count;
     });
@@ -1196,34 +1203,28 @@ class AppDatabase extends _$AppDatabase {
   ) async {
     if (tagSpecs.isEmpty) return {};
 
-    final namesLower = tagSpecs
-        .map((s) => s.name.trim().toLowerCase())
-        .where((n) => n.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
-    if (namesLower.isEmpty) return {};
-
-    // SQLite's lower() only folds ASCII. Normalize in Dart so tags such as
-    // "Çok Oyunculu" match the same keys used by imports and device sync.
-    final requestedNames = namesLower.toSet();
-    final result = <String, TagEntry>{};
-    void collect(List<TagEntry> rows) {
-      for (final row in rows) {
-        final key = row.name.trim().toLowerCase();
-        if (requestedNames.contains(key)) result.putIfAbsent(key, () => row);
-      }
-    }
-
-    collect(await getAllTags());
-
-    // Determine which names need inserting
+    // Normalize once; the last specification supplies new-tag attributes.
     final specsByNameLower =
         <String, ({String name, String color, bool isSteamTag})>{};
     for (final spec in tagSpecs) {
       final key = spec.name.trim().toLowerCase();
-      if (key.isEmpty) continue;
-      specsByNameLower[key] = spec;
+      if (key.isNotEmpty) specsByNameLower[key] = spec;
     }
+    if (specsByNameLower.isEmpty) return {};
+
+    // SQLite's lower() only folds ASCII. Normalize in Dart so tags such as
+    // "Çok Oyunculu" match the same keys used by imports and device sync.
+    final result = <String, TagEntry>{};
+    void collect(List<TagEntry> rows) {
+      for (final row in rows) {
+        final key = row.name.trim().toLowerCase();
+        if (specsByNameLower.containsKey(key)) {
+          result.putIfAbsent(key, () => row);
+        }
+      }
+    }
+
+    collect(await getAllTags());
 
     final missingSpecs = <({String name, String color, bool isSteamTag})>[];
     for (final entry in specsByNameLower.entries) {
@@ -1265,7 +1266,7 @@ class AppDatabase extends _$AppDatabase {
       await batch((b) {
         b.insertAll(gameTags, [
           for (final entry in gameTagMap.entries)
-            for (final tagId in entry.value)
+            for (final tagId in entry.value.toSet())
               GameTagsCompanion.insert(gameId: entry.key, tagId: tagId),
         ], mode: InsertMode.insertOrIgnore);
       });

@@ -37,16 +37,21 @@ List<ImportRecord> parseLibraryCsv(String content) {
   final rows = libraryCsv.decode(content);
   if (rows.isEmpty) throw const FormatException('CSV file is empty');
   final headers = rows.first.map((v) => v.toString()).toList();
+  // Preserve the first occurrence when an export repeats a column name.
+  final columns = <String, int>{};
+  for (var i = 0; i < headers.length; i++) {
+    columns.putIfAbsent(headers[i], () => i);
+  }
   for (final required in ['Title', 'Key']) {
-    if (!headers.contains(required)) {
+    if (!columns.containsKey(required)) {
       throw FormatException('CSV must have a "$required" column');
     }
   }
   final records = <ImportRecord>[];
   for (final row in rows.skip(1)) {
     String field(String name, [String fallback = '']) {
-      final index = headers.indexOf(name);
-      return index < 0 || index >= row.length
+      final index = columns[name];
+      return index == null || index >= row.length
           ? fallback
           : row[index].toString();
     }
@@ -70,7 +75,7 @@ List<ImportRecord> parseLibraryCsv(String content) {
           reviewScore: Value(int.tryParse(field('Rating')) ?? 0),
           updatedAt: Value(DateTime.now()),
         ),
-        headers.contains('Tags')
+        columns.containsKey('Tags')
             ? field('Tags')
                   .split(';')
                   .map((s) => s.trim())

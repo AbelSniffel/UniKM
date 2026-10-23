@@ -17,7 +17,9 @@ class LibraryBackupExporter {
   final DateTime exportedAt;
 
   String encode(List<Game> games, List<Tag> tags, String format) {
-    final tagNamesById = {for (final tag in tags) tag.id: tag.name};
+    final tagNamesById = includeTags && (format == 'json' || format == 'csv')
+        ? {for (final tag in tags) tag.id: tag.name}
+        : const <int, String>{};
     return switch (format) {
       'json' => _json(games, tagNamesById),
       'csv' => _csv(games, tagNamesById),
@@ -40,7 +42,7 @@ class LibraryBackupExporter {
               'is_used': game.isUsed,
               'is_dlc': game.isDlc,
               'rating': game.rating,
-              if (includeTags && game.tagIds.isNotEmpty)
+              if (includeTags && game.tags.isNotEmpty)
                 'tags': _tagNames(game, tagNamesById).toList(),
               if (includeNotes) 'notes': game.notes,
               'cover_image': game.coverImage,

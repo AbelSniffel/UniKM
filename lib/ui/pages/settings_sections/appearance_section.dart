@@ -90,11 +90,6 @@ class AppearanceSection extends ConsumerWidget {
     cardStylesSearchGroup,
   ];
 
-  static List<String> get sectionSearchTexts => [
-    'Appearance Settings',
-    ...searchGroups.expand((group) => group.indexTexts),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(customThemesJsonProvider);

@@ -82,11 +82,7 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
       locale: locale,
     );
     final separatorWidth = measure(' · ');
-    final countWidths = <int, double>{};
-    double countWidth(int count) => countWidths.putIfAbsent(
-      count,
-      () => measure('+$count') + _padding.horizontal,
-    );
+    double countWidth(int count) => measure('+$count') + _padding.horizontal;
     var bestCount = 0;
     var textWidth = 0.0;
     for (var i = 0; i < _names.length; i++) {

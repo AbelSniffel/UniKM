@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/database.dart';
@@ -80,6 +81,9 @@ class TagsNotifier extends Notifier<List<Tag>> {
 
   void _replaceTags(List<Tag> tags) {
     _snapshotEpoch++;
+    // Still advance the epoch so an overlapping refresh cannot publish stale
+    // rows, but don't rebuild tag controls for an identical snapshot.
+    if (const ListEquality<Tag>().equals(_cachedTags, tags)) return;
     _cachedTags = List<Tag>.unmodifiable(tags);
     state = _cachedTags;
   }

@@ -56,11 +56,6 @@ class EncryptedDbSession {
           source.close();
         }
       });
-    } catch (_) {
-      await snapshotDirectory.delete(recursive: true);
-      rethrow;
-    }
-    try {
       await encryptionManager.reencryptFromTemp(snapshotPath, password);
     } finally {
       await snapshotDirectory.delete(recursive: true);
@@ -74,17 +69,13 @@ class EncryptedDbSession {
     return _saves.save();
   }
 
-  Future<void> flush() => _saves.flush();
-
-  /// Always capture a final snapshot: legacy writers do not all mark revisions.
-  bool shouldPersistOnClose() => true;
-
   Future<void> closeAndPersist(AppDatabase db) async {
     _closing = true;
     // Drain all accepted saves before closing the SQLite connection. Never
     // remove the plaintext recovery file when encryption or replacement fails.
     await _saves.flush();
     await db.close();
+    // Always capture a final snapshot: legacy writers do not all mark revisions.
     await _saves.save();
     if (encryptionManager.isEncrypted) {
       await encryptionManager.deletePlaintextDatabaseFile(

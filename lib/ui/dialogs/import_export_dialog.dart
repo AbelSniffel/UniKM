@@ -695,7 +695,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     switch (encryptedKind) {
       case EncryptedImportKind.uniKmDatabase:
         return _importEncryptedDatabase(
-          file,
           title: 'Unlock UniKM Backup',
           message:
               'This UniKM backup is encrypted. Enter the password to import it.',
@@ -704,7 +703,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         );
       case EncryptedImportKind.steamKm2Database:
         return _importEncryptedDatabase(
-          file,
           title: 'Unlock SteamKM2 Backup',
           message:
               'This SteamKM2 backup is encrypted. Enter the password to import it.',
@@ -718,8 +716,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     }
   }
 
-  Future<bool> _importEncryptedDatabase(
-    File file, {
+  Future<bool> _importEncryptedDatabase({
     required String title,
     required String message,
     required Future<PreparedEncryptedDatabaseImport> Function(String password)

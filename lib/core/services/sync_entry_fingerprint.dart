@@ -16,8 +16,9 @@ class SyncEntryFingerprint {
 
   static Future<String> fromGameEntry(
     GameEntry game,
-    List<TagEntry> tags,
-  ) async {
+    List<TagEntry> tags, {
+    String? coverDigest,
+  }) async {
     return fromPayload({
       'title': game.title,
       'gameKey': game.gameKey,
@@ -26,7 +27,7 @@ class SyncEntryFingerprint {
       'updatedAt': game.updatedAt.toIso8601String(),
       'notes': game.notes,
       'isUsed': game.isUsed,
-      'coverDigest': await coverIdentity(game.coverImage),
+      'coverDigest': coverDigest ?? await coverIdentity(game.coverImage),
       'hasDeadline': game.hasDeadline,
       'deadlineDate': game.deadlineDate?.toIso8601String(),
       'isDlc': game.isDlc,
@@ -90,8 +91,10 @@ class SyncEntryFingerprint {
                 'isSteamTag': tag['isSteamTag'] as bool? ?? false,
               },
             )
+            // Preserve the wire ordering while encoding each tag only once.
+            .map((tag) => (encoded: jsonEncode(tag), value: tag))
             .toList()
-          ..sort((a, b) => jsonEncode(a).compareTo(jsonEncode(b)));
+          ..sort((a, b) => a.encoded.compareTo(b.encoded));
     return hashBytes(
       utf8.encode(
         jsonEncode({
@@ -110,7 +113,7 @@ class SyncEntryFingerprint {
           'developer': input['developer'] as String? ?? '',
           'reviewScore': (input['reviewScore'] as num?)?.toInt() ?? 0,
           'reviewCount': (input['reviewCount'] as num?)?.toInt() ?? 0,
-          'tags': tags,
+          'tags': tags.map((tag) => tag.value).toList(growable: false),
         }),
       ),
     );

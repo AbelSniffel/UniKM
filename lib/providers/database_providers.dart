@@ -32,13 +32,6 @@ class DatabaseState {
   final int revision;
 
   const DatabaseState({this.database, this.revision = 0});
-
-  DatabaseState copyWith({AppDatabase? database, int? revision}) {
-    return DatabaseState(
-      database: database ?? this.database,
-      revision: revision ?? this.revision,
-    );
-  }
 }
 
 /// State notifier that manages the active database.
@@ -55,9 +48,6 @@ class DatabaseNotifier extends Notifier<DatabaseState> {
   void clearDatabase() {
     state = DatabaseState(database: null, revision: state.revision + 1);
   }
-
-  /// Gets the current revision number.
-  int get revision => state.revision;
 }
 
 /// Provider for the database state notifier.

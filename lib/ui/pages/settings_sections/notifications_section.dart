@@ -38,11 +38,6 @@ class NotificationsSection extends ConsumerWidget {
     settings: [deadlineRemindersSpec, updateNotificationsSpec],
   );
 
-  static List<String> get sectionSearchTexts => [
-    'Notification Settings',
-    ...typesSearchGroup.indexTexts,
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifications = ref.watch(notificationsSettingsProvider);

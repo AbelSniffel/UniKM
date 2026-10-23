@@ -1976,7 +1976,7 @@ class DeviceSyncService {
     _reportTransfer(
       '[${targetPeer.name}] Step 1/4: Creating pre-sync backup...',
     );
-    await ref.read(backupServiceProvider).createBackup(label: 'pre-sync');
+    await ref.read(backupServiceProvider).createBackup();
 
     // If this is a pull and peer DB name differs, switch/create a local DB
     // with the remote filename before applying incoming changes.

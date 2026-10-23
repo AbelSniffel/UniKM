@@ -70,6 +70,9 @@ class _DiskCache {
   _DiskCache._();
 
   Map<String, dynamic>? _cache;
+  Future<void> _writeTail = Future.value();
+  int _requestedRevision = 0;
+  int _savedRevision = 0;
 
   // Single shared Future used by all concurrent callers so we only read the
   // file once even when multiple async operations call _ensureLoaded at the
@@ -225,14 +228,23 @@ class _DiskCache {
     await _persist();
   }
 
-  Future<void> _persist() async {
-    try {
-      final jsonStr = json.encode(_cache);
-      final path = await _getCacheFilePath();
-      await File(path).writeAsString(jsonStr);
-    } catch (_) {
-      // Ignore cache write failures
-    }
+  Future<void> _persist() {
+    final requested = ++_requestedRevision;
+    // Serialize writes to the same file. A queued write captures the newest
+    // snapshot, so requests already included in it need no additional I/O.
+    return _writeTail = _writeTail.then((_) async {
+      if (_savedRevision >= requested) return;
+      final snapshotRevision = _requestedRevision;
+      try {
+        final jsonStr = json.encode(_cache);
+        final path = await _getCacheFilePath();
+        await File(path).writeAsString(jsonStr);
+        _savedRevision = snapshotRevision;
+      } catch (_) {
+        // Keep failed revisions pending so a later update can retry them.
+        // Cache failures remain non-fatal, as before.
+      }
+    });
   }
 }
 
@@ -447,6 +459,9 @@ class SteamService {
     _dio.options.headers['Accept'] = 'application/json,text/html,*/*';
     _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9';
   }
+
+  /// Release HTTP connections and cancel in-flight requests on disposal.
+  void dispose() => _dio.close(force: true);
 
   /// Initialize the service (get images directory)
   Future<void> init() async {
@@ -891,10 +906,13 @@ class SteamService {
       if (itemName == searchTitle) return item;
     }
 
-    // 2. Exact match with cleaned title
+    // 2. Exact match with cleaned title. Retain these strings for later stages
+    // of this search instead of repeating edition/punctuation cleanup.
+    final cleanedNames = <String>[];
     for (final item in items) {
       final itemName = item['name'] as String? ?? '';
       final itemClean = cleanTitleForSearch(itemName).toLowerCase();
+      cleanedNames.add(itemClean);
       if (itemClean == cleanSearch) return item;
     }
 
@@ -908,9 +926,10 @@ class SteamService {
     }
 
     // 4. Contains match with cleaned versions - avoid sequels
-    for (final item in items) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
       final itemName = item['name'] as String? ?? '';
-      final itemClean = cleanTitleForSearch(itemName).toLowerCase();
+      final itemClean = cleanedNames[i];
       if (cleanSearch.contains(itemClean) || itemClean.contains(cleanSearch)) {
         if (!_isSequelMismatch(originalTitle, itemName)) return item;
       }
@@ -920,7 +939,7 @@ class SteamService {
     final firstItem = items[0];
     final firstName = firstItem['name'] as String? ?? '';
     if (!_isSequelMismatch(originalTitle, firstName)) {
-      final firstClean = cleanTitleForSearch(firstName).toLowerCase();
+      final firstClean = cleanedNames.first;
       final ratio = weightedSimilarity(cleanSearch, firstClean);
       // If ratio is decent, accept it. We use a slightly stricter threshold now that
       // the token-weighted scorer gives more accurate results for numbered titles.
@@ -1188,6 +1207,7 @@ class SteamService {
 /// Provider for SteamService
 final steamServiceProvider = Provider<SteamService>((ref) {
   final service = SteamService();
+  ref.onDispose(service.dispose);
   // Initialize asynchronously
   service.init();
   return service;

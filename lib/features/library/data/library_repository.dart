@@ -115,7 +115,7 @@ class LibraryRepository {
         ),
       );
     }
-    await database.setTagsForGame(id, tagIds.toSet().toList());
+    await database.setTagsForGame(id, tagIds);
     final revision = await database.markLocalDataChanged();
     await database.recordGameUpsert(id, localRevision: revision);
     return id;
@@ -129,7 +129,7 @@ class LibraryRepository {
           throw StateError('The game no longer exists');
         }
         if (tagIds != null) {
-          await database.setTagsForGame(game.id, tagIds.toSet().toList());
+          await database.setTagsForGame(game.id, tagIds);
         }
         final revision = await database.markLocalDataChanged();
         await database.recordGameUpsert(game.id, localRevision: revision);

@@ -65,6 +65,7 @@ class AppSearchField extends StatefulWidget {
 
 class _AppSearchFieldState extends State<AppSearchField> {
   late final TextEditingController _internalController;
+  late bool _showClear;
 
   TextEditingController get _effectiveController =>
       widget.controller ?? _internalController;
@@ -73,6 +74,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
   void initState() {
     super.initState();
     _internalController = TextEditingController();
+    _showClear = _effectiveController.text.isNotEmpty;
     _effectiveController.addListener(_handleTextChanged);
   }
 
@@ -83,6 +85,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
       (oldWidget.controller ?? _internalController).removeListener(
         _handleTextChanged,
       );
+      _showClear = _effectiveController.text.isNotEmpty;
       _effectiveController.addListener(_handleTextChanged);
     }
   }
@@ -95,15 +98,17 @@ class _AppSearchFieldState extends State<AppSearchField> {
   }
 
   void _handleTextChanged() {
-    if (mounted) {
-      setState(() {});
+    final showClear = _effectiveController.text.isNotEmpty;
+    // EditableText already listens for text, selection and composing changes.
+    // Only the clear-button visibility needs to rebuild this decoration.
+    if (mounted && showClear != _showClear) {
+      setState(() => _showClear = showClear);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = _effectiveController;
-    final showClear = controller.text.isNotEmpty;
 
     final effectiveContentPadding =
         widget.contentPadding ??
@@ -131,7 +136,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
           minWidth: 38,
           minHeight: 36,
         ),
-        suffixIcon: showClear
+        suffixIcon: _showClear
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

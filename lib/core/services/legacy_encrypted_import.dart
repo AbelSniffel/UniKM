@@ -45,22 +45,40 @@ const _steamKm1SaltLength = 16;
 const _steamKm1IvLength = 16;
 const _steamKm1Iterations = 480000;
 const _aesBlockSize = 16;
+const _uniKmMinimumLength =
+    1 + EncryptionConfig.saltLength + EncryptionConfig.nonceLength + 16;
 final _base64Pattern = RegExp(r'^[A-Za-z0-9+/=\r\n]+$');
 
 Future<EncryptedImportKind> detectEncryptedImportKind(File file) async {
-  final bytes = await file.readAsBytes();
-  return detectEncryptedImportKindFromBytes(bytes);
+  // Binary formats need only their header and minimum length. The stream closes
+  // its file handle on completion or error, including for truncated files.
+  final header = BytesBuilder(copy: false);
+  await for (final chunk in file.openRead(0, _uniKmMinimumLength)) {
+    header.add(chunk);
+  }
+  final kind = _detectBinaryEncryptedImportKind(header.takeBytes());
+  if (kind != EncryptedImportKind.unknown) {
+    return kind;
+  }
+  return detectEncryptedImportKindFromBytes(await file.readAsBytes());
 }
 
 EncryptedImportKind detectEncryptedImportKindFromBytes(Uint8List bytes) {
+  final kind = _detectBinaryEncryptedImportKind(bytes);
+  if (kind != EncryptedImportKind.unknown) {
+    return kind;
+  }
+  return _looksLikeSteamKm1EncryptedExport(bytes)
+      ? EncryptedImportKind.steamKm1Json
+      : EncryptedImportKind.unknown;
+}
+
+EncryptedImportKind _detectBinaryEncryptedImportKind(Uint8List bytes) {
   if (_looksLikeSteamKm2EncryptedDatabase(bytes)) {
     return EncryptedImportKind.steamKm2Database;
   }
   if (_looksLikeUniKmEncryptedDatabase(bytes)) {
     return EncryptedImportKind.uniKmDatabase;
-  }
-  if (_looksLikeSteamKm1EncryptedExport(bytes)) {
-    return EncryptedImportKind.steamKm1Json;
   }
   return EncryptedImportKind.unknown;
 }
@@ -150,6 +168,7 @@ Future<PreparedEncryptedDatabaseImport> decryptSteamKm2DatabaseToTemp(
     iterations: iterations,
   );
 
+  Directory? tempDir;
   try {
     final macStart = ciphertextAndMac.length - 16;
     final secretBox = crypto.SecretBox(
@@ -162,7 +181,7 @@ Future<PreparedEncryptedDatabaseImport> decryptSteamKm2DatabaseToTemp(
       secretKey: key,
     );
 
-    final tempDir = await Directory.systemTemp.createTemp('UniKM_import_skm2_');
+    tempDir = await Directory.systemTemp.createTemp('UniKM_import_skm2_');
     final dbPath = p.join(tempDir.path, 'steamkm2_import.db');
     await File(dbPath).writeAsBytes(plaintext);
 
@@ -171,6 +190,9 @@ Future<PreparedEncryptedDatabaseImport> decryptSteamKm2DatabaseToTemp(
       cleanupPaths: <String>[tempDir.path],
     );
   } catch (_) {
+    try {
+      await tempDir?.delete(recursive: true);
+    } catch (_) {}
     throw InvalidPasswordException('Incorrect password or corrupted SteamKM2 backup');
   }
 }
@@ -182,10 +204,9 @@ Future<PreparedEncryptedDatabaseImport> decryptUniKmDatabaseToTemp(
   final tempDir = await Directory.systemTemp.createTemp('UniKM_import_enc_');
   final basePath = p.join(tempDir.path, 'imported_database');
   final tempEncryptedPath = '$basePath.enc';
-  await file.copy(tempEncryptedPath);
-
-  final manager = EncryptionManager(basePath);
   try {
+    await file.copy(tempEncryptedPath);
+    final manager = EncryptionManager(basePath);
     final tempDbPath = await manager.decryptToTemp(password);
     return PreparedEncryptedDatabaseImport(
       databasePath: tempDbPath,
@@ -207,8 +228,8 @@ bool _looksLikeSteamKm2EncryptedDatabase(Uint8List bytes) {
 }
 
 bool _looksLikeUniKmEncryptedDatabase(Uint8List bytes) {
-  final minLength = 1 + EncryptionConfig.saltLength + EncryptionConfig.nonceLength + 16;
-  return bytes.length >= minLength && bytes.first == EncryptionConfig.metaVersion;
+  return bytes.length >= _uniKmMinimumLength &&
+      bytes.first == EncryptionConfig.metaVersion;
 }
 
 bool _looksLikeSteamKm1EncryptedExport(Uint8List bytes) {

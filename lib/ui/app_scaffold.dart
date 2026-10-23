@@ -382,9 +382,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     final session = ref.read(encryptedDbSessionProvider);
     if (session != null) {
       try {
-        if (session.shouldPersistOnClose()) {
-          NotificationManager.instance.info('Saving encrypted database…');
-        }
+        NotificationManager.instance.info('Saving encrypted database…');
         await session.closeAndPersist(ref.read(requireDatabaseProvider));
       } catch (e) {
         // Avoid trapping the user in a close loop.

@@ -1,7 +1,6 @@
 /// Card Visual settings section
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -106,14 +105,6 @@ class CardDisplaySection extends ConsumerWidget {
     if (supportsListViewMode(platform)) listViewSearchGroup,
     displayRulesSearchGroup,
     chipsSearchGroup,
-  ];
-
-  static List<SettingsSearchGroup> get searchGroups =>
-      searchGroupsFor(defaultTargetPlatform);
-
-  static List<String> get sectionSearchTexts => [
-    'Game Card Visual Settings',
-    for (final group in searchGroups) ...group.indexTexts,
   ];
 
   @override

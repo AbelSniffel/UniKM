@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -296,29 +297,38 @@ final effectiveThemeProvider = Provider<AppThemeData>((ref) {
   return theme.copyWith(navPanelOverlayStyle: overlayStyle);
 });
 
-final Map<String, ThemeData> _themeDataCache = <String, ThemeData>{};
+/// Cache recent Material themes within this provider's lifetime. Live color
+/// previews can produce thousands of variants, so retain at most 16 of them.
+final themeDataProvider = NotifierProvider<_ThemeDataNotifier, ThemeData>(
+  _ThemeDataNotifier.new,
+);
 
-String _themeDataCacheKey(AppThemeData theme) {
-  return [
-    theme.id,
-    theme.name,
-    theme.baseBackground.toARGB32().toString(),
-    theme.baseSecondary.toARGB32().toString(),
-    theme.baseAccent.toARGB32().toString(),
-    theme.iconData?.codePoint.toString() ?? '',
-    theme.cornerRadius.toString(),
-    theme.scrollbarRadius.toString(),
-    theme.inputPaddingHorizontal.toString(),
-    theme.inputPaddingVertical.toString(),
-  ].join('|');
+class _ThemeDataNotifier extends Notifier<ThemeData> {
+  final _cache = <Record, ThemeData>{};
+
+  @override
+  ThemeData build() {
+    final theme = ref.watch(themeProvider);
+    // Include every extension field and the platform's control sizing. A
+    // cached ThemeData must expose the current AppThemeData extension too.
+    final key = (
+      theme.id,
+      theme.name,
+      theme.baseBackground,
+      theme.baseSecondary,
+      theme.baseAccent,
+      theme.iconData,
+      theme.cornerRadius,
+      theme.useThemeToggleRadius,
+      theme.scrollbarRadius,
+      theme.inputPaddingHorizontal,
+      theme.inputPaddingVertical,
+      theme.progressIndicatorStrokeWidth,
+      theme.navPanelOverlayStyle,
+      defaultTargetPlatform,
+    );
+    final cached = _cache.remove(key);
+    if (_cache.length >= 16) _cache.remove(_cache.keys.first);
+    return _cache[key] = cached ?? theme.toThemeData();
+  }
 }
-
-/// Cached Material [ThemeData] derived from the current [AppThemeData].
-///
-/// This avoids rebuilding the full ThemeData object graph every time the app
-/// root rebuilds, while still updating instantly when any theme field changes.
-final themeDataProvider = Provider<ThemeData>((ref) {
-  final theme = ref.watch(themeProvider);
-  final key = _themeDataCacheKey(theme);
-  return _themeDataCache.putIfAbsent(key, theme.toThemeData);
-});

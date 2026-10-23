@@ -169,6 +169,10 @@ class SyncPayloadCodec {
       for (final game in changed) {
         final record = liveById[game.id]!;
         final gameTags = tags[game.id] ?? const <TagEntry>[];
+        final cover = await _serializeCoverImageForTransfer(
+          rawCoverImagePath: game.coverImage,
+          gameKey: game.gameKey,
+        );
         serialized.add({
           'id': game.id,
           'syncId': record['syncId'],
@@ -183,13 +187,8 @@ class SyncPayloadCodec {
           'isUsed': game.isUsed,
           'coverImage': game.coverImage,
           'hasCoverImage': game.coverImage.trim().isNotEmpty,
-          'coverDigest': await SyncEntryFingerprint.coverIdentity(
-            game.coverImage,
-          ),
-          'coverImageFile': await _serializeCoverImageForTransfer(
-            rawCoverImagePath: game.coverImage,
-            gameKey: game.gameKey,
-          ),
+          'coverDigest': cover.digest,
+          'coverImageFile': cover.file,
           'hasDeadline': game.hasDeadline,
           'deadlineDate': game.deadlineDate?.toUtc().toIso8601String(),
           'isDlc': game.isDlc,
@@ -200,6 +199,7 @@ class SyncPayloadCodec {
           'entrySyncId': await SyncEntryFingerprint.fromGameEntry(
             game,
             gameTags,
+            coverDigest: cover.digest,
           ),
           'tags': gameTags
               .map(
@@ -621,12 +621,10 @@ class SyncPayloadCodec {
           String? persistedCover;
           if (data['coverImageFile'] is Map) {
             persistedCover = await _persistIncomingCoverImage(
-              gameKey: key,
               payload: Map<String, dynamic>.from(data['coverImageFile'] as Map),
             );
           }
           final cover = await _resolveTranslatedCoverImagePath(
-            gameKey: key,
             hasCoverImage:
                 data['hasCoverImage'] as bool? ??
                 (data['coverImage'] as String? ?? '').isNotEmpty,
@@ -736,14 +734,20 @@ class SyncPayloadCodec {
   // Cover image serialisation helpers
   // -------------------------------------------------------------------------
 
-  Future<Map<String, dynamic>?> _serializeCoverImageForTransfer({
+  /// Hash the same bytes that are sent, without reading the cover again for
+  /// the payload digest and entry fingerprint.
+  Future<({String digest, Map<String, dynamic>? file})>
+  _serializeCoverImageForTransfer({
     required String rawCoverImagePath,
     required String gameKey,
   }) async {
     final raw = rawCoverImagePath.trim();
-    if (raw.isEmpty) return null;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return null;
-    if (raw.startsWith('assets/')) return null;
+    if (raw.isEmpty) return (digest: '', file: null);
+    if (raw.startsWith('http://') ||
+        raw.startsWith('https://') ||
+        raw.startsWith('assets/')) {
+      return (digest: raw, file: null);
+    }
 
     File sourceFile;
     final uri = Uri.tryParse(raw);
@@ -753,9 +757,10 @@ class SyncPayloadCodec {
       sourceFile = File(raw);
     }
 
-    if (!await sourceFile.exists()) return null;
+    if (!await sourceFile.exists()) return (digest: '', file: null);
     final bytes = await sourceFile.readAsBytes();
-    if (bytes.isEmpty) return null;
+    final digest = 'sha256:${await SyncEntryFingerprint.hashBytes(bytes)}';
+    if (bytes.isEmpty) return (digest: digest, file: null);
 
     final sourceName = p.basename(sourceFile.path).trim();
     final ext = p.extension(sourceFile.path).toLowerCase();
@@ -763,11 +768,13 @@ class SyncPayloadCodec {
     final fileName = sourceName.isNotEmpty
         ? sourceName
         : '${safeKey.isEmpty ? 'cover' : safeKey}${ext.isEmpty ? '.img' : ext}';
-    return {'fileName': fileName, 'bytesBase64': base64Encode(bytes)};
+    return (
+      digest: digest,
+      file: {'fileName': fileName, 'bytesBase64': base64Encode(bytes)},
+    );
   }
 
   Future<String?> _persistIncomingCoverImage({
-    required String gameKey,
     required Map<String, dynamic> payload,
   }) async {
     final bytesBase64 = (payload['bytesBase64'] as String?)?.trim() ?? '';
@@ -792,7 +799,6 @@ class SyncPayloadCodec {
   }
 
   Future<String> _resolveTranslatedCoverImagePath({
-    required String gameKey,
     required bool hasCoverImage,
     required String? syncedCoverImagePath,
     required String incomingLegacyCoverPath,
@@ -807,13 +813,11 @@ class SyncPayloadCodec {
 
     final fromIncoming = await _translateCoverImagePathForCurrentDevice(
       rawPath: incomingLegacyCoverPath,
-      gameKey: gameKey,
     );
     if (fromIncoming.isNotEmpty) return fromIncoming;
 
     final fromExisting = await _translateCoverImagePathForCurrentDevice(
       rawPath: existingCoverImagePath,
-      gameKey: gameKey,
     );
     if (fromExisting.isNotEmpty) return fromExisting;
 
@@ -822,7 +826,6 @@ class SyncPayloadCodec {
 
   Future<String> _translateCoverImagePathForCurrentDevice({
     required String rawPath,
-    required String gameKey,
   }) async {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
@@ -831,7 +834,7 @@ class SyncPayloadCodec {
 
     final sourceFile = _fileFromRawPath(raw);
     if (sourceFile != null && await sourceFile.exists()) {
-      return _copyCoverImageToManagedPath(sourceFile, gameKey: gameKey);
+      return _copyCoverImageToManagedPath(sourceFile);
     }
 
     final maybeByName = await _findManagedImageByName(raw);
@@ -880,10 +883,7 @@ class SyncPayloadCodec {
     return null;
   }
 
-  Future<String> _copyCoverImageToManagedPath(
-    File sourceFile, {
-    required String gameKey,
-  }) async {
+  Future<String> _copyCoverImageToManagedPath(File sourceFile) async {
     final sourceCanonical = p.normalize(sourceFile.absolute.path);
     final syncDir = await _resolveManagedImagesDirectory();
     final steamDir = await _resolveSteamImagesDirectory();

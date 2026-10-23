@@ -180,9 +180,6 @@ class UpdateService {
   /// Get the API URL for all releases
   String get _allReleasesUrl => 'https://api.github.com/repos/$_repo/releases';
 
-  /// Get the releases page URL
-  String get releasesPageUrl => 'https://github.com/$_repo/releases';
-
   /// Build HTTP headers for GitHub API
   Map<String, String> get _headers {
     final headers = <String, String>{
@@ -416,17 +413,18 @@ class UpdateService {
     final client = http.Client();
     _activeDownloadClient = client;
 
-    // Determine destination path up-front so we can delete it on cancel.
-    final urlPath = Uri.parse(release.downloadUrl!).path;
-    final extension = p.extension(urlPath);
-    final fileName = 'UniKM-${release.version}$extension';
-    final downloadsDir = await _getDownloadsDirectory();
-    final filePath = p.join(downloadsDir.path, fileName);
-    final file = File(filePath);
-
+    File? file;
     IOSink? sink;
     try {
-      final request = http.Request('GET', Uri.parse(release.downloadUrl!));
+      // Include destination preparation in client cleanup if it fails.
+      final url = Uri.parse(release.downloadUrl!);
+      final extension = p.extension(url.path);
+      final fileName = 'UniKM-${release.version}$extension';
+      final downloadsDir = await _getDownloadsDirectory();
+      final filePath = p.join(downloadsDir.path, fileName);
+      file = File(filePath);
+
+      final request = http.Request('GET', url);
       request.headers.addAll(_headers);
 
       final response = await client.send(request);
@@ -472,7 +470,7 @@ class UpdateService {
       if (e is DownloadCancelledException) rethrow;
       // Unexpected error — clean up partial file.
       try { await sink?.close(); } catch (_) {}
-      try { if (await file.exists()) await file.delete(); } catch (_) {}
+      try { if (file != null && await file.exists()) await file.delete(); } catch (_) {}
       rethrow;
     } finally {
       client.close();

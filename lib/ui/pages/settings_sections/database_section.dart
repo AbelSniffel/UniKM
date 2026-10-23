@@ -390,13 +390,6 @@ class DatabaseSection extends ConsumerStatefulWidget {
         extraTexts: ['Device Sync'],
       );
 
-  static List<String> get sectionSearchTexts => [
-    'Database',
-    ...dataManagementSearchGroup.indexTexts,
-    ...databaseSyncSearchGroup.indexTexts,
-    ...keyVisibilitySearchGroup.indexTexts,
-  ];
-
   @override
   ConsumerState<DatabaseSection> createState() => _DatabaseSectionState();
 }

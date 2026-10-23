@@ -69,13 +69,6 @@ class AdvancedSection extends ConsumerWidget {
         extraTexts: ['Legacy layout', 'Card style'],
       );
 
-  static List<String> get sectionSearchTexts => [
-    'Advanced Settings',
-    ...displaySearchGroup.indexTexts,
-    ...systemSearchGroup.indexTexts,
-    if (showExperimentalSettings) ...experimentalSearchGroup.indexTexts,
-  ];
-
   static const _frameRateOptions = <MapEntry<String, String>>[
     MapEntry('auto', 'Auto'),
     MapEntry('60', '60 fps'),
