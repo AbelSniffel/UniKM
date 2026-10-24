@@ -1,5 +1,4 @@
 /// UniKM Flutter - Game Key Manager
-/// Rewrite of UniKM-Sonnet in Flutter for better performance and UI
 library;
 
 import 'dart:io';

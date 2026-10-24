@@ -204,20 +204,25 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Live preview
   // ---------------------------------------------------------------------------
 
+  /// The theme the editor fields currently describe.
+  AppThemeData _buildWorkingTheme(String name) => AppThemeData(
+    id: _workingThemeId,
+    name: name,
+    baseBackground: parseHexColor(_backgroundHex),
+    baseSecondary: parseHexColor(_secondaryHex),
+    baseAccent: parseHexColor(_accentHex),
+    cornerRadius: _cornerRadius,
+    navPanelOverlayStyle: _navPanelOverlayStyle,
+    iconData: _selectedIconCodePoint != null
+        ? themeIconFromCodePoint(_selectedIconCodePoint!)
+        : null,
+  );
+
   void _updatePreview() {
     if (!mounted) return;
     _themeNotifier.startPreview(
-      AppThemeData(
-        id: _workingThemeId,
-        name: _nameController.text.isEmpty ? 'Preview' : _nameController.text,
-        baseBackground: parseHexColor(_backgroundHex),
-        baseSecondary: parseHexColor(_secondaryHex),
-        baseAccent: parseHexColor(_accentHex),
-        cornerRadius: _cornerRadius,
-        navPanelOverlayStyle: _navPanelOverlayStyle,
-        iconData: _selectedIconCodePoint != null
-            ? themeIconFromCodePoint(_selectedIconCodePoint!)
-            : null,
+      _buildWorkingTheme(
+        _nameController.text.isEmpty ? 'Preview' : _nameController.text,
       ),
     );
   }
@@ -814,18 +819,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       return;
     }
 
-    final customTheme = AppThemeData(
-      id: _workingThemeId,
-      name: name,
-      baseBackground: parseHexColor(_backgroundHex),
-      baseSecondary: parseHexColor(_secondaryHex),
-      baseAccent: parseHexColor(_accentHex),
-      cornerRadius: _cornerRadius,
-      navPanelOverlayStyle: _navPanelOverlayStyle,
-      iconData: _selectedIconCodePoint != null
-          ? themeIconFromCodePoint(_selectedIconCodePoint!)
-          : null,
-    );
+    final customTheme = _buildWorkingTheme(name);
 
     await _themeNotifier.saveCustomTheme(customTheme);
 

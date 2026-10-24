@@ -40,8 +40,10 @@ class SteamApi {
 // and re-exported via the import above.
 
 /// Disk cache helpers
+final _cacheKeyStripPattern = RegExp(r'[^a-z0-9]');
+
 String _normalizeCacheKey(String title) {
-  return title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  return title.toLowerCase().replaceAll(_cacheKeyStripPattern, '');
 }
 
 Future<String> _getCacheFilePath() async {
@@ -440,6 +442,23 @@ class _LruCache<K, V extends Object> {
 
 /// Steam integration service
 class SteamService {
+  // Matching runs per candidate; compile each pattern once.
+  static final _addonPattern = RegExp(
+    r'\b(dlc|expansion|expansions|season\s*pass|soundtrack|artbook|booster|bonus|pack|skin\s*pack|supporter\s*pack)\b',
+  );
+  static final _trademarkPattern = RegExp(r'[™®©]');
+  static final _whitespacePattern = RegExp(r'\s+');
+  static final _searchEditionPattern = RegExp(
+    r"\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition\s*",
+    caseSensitive: false,
+  );
+  static final _parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
+  static final _arabicSequelPattern = RegExp(r'\s\d+([: -]|\b)');
+  static final _romanSequelPattern = RegExp(
+    r'\s[ivxlcdm]+([: -]|\b)',
+    caseSensitive: false,
+  );
+
   final Dio _dio;
 
   /// LRU cache with 500 entry limit to prevent unbounded memory growth
@@ -466,16 +485,7 @@ class SteamService {
   /// Initialize the service (get images directory)
   Future<void> init() async {
     try {
-      // images should live next to the database so that a user can move or
-      // back up the entire "data" folder in one go.  We keep the same
-      // "images/steam" sub‑directory for organisation but start from the
-      // database directory instead of the application support directory.
-      final dbPath = await AppDatabase.getDatabasePath();
-      final dbDir = Directory(p.dirname(dbPath));
-      _imagesDir = Directory(p.join(dbDir.path, 'images', 'steam'));
-      if (!_imagesDir!.existsSync()) {
-        await _imagesDir!.create(recursive: true);
-      }
+      _imagesDir = await AppDatabase.getSteamImagesDirectory();
     } catch (e) {
       developer.log(
         'Failed to init Steam image cache: $e',
@@ -683,10 +693,7 @@ class SteamService {
   }
 
   bool _looksLikeAddonTitle(String titleLower) {
-    final addonPattern = RegExp(
-      r'\b(dlc|expansion|expansions|season\s*pass|soundtrack|artbook|booster|bonus|pack|skin\s*pack|supporter\s*pack)\b',
-    );
-    return addonPattern.hasMatch(titleLower);
+    return _addonPattern.hasMatch(titleLower);
   }
 
   double _scoreCandidate(String cleanSearch, Map<String, dynamic> item) {
@@ -800,21 +807,17 @@ class SteamService {
 
     // 2. Clean special characters
     final cleaned = original
-        .replaceAll(RegExp(r'[™®©]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(_trademarkPattern, '')
+        .replaceAll(_whitespacePattern, ' ')
         .trim();
     if (cleaned != original) variants.add(cleaned);
 
     // 3. Remove edition names
-    final editionPattern = RegExp(
-      r"\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition\s*",
-      caseSensitive: false,
-    );
-    final noEdition = cleaned.replaceAll(editionPattern, '').trim();
+    final noEdition = cleaned.replaceAll(_searchEditionPattern, '').trim();
     if (noEdition.isNotEmpty && noEdition != cleaned) variants.add(noEdition);
 
     // 4. Remove parenthetical content
-    final noParens = cleaned.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ').trim();
+    final noParens = cleaned.replaceAll(_parentheticalPattern, ' ').trim();
     if (noParens.isNotEmpty &&
         noParens != cleaned &&
         !variants.contains(noParens)) {
@@ -954,24 +957,15 @@ class SteamService {
     return null;
   }
 
-  bool _isSequelMismatch(String searchTitle, String resultName) {
-    final s = searchTitle.toLowerCase();
-    // If search explicitly contains a number or roman numeral, don't treat as mismatch
-    if (RegExp(r'\s\d+([: -]|\b)').hasMatch(s) ||
-        RegExp(r'\s[ivxlcdm]+([: -]|\b)', caseSensitive: false).hasMatch(s)) {
-      return false;
-    }
+  bool _hasSequelNumber(String titleLower) =>
+      _arabicSequelPattern.hasMatch(titleLower) ||
+      _romanSequelPattern.hasMatch(titleLower);
 
-    final item = resultName.toLowerCase();
+  bool _isSequelMismatch(String searchTitle, String resultName) {
+    // If search explicitly contains a number or roman numeral, don't treat as mismatch
+    if (_hasSequelNumber(searchTitle.toLowerCase())) return false;
     // If result contains an Arabic number suffix (e.g., ' 2') or roman numerals, it's likely a sequel
-    if (RegExp(r'\s\d+([: -]|\b)').hasMatch(item) ||
-        RegExp(
-          r'\s[ivxlcdm]+([: -]|\b)',
-          caseSensitive: false,
-        ).hasMatch(item)) {
-      return true;
-    }
-    return false;
+    return _hasSequelNumber(resultName.toLowerCase());
   }
 
   Future<SteamSearchResult?> _fetchGameDetails(

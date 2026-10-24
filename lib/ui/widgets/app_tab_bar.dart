@@ -199,63 +199,126 @@ class AppTabBar extends StatelessWidget {
   }
 }
 
-/// Reveals index-driven tab content without retaining stale controls or adding
-/// an outgoing child's height to panels that size themselves to their content.
+/// Slides index-driven tab content like [TabBarView]: the previous tab slides
+/// out while the next slides in. Unlike [TabBarView] it sizes to the current
+/// tab, so the outgoing tab keeps its own height without adding to the panel.
+/// Fixed-height tab views use [AppTabView].
 class AppTabTransition extends StatefulWidget {
-  const AppTabTransition({super.key, required this.index, required this.child});
+  const AppTabTransition({
+    super.key,
+    required this.index,
+    required this.child,
+    this.slide = true,
+  });
 
   final int index;
   final Widget child;
+
+  /// False fades the new content in place, for page-like section switches.
+  final bool slide;
 
   @override
   State<AppTabTransition> createState() => _AppTabTransitionState();
 }
 
-class _AppTabTransitionState extends State<AppTabTransition>
-    with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(
-    vsync: this,
-    duration: kTabTransition,
-    value: 1,
-  );
-  late final _animation = _controller.drive(
-    CurveTween(curve: kTabTransitionCurve),
-  );
+class _AppTabTransitionState extends State<AppTabTransition> {
+  // 1 when the next tab enters from the end side, -1 from the start side.
+  double _side = 1;
+  final _heights = <Key, double>{};
+  // The child built this frame; every other switcher child is sliding out,
+  // even one returning to an index that is still leaving.
+  Widget? _current;
 
   @override
   void didUpdateWidget(covariant AppTabTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.index != oldWidget.index) {
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _controller.value = 1;
-      } else {
-        _controller.forward(from: 0);
-      }
+    if (widget.index == oldWidget.index) return;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    _side = (widget.index > oldWidget.index) != rtl ? 1 : -1;
+    // Only the current tab sizes the panel, so remember the outgoing height.
+    if (context.findRenderObject() case final RenderBox box when box.hasSize) {
+      _heights[ValueKey(oldWidget.index)] = box.size.height;
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context) && _controller.value != 1) {
-      _controller.value = 1;
+  Widget _transition(Widget child, Animation<double> animation) {
+    final incoming = identical(child, _current);
+    // A tab coming back while it still slides out is never mounted twice, so
+    // its controllers stay attached to a single copy.
+    if (!incoming && child.key == ValueKey(widget.index)) {
+      return const SizedBox.shrink();
     }
+    final position = animation.drive(
+      Tween(begin: Offset(incoming ? _side : -_side, 0), end: Offset.zero),
+    );
+    final slide = SlideTransition(position: position, child: child);
+    if (incoming) return slide;
+    return SizedBox(
+      height: _heights[child.key],
+      child: IgnorePointer(child: ExcludeSemantics(child: slide)),
+    );
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  // Clip only while a tab slides out, so selection glows and shadows that
+  // reach past the panel edge stay visible at rest. Toggling the clip keeps
+  // the tab mounted.
+  Widget _layout(Widget? current, List<Widget> previous) => ClipRect(
+    clipBehavior: previous.isEmpty ? Clip.none : Clip.hardEdge,
+    child: Stack(
+      fit: StackFit.passthrough,
+      clipBehavior: Clip.none,
+      children: [
+        for (final child in previous)
+          Positioned(left: 0, right: 0, top: 0, child: child),
+        ?current,
+      ],
+    ),
+  );
 
   @override
-  Widget build(BuildContext context) =>
-      FadeTransition(opacity: _animation, child: widget.child);
+  Widget build(BuildContext context) {
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : kTabTransition;
+    if (!widget.slide) {
+      // Page-like sections fade in alone, so no second copy is ever mounted.
+      return AnimatedSwitcher(
+        duration: duration,
+        switchInCurve: kTabTransitionCurve,
+        layoutBuilder: (current, _) => current!,
+        child: _current = KeyedSubtree(
+          key: ValueKey(widget.index),
+          child: widget.child,
+        ),
+      );
+    }
+    // Slide across the full available width, even when a tab's content is
+    // narrower, so the slide distance and clip never cut that content off.
+    final child = _current = KeyedSubtree(
+      key: ValueKey(widget.index),
+      child: Align(
+        alignment: AlignmentDirectional.topStart,
+        heightFactor: 1,
+        child: widget.child,
+      ),
+    );
+    return AnimatedSwitcher(
+      duration: duration,
+      switchInCurve: kTabTransitionCurve,
+      // Mirrors the incoming curve so both tabs stay edge to edge.
+      switchOutCurve: kTabTransitionCurve.flipped,
+      // A fresh closure makes the switcher re-wrap the outgoing tab, which
+      // was built as the incoming one, with its outgoing transition.
+      transitionBuilder: (child, animation) => _transition(child, animation),
+      layoutBuilder: _layout,
+      child: child,
+    );
+  }
 }
 
-/// Controller-driven tabs use the same stationary fade as index-driven panels.
+/// Controller-driven tabs use Flutter's native [TabBarView] slide and swipe.
 /// Visited pages retain their fields and scroll position while hidden.
-class AppTabView extends StatefulWidget {
+class AppTabView extends StatelessWidget {
   const AppTabView({
     super.key,
     required this.controller,
@@ -266,89 +329,40 @@ class AppTabView extends StatefulWidget {
   final List<Widget> children;
 
   @override
-  State<AppTabView> createState() => _AppTabViewState();
+  Widget build(BuildContext context) {
+    // TabBarView always animates with the controller's duration, so reduced
+    // motion swaps pages directly instead.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) =>
+            IndexedStack(index: controller.index, children: children),
+      );
+    }
+    return TabBarView(
+      controller: controller,
+      children: [for (final child in children) _KeepAlive(child: child)],
+    );
+  }
 }
 
-class _AppTabViewState extends State<AppTabView> {
-  late int _index;
-  final _visited = <int>{};
-  double _dragDistance = 0;
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+
+  final Widget child;
 
   @override
-  void initState() {
-    super.initState();
-    _index = widget.controller.index;
-    _visited.add(_index);
-    widget.controller.addListener(_onChanged);
-  }
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
 
   @override
-  void didUpdateWidget(covariant AppTabView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_onChanged);
-      widget.controller.addListener(_onChanged);
-      _visited.clear();
-    }
-    _index = widget.controller.index;
-    _visited.add(_index);
-    _visited.removeWhere((index) => index >= widget.children.length);
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
-
-  void _onChanged() {
-    if (_index == widget.controller.index) return;
-    setState(() {
-      _index = widget.controller.index;
-      _visited.add(_index);
-    });
-  }
-
-  void _onSwipe(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
-    if (_dragDistance.abs() < 48 && velocity.abs() < 300) return;
-    final movement = velocity.abs() >= 300 ? velocity : _dragDistance;
-    final direction = Directionality.of(context) == TextDirection.ltr ? 1 : -1;
-    final next = (_index + (movement < 0 ? direction : -direction)).clamp(
-      0,
-      widget.children.length - 1,
-    );
-    widget.controller.index = next;
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onChanged);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onHorizontalDragStart: (_) => _dragDistance = 0,
-    onHorizontalDragUpdate: (details) => _dragDistance += details.delta.dx,
-    onHorizontalDragEnd: _onSwipe,
-    child: ClipRect(
-      child: AppTabTransition(
-        index: _index,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            for (var index = 0; index < widget.children.length; index++)
-              if (_visited.contains(index))
-                Offstage(
-                  key: ValueKey(index),
-                  offstage: index != _index,
-                  child: TickerMode(
-                    enabled: index == _index,
-                    child: ExcludeFocus(
-                      excluding: index != _index,
-                      child: widget.children[index],
-                    ),
-                  ),
-                ),
-          ],
-        ),
-      ),
-    ),
-  );
 }

@@ -2,7 +2,9 @@ library;
 
 import 'dart:convert';
 
-const supportedDeviceSyncProtocol = 3;
+/// Version 4 compares per-record hashes before transferring, deduplicates
+/// covers and compresses payloads. Older builds cannot read its messages.
+const supportedDeviceSyncProtocol = 4;
 
 // ---------------------------------------------------------------------------
 // Sync snapshot — UI state for the device sync dialog and notifier.
@@ -161,6 +163,25 @@ class SyncTransferActivityEvent extends SyncEvent {
   const SyncTransferActivityEvent({required this.active, this.message});
   final bool active;
   final String? message;
+}
+
+/// Progress of one sync transfer, shown as a notification that stays until
+/// the transfer ends. [progress] runs from 0 to 1.
+class SyncProgressEvent extends SyncEvent {
+  const SyncProgressEvent({
+    required this.transferId,
+    required this.title,
+    required this.message,
+    this.progress = 0,
+    this.finished = false,
+    this.failed = false,
+  });
+  final String transferId;
+  final String title;
+  final String message;
+  final double progress;
+  final bool finished;
+  final bool failed;
 }
 
 class PairRequestReceivedEvent extends SyncEvent {

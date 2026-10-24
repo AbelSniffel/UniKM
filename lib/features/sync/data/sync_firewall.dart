@@ -358,6 +358,23 @@ class SyncFirewall {
     return false;
   }
 
+  // Linux rule arguments shared by grant and clear, so both always name the
+  // same rules for the discovery (UDP) and transfer (TCP) ports.
+  static List<String> _ufwRule(int port, String protocol) => [
+    'allow',
+    'from',
+    'any',
+    'to',
+    'any',
+    'port',
+    '$port',
+    'proto',
+    protocol,
+  ];
+
+  static List<String> _iptablesRule(String action, String protocol, int port) =>
+      [action, 'INPUT', '-p', protocol, '--dport', '$port', '-j', 'ACCEPT'];
+
   Future<bool> grantLinuxFirewallAccess() async {
     if (kIsWeb || !Platform.isLinux) {
       return false;
@@ -365,29 +382,12 @@ class SyncFirewall {
 
     // Try ufw
     try {
-      final udpOk = await _runWithElevation('ufw', [
-        'allow',
-        'from',
-        'any',
-        'to',
-        'any',
-        'port',
-        SyncPorts.discovery.toString(),
-        'proto',
-        'udp',
-      ]);
+      final udpOk = await _runWithElevation(
+        'ufw',
+        _ufwRule(SyncPorts.discovery, 'udp'),
+      );
       if (udpOk) {
-        await _runWithElevation('ufw', [
-          'allow',
-          'from',
-          'any',
-          'to',
-          'any',
-          'port',
-          SyncPorts.transfer.toString(),
-          'proto',
-          'tcp',
-        ]);
+        await _runWithElevation('ufw', _ufwRule(SyncPorts.transfer, 'tcp'));
         return true;
       }
     } catch (_) {}
@@ -410,27 +410,15 @@ class SyncFirewall {
 
     // Try iptables as fallback
     try {
-      final udpOk = await _runWithElevation('iptables', [
-        '-A',
-        'INPUT',
-        '-p',
-        'udp',
-        '--dport',
-        SyncPorts.discovery.toString(),
-        '-j',
-        'ACCEPT',
-      ]);
+      final udpOk = await _runWithElevation(
+        'iptables',
+        _iptablesRule('-A', 'udp', SyncPorts.discovery),
+      );
       if (udpOk) {
-        await _runWithElevation('iptables', [
-          '-A',
-          'INPUT',
-          '-p',
-          'tcp',
-          '--dport',
-          SyncPorts.transfer.toString(),
-          '-j',
-          'ACCEPT',
-        ]);
+        await _runWithElevation(
+          'iptables',
+          _iptablesRule('-A', 'tcp', SyncPorts.transfer),
+        );
         return true;
       }
     } catch (_) {}
@@ -450,28 +438,12 @@ class SyncFirewall {
     try {
       final udpOk = await _runWithElevation('ufw', [
         'delete',
-        'allow',
-        'from',
-        'any',
-        'to',
-        'any',
-        'port',
-        SyncPorts.discovery.toString(),
-        'proto',
-        'udp',
+        ..._ufwRule(SyncPorts.discovery, 'udp'),
       ]);
       if (udpOk) anyRemoved = true;
       await _runWithElevation('ufw', [
         'delete',
-        'allow',
-        'from',
-        'any',
-        'to',
-        'any',
-        'port',
-        SyncPorts.transfer.toString(),
-        'proto',
-        'tcp',
+        ..._ufwRule(SyncPorts.transfer, 'tcp'),
       ]);
     } catch (_) {}
 
@@ -493,27 +465,15 @@ class SyncFirewall {
 
     // Try iptables
     try {
-      final udpOk = await _runWithElevation('iptables', [
-        '-D',
-        'INPUT',
-        '-p',
-        'udp',
-        '--dport',
-        SyncPorts.discovery.toString(),
-        '-j',
-        'ACCEPT',
-      ]);
+      final udpOk = await _runWithElevation(
+        'iptables',
+        _iptablesRule('-D', 'udp', SyncPorts.discovery),
+      );
       if (udpOk) anyRemoved = true;
-      await _runWithElevation('iptables', [
-        '-D',
-        'INPUT',
-        '-p',
-        'tcp',
-        '--dport',
-        SyncPorts.transfer.toString(),
-        '-j',
-        'ACCEPT',
-      ]);
+      await _runWithElevation(
+        'iptables',
+        _iptablesRule('-D', 'tcp', SyncPorts.transfer),
+      );
     } catch (_) {}
 
     return anyRemoved;

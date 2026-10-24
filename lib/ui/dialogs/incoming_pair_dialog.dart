@@ -53,13 +53,14 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
       }
 
       final shouldClose = switch (event) {
-        PairRequestCanceledEvent e
+        final PairRequestCanceledEvent e
             when e.request.requestId == widget.request.requestId =>
           true,
-        PairRequestTimedOutEvent e
+        final PairRequestTimedOutEvent e
             when e.request.requestId == widget.request.requestId =>
           true,
-        PeerTrustedEvent e when e.peer.id == widget.request.peer.id => true,
+        final PeerTrustedEvent e when e.peer.id == widget.request.peer.id =>
+          true,
         _ => false,
       };
 

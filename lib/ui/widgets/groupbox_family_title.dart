@@ -5,6 +5,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
 import 'search_highlight.dart';
 
+/// Header actions move below the title at this content width or narrower.
+/// The short title and compact actions fit inline slightly below the card
+/// compact width, so the header stays on one row a little longer.
+const double kFamilyTitleStackWidth = kSettingsCompactLayoutBreakpoint - 10;
+
 /// Shared inset title pill for groupbox families throughout the GUI.
 class GroupBoxFamilyTitle extends StatelessWidget {
   const GroupBoxFamilyTitle({
@@ -61,11 +66,11 @@ class GroupBoxFamilyTitle extends StatelessWidget {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Keep header action stacking aligned with the inset body width.
+              // Measured like the inset body width below the header.
               final contentWidth = constraints.maxWidth + 2;
               final stacked =
                   trailingBuilder != null &&
-                  contentWidth <= kSettingsCompactLayoutBreakpoint;
+                  contentWidth <= kFamilyTitleStackWidth;
               final titleRow = Row(
                 children: [
                   Icon(icon, size: 20, color: iconAndTextColor),

@@ -284,6 +284,14 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   /// Input field focus wrap-around amount.
   double get inputBorderWrapFocus => cornerRadius * 0.62;
 
+  /// Selected-card overlay shared by game cards and preview cards: a
+  /// secondary tint inside an accent border, faded in by [t].
+  BoxDecoration selectionOverlayDecoration(double t) => BoxDecoration(
+    color: secondary.withValues(alpha: 0.55 * t),
+    border: Border.all(color: accent.withValues(alpha: t), width: 3),
+    borderRadius: BorderRadius.circular(cornerRadius),
+  );
+
   /// Scrollbar color
   Color get scrollbar => accent;
 
@@ -299,9 +307,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
 
   /// Navigation panel background
   Color get navBackground => blendColors(baseBackground, baseAccent, 0.035);
-
-  /// Shared tint for section title bars and the library action bar.
-  Color get sectionHeaderBackground => accent.withValues(alpha: 0.35);
 
   /// Navigation groups' tint over their panel, flattened to an opaque fill.
   /// This can cover a tinted section header without mixing with its color.
@@ -1006,6 +1011,7 @@ class AppNavigationButton extends StatefulWidget {
     this.labelVisible = true,
     this.labelFadeDuration = Duration.zero,
     this.labelFadeCurve = Curves.easeOut,
+    this.hideIconWithLabel = false,
     this.hasNotification = false,
   });
 
@@ -1034,6 +1040,10 @@ class AppNavigationButton extends StatefulWidget {
   final bool labelVisible;
   final Duration labelFadeDuration;
   final Curve labelFadeCurve;
+
+  /// Shrinks the icon away as the label grows in, for text-only buttons that
+  /// still show an icon while collapsed.
+  final bool hideIconWithLabel;
   final bool hasNotification;
 
   @override
@@ -1043,6 +1053,8 @@ class AppNavigationButton extends StatefulWidget {
 class _AppNavigationButtonState extends State<AppNavigationButton>
     with TickerProviderStateMixin {
   static const double _hoverIconBoost = 0.2;
+  // Keeps the button's state (ink, hover) when a tooltip is added or removed.
+  final _buttonKey = GlobalKey();
   late final AnimationController _hoverController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 100),
@@ -1132,7 +1144,14 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         .clamp(0.0, 1.0);
   }
 
-  Widget? _buildIcon({required Color iconColor, required double iconScale}) {
+  double _iconVisibilityT(double labelVisibilityT) =>
+      widget.hideIconWithLabel ? 1 - labelVisibilityT : 1;
+
+  Widget? _buildIcon({
+    required Color iconColor,
+    required double iconScale,
+    required double iconVisibilityT,
+  }) {
     Widget? icon;
     if (widget.iconBuilder != null) {
       icon = widget.iconBuilder!(context, iconColor, widget.iconSize);
@@ -1143,7 +1162,15 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       }
       icon = Icon(iconData, color: iconColor, size: widget.iconSize);
     }
-    return Transform.scale(scale: iconScale, child: icon);
+    final scaled = Transform.scale(scale: iconScale, child: icon);
+    if (iconVisibilityT == 1) return scaled;
+    return ClipRect(
+      child: Align(
+        widthFactor: widget.isHorizontal ? iconVisibilityT : 1,
+        heightFactor: widget.isHorizontal ? 1 : iconVisibilityT,
+        child: Opacity(opacity: iconVisibilityT, child: scaled),
+      ),
+    );
   }
 
   Widget? _buildLabel({required TextStyle labelStyle}) {
@@ -1186,7 +1213,12 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     required double iconScale,
     required double labelVisibilityT,
   }) {
-    final icon = _buildIcon(iconColor: iconColor, iconScale: iconScale);
+    final iconVisibilityT = _iconVisibilityT(labelVisibilityT);
+    final icon = _buildIcon(
+      iconColor: iconColor,
+      iconScale: iconScale,
+      iconVisibilityT: iconVisibilityT,
+    );
     final label = _buildLabel(labelStyle: labelStyle);
     final iconChildren = icon == null ? null : <Widget>[icon];
     final horizontalLabel = label == null
@@ -1195,7 +1227,9 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
             padding: EdgeInsets.only(
               left: icon == null
                   ? 0
-                  : widget.horizontalSpacing * labelVisibilityT,
+                  : widget.horizontalSpacing *
+                        labelVisibilityT *
+                        iconVisibilityT,
             ),
             child: label,
           );
@@ -1229,6 +1263,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         );
 
     final button = AnimatedBuilder(
+      key: _buttonKey,
       animation: Listenable.merge([
         _hoverController,
         _selectionController,
@@ -1238,10 +1273,18 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         final selectionT = Curves.linear.transform(_selectionController.value);
         final hoverT = Curves.linear.transform(_hoverController.value);
         final labelVisibilityT = _labelVisibilityT();
+        // Animated buttons start from a padding that already fills the
+        // minimum width, so collapsing never clamps and re-centers the icon.
+        final collapsedHorizontal = widget.labelFadeDuration == Duration.zero
+            ? 6.0
+            : math.max(6.0, (widget.minWidth - widget.iconSize) / 2);
         final effectivePadding =
             widget.padding ??
             EdgeInsetsGeometry.lerp(
-              const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              EdgeInsets.symmetric(
+                horizontal: collapsedHorizontal,
+                vertical: 8,
+              ),
               EdgeInsets.symmetric(
                 horizontal: widget.labelText == null ? 6 : 12,
                 vertical: 6,

@@ -792,10 +792,15 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
       return;
     }
     WidgetsBinding.instance.addObserver(this);
-    _fileRefreshTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _refreshDatabaseFiles(),
-    );
+    // Skip disk checks while the window is hidden; resuming refreshes at once.
+    _fileRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.paused) {
+        return;
+      }
+      _refreshDatabaseFiles();
+    });
     _init();
   }
 

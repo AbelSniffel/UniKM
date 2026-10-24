@@ -61,7 +61,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   @override
   void didUpdateWidget(covariant HomeHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!widget.isVeryNarrowLayout && _filterTabIndex == 2) {
+    if (!widget.isVeryNarrowLayout && _filterTabIndex == 1) {
       _filterTabIndex = 0;
     }
   }
@@ -513,7 +513,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     final platformCount = platformFilter?.isNotEmpty == true ? 1 : 0;
     final hasSortingOverrides =
         platformCount > 0 || sortMode != DefaultSettings.gameSortMode;
-    final tabId = ['tags', 'options', 'sorting'][_filterTabIndex];
+    final filterCount = selectedTagIds.length + optionCount;
+    final isSorting = _filterTabIndex == 1;
+    final tabId = isSorting ? 'sorting' : 'filters';
     final maxFilterPanelHeight = (MediaQuery.sizeOf(context).height * 0.45)
         .clamp(50.0, 450.0)
         .toDouble();
@@ -528,117 +530,133 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       theme: theme,
       child: child,
     );
-    final content = switch (_filterTabIndex) {
-      0 => group(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AppSearchField(
-              theme: theme,
-              backgroundColor: Color.lerp(theme.surface, theme.background, 0.6),
-              hintText: 'Search tags...',
-              controller: _tagSearchController,
-              onChanged: (value) => setState(() => _tagSearchQuery = value),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
+    final content = isSorting
+        ? group(
+            Column(
+              children: [
+                _buildPlatformDropdown(theme, platformFilter),
+                const SizedBox(height: 6),
+                _buildSortDropdown(theme, sortMode),
+              ],
+            ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              group(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AppSearchField(
+                      theme: theme,
+                      backgroundColor: Color.lerp(
+                        theme.surface,
+                        theme.background,
+                        0.6,
+                      ),
+                      hintText: 'Search tags...',
+                      controller: _tagSearchController,
+                      onChanged: (value) =>
+                          setState(() => _tagSearchQuery = value),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TagList(
+                      tags: matchingTags,
+                      selectedTagIds: selectedTagIds,
+                      theme: theme,
+                      onTagToggled: notifier.toggleTagFilter,
+                      maxHeight: 120,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            TagList(
-              tags: matchingTags,
-              selectedTagIds: selectedTagIds,
-              theme: theme,
-              onTagToggled: notifier.toggleTagFilter,
-              maxHeight: 120,
-            ),
-          ],
-        ),
-      ),
-      1 => group(
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            AppActionButton(
-              label: 'Deadline',
-              theme: theme,
-              selected: state.showDeadlineOnly,
-              onTap: () =>
-                  notifier.setShowDeadlineOnly(!state.showDeadlineOnly),
-            ),
-            AppActionButton(
-              label: 'DLC',
-              theme: theme,
-              selected: state.showDlcOnly,
-              onTap: () => notifier.setShowDlcOnly(!state.showDlcOnly),
-            ),
-            AppActionButton(
-              label: 'Used',
-              theme: theme,
-              selected: state.showUsedOnly,
-              onTap: () => notifier.setShowUsedOnly(!state.showUsedOnly),
-            ),
-            AppActionButton(
-              label: 'No Tags',
-              theme: theme,
-              selected: state.showNoTagsOnly,
-              onTap: () => notifier.setShowNoTagsOnly(!state.showNoTagsOnly),
-            ),
-            AppActionButton(
-              label: 'No Pictures',
-              theme: theme,
-              selected: state.showNoPicturesOnly,
-              onTap: () =>
-                  notifier.setShowNoPicturesOnly(!state.showNoPicturesOnly),
-            ),
-          ],
-        ),
-      ),
-      _ => group(
-        Column(
-          children: [
-            _buildPlatformDropdown(theme, platformFilter),
-            const SizedBox(height: 6),
-            _buildSortDropdown(theme, sortMode),
-          ],
-        ),
-      ),
-    };
-    final VoidCallback? onClear = switch (_filterTabIndex) {
-      0 => selectedTagIds.isEmpty ? null : () => notifier.setTagFilters([]),
-      1 => optionCount == 0 ? null : _clearBoolFilters,
-      _ =>
-        !hasSortingOverrides
-            ? null
-            : () async {
-                notifier.setPlatformFilter(null);
-                await notifier.setSortMode(DefaultSettings.gameSortMode);
-              },
-    };
+              const SizedBox(height: 8),
+              Wrap(
+                key: const ValueKey('home-filter-options'),
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  AppActionButton(
+                    label: 'Deadline',
+                    theme: theme,
+                    selected: state.showDeadlineOnly,
+                    onTap: () =>
+                        notifier.setShowDeadlineOnly(!state.showDeadlineOnly),
+                  ),
+                  AppActionButton(
+                    label: 'DLC',
+                    theme: theme,
+                    selected: state.showDlcOnly,
+                    onTap: () => notifier.setShowDlcOnly(!state.showDlcOnly),
+                  ),
+                  AppActionButton(
+                    label: 'Used',
+                    theme: theme,
+                    selected: state.showUsedOnly,
+                    onTap: () => notifier.setShowUsedOnly(!state.showUsedOnly),
+                  ),
+                  AppActionButton(
+                    label: 'No Tags',
+                    theme: theme,
+                    selected: state.showNoTagsOnly,
+                    onTap: () =>
+                        notifier.setShowNoTagsOnly(!state.showNoTagsOnly),
+                  ),
+                  AppActionButton(
+                    label: 'No Pictures',
+                    theme: theme,
+                    selected: state.showNoPicturesOnly,
+                    onTap: () => notifier.setShowNoPicturesOnly(
+                      !state.showNoPicturesOnly,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+    final VoidCallback? onClear = isSorting
+        ? (!hasSortingOverrides
+              ? null
+              : () async {
+                  notifier.setPlatformFilter(null);
+                  await notifier.setSortMode(DefaultSettings.gameSortMode);
+                })
+        : (filterCount == 0
+              ? null
+              : () {
+                  notifier.setTagFilters([]);
+                  _clearBoolFilters();
+                });
     final panel = ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxFilterPanelHeight),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppTabBar(
-            key: const ValueKey('home-filter-tabs'),
-            theme: theme,
-            tabs: [
-              AppTab(tabLabel('Tags', selectedTagIds.length)),
-              AppTab(tabLabel('Options', optionCount)),
-              if (isVeryNarrow) AppTab(tabLabel('Sorting', platformCount)),
-            ],
-            selectedIndex: _filterTabIndex,
-            onChanged: (index) {
-              if (_filtersScrollController.hasClients) {
-                _filtersScrollController.jumpTo(0);
-              }
-              setState(() => _filterTabIndex = index);
-            },
-          ),
-          const SizedBox(height: 8),
+          // Sorting lives in the header row on wider layouts, leaving a
+          // single tab, so the tab bar is only shown alongside Sorting.
+          if (isVeryNarrow) ...[
+            AppTabBar(
+              key: const ValueKey('home-filter-tabs'),
+              theme: theme,
+              tabs: [
+                AppTab(tabLabel('Filters', filterCount)),
+                AppTab(tabLabel('Sorting', platformCount)),
+              ],
+              selectedIndex: _filterTabIndex,
+              onChanged: (index) {
+                if (_filtersScrollController.hasClients) {
+                  _filtersScrollController.jumpTo(0);
+                }
+                setState(() => _filterTabIndex = index);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
           Flexible(
             child: Scrollbar(
               controller: _filtersScrollController,
@@ -658,17 +676,13 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             key: ValueKey(
-                              'home-filter-$tabId-${_filterTabIndex == 2 ? 'default' : 'clear'}',
+                              'home-filter-$tabId-${isSorting ? 'default' : 'clear'}',
                             ),
                             onPressed: onClear,
                             icon: Icon(
-                              _filterTabIndex == 2
-                                  ? Icons.restore
-                                  : Icons.filter_list_off,
+                              isSorting ? Icons.restore : Icons.filter_list_off,
                             ),
-                            label: Text(
-                              _filterTabIndex == 2 ? 'Default' : 'Clear',
-                            ),
+                            label: Text(isSorting ? 'Default' : 'Clear'),
                           ),
                         ),
                       ],

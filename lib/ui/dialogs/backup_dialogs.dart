@@ -137,7 +137,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
       final result = await backupService.createBackup();
       if (result.success) {
         NotificationManager.instance.success(
-          'Backup created: ${result.backupInfo?.fileName}',
+          'Backup created: ${result.backupInfo?.displayName}',
         );
         await _loadBackups();
       } else {
@@ -159,7 +159,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
       theme: theme,
       title: 'Delete Backup',
       titleIcon: Icons.delete_forever,
-      message: 'Are you sure you want to delete "${backup.fileName}"?',
+      message: 'Are you sure you want to delete "${backup.displayName}"?',
       confirmLabel: 'Delete',
       destructive: true,
     );
@@ -370,8 +370,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                               key: ValueKey(backup.filePath),
                               theme: theme,
                               title: backup.displayName,
-                              subtitle:
-                                  '${backup.formattedSize} • ${backup.fileName}',
+                              subtitle: backup.details,
                               isEncrypted: backup.isEncrypted,
                               actions: [
                                 IconButton(

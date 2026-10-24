@@ -5,6 +5,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
@@ -13,24 +14,33 @@ import 'package:path/path.dart' as p;
 import '../database/database.dart';
 import '../models/device_sync_models.dart';
 import 'sync_entry_fingerprint.dart';
+import 'sync_frames.dart';
 import 'steam_service.dart';
 
 class SyncPayloadCodec {
   SyncPayloadCodec({
     required this.getDatabase,
     this.exportSteamCache = exportSteamCacheSnapshotForSync,
+    this.imagesRoot,
   });
 
   final AppDatabase? Function() getDatabase;
   final Future<Map<String, dynamic>> Function() exportSteamCache;
 
+  /// Folder holding the `sync` and `steam` image folders. Defaults to the
+  /// `images` folder beside the default database.
+  final Future<Directory> Function()? imagesRoot;
+
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
-  int? _digestRevision;
-  String? _digest;
-  String? _digestOrigin;
-  AppDatabase? _digestDatabase;
-  final _recordSignatures = <String, String>{};
+  /// Digest state is shared by every codec bound to the same open database,
+  /// so the background poll, manual syncs and incoming transfers reuse one
+  /// computation instead of each rehashing the library.
+  static final Expando<_DigestState> _digestStates = Expando();
+
+  /// Below this many changed records hashing stays on the calling isolate;
+  /// spawning a worker would cost more than it saves.
+  static const int _isolateHashThreshold = 256;
 
   /// Hashes only journalled changes after the initial snapshot. Health checks
   /// reuse the completed digest while the database revision is unchanged.
@@ -40,197 +50,400 @@ class SyncPayloadCodec {
     return _getDatasetDigest(db);
   }
 
+  /// Record hashes folded into [count] buckets that peers compare to find
+  /// the few records that differ, instead of exchanging every record's hash.
+  /// Also returns the revision the hashes describe: records changed after it
+  /// must be sent whatever their bucket.
+  Future<({List<String> digests, int revision})> getBucketDigests(
+    int count,
+  ) async {
+    final db = getDatabase();
+    if (db == null) return (digests: List.filled(count, ''), revision: 0);
+    await _getDatasetDigest(db);
+    final state = _digestStates[db]!;
+    return (
+      digests: bucketDigests(state.hashes, count),
+      revision: state.revision ?? 0,
+    );
+  }
+
+  /// Number of live and deleted records the digests currently cover.
+  int get hashedRecordCount {
+    final db = getDatabase();
+    return db == null ? 0 : _digestStates[db]?.hashes.length ?? 0;
+  }
+
+  /// About 32 records per bucket keeps both the digests and the records sent
+  /// around one edit small.
+  static int bucketCountFor(int records) {
+    var count = 16;
+    while (count < 2048 && count * 32 < records) {
+      count *= 2;
+    }
+    return count;
+  }
+
+  /// Stable across devices and platforms: FNV-1a of the sync ID.
+  static int bucketOf(String syncId, int count) {
+    var hash = 0x811c9dc5;
+    for (final unit in syncId.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return hash % count;
+  }
+
+  /// XOR of each bucket's 60-bit record-hash prefixes: order-independent,
+  /// and record hashes include the sync ID, so duplicates cannot cancel out.
+  static List<String> bucketDigests(Map<String, String> hashes, int count) {
+    final buckets = List<int?>.filled(count, null);
+    hashes.forEach((syncId, hash) {
+      final bucket = bucketOf(syncId, count);
+      final value = int.parse(hash.substring(0, 15), radix: 16);
+      buckets[bucket] = (buckets[bucket] ?? 0) ^ value;
+    });
+    return [for (final value in buckets) value?.toRadixString(16) ?? ''];
+  }
+
+  /// Buckets whose digests differ; a missing remote digest always differs.
+  static Set<int> differingBuckets(List<Object?> local, List<Object?> remote) =>
+      {
+        for (var i = 0; i < local.length; i++)
+          if (i >= remote.length || local[i] != remote[i]) i,
+      };
+
+  /// `sha256:<hex>` digests of the covers stored in the managed sync image
+  /// folder. Those files are content-addressed, so a peer can skip sending
+  /// any cover listed here.
+  Future<List<String>> getLocalCoverDigests() async =>
+      (await _localCoverFiles()).keys.toList();
+
+  Future<Map<String, String>> _localCoverFiles() async {
+    final dir = await _resolveManagedImagesDirectory();
+    final files = <String, String>{};
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basenameWithoutExtension(entity.path);
+      if (_sha256Hex.hasMatch(name)) files['sha256:$name'] = entity.path;
+    }
+    return files;
+  }
+
+  static final RegExp _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
+
+  /// Long record loops pause this often so the UI can draw frames; awaiting
+  /// only completed futures never returns control to the event loop.
+  static const int _yieldEvery = 250;
+
+  static Future<void> _yieldToUi() => Future<void>.delayed(Duration.zero);
+
+  /// Must not be awaited from inside a database transaction: the refresh reads
+  /// in its own transaction and would wait on the caller's forever.
   Future<String> _getDatasetDigest(AppDatabase db) {
-    return db.transaction(() async {
+    final state = _digestStates[db] ??= _DigestState();
+    return state.inFlight ??= _refreshDigest(
+      db,
+      state,
+    ).whenComplete(() => state.inFlight = null);
+  }
+
+  Future<String> _refreshDigest(AppDatabase db, _DigestState state) async {
+    final snapshot = await db.transaction(() async {
       final revision = await db.getLocalSyncRevision();
       final origin = await db.getSyncDatabaseOrigin();
-      final sameDatabase =
-          identical(_digestDatabase, db) && _digestOrigin == origin;
-      if (sameDatabase && _digestRevision == revision && _digest != null) {
-        return _digest!;
+      if (state.origin == origin &&
+          state.revision == revision &&
+          state.digest != null) {
+        return null;
       }
       final reset =
-          !sameDatabase ||
-          _digestRevision == null ||
-          revision < _digestRevision!;
-      if (reset) _recordSignatures.clear();
+          state.origin != origin ||
+          state.revision == null ||
+          revision < state.revision!;
       final records = await db.getSyncRecords(
-        sinceRevision: reset ? 0 : _digestRevision!,
+        sinceRevision: reset ? 0 : state.revision!,
       );
       final games = await db.getGamesByIds([
         for (final record in records)
           if (record['deletedAt'] == 0 && record['id'] is int)
             record['id'] as int,
       ]);
-      final tags = await db.getTagsForGames(
-        games.map((game) => game.id).toList(),
-      );
-      final byId = {for (final game in games) game.id: game};
-      final tagVersions = await db.getSyncTagVersions();
-      for (final record in records) {
-        final syncId = record['syncId'] as String;
-        final game = byId[record['id']];
-        final deleted = (record['deletedAt'] as int) > 0;
-        if (!deleted && game == null) {
-          _recordSignatures.remove(syncId);
-          continue;
-        }
-        final gameTags = deleted
-            ? const <TagEntry>[]
-            : tags[game!.id] ?? const <TagEntry>[];
-        final tagSignatures =
-            gameTags
-                .map(
-                  (tag) => jsonEncode([
-                    tag.name,
-                    tagVersions[tag.id]?['changeClock'],
-                    tagVersions[tag.id]?['changeOrigin'],
-                  ]),
-                )
-                .toList()
-              ..sort();
-        final content = deleted
-            ? 'deleted'
-            : await SyncEntryFingerprint.fromGameEntry(game!, gameTags);
-        _recordSignatures[syncId] = jsonEncode([
-          syncId,
-          record['changeClock'],
-          record['changeOrigin'],
-          content,
-          tagSignatures,
-        ]);
-      }
-      if (!reset) {
+      return (
+        revision: revision,
+        origin: origin,
+        reset: reset,
+        records: records,
+        games: games,
+        tags: await db.getTagsForGames(games.map((game) => game.id).toList()),
+        tagVersions: await db.getSyncTagVersions(),
         // Identity adoption can remove the prior sync record without changing
         // any game fields. Prune metadata-only removals without rehashing the
         // unchanged rows in the library.
-        final currentIds = await db.getSyncRecordIds();
-        _recordSignatures.removeWhere((id, _) => !currentIds.contains(id));
-      }
-      final signatures = _recordSignatures.values.toList()..sort();
-      final digest = await SyncEntryFingerprint.hashBytes(
-        utf8.encode(jsonEncode(signatures)),
+        currentIds: reset ? null : await db.getSyncRecordIds(),
       );
-      _digestRevision = revision;
-      _digestDatabase = db;
-      _digestOrigin = origin;
-      _digest = digest;
-      return digest;
     });
+    if (snapshot == null) return state.digest!;
+
+    final records = snapshot.records;
+    final games = snapshot.games;
+    final tags = snapshot.tags;
+    final tagVersions = snapshot.tagVersions;
+    final ({Map<String, String?> hashes, Map<String, CoverStamp> covers})
+    hashed;
+    if (records.length < _isolateHashThreshold) {
+      hashed = _hashRecords(records, games, tags, tagVersions, null);
+    } else {
+      hashed = await _hashRecordsInBackground(
+        records,
+        games,
+        tags,
+        tagVersions,
+        Map.of(SyncEntryFingerprint.coverCache),
+      );
+      SyncEntryFingerprint.coverCache.addAll(hashed.covers);
+    }
+
+    if (snapshot.reset) state.hashes.clear();
+    hashed.hashes.forEach((syncId, hash) {
+      if (hash == null) {
+        state.hashes.remove(syncId);
+      } else {
+        state.hashes[syncId] = hash;
+      }
+    });
+    final currentIds = snapshot.currentIds;
+    if (currentIds != null) {
+      state.hashes.removeWhere((id, _) => !currentIds.contains(id));
+    }
+    final entries = [
+      for (final entry in state.hashes.entries) '${entry.key}:${entry.value}',
+    ]..sort();
+    state
+      ..revision = snapshot.revision
+      ..origin = snapshot.origin
+      ..digest = SyncEntryFingerprint.hashBytes(
+        utf8.encode(entries.join('\n')),
+      );
+    return state.digest!;
   }
 
+  /// Kept static so the worker closure captures only these arguments.
+  static Future<({Map<String, String?> hashes, Map<String, CoverStamp> covers})>
+  _hashRecordsInBackground(
+    List<Map<String, dynamic>> records,
+    List<GameEntry> games,
+    Map<int, List<TagEntry>> tags,
+    Map<int, Map<String, dynamic>> tagVersions,
+    Map<String, CoverStamp> coverCache,
+  ) => Isolate.run(
+    () => _hashRecords(records, games, tags, tagVersions, coverCache),
+  );
+
+  /// Pure function so it can run on a worker isolate. A `null` hash marks a
+  /// record whose game row disappeared without a tombstone.
+  static ({Map<String, String?> hashes, Map<String, CoverStamp> covers})
+  _hashRecords(
+    List<Map<String, dynamic>> records,
+    List<GameEntry> games,
+    Map<int, List<TagEntry>> tags,
+    Map<int, Map<String, dynamic>> tagVersions,
+    Map<String, CoverStamp>? coverCache,
+  ) {
+    if (coverCache != null) SyncEntryFingerprint.coverCache.addAll(coverCache);
+    final byId = {for (final game in games) game.id: game};
+    final hashes = <String, String?>{};
+    for (final record in records) {
+      final syncId = record['syncId'] as String;
+      final game = byId[record['id']];
+      final deleted = (record['deletedAt'] as int) > 0;
+      if (!deleted && game == null) {
+        hashes[syncId] = null;
+        continue;
+      }
+      final gameTags = deleted
+          ? const <TagEntry>[]
+          : tags[game!.id] ?? const <TagEntry>[];
+      final tagSignatures =
+          gameTags
+              .map(
+                (tag) => jsonEncode([
+                  tag.name,
+                  tagVersions[tag.id]?['changeClock'],
+                  tagVersions[tag.id]?['changeOrigin'],
+                ]),
+              )
+              .toList()
+            ..sort();
+      final content = deleted
+          ? 'deleted'
+          : SyncEntryFingerprint.fromGameEntry(game!, gameTags);
+      final signature = jsonEncode([
+        syncId,
+        record['changeClock'],
+        record['changeOrigin'],
+        content,
+        tagSignatures,
+      ]);
+      // 128 bits is ample to detect a changed record; the full digest below
+      // still covers the whole manifest.
+      hashes[syncId] = SyncEntryFingerprint.hashBytes(
+        utf8.encode(signature),
+      ).substring(0, 32);
+    }
+    return (hashes: hashes, covers: SyncEntryFingerprint.coverCache);
+  }
+
+  /// Builds the records to send to a peer: everything changed after
+  /// [sinceRevision], or with [onlyBuckets] just the records in buckets whose
+  /// digests differ from the peer's (plus any changed after those digests
+  /// were taken). Covers the peer lists in [peerCovers] are not sent again.
   Future<Map<String, dynamic>> buildDeltaPayload({
     required String syncRevisionId,
-    required int baseRevision,
-    required int baseSyncAtMillis,
-    required int localRevision,
     String? deviceName,
-    bool includeAllGames = false,
     bool includeSteamCache = true,
+    int sinceRevision = 0,
+    ({int count, Set<int> buckets, int hashedRevision})? onlyBuckets,
+    Set<String> peerCovers = const {},
   }) async {
     final db = getDatabase();
-    final full = includeAllGames || baseRevision <= 0;
     if (db == null) {
       return {
-        'mode': 'delta',
-        'fullDataset': full,
-        'syncProtocol': 3,
+        'syncProtocol': supportedDeviceSyncProtocol,
         'syncRevisionId': syncRevisionId,
         'localRevision': 0,
         'dbTimestampMillis': 0,
-        'baseRevision': baseRevision,
-        'baseSyncAt': baseSyncAtMillis,
         'games': const <Map<String, dynamic>>[],
         'tombstones': const <Map<String, dynamic>>[],
       };
     }
+    // Hash outside the transaction below (see [_getDatasetDigest]).
+    final contentDigest = await _getDatasetDigest(db);
     // The cursor and records describe the same snapshot. A later edit must
     // never fall behind a checkpoint for an earlier payload.
-    return db.transaction(() async {
+    final snapshot = await db.transaction(() async {
       final snapshotRevision = await db.getLocalSyncRevision();
-      final full =
-          includeAllGames ||
-          baseRevision <= 0 ||
-          baseRevision > snapshotRevision;
-      final records = await db.getSyncRecords(
-        sinceRevision: full ? 0 : baseRevision,
+      var records = await db.getSyncRecords(
+        sinceRevision: onlyBuckets == null ? sinceRevision : 0,
       );
+      if (onlyBuckets case (
+        :final count,
+        :final buckets,
+        :final hashedRevision,
+      )) {
+        records = records
+            .where(
+              (record) =>
+                  (record['localRevision'] as int) > hashedRevision ||
+                  buckets.contains(bucketOf(record['syncId'] as String, count)),
+            )
+            .toList(growable: false);
+      }
       final liveById = <int, Map<String, dynamic>>{
         for (final record in records)
           if (record['deletedAt'] == 0 && record['id'] is int)
             record['id'] as int: record,
       };
       final changed = await db.getGamesByIds(liveById.keys);
-      final tags = await db.getTagsForGames(
-        changed.map((game) => game.id).toList(),
+      return (
+        revision: snapshotRevision,
+        records: records,
+        liveById: liveById,
+        changed: changed,
+        tags: await db.getTagsForGames(changed.map((g) => g.id).toList()),
+        tagVersions: await db.getSyncTagVersions(),
+        dbTimestampMillis: await db.getSyncDbTimestampMillis(),
       );
-      final tagVersions = await db.getSyncTagVersions();
-      final serialized = <Map<String, dynamic>>[];
-      for (final game in changed) {
-        final record = liveById[game.id]!;
-        final gameTags = tags[game.id] ?? const <TagEntry>[];
-        final cover = await _serializeCoverImageForTransfer(
-          rawCoverImagePath: game.coverImage,
-          gameKey: game.gameKey,
-        );
-        serialized.add({
-          'id': game.id,
-          'syncId': record['syncId'],
-          'changeClock': record['changeClock'],
-          'changeOrigin': record['changeOrigin'],
-          'title': game.title,
-          'gameKey': game.gameKey,
-          'platform': game.platform,
-          'dateAdded': game.dateAdded.toUtc().toIso8601String(),
-          'updatedAt': game.updatedAt.toUtc().toIso8601String(),
-          'notes': game.notes,
-          'isUsed': game.isUsed,
-          'coverImage': game.coverImage,
-          'hasCoverImage': game.coverImage.trim().isNotEmpty,
-          'coverDigest': cover.digest,
-          'coverImageFile': cover.file,
-          'hasDeadline': game.hasDeadline,
-          'deadlineDate': game.deadlineDate?.toUtc().toIso8601String(),
-          'isDlc': game.isDlc,
-          'steamAppId': game.steamAppId,
-          'developer': game.developer,
-          'reviewScore': game.reviewScore,
-          'reviewCount': game.reviewCount,
-          'entrySyncId': await SyncEntryFingerprint.fromGameEntry(
-            game,
-            gameTags,
-            coverDigest: cover.digest,
-          ),
-          'tags': gameTags
-              .map(
-                (tag) => {
-                  'name': tag.name,
-                  'colorHex': tag.color,
-                  'isSteamTag': tag.isSteamTag,
-                  ...?tagVersions[tag.id],
-                },
-              )
-              .toList(growable: false),
-        });
+    });
+
+    final serialized = <Map<String, dynamic>>[];
+    final coverFiles = <String, String>{};
+    var processed = 0;
+    for (final game in snapshot.changed) {
+      if (++processed % _yieldEvery == 0) await _yieldToUi();
+      final record = snapshot.liveById[game.id]!;
+      final gameTags = snapshot.tags[game.id] ?? const <TagEntry>[];
+      final coverDigest = SyncEntryFingerprint.coverIdentity(game.coverImage);
+      if (coverDigest.startsWith('sha256:') &&
+          !peerCovers.contains(coverDigest)) {
+        coverFiles.putIfAbsent(coverDigest, () => game.coverImage.trim());
       }
-      return {
-        'mode': 'delta',
-        'fullDataset': full,
-        'syncProtocol': 3,
-        'syncRevisionId': syncRevisionId,
-        'localRevision': snapshotRevision,
-        'dbTimestampMillis': await db.getSyncDbTimestampMillis(),
-        'contentDigest': await _getDatasetDigest(db),
-        'baseRevision': baseRevision,
-        'baseSyncAt': baseSyncAtMillis,
-        if (deviceName != null && deviceName.isNotEmpty)
-          'deviceName': deviceName,
-        if (includeSteamCache) 'steamCache': await exportSteamCache(),
-        'games': serialized,
-        'tombstones': records
-            .where((record) => (record['deletedAt'] as int) > 0)
+      serialized.add({
+        'id': game.id,
+        'syncId': record['syncId'],
+        'changeClock': record['changeClock'],
+        'changeOrigin': record['changeOrigin'],
+        'title': game.title,
+        'gameKey': game.gameKey,
+        'platform': game.platform,
+        'dateAdded': game.dateAdded.toUtc().toIso8601String(),
+        'updatedAt': game.updatedAt.toUtc().toIso8601String(),
+        'notes': game.notes,
+        'isUsed': game.isUsed,
+        'coverImage': game.coverImage,
+        'hasCoverImage': game.coverImage.trim().isNotEmpty,
+        'coverDigest': coverDigest,
+        'hasDeadline': game.hasDeadline,
+        'deadlineDate': game.deadlineDate?.toUtc().toIso8601String(),
+        'isDlc': game.isDlc,
+        'steamAppId': game.steamAppId,
+        'developer': game.developer,
+        'reviewScore': game.reviewScore,
+        'reviewCount': game.reviewCount,
+        'tags': gameTags
+            .map(
+              (tag) => {
+                'name': tag.name,
+                'colorHex': tag.color,
+                'isSteamTag': tag.isSteamTag,
+                ...?snapshot.tagVersions[tag.id],
+              },
+            )
             .toList(growable: false),
-      };
+      });
+    }
+    return {
+      'syncProtocol': supportedDeviceSyncProtocol,
+      'syncRevisionId': syncRevisionId,
+      'localRevision': snapshot.revision,
+      'dbTimestampMillis': snapshot.dbTimestampMillis,
+      'contentDigest': contentDigest,
+      if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName,
+      if (includeSteamCache) 'steamCache': await exportSteamCache(),
+      'games': serialized,
+      'covers': await _readCoversForTransfer(coverFiles),
+      'tombstones': snapshot.records
+          .where((record) => (record['deletedAt'] as int) > 0)
+          .toList(growable: false),
+    };
+  }
+
+  /// Reads covers on a worker isolate. A cover whose bytes no longer match
+  /// its cached digest is dropped; the receiver keeps its own copy.
+  static Future<List<SyncCover>> _readCoversForTransfer(
+    Map<String, String> pathsByDigest,
+  ) async {
+    if (pathsByDigest.isEmpty) return const [];
+    return Isolate.run(() {
+      final covers = <SyncCover>[];
+      pathsByDigest.forEach((digest, raw) {
+        try {
+          final file = SyncEntryFingerprint.coverFile(raw);
+          final bytes = file.readAsBytesSync();
+          if (bytes.isEmpty ||
+              SyncEntryFingerprint.coverDigest(bytes) != digest) {
+            return;
+          }
+          covers.add(
+            SyncCover(
+              digest: digest,
+              fileName: p.basename(file.path),
+              bytes: bytes,
+            ),
+          );
+        } on FileSystemException {
+          // Missing covers are simply not sent.
+        }
+      });
+      return covers;
     });
   }
 
@@ -361,15 +574,33 @@ class SyncPayloadCodec {
   /// Modern records converge by stable identity and deterministic logical
   /// versions. Received changes retain their version when relayed to a third
   /// device. Legacy peers still use their timestamp/conflict rules.
+  ///
+  /// [covers] is the payload's deduplicated `digest → file` map. A record
+  /// whose cover is not in it reuses the copy this device already stores.
   Future<SyncImportResult> applyDeltaPayload(
     List<Map<String, dynamic>> gamesJson, {
     List<Map<String, dynamic>> tombstones = const [],
     DateTime? lastSyncAt,
+    Map<String, SyncCover> covers = const {},
   }) async {
     final db = getDatabase();
     if (db == null) {
       return const SyncImportResult(inserted: 0, updated: 0, conflicts: 0);
     }
+    // Listed only when a record needs a cover, so cover-free payloads never
+    // touch the image folder.
+    Map<String, String>? localCovers;
+    Future<String?> coverForDigest(String digest) async {
+      final storedCovers = localCovers ??= await _localCoverFiles();
+      final stored = storedCovers[digest];
+      if (stored != null) return stored;
+      final cover = covers[digest];
+      if (cover == null) return null;
+      final path = await _persistIncomingCoverImage(cover);
+      if (path != null) storedCovers[digest] = path;
+      return path;
+    }
+
     return db.transaction(() async {
       final tagEntries = await _mergeIncomingTags(db, gamesJson);
       final records = await db.getSyncRecords();
@@ -494,14 +725,16 @@ class SyncPayloadCodec {
             !_modern(data) ||
             _compareVersions(data, previous) > 0 ||
             _compareVersions(data, previous) == 0 &&
-                (await SyncEntryFingerprint.fromPayload(data)).compareTo(
-                      await SyncEntryFingerprint.fromPayload(previous),
-                    ) >
+                SyncEntryFingerprint.fromPayload(
+                      data,
+                    ).compareTo(SyncEntryFingerprint.fromPayload(previous)) >
                     0) {
           incomingByIdentity[identity] = data;
         }
       }
+      var processed = 0;
       for (final rawData in incomingByIdentity.values) {
+        if (++processed % _yieldEvery == 0) await _yieldToUi();
         // A tag is shared by several games. Use its independently resolved
         // metadata when comparing records, so an older colour cannot force
         // repeated repair of an otherwise identical game.
@@ -572,10 +805,10 @@ class SyncPayloadCodec {
                 (localRecord['deletedAt'] as int)) {
           continue;
         }
-        final incomingHash = await SyncEntryFingerprint.fromPayload(data);
+        final incomingHash = SyncEntryFingerprint.fromPayload(data);
         final localHash = existing == null
             ? null
-            : await SyncEntryFingerprint.fromGameEntry(
+            : SyncEntryFingerprint.fromGameEntry(
                 existing,
                 tagsById[existing.id] ?? [],
               );
@@ -618,12 +851,10 @@ class SyncPayloadCodec {
                 : nextLocalId;
             if (localId >= nextLocalId) nextLocalId = localId + 1;
           }
-          String? persistedCover;
-          if (data['coverImageFile'] is Map) {
-            persistedCover = await _persistIncomingCoverImage(
-              payload: Map<String, dynamic>.from(data['coverImageFile'] as Map),
-            );
-          }
+          final coverDigest = data['coverDigest'] as String? ?? '';
+          final persistedCover = coverDigest.startsWith('sha256:')
+              ? await coverForDigest(coverDigest)
+              : null;
           final cover = await _resolveTranslatedCoverImagePath(
             hasCoverImage:
                 data['hasCoverImage'] as bool? ??
@@ -734,65 +965,18 @@ class SyncPayloadCodec {
   // Cover image serialisation helpers
   // -------------------------------------------------------------------------
 
-  /// Hash the same bytes that are sent, without reading the cover again for
-  /// the payload digest and entry fingerprint.
-  Future<({String digest, Map<String, dynamic>? file})>
-  _serializeCoverImageForTransfer({
-    required String rawCoverImagePath,
-    required String gameKey,
-  }) async {
-    final raw = rawCoverImagePath.trim();
-    if (raw.isEmpty) return (digest: '', file: null);
-    if (raw.startsWith('http://') ||
-        raw.startsWith('https://') ||
-        raw.startsWith('assets/')) {
-      return (digest: raw, file: null);
-    }
-
-    File sourceFile;
-    final uri = Uri.tryParse(raw);
-    if (uri != null && uri.scheme.toLowerCase() == 'file') {
-      sourceFile = File.fromUri(uri);
-    } else {
-      sourceFile = File(raw);
-    }
-
-    if (!await sourceFile.exists()) return (digest: '', file: null);
-    final bytes = await sourceFile.readAsBytes();
-    final digest = 'sha256:${await SyncEntryFingerprint.hashBytes(bytes)}';
-    if (bytes.isEmpty) return (digest: digest, file: null);
-
-    final sourceName = p.basename(sourceFile.path).trim();
-    final ext = p.extension(sourceFile.path).toLowerCase();
-    final safeKey = gameKey.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-    final fileName = sourceName.isNotEmpty
-        ? sourceName
-        : '${safeKey.isEmpty ? 'cover' : safeKey}${ext.isEmpty ? '.img' : ext}';
-    return (
-      digest: digest,
-      file: {'fileName': fileName, 'bytesBase64': base64Encode(bytes)},
-    );
-  }
-
-  Future<String?> _persistIncomingCoverImage({
-    required Map<String, dynamic> payload,
-  }) async {
-    final bytesBase64 = (payload['bytesBase64'] as String?)?.trim() ?? '';
-    if (bytesBase64.isEmpty) return null;
-
-    List<int> bytes;
-    try {
-      bytes = base64Decode(bytesBase64);
-    } catch (_) {
+  /// Stores a received cover under its content address. Bytes that do not
+  /// match the digest they were sent under are discarded.
+  Future<String?> _persistIncomingCoverImage(SyncCover cover) async {
+    final bytes = cover.bytes;
+    if (bytes.isEmpty ||
+        SyncEntryFingerprint.coverDigest(bytes) != cover.digest) {
       return null;
     }
-    if (bytes.isEmpty) return null;
-
     final imagesDir = await _resolveManagedImagesDirectory();
-    final incomingName = (payload['fileName'] as String?)?.trim() ?? '';
-    final ext = p.extension(p.basename(incomingName));
+    final ext = p.extension(p.basename(cover.fileName.trim()));
     final safeName =
-        '${await SyncEntryFingerprint.hashBytes(bytes)}${ext.isEmpty ? '.img' : ext}';
+        '${SyncEntryFingerprint.hashBytes(bytes)}${ext.isEmpty ? '.img' : ext}';
     final target = File(p.join(imagesDir.path, safeName));
     if (!await target.exists()) await target.writeAsBytes(bytes, flush: true);
     return target.path;
@@ -829,8 +1013,7 @@ class SyncPayloadCodec {
   }) async {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
-    if (raw.startsWith('assets/')) return raw;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    if (SyncEntryFingerprint.isAddressedCover(raw)) return raw;
 
     final sourceFile = _fileFromRawPath(raw);
     if (sourceFile != null && await sourceFile.exists()) {
@@ -869,7 +1052,10 @@ class SyncPayloadCodec {
     final sourcePath = (uri != null && uri.scheme.toLowerCase() == 'file')
         ? uri.path
         : rawPath;
-    final fileName = p.basename(sourcePath);
+    // Covers synced from another OS keep that OS's path separators.
+    final fileName = _windowsPathPattern.hasMatch(sourcePath)
+        ? p.windows.basename(sourcePath)
+        : p.basename(sourcePath);
     if (fileName.trim().isEmpty) return null;
 
     final syncDir = await _resolveManagedImagesDirectory();
@@ -894,7 +1080,7 @@ class SyncPayloadCodec {
     }
 
     final ext = p.extension(sourceFile.path);
-    final digest = await SyncEntryFingerprint.hashBytes(
+    final digest = SyncEntryFingerprint.hashBytes(
       await sourceFile.readAsBytes(),
     );
     final fileName = '$digest${ext.isEmpty ? '.img' : ext}';
@@ -906,17 +1092,46 @@ class SyncPayloadCodec {
     return target.path;
   }
 
-  Future<Directory> _resolveManagedImagesDirectory() async {
-    final dbPath = await AppDatabase.getDatabasePath();
-    final imagesDir = Directory(p.join(p.dirname(dbPath), 'images', 'sync'));
-    if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
-    return imagesDir;
-  }
+  // Resolved once: the default lookup goes through a platform channel and
+  // codecs are created per sync, so it is shared. An injected root is cached
+  // per codec instead, keeping separate devices in one process apart.
+  static final Map<String, Future<Directory>> _defaultImageDirectories = {};
+  final Map<String, Future<Directory>> _imageDirectories = {};
 
-  Future<Directory> _resolveSteamImagesDirectory() async {
-    final dbPath = await AppDatabase.getDatabasePath();
-    final imagesDir = Directory(p.join(p.dirname(dbPath), 'images', 'steam'));
-    if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
-    return imagesDir;
+  Future<Directory> _resolveManagedImagesDirectory() =>
+      _imagesDirectory('sync');
+
+  Future<Directory> _resolveSteamImagesDirectory() => _imagesDirectory('steam');
+
+  Future<Directory> _imagesDirectory(String name) {
+    final cache = imagesRoot == null
+        ? _defaultImageDirectories
+        : _imageDirectories;
+    return cache[name] ??= () async {
+      try {
+        final root =
+            await imagesRoot?.call() ??
+            Directory(
+              p.join(p.dirname(await AppDatabase.getDatabasePath()), 'images'),
+            );
+        final imagesDir = Directory(p.join(root.path, name));
+        if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
+        return imagesDir;
+      } catch (_) {
+        // Retry on the next call instead of caching the failure.
+        cache.remove(name);
+        rethrow;
+      }
+    }();
   }
+}
+
+class _DigestState {
+  int? revision;
+  String? origin;
+  String? digest;
+
+  /// `syncId → record hash`, the manifest peers compare.
+  final Map<String, String> hashes = {};
+  Future<String>? inFlight;
 }

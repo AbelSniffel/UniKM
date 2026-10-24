@@ -26,7 +26,6 @@ class GameLibraryView extends ConsumerStatefulWidget {
     required this.scrollController,
     this.animateEntries = false,
     required this.gameListFocusNode,
-    this.isVeryNarrowLayout = false,
     required this.onSelectAll,
     required this.onDeleteSelection,
     required this.onCopySelection,
@@ -35,7 +34,6 @@ class GameLibraryView extends ConsumerStatefulWidget {
   final ScrollController scrollController;
   final bool animateEntries;
   final FocusNode gameListFocusNode;
-  final bool isVeryNarrowLayout;
   final VoidCallback onSelectAll;
   final Future<void> Function() onDeleteSelection;
   final Future<void> Function() onCopySelection;
@@ -508,9 +506,7 @@ class _GameLibraryDragSelectionLayerState
     }
     if (lastVisited != null) {
       ref.read(gamesProvider.notifier).setSelection(selection);
-      ref
-          .read(lastSelectedGameIdProvider.notifier)
-          .set(lastVisited);
+      ref.read(lastSelectedGameIdProvider.notifier).set(lastVisited);
     }
   }
 
@@ -589,9 +585,7 @@ class _GameLibraryDragSelectionLayerState
     ref.read(gamesProvider.notifier).setSelection(nextSelection);
     ref
         .read(lastSelectedGameIdProvider.notifier)
-        .set(
-          nextSelection.isEmpty ? null : nextSelection.last,
-        );
+        .set(nextSelection.isEmpty ? null : nextSelection.last);
 
     setState(() {
       _isShiftMarqueeActive = true;

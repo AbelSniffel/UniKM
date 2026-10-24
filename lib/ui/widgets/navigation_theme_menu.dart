@@ -163,11 +163,7 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
         .getAllThemes()
         .where((data) => !builtInIds.contains(data.id))
         .toList();
-    final themes = switch (_selectedTab) {
-      1 => kBuiltInThemes,
-      2 => custom,
-      _ => [...kBuiltInThemes, ...custom],
-    };
+    final themes = _selectedTab == 0 ? kBuiltInThemes : custom;
     final media = MediaQuery.of(context);
     final width = math.min(
       296.0,
@@ -182,13 +178,13 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     final tabLabelStyle = Theme.of(
       context,
     ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.bold);
-    final tabHeight = ['All', 'Built-in', 'Custom']
+    final tabHeight = ['Default', 'Custom']
         .map((label) {
           final painter = TextPainter(
             text: TextSpan(text: label, style: tabLabelStyle),
             textDirection: Directionality.of(context),
             textScaler: media.textScaler,
-          )..layout(maxWidth: (width - 20) / 3 - 16);
+          )..layout(maxWidth: (width - 20) / 2 - 16);
           final height = painter.height + 20;
           painter.dispose();
           return height;
@@ -244,11 +240,7 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                 children: [
                   AppTabBar(
                     theme: theme,
-                    tabs: const [
-                      AppTab('All'),
-                      AppTab('Default'),
-                      AppTab('Custom'),
-                    ],
+                    tabs: const [AppTab('Default'), AppTab('Custom')],
                     selectedIndex: _selectedTab,
                     onChanged: (index) {
                       ref

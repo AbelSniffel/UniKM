@@ -119,32 +119,34 @@ class SyncCrypto {
 
   // ── Encrypt / Decrypt ────────────────────────────────────────────────────
 
-  /// Encrypts [plaintext] with AES-256-GCM.
-  ///
-  /// Returns a compact JSON envelope for transmission as a single
-  /// newline-terminated line:
-  ///   `{"n":"<nonce_b64>","c":"<ciphertext+mac_b64>"}`
-  ///
-  /// The 16-byte GCM authentication tag is appended to the ciphertext before
-  /// base64 encoding so the entire authenticated blob is a single field.
-  static Future<String> encrypt(String plaintext, SecretKey key) async {
-    final nonce = _aesgcm.newNonce();
-    final box = await _aesgcm.encrypt(
-      utf8.encode(plaintext),
-      secretKey: key,
-      nonce: nonce,
-    );
-    final combined = Uint8List.fromList([...box.cipherText, ...box.mac.bytes]);
-    return jsonEncode({'n': base64.encode(nonce), 'c': base64.encode(combined)});
-  }
+  /// Encrypts a short [plaintext] (the pairing code proof) with AES-256-GCM
+  /// as a JSON envelope: `{"n":"<nonce_b64>","c":"<ciphertext+mac_b64>"}`.
+  /// Sync sessions use the framed channel in `sync_frames.dart` instead.
+  static Future<String> encrypt(String plaintext, SecretKey key) =>
+      _encryptNow(plaintext, key);
 
   /// Decrypts an envelope produced by [encrypt].
   ///
-  /// Throws [ArgumentError] if the envelope is malformed.
-  /// Throws [SecretBoxAuthenticationError] (from the `cryptography` package)
-  /// if the GCM authentication tag does not match — indicating tampered data
-  /// or an incorrect session key.
-  static Future<String> decrypt(String envelope, SecretKey key) async {
+  /// Throws [ArgumentError] if the envelope is malformed, or
+  /// [SecretBoxAuthenticationError] if it was tampered with or the key is
+  /// wrong.
+  static Future<String> decrypt(String envelope, SecretKey key) =>
+      _decryptNow(envelope, key);
+
+  static Future<String> _encryptNow(String plaintext, SecretKey key) async {
+    final clear = utf8.encode(plaintext);
+    final nonce = _aesgcm.newNonce();
+    final box = await _aesgcm.encrypt(clear, secretKey: key, nonce: nonce);
+    final combined = Uint8List(box.cipherText.length + box.mac.bytes.length)
+      ..setAll(0, box.cipherText)
+      ..setAll(box.cipherText.length, box.mac.bytes);
+    return jsonEncode({
+      'n': base64.encode(nonce),
+      'c': base64.encode(combined),
+    });
+  }
+
+  static Future<String> _decryptNow(String envelope, SecretKey key) async {
     final Map<String, dynamic> map;
     try {
       map = jsonDecode(envelope) as Map<String, dynamic>;
@@ -157,8 +159,12 @@ class SyncCrypto {
     if (combined.length < macLen) {
       throw ArgumentError('Encrypted envelope is too short.');
     }
-    final cipherText = combined.sublist(0, combined.length - macLen);
-    final mac = Mac(combined.sublist(combined.length - macLen));
+    final cipherText = Uint8List.sublistView(
+      combined,
+      0,
+      combined.length - macLen,
+    );
+    final mac = Mac(Uint8List.sublistView(combined, combined.length - macLen));
     final clearBytes = await _aesgcm.decrypt(
       SecretBox(cipherText, nonce: nonce, mac: mac),
       secretKey: key,

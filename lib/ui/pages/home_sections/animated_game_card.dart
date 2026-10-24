@@ -12,6 +12,8 @@ class GameCardRevealCoordinator {
   final _revealedIds = <int>{};
   Duration? _batchFrame;
   int _batchIndex = 0;
+  double? _lastScrollPixels;
+  bool _scrollingTowardEnd = true;
 
   bool hasRevealed(int gameId) => _revealedIds.contains(gameId);
 
@@ -29,6 +31,21 @@ class GameCardRevealCoordinator {
     final delay = Duration(milliseconds: _batchIndex.clamp(0, 7) * 22);
     _batchIndex++;
     return delay;
+  }
+
+  /// The edge a revealed card grows from. Scrolling down brings cards in at
+  /// the bottom, so they grow up from their bottom edge; scrolling up brings
+  /// them in at the top, so they grow down from their top edge. The direction
+  /// comes from the offset itself because `userScrollDirection` is already
+  /// idle again after a mouse-wheel step.
+  Alignment growthAlignment(ScrollPosition? position) {
+    if (position != null && position.hasPixels) {
+      final pixels = position.pixels;
+      final last = _lastScrollPixels;
+      if (last != null && pixels != last) _scrollingTowardEnd = pixels > last;
+      _lastScrollPixels = pixels;
+    }
+    return _scrollingTowardEnd ? Alignment.bottomCenter : Alignment.topCenter;
   }
 }
 
@@ -51,7 +68,7 @@ class AnimatedGameCard extends StatefulWidget {
 class _AnimatedGameCardState extends State<AnimatedGameCard>
     with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
-    duration: const Duration(milliseconds: 190),
+    duration: const Duration(milliseconds: 220),
     value: widget.coordinator.hasRevealed(widget.gameId) ? 1 : 0,
     vsync: this,
   );
@@ -61,6 +78,9 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   );
   bool _started = false;
   Timer? _startTimer;
+  Alignment _growFrom = Alignment.bottomCenter;
+
+  static const double _startScale = 0.88;
 
   @override
   void didChangeDependencies() {
@@ -90,6 +110,9 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   void _startReveal() {
     if (!mounted || _started || _controller.isCompleted) return;
     _started = true;
+    _growFrom = widget.coordinator.growthAlignment(
+      Scrollable.maybeOf(context)?.position,
+    );
     final delay = widget.coordinator.reveal(widget.gameId);
     if (delay == Duration.zero) {
       _controller.forward();
@@ -114,10 +137,13 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     onPaint: _startReveal,
     child: AnimatedBuilder(
       animation: _animation,
+      // Grow out from the middle horizontally, anchored at the edge the
+      // card scrolled in from.
       builder: (context, child) => Opacity(
         opacity: _animation.value,
-        child: Transform.translate(
-          offset: Offset(0, 10 * (1 - _animation.value)),
+        child: Transform.scale(
+          scale: _startScale + (1 - _startScale) * _animation.value,
+          alignment: _growFrom,
           child: child,
         ),
       ),

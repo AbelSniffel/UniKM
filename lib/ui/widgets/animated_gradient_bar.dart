@@ -618,7 +618,7 @@ class _GradientPainter extends CustomPainter {
       }
 
       // Interpolate between the dim background and the bright middle
-      var col = Color.lerp(baseEndDim, mid, intensity) ?? baseEndDim;
+      final col = Color.lerp(baseEndDim, mid, intensity) ?? baseEndDim;
       colors.add(col);
       stops.add(t);
     }

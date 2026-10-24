@@ -3,22 +3,33 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:cryptography/cryptography.dart';
+import 'package:cryptography/dart.dart';
 
 import '../database/database.dart';
 
+/// A cover digest remembered for a file whose size and modification time
+/// have not changed since it was hashed.
+typedef CoverStamp = ({int size, int modifiedMillis, String digest});
+
 /// Portable content hashes: local row IDs, filesystem paths, tag ordering,
 /// timezone formatting and sub-second precision are not shared state.
+///
+/// Everything here is synchronous so it can run inside a background isolate.
 class SyncEntryFingerprint {
   SyncEntryFingerprint._();
 
-  static final Sha256 _sha256 = Sha256();
+  static const DartSha256 _sha256 = DartSha256();
 
-  static Future<String> fromGameEntry(
+  /// Cover digests for this isolate, keyed by the raw cover path. Many games
+  /// share one cover, and the files rarely change, so hashing each file once
+  /// keeps database comparison from re-reading every image on each pass.
+  static final Map<String, CoverStamp> coverCache = {};
+
+  static String fromGameEntry(
     GameEntry game,
     List<TagEntry> tags, {
     String? coverDigest,
-  }) async {
+  }) {
     return fromPayload({
       'title': game.title,
       'gameKey': game.gameKey,
@@ -27,7 +38,7 @@ class SyncEntryFingerprint {
       'updatedAt': game.updatedAt.toIso8601String(),
       'notes': game.notes,
       'isUsed': game.isUsed,
-      'coverDigest': coverDigest ?? await coverIdentity(game.coverImage),
+      'coverDigest': coverDigest ?? coverIdentity(game.coverImage),
       'hasDeadline': game.hasDeadline,
       'deadlineDate': game.deadlineDate?.toIso8601String(),
       'isDlc': game.isDlc,
@@ -47,38 +58,54 @@ class SyncEntryFingerprint {
     });
   }
 
-  static Future<String> coverIdentity(String rawPath) async {
+  /// Remote and bundled covers are identified by their address, not bytes.
+  static bool isAddressedCover(String raw) =>
+      raw.startsWith('http://') ||
+      raw.startsWith('https://') ||
+      raw.startsWith('assets/');
+
+  /// The local file for a stored cover path or `file:` URI.
+  static File coverFile(String raw) {
+    final uri = Uri.tryParse(raw);
+    return uri != null && uri.scheme.toLowerCase() == 'file'
+        ? File.fromUri(uri)
+        : File(raw);
+  }
+
+  /// Content-addressed cover identity shared on the wire and on disk.
+  static String coverDigest(List<int> bytes) => 'sha256:${hashBytes(bytes)}';
+
+  static String coverIdentity(String rawPath) {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
-    if (raw.startsWith('http://') ||
-        raw.startsWith('https://') ||
-        raw.startsWith('assets/')) {
-      return raw;
-    }
+    if (isAddressedCover(raw)) return raw;
     try {
-      final uri = Uri.tryParse(raw);
-      final file = uri?.scheme == 'file' ? File.fromUri(uri!) : File(raw);
-      if (!await file.exists()) return '';
-      return 'sha256:${await hashBytes(await file.readAsBytes())}';
+      final file = coverFile(raw);
+      final stat = file.statSync();
+      if (stat.type != FileSystemEntityType.file) return '';
+      final modified = stat.modified.millisecondsSinceEpoch;
+      final cached = coverCache[raw];
+      if (cached != null &&
+          cached.size == stat.size &&
+          cached.modifiedMillis == modified) {
+        return cached.digest;
+      }
+      final digest = coverDigest(file.readAsBytesSync());
+      coverCache[raw] = (
+        size: stat.size,
+        modifiedMillis: modified,
+        digest: digest,
+      );
+      return digest;
     } on FileSystemException {
       return '';
     }
   }
 
-  static Future<String> fromPayload(Map<String, dynamic> input) async {
-    var coverDigest = input['coverDigest'] as String?;
-    final coverFile = input['coverImageFile'];
-    if (coverDigest == null &&
-        coverFile is Map &&
-        coverFile['bytesBase64'] is String) {
-      try {
-        coverDigest =
-            'sha256:${await hashBytes(base64Decode(coverFile['bytesBase64'] as String))}';
-      } on FormatException {
-        coverDigest = '';
-      }
-    }
-    coverDigest ??= await coverIdentity(input['coverImage'] as String? ?? '');
+  static String fromPayload(Map<String, dynamic> input) {
+    final coverDigest =
+        input['coverDigest'] as String? ??
+        coverIdentity(input['coverImage'] as String? ?? '');
     final tags =
         (input['tags'] as List<dynamic>? ?? const [])
             .whereType<Map>()
@@ -124,8 +151,12 @@ class SyncEntryFingerprint {
     return time == null ? null : time.millisecondsSinceEpoch ~/ 1000;
   }
 
-  static Future<String> hashBytes(List<int> bytes) async {
-    final hash = await _sha256.hash(bytes);
-    return hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  static String hashBytes(List<int> bytes) {
+    final digest = _sha256.hashSync(bytes).bytes;
+    final buffer = StringBuffer();
+    for (final b in digest) {
+      buffer.write(b.toRadixString(16).padLeft(2, '0'));
+    }
+    return buffer.toString();
   }
 }

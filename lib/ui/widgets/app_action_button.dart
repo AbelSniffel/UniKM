@@ -55,6 +55,7 @@ class AppActionButton extends StatelessWidget {
     Color? accentColor,
     bool readOnly = false,
     bool transparentWhenIdle = false,
+    bool hoverBorder = true,
     double depthStrength = SettingsCardInset.defaultDepthStrength,
   }) {
     final accent = accentColor ?? theme.accent;
@@ -95,8 +96,9 @@ class AppActionButton extends StatelessWidget {
           return BorderSide.none;
         }
         final highlighted =
-            states.contains(WidgetState.hovered) ||
-            states.contains(WidgetState.pressed) ||
+            (hoverBorder &&
+                (states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.pressed))) ||
             states.contains(WidgetState.focused);
         return BorderSide(
           color: highlighted ? accent : theme.border,
@@ -106,9 +108,9 @@ class AppActionButton extends StatelessWidget {
       elevation: selected == true || transparentWhenIdle
           ? const WidgetStatePropertyAll(0)
           : null,
-      shadowColor: selected == true
-          ? const WidgetStatePropertyAll(Colors.transparent)
-          : null,
+      // Keep the theme's shadow color when toggling. Swapping it restarts
+      // Material's shadow animation, which flashes a dark fill behind the
+      // translucent surface for a frame.
       backgroundBuilder: selected == null
           ? null
           : (context, states, child) {
@@ -171,6 +173,9 @@ class AppActionButton extends StatelessWidget {
       accentColor: accentColor,
       readOnly: readOnly,
       transparentWhenIdle: transparentWhenIdle,
+      // Toggles keep a calm outline on hover; only tags that delete on click
+      // highlight it as a warning.
+      hoverBorder: selected == null || deleteOnHover,
       depthStrength: depthStrength,
     );
     final button = ButtonThemeSync(

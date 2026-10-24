@@ -433,7 +433,7 @@ class _RibbonBar extends StatelessWidget {
     key: const ValueKey('selection-ribbon-bar'),
     height: kNavigationPanelHorizontalExtent,
     decoration: BoxDecoration(
-      color: theme.sectionHeaderBackground,
+      color: theme.navBackground,
       border: Border(top: BorderSide(color: theme.border)),
     ),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),

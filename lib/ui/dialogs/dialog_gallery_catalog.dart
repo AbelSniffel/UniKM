@@ -101,6 +101,7 @@ final galleryBackup = BackupInfo(
   createdAt: galleryDate,
   isEncrypted: false,
   sizeBytes: 524288,
+  databaseName: 'library.db',
 );
 const galleryDatabaseFiles = <String, DatabaseFileInfo>{
   '/preview/UniKM/library.db': (
@@ -578,6 +579,9 @@ class _GalleryBackups extends BackupService {
       createdAt: galleryDate.subtract(const Duration(days: 1)),
       isEncrypted: true,
       sizeBytes: 1048576,
+      kind: BackupKind.preSync,
+      databaseName: 'collection.db',
+      peerName: galleryPeer.name,
     ),
   ];
 }

@@ -33,6 +33,7 @@ import 'widgets/dev_window.dart';
 import 'widgets/app_title_bar.dart';
 import 'widgets/dialog_helpers.dart';
 import 'widgets/notification_system.dart';
+import 'widgets/sync_progress_notifications.dart';
 
 const int _kLargeLibraryNavAnimationThreshold = 250;
 
@@ -58,12 +59,18 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   bool _navSelectionTransitionActive = false;
   Timer? _navSelectionAnimTimer;
   final Set<String> _handledPairRequestPrompts = <String>{};
+  final _syncProgressNotifications = SyncProgressNotifications();
+  StreamSubscription<SyncEvent>? _syncProgressSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     windowManager.addListener(this);
+    _syncProgressSub = ref
+        .read(deviceSyncServiceProvider)
+        .syncEvents
+        .listen(_syncProgressNotifications.handle);
     _applyMobileSystemUiMode();
     _initWindow();
     _initAutoBackup();
@@ -73,6 +80,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   @override
   void dispose() {
     _cancelAllTimers();
+    _syncProgressSub?.cancel();
+    _syncProgressNotifications.dispose();
     WidgetsBinding.instance.removeObserver(this);
     windowManager.removeListener(this);
     super.dispose();
@@ -176,7 +185,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
             // Only log in debug mode
             if (ref.read(appShellSettingsProvider).developerMode) {
               NotificationManager.instance.info(
-                'Auto backup created: ${result.backupInfo?.fileName}',
+                'Auto backup created: ${result.backupInfo?.displayName}',
               );
             }
           }

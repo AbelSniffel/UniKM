@@ -293,17 +293,14 @@ class UpdateNotifier extends Notifier<UpdateState> {
     switch (preview) {
       case UpdatePreviewState.idle:
         state = UpdateState(allReleases: cachedReleases);
-        break;
       case UpdatePreviewState.checking:
         state = UpdateState(
           isChecking: true,
           hasChecked: false,
           allReleases: cachedReleases,
         );
-        break;
       case UpdatePreviewState.upToDate:
         state = UpdateState(hasChecked: true, allReleases: cachedReleases);
-        break;
       case UpdatePreviewState.updateAvailable:
         _currentRelease = _devPreviewRelease;
         state = UpdateState(
@@ -312,7 +309,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
           release: _devPreviewRelease,
           allReleases: cachedReleases,
         );
-        break;
       case UpdatePreviewState.downloading:
         _currentRelease = _devPreviewRelease;
         state = UpdateState(
@@ -325,21 +321,18 @@ class UpdateNotifier extends Notifier<UpdateState> {
           totalBytes: _devPreviewRelease.downloadSize ?? 48234496,
           allReleases: cachedReleases,
         );
-        break;
       case UpdatePreviewState.downloaded:
         state = UpdateState(
           hasChecked: true,
           downloadedFilePath: r'C:\Temp\UniKM-Preview-9.9.9.exe',
           allReleases: cachedReleases,
         );
-        break;
       case UpdatePreviewState.error:
         state = UpdateState(
           hasChecked: true,
           error: 'Preview error: unable to reach the update service.',
           allReleases: cachedReleases,
         );
-        break;
     }
 
     if ((state.hasUpdate || state.downloadedFilePath != null) &&

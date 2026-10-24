@@ -119,7 +119,6 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: GameLibraryView(
                 scrollController: _scrollController,
                 gameListFocusNode: _gameListFocusNode,
-                isVeryNarrowLayout: widget.isVeryNarrowLayout,
                 onSelectAll: _handleSelectAll,
                 onDeleteSelection: () => _handleDeleteSelection(context),
                 onCopySelection: () => _handleCopySelection(context),
@@ -162,7 +161,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           : null,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       await ref.read(gamesProvider.notifier).deleteGames(selectedIds.toList());
       NotificationManager.instance.success(
         'Deleted ${selectedIds.length} game${selectedIds.length > 1 ? 's' : ''}',

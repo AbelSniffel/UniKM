@@ -104,18 +104,16 @@ class AppearanceSection extends ConsumerWidget {
         .toList();
     final isSearching = searchQuery.trim().isNotEmpty;
     final selectedTab = ref.watch(appearanceThemeTabProvider);
-    List<AppThemeData> themesForTab(int tab) => switch (tab) {
-      1 => builtInThemes,
-      2 => customThemes,
-      _ => allThemes,
-    };
+    List<AppThemeData> themesForTab(int tab) =>
+        tab == 0 ? builtInThemes : customThemes;
     // A name search can reveal a theme in the other collection without
     // replacing the user's remembered tab.
+    final otherTab = 1 - selectedTab;
     final visibleTab =
         isSearching &&
             !themesForTab(selectedTab).any((t) => matchesSearch(t.name)) &&
-            allThemes.any((t) => matchesSearch(t.name))
-        ? 0
+            themesForTab(otherTab).any((t) => matchesSearch(t.name))
+        ? otherTab
         : selectedTab;
     final visibleThemes = themesForTab(visibleTab);
 
@@ -164,11 +162,7 @@ class AppearanceSection extends ConsumerWidget {
               children: [
                 AppTabBar(
                   theme: theme,
-                  tabs: const [
-                    AppTab('All'),
-                    AppTab('Default'),
-                    AppTab('Custom'),
-                  ],
+                  tabs: const [AppTab('Default'), AppTab('Custom')],
                   selectedIndex: visibleTab,
                   onChanged: (index) => ref
                       .read(appearanceThemeTabProvider.notifier)
@@ -437,36 +431,26 @@ class _ControlStylesSectionState extends ConsumerState<_ControlStylesSection> {
             Tooltip(
               key: ValueKey(style),
               message: style.description,
-              child: PreviewCard(
+              child: StyleChoiceCard(
                 name: style.displayName,
-                height: 84,
                 theme: widget.theme,
                 isSelected: currentStyle == style,
-                recessedSelection: true,
                 onTap: () => settingsNotifier.setSetting(
                   SettingsKeys.toggleStyle,
                   style,
                 ),
-                backgroundBuilder: (_, _) => ColoredBox(
-                  color: widget.theme.background.withValues(alpha: 0.65),
-                ),
-                foreground: Positioned(
-                  right: 8,
-                  bottom: 8,
-                  child: Semantics(
-                    label: '${style.displayName} toggle preview',
-                    toggled: _demoOn[style],
-                    onTap: () =>
-                        setState(() => _demoOn[style] = !_demoOn[style]!),
-                    child: ExcludeSemantics(
-                      child: AppToggleSwitch(
-                        value: _demoOn[style]!,
-                        onChanged: (value) =>
-                            setState(() => _demoOn[style] = value),
-                        theme: widget.theme,
-                        style: style,
-                        label: '',
-                      ),
+                preview: Semantics(
+                  label: '${style.displayName} toggle preview',
+                  toggled: _demoOn[style],
+                  onTap: () =>
+                      setState(() => _demoOn[style] = !_demoOn[style]!),
+                  child: ExcludeSemantics(
+                    child: AppToggleSwitch(
+                      value: _demoOn[style]!,
+                      onChanged: (value) =>
+                          setState(() => _demoOn[style] = value),
+                      theme: widget.theme,
+                      style: style,
                     ),
                   ),
                 ),

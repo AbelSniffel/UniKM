@@ -237,16 +237,25 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
     }
   }
 
+  // Discovery runs only while this dialog is open. Captured up front so
+  // dispose never reads providers.
+  late final DeviceSyncNotifier _notifier;
+
   @override
   void initState() {
     super.initState();
+    _notifier = ref.read(deviceSyncProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final snapshot = ref.read(deviceSyncProvider).asData?.value;
-      if (snapshot?.enabled == true) {
-        unawaited(_refreshDiscovery());
-      }
+      if (snapshot?.enabled == true) _notifier.startDiscovery();
     });
+  }
+
+  @override
+  void dispose() {
+    _notifier.stopDiscovery();
+    super.dispose();
   }
 
   @override
@@ -588,7 +597,7 @@ class _SyncContent extends ConsumerWidget {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
-                      'No devices found yet. Device discovery runs automatically while sync is enabled.',
+                      'No devices found yet. Searching the local network while this window is open.',
                       style: TextStyle(
                         color: theme.textSecondary,
                         fontSize: 12,
@@ -706,17 +715,13 @@ class _SyncContent extends ConsumerWidget {
         if (choice == null) return;
         final isPull = !choice;
         try {
+          // The sync's progress notification reports success or failure.
           await notifier.manualSync(
             peerId: row.id,
             isPull: isPull,
             fullScan: true,
           );
-          NotificationManager.instance.success(
-            isPull ? 'Receive sync completed.' : 'Send sync completed.',
-          );
-        } catch (error) {
-          NotificationManager.instance.error('Sync failed: $error');
-        }
+        } catch (_) {}
       }
 
       return Row(

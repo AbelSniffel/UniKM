@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import '../../core/constants/app_constants.dart';
 
 /// Settings cards share one width across rows, including the last partial row.
-/// Compact layouts use the available width; desktop cards have a width cap.
+/// When two cards cannot sit side by side, each card fills its row instead of
+/// leaving empty space; otherwise cards share each row up to a width cap.
 double settingsCardWidth({
   required double availableWidth,
   required int cardCount,
@@ -11,17 +12,14 @@ double settingsCardWidth({
   double maximumCardWidth = kInteractionCardMaxWidth,
   double spacing = 8,
 }) {
-  final columns = math.max(
-    1,
-    math.min(
-      cardCount,
-      ((availableWidth + spacing) / (minimumCardWidth + spacing)).floor(),
-    ),
+  final fitting = ((availableWidth + spacing) / (minimumCardWidth + spacing))
+      .floor();
+  if (fitting < 2 || availableWidth <= kSettingsCompactLayoutBreakpoint) {
+    return availableWidth;
+  }
+  final columns = math.max(1, math.min(cardCount, fitting));
+  return math.min(
+    maximumCardWidth,
+    (availableWidth - spacing * (columns - 1)) / columns,
   );
-  return availableWidth <= kSettingsCompactLayoutBreakpoint
-      ? availableWidth
-      : math.min(
-          maximumCardWidth,
-          (availableWidth - spacing * (columns - 1)) / columns,
-        );
 }

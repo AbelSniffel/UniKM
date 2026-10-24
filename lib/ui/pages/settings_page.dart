@@ -612,6 +612,7 @@ class _SettingsPageBody extends ConsumerWidget {
             child: AppTabTransition(
               key: const ValueKey('settings-section-transition'),
               index: sectionIndex,
+              slide: false,
               child: RepaintBoundary(
                 child: CustomScrollView(
                   controller: scrollController,

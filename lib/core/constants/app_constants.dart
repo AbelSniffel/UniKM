@@ -28,8 +28,9 @@ const double kIconSize = 24.0;
 const double kDropdownMenuMaxHeight = 320.0;
 const double kVeryNarrowLayoutBreakpoint = 720.0;
 
-/// Desktop width cap for settings toggle, choice, and action cards.
-const double kInteractionCardMinWidth = 260.0;
+/// Width range for settings toggle, choice, action, and preview cards. Rows
+/// that cannot fit two minimum-width cards use the full width instead.
+const double kInteractionCardMinWidth = 240.0;
 const double kInteractionCardMaxWidth = 360.0;
 
 /// Available settings content width for full-width cards and stacked header actions.

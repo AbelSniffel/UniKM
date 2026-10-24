@@ -56,8 +56,9 @@ class PeerSyncQueue {
 
   void clear() => _pending.clear();
 
-  void markAllDirty(DateTime now, {bool immediate = false}) {
+  void markAllDirty(DateTime now, {bool immediate = false, String? except}) {
     for (final peerId in _peers) {
+      if (peerId == except) continue;
       markDirty(peerId, now, immediate: immediate);
     }
   }

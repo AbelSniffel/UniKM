@@ -449,7 +449,7 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showIcon = isCollapsed || appearance != NavBarAppearance.textOnly;
+    final textOnly = appearance == NavBarAppearance.textOnly;
     final showText = !isCollapsed && appearance != NavBarAppearance.iconOnly;
     final displayIcon = item.selectedIcon ?? item.icon;
     final tooltipText = isLocked
@@ -457,7 +457,7 @@ class _NavButton extends StatelessWidget {
         : (isCollapsed ? (item.tooltipLabel ?? item.label) : '');
 
     Widget Function(BuildContext, Color, double)? iconBuilder;
-    if (showIcon && !isLocked) {
+    if (!isLocked) {
       if (item.iconBuilder != null) {
         iconBuilder = (context, color, size) => item.iconBuilder!(color, size);
       }
@@ -471,7 +471,10 @@ class _NavButton extends StatelessWidget {
       hasNotification: item.hasNotification,
       isHorizontal: isHorizontal,
       onTap: onTap,
-      iconData: showIcon ? (isLocked ? Icons.lock_rounded : displayIcon) : null,
+      // Text-only buttons keep their icon mounted and shrink it away as the
+      // label grows, so automatic expansion morphs instead of jumping.
+      iconData: isLocked ? Icons.lock_rounded : displayIcon,
+      hideIconWithLabel: textOnly,
       iconBuilder: iconBuilder,
       labelText: item.label,
       labelVisible: showText,

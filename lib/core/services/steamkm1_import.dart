@@ -1,5 +1,10 @@
 library;
 
+// Text exports are parsed line by line; compile these once.
+final _lineBreakPattern = RegExp(r'\r?\n');
+final _titleKeyLinePattern = RegExp(r'^(.+?)\s+([A-Za-z0-9-]{15,})$');
+final _nonAlphanumericPattern = RegExp(r'[^A-Za-z0-9]');
+
 class SteamKm1ImportedGame {
   const SteamKm1ImportedGame({
     required this.title,
@@ -70,7 +75,7 @@ List<SteamKm1ImportedGame> parseSteamKm1JsonExportData(Object? data) {
 
 List<SteamKm1ImportedGame> parseSteamKm1TextExport(String content) {
   final records = <SteamKm1ImportedGame>[];
-  for (final rawLine in content.split(RegExp(r'\r?\n'))) {
+  for (final rawLine in content.split(_lineBreakPattern)) {
     final line = rawLine.trim();
     if (line.isEmpty) {
       continue;
@@ -84,7 +89,7 @@ List<SteamKm1ImportedGame> parseSteamKm1TextExport(String content) {
       title = line.substring(0, pipeIndex).trim();
       key = line.substring(pipeIndex + 1).trim();
     } else {
-      final match = RegExp(r'^(.+?)\s+([A-Za-z0-9-]{15,})$').firstMatch(line);
+      final match = _titleKeyLinePattern.firstMatch(line);
       if (match != null) {
         title = match.group(1)?.trim();
         key = match.group(2)?.trim();
@@ -140,7 +145,7 @@ String? _normalizeKey(String? rawKey) {
     return null;
   }
 
-  final compact = rawKey.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+  final compact = rawKey.replaceAll(_nonAlphanumericPattern, '').toUpperCase();
   if (compact.length != 15) {
     return null;
   }

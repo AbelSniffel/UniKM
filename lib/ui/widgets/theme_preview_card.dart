@@ -30,20 +30,17 @@ class ThemePreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final background = preview ?? data;
-    return Tooltip(
-      message: data.name,
-      child: PreviewCard(
-        name: data.name,
-        theme: theme,
-        isSelected: selected,
-        height: height,
-        tapKey: tapKey,
-        onTap: onTap,
-        onDoubleTap: onDoubleTap,
-        icon: data.icon,
-        backgroundIconColor: background.surface.withValues(alpha: 0.25),
-        backgroundBuilder: (_, _) => ThemePreviewBackground(theme: background),
-      ),
+    return PreviewCard(
+      name: data.name,
+      theme: theme,
+      isSelected: selected,
+      height: height,
+      tapKey: tapKey,
+      onTap: onTap,
+      onDoubleTap: onDoubleTap,
+      icon: data.icon,
+      backgroundIconColor: background.surface.withValues(alpha: 0.25),
+      backgroundBuilder: (_, _) => ThemePreviewBackground(theme: background),
     );
   }
 }

@@ -121,8 +121,7 @@ enum TooltipAnimation {
 enum ToggleStyle {
   regular('Regular', 'Sliding switch with an on/off thumb.'),
   dot('Dot', 'Round dot that grows when enabled.'),
-  morphDot('Morph Dot', 'Dot toggle that follows the theme’s corner radius.'),
-  segmented('OFF / ON', 'Two-part OFF / ON switch with a sliding highlight.');
+  morphDot('Morph Dot', 'Dot toggle that follows the theme’s corner radius.');
 
   const ToggleStyle(this.displayName, this.description);
 

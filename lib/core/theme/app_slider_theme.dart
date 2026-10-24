@@ -73,10 +73,8 @@ class AppSliderThumbShape extends SliderComponentShape {
       sliderTheme.thumbColor,
       enableAnimation.value,
     )!;
-    context.canvas.drawRRect(
-      _handleRect(center, cornerRadius),
-      Paint()..color = color,
-    );
+    final handle = _handleRect(center, cornerRadius);
+    context.canvas.drawRRect(handle, Paint()..color = color);
     final glow = Color.lerp(color, Colors.black, 0.35)!;
     // A bounded set of narrow inset strokes gives a smooth inner glow
     // without a blur, offscreen layer, or painting outside the handle.
@@ -91,16 +89,13 @@ class AppSliderThumbShape extends SliderComponentShape {
       paint.color = glow.withValues(
         alpha: glow.a * 0.65 * fade * fade * enableAnimation.value,
       );
-      context.canvas.drawRRect(
-        _handleRect(center, cornerRadius).deflate((i + 0.5) * stepWidth),
-        paint,
-      );
+      context.canvas.drawRRect(handle.deflate((i + 0.5) * stepWidth), paint);
     }
     if (outlineColor case final outline?) {
       // Keep the selected color visible even when it matches the surface.
       // This edge stays inside the handle and follows its corner geometry.
       context.canvas.drawRRect(
-        _handleRect(center, cornerRadius).deflate(1),
+        handle.deflate(1),
         Paint()
           ..color = outline.withValues(
             alpha: outline.a * (0.4 + 0.6 * enableAnimation.value),

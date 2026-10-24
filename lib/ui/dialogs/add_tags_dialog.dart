@@ -52,11 +52,7 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
       _focusNode.requestFocus();
       return;
     }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
+    await _runBusy('Failed to add tag', () async {
       final db = ref.read(requireDatabaseProvider);
       final existing = await db.getTagByName(name);
       if (!mounted) return;
@@ -73,52 +69,42 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
       if (!mounted) return;
       // Preserve the next name if the user typed while this tag was saving.
       if (_controller.text.trim() == name) _controller.clear();
-    } catch (error) {
-      if (mounted) setState(() => _error = 'Failed to add tag: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-        _focusNode.requestFocus();
-      }
-    }
+    });
   }
 
-  Future<void> _deleteTag(int tagId, String tagName) async {
+  Future<void> _deleteTag(int tagId, String tagName) => _runBusy(
+    'Failed to delete tag',
+    () => deleteTagWithConfirmation(
+      context: context,
+      theme: widget.theme,
+      tagId: tagId,
+      tagName: tagName,
+    ),
+  );
+
+  Future<void> _deleteAllCustomTags() => _runBusy(
+    'Failed to delete tags',
+    () => deleteAllCustomTagsWithConfirmation(
+      context: context,
+      theme: widget.theme,
+    ),
+  );
+
+  /// Blocks other tag actions while [action] runs, shows any failure inline,
+  /// and returns focus to the name field afterwards.
+  Future<void> _runBusy(
+    String failureMessage,
+    Future<void> Function() action,
+  ) async {
     if (_saving) return;
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      await deleteTagWithConfirmation(
-        context: context,
-        theme: widget.theme,
-        tagId: tagId,
-        tagName: tagName,
-      );
+      await action();
     } catch (error) {
-      if (mounted) setState(() => _error = 'Failed to delete tag: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-        _focusNode.requestFocus();
-      }
-    }
-  }
-
-  Future<void> _deleteAllCustomTags() async {
-    if (_saving) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await deleteAllCustomTagsWithConfirmation(
-        context: context,
-        theme: widget.theme,
-      );
-    } catch (error) {
-      if (mounted) setState(() => _error = 'Failed to delete tags: $error');
+      if (mounted) setState(() => _error = '$failureMessage: $error');
     } finally {
       if (mounted) {
         setState(() => _saving = false);

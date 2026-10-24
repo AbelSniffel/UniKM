@@ -73,11 +73,11 @@ class NavigationThemeMenuTabNotifier extends Notifier<int> {
   @override
   int build() {
     // Read once: subsequent theme selections must not replace the chosen tab.
-    return ref.read(currentThemeIsBuiltInProvider) ? 1 : 2;
+    return ref.read(currentThemeIsBuiltInProvider) ? 0 : 1;
   }
 
   void setIndex(int index) {
-    state = index.clamp(0, 2);
+    state = index.clamp(0, 1);
   }
 }
 

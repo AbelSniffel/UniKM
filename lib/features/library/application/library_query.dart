@@ -169,31 +169,22 @@ class LibraryQueryIndex {
 
           return a.title.compareTo(b.title);
         });
-        break;
       case GameSortMode.titleAZ:
         sorted.sort((a, b) => a.title.compareTo(b.title));
-        break;
       case GameSortMode.titleZA:
         sorted.sort((a, b) => b.title.compareTo(a.title));
-        break;
       case GameSortMode.platformAZ:
         sorted.sort((a, b) => a.platform.compareTo(b.platform));
-        break;
       case GameSortMode.platformZA:
         sorted.sort((a, b) => b.platform.compareTo(a.platform));
-        break;
       case GameSortMode.dateNewest:
         sorted.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-        break;
       case GameSortMode.dateOldest:
         sorted.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
-        break;
       case GameSortMode.ratingHigh:
         sorted.sort((a, b) => b.reviewScore.compareTo(a.reviewScore));
-        break;
       case GameSortMode.ratingLow:
         sorted.sort((a, b) => a.reviewScore.compareTo(b.reviewScore));
-        break;
     }
 
     return List.unmodifiable(sorted);

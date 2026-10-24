@@ -11,6 +11,9 @@ import '../../core/settings/settings_model.dart';
 
 const _deadlineExactDateFieldKey = ValueKey('deadline_exact_date_input');
 const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
+// Date entry is reformatted on every keystroke; compile these once.
+final _nonDigitPattern = RegExp(r'\D');
+final _digitPattern = RegExp(r'\d');
 
 Future<DateTime?> showDeadlinePickerDialog({
   required BuildContext context,
@@ -129,7 +132,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
   }
 
   void _handleExactDateChanged(String value) {
-    final digits = value.replaceAll(RegExp(r'\D'), '');
+    final digits = value.replaceAll(_nonDigitPattern, '');
     if (digits.isEmpty) {
       setState(() => _exactDateError = null);
       return;
@@ -383,7 +386,7 @@ class _DeadlineDateInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final digits = newValue.text.replaceAll(_nonDigitPattern, '');
     final truncatedDigits = digits.length > 8 ? digits.substring(0, 8) : digits;
     final formatted = _formatDigits(truncatedDigits);
     final digitsBeforeSelection = _countDigitsBeforeSelection(newValue);
@@ -411,7 +414,7 @@ class _DeadlineDateInputFormatter extends TextInputFormatter {
 
   static int _countDigitsBeforeSelection(TextEditingValue value) {
     final end = value.selection.end.clamp(0, value.text.length);
-    return value.text.substring(0, end).replaceAll(RegExp(r'\D'), '').length;
+    return value.text.substring(0, end).replaceAll(_nonDigitPattern, '').length;
   }
 
   static int _selectionIndexForDigits(String formatted, int digitCount) {
@@ -421,7 +424,7 @@ class _DeadlineDateInputFormatter extends TextInputFormatter {
 
     var seenDigits = 0;
     for (var index = 0; index < formatted.length; index++) {
-      if (RegExp(r'\d').hasMatch(formatted[index])) {
+      if (_digitPattern.hasMatch(formatted[index])) {
         seenDigits++;
         if (seenDigits == digitCount) {
           return index + 1;

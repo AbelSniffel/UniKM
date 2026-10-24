@@ -864,7 +864,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           .throwIfInvalid(game);
       records.add(ImportRecord(game, links[row['id']] ?? []));
     }
-    final imagesDir = await _resolveManagedImagesDirectory();
+    final imagesDir = await AppDatabase.getSteamImagesDirectory();
     final cache = <String, String>{};
     final normalized = <ImportRecord>[];
     for (var i = 0; i < records.length; i++) {
@@ -896,16 +896,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     for (final path in cache.values) {
       PaintingBinding.instance.imageCache.evict(FileImage(File(path)));
     }
-  }
-
-  Future<Directory> _resolveManagedImagesDirectory() async {
-    final dbPath = await AppDatabase.getDatabasePath();
-    // Use the same path as SteamService: {dbDir}/images/steam/
-    final imagesDir = Directory(p.join(p.dirname(dbPath), 'images', 'steam'));
-    if (!await imagesDir.exists()) {
-      await imagesDir.create(recursive: true);
-    }
-    return imagesDir;
   }
 
   Future<String> _normalizeImportedCoverImagePath(
@@ -1061,7 +1051,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required String sourceLabel,
     NotificationHandle? task,
   }) async {
-    final imagesDir = await _resolveManagedImagesDirectory();
+    final imagesDir = await AppDatabase.getSteamImagesDirectory();
     final cache = <String, String>{};
     final imported = <ImportRecord>[];
     for (var i = 0; i < records.length; i++) {

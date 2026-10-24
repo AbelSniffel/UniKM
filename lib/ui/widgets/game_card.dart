@@ -236,21 +236,11 @@ class _GameCardState extends ConsumerState<GameCard>
                     ),
                   _buildSelectionOverlay(theme, isSelected),
                   _buildAnimatedFetchOverlay(theme, fetchStatus),
-                  if (hasDlc)
-                    _buildRibbonBand(
-                      label: 'DLC',
-                      color: theme.accent,
-                      textColor: theme.primaryButtonText,
-                      bandIndex: 0,
-                    ),
-                  if (showNewBadge)
-                    _buildRibbonBand(
-                      label: 'NEW',
-                      color: theme.secondary,
-                      textColor: theme.primaryButtonText,
-                      bandIndex: hasDlc ? 1 : 0,
-                      addedDate: widget.game.createdAt,
-                    ),
+                  ..._buildCornerRibbons(
+                    theme,
+                    hasDlc: hasDlc,
+                    showNewBadge: showNewBadge,
+                  ),
                   Positioned(
                     left: 8,
                     right: 8,
@@ -655,23 +645,11 @@ class _GameCardState extends ConsumerState<GameCard>
           left: Radius.circular(theme.cornerRadius),
         ),
         child: Stack(
-          children: [
-            if (hasDlc)
-              _buildRibbonBand(
-                label: 'DLC',
-                color: theme.accent,
-                textColor: theme.primaryButtonText,
-                bandIndex: 0,
-              ),
-            if (showNewBadge)
-              _buildRibbonBand(
-                label: 'NEW',
-                color: theme.secondary,
-                textColor: theme.primaryButtonText,
-                bandIndex: hasDlc ? 1 : 0,
-                addedDate: widget.game.createdAt,
-              ),
-          ],
+          children: _buildCornerRibbons(
+            theme,
+            hasDlc: hasDlc,
+            showNewBadge: showNewBadge,
+          ),
         ),
       ),
     );
@@ -821,14 +799,7 @@ class _GameCardState extends ConsumerState<GameCard>
           final centeredIcon = Center(child: iconWidget);
 
           return Container(
-            decoration: BoxDecoration(
-              color: theme.secondary.withValues(alpha: 0.55 * t),
-              border: Border.all(
-                color: theme.accent.withValues(alpha: t),
-                width: 3.0,
-              ),
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-            ),
+            decoration: theme.selectionOverlayDecoration(t),
             child: imageWidth == null
                 ? centeredIcon
                 : Align(
@@ -947,6 +918,29 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Corner ribbon ──────────────────────────────────────────────────────────
 
+  /// The DLC and NEW bands shared by the grid and list layouts.
+  List<Widget> _buildCornerRibbons(
+    AppThemeData theme, {
+    required bool hasDlc,
+    required bool showNewBadge,
+  }) => [
+    if (hasDlc)
+      _buildRibbonBand(
+        label: 'DLC',
+        color: theme.accent,
+        textColor: theme.primaryButtonText,
+        bandIndex: 0,
+      ),
+    if (showNewBadge)
+      _buildRibbonBand(
+        label: 'NEW',
+        color: theme.secondary,
+        textColor: theme.primaryButtonText,
+        bandIndex: hasDlc ? 1 : 0,
+        addedDate: widget.game.createdAt,
+      ),
+  ];
+
   Positioned _buildRibbonBand({
     required String label,
     required Color color,
@@ -1027,9 +1021,7 @@ class _GameCardState extends ConsumerState<GameCard>
     if (!selectedIds.contains(widget.game.id)) {
       ref.read(gamesProvider.notifier).clearSelection();
       ref.read(gamesProvider.notifier).selectGame(widget.game.id);
-      ref
-          .read(lastSelectedGameIdProvider.notifier)
-          .set(widget.game.id);
+      ref.read(lastSelectedGameIdProvider.notifier).set(widget.game.id);
     }
 
     final theme = ref.read(themeProvider);
@@ -1093,7 +1085,7 @@ class _GameCardState extends ConsumerState<GameCard>
         const PopupMenuDivider(),
         menuRowItem(
           value: 'details',
-          icon: Icons.info_outline,
+          icon: Icons.edit_outlined,
           label: 'Game Editor$suffix',
           enabled: !isFetching,
           disabledIcon: Icons.lock_rounded,

@@ -39,6 +39,7 @@ class AppNotification {
     this.secondaryActionLabel,
     this.onSecondaryAction,
     this.isDismissing = false,
+    this.dismissible = true,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -52,6 +53,10 @@ class AppNotification {
   final String? secondaryActionLabel;
   final VoidCallback? onSecondaryAction;
   final bool isDismissing;
+
+  /// When false the user cannot close the notification; it stays until the
+  /// task that owns it completes or dismisses it.
+  final bool dismissible;
 
   AppNotification copyWith({
     String? message,
@@ -68,6 +73,7 @@ class AppNotification {
     bool clearAction = false,
     bool clearSecondaryAction = false,
     bool? isDismissing,
+    bool? dismissible,
   }) {
     return AppNotification(
       id: id,
@@ -85,6 +91,7 @@ class AppNotification {
           ? null
           : (onSecondaryAction ?? this.onSecondaryAction),
       isDismissing: isDismissing ?? this.isDismissing,
+      dismissible: dismissible ?? this.dismissible,
     );
   }
 }
@@ -109,6 +116,7 @@ class NotificationHandle {
     bool clearAction = false,
     bool clearSecondaryAction = false,
     Duration? autoDismissAfter,
+    bool? dismissible,
   }) {
     _manager.update(
       id,
@@ -124,6 +132,7 @@ class NotificationHandle {
       clearAction: clearAction,
       clearSecondaryAction: clearSecondaryAction,
       autoDismissAfter: autoDismissAfter,
+      dismissible: dismissible,
     );
   }
 
@@ -147,6 +156,7 @@ class NotificationHandle {
       clearAction: true,
       clearSecondaryAction: true,
       autoDismissAfter: NotificationManager.defaultDuration(type),
+      dismissible: true,
     );
   }
 
@@ -220,6 +230,7 @@ class NotificationManager {
     VoidCallback? onSecondaryAction,
     bool persistent = false,
     bool dedupe = true,
+    bool dismissible = true,
     Duration? autoDismissAfter,
   }) {
     if (!_enabled) {
@@ -245,6 +256,7 @@ class NotificationManager {
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
       isDismissing: false,
+      dismissible: dismissible,
     );
 
     _notifications.add(notification);
@@ -287,6 +299,7 @@ class NotificationManager {
     double? progress,
     String? actionLabel,
     VoidCallback? onAction,
+    bool dismissible = true,
   }) {
     return showHandle(
       message: message,
@@ -297,6 +310,7 @@ class NotificationManager {
       onAction: onAction,
       persistent: true,
       dedupe: false,
+      dismissible: dismissible,
     );
   }
 
@@ -314,6 +328,7 @@ class NotificationManager {
     bool clearAction = false,
     bool clearSecondaryAction = false,
     Duration? autoDismissAfter,
+    bool? dismissible,
   }) {
     final list = _notifications.toList(growable: false);
     final index = list.indexWhere((n) => n.id == id);
@@ -332,6 +347,7 @@ class NotificationManager {
       clearProgress: clearProgress,
       clearAction: clearAction,
       clearSecondaryAction: clearSecondaryAction,
+      dismissible: dismissible,
     );
 
     _notifications
@@ -546,10 +562,11 @@ class _NotificationToastState extends State<NotificationToast> {
                 child: GestureDetector(
                   onTap: () {
                     notification.onTap?.call();
-                    widget.onDismiss();
+                    if (notification.dismissible) widget.onDismiss();
                   },
                   onHorizontalDragUpdate: (details) {
-                    if (!notification.isDismissing) {
+                    if (notification.dismissible &&
+                        !notification.isDismissing) {
                       setState(() {
                         _dragOffset = (_dragOffset + details.delta.dx).clamp(
                           0.0,
@@ -559,7 +576,7 @@ class _NotificationToastState extends State<NotificationToast> {
                     }
                   },
                   onHorizontalDragEnd: (details) {
-                    if (_dragOffset >= 40.0) {
+                    if (notification.dismissible && _dragOffset >= 40.0) {
                       widget.onDismiss();
                     } else {
                       setState(() => _dragOffset = 0.0);
@@ -660,19 +677,20 @@ class _NotificationToastState extends State<NotificationToast> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          size: 18,
-                          color: theme.textHint,
+                      if (notification.dismissible)
+                        IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            size: 18,
+                            color: theme.textHint,
+                          ),
+                          onPressed: widget.onDismiss,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
+                          ),
                         ),
-                        onPressed: widget.onDismiss,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 24,
-                          minHeight: 24,
-                        ),
-                      ),
                     ],
                   ),
                 ),

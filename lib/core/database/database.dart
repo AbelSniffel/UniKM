@@ -1333,6 +1333,19 @@ class AppDatabase extends _$AppDatabase {
     return p.join(uniKMDir.path, kDatabaseName);
   }
 
+  /// Downloaded Steam artwork folder (`images/steam` beside the database),
+  /// created on demand. Keeping it next to the database lets the whole data
+  /// folder be moved or backed up in one go.
+  static Future<Directory> getSteamImagesDirectory() async {
+    final dir = Directory(
+      p.join(p.dirname(await getDatabasePath()), 'images', 'steam'),
+    );
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
   /// Get database file
   static Future<File> getDatabaseFile() async {
     final path = await getDatabasePath();

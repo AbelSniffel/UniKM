@@ -1,4 +1,4 @@
-/// Theme-colored toggle switches with sliding, dot, and OFF / ON styles
+/// Theme-colored toggle switches with sliding and dot styles
 /// Matches the original Python toggle switch styles
 library;
 
@@ -81,11 +81,6 @@ class AppToggleSwitch extends ConsumerWidget {
           ),
         ),
       ),
-      ToggleStyle.segmented => _SegmentedToggle(
-        value: value,
-        onChanged: onChanged,
-        theme: theme,
-      ),
       ToggleStyle.dot => _DotToggle(
         value: value,
         onChanged: onChanged,
@@ -102,14 +97,12 @@ class AppToggleSwitch extends ConsumerWidget {
 
     final displayLabel =
         label ??
-        (effectiveStyle == ToggleStyle.segmented
-            ? null
-            : isDisabled
+        (isDisabled
             ? 'Disabled'
             : value
             ? 'On'
             : 'Off');
-    if (displayLabel == null || displayLabel.isEmpty) return toggle;
+    if (displayLabel.isEmpty) return toggle;
     final labelStyle = TextStyle(
       fontWeight: FontWeight.w500,
       color: isDisabled
@@ -424,106 +417,5 @@ class _OnSpringCurve extends Curve {
     final double p = (t - _peakT) / (1.0 - _peakT);
     final double eased = Curves.easeOutCubic.transform(p);
     return _overshoot + (1.0 - _overshoot) * eased;
-  }
-}
-
-class _SegmentedToggle extends StatelessWidget {
-  const _SegmentedToggle({
-    required this.value,
-    required this.onChanged,
-    required this.theme,
-  });
-
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-  final AppThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    const duration = Duration(milliseconds: 180);
-    const textStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w700);
-    final metrics = TextPainter(
-      text: const TextSpan(text: 'OFF', style: textStyle),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
-    final width = (metrics.width + 18) * 2;
-    final height = (metrics.height + 10).clamp(28.0, double.infinity);
-    metrics.dispose();
-    final radius = BorderRadius.circular(
-      theme.cornerRadius.clamp(0.0, height / 2),
-    );
-    final enabled = onChanged != null;
-    return Semantics(
-      toggled: value,
-      enabled: enabled,
-      onTap: enabled ? () => onChanged!(!value) : null,
-      child: ExcludeSemantics(
-        child: Opacity(
-          opacity: enabled ? 1 : 0.4,
-          child: Material(
-            color: theme.surface,
-            shape: RoundedRectangleBorder(borderRadius: radius),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: enabled ? () => onChanged!(!value) : null,
-              borderRadius: radius,
-              hoverColor: theme.accent.withValues(alpha: 0.08),
-              focusColor: theme.accent.withValues(alpha: 0.16),
-              splashColor: theme.accent.withValues(alpha: 0.16),
-              child: SizedBox(
-                width: width,
-                height: height,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: AnimatedAlign(
-                        duration: duration,
-                        curve: Curves.easeOutCubic,
-                        alignment: value
-                            ? AlignmentDirectional.centerEnd
-                            : AlignmentDirectional.centerStart,
-                        child: FractionallySizedBox(
-                          widthFactor: 0.5,
-                          heightFactor: 1,
-                          child: AnimatedContainer(
-                            duration: duration,
-                            decoration: BoxDecoration(
-                              color: value
-                                  ? (SwitchTheme.of(context).trackColor
-                                            ?.resolve({WidgetState.selected}) ??
-                                        theme.accent.withAlpha(0x80))
-                                  : theme.textHint.withValues(alpha: 0.16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        for (final isOn in [false, true])
-                          Expanded(
-                            child: Center(
-                              child: AnimatedDefaultTextStyle(
-                                duration: duration,
-                                style: textStyle.copyWith(
-                                  color: value == isOn
-                                      ? theme.textPrimary
-                                      : theme.textHint,
-                                ),
-                                child: Text(isOn ? 'ON' : 'OFF'),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

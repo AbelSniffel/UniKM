@@ -9,11 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/color_utils.dart';
-import 'card_selection_glow.dart';
 import 'settings_card_layout.dart';
-import 'settings_card_inset.dart';
-
-const _selectionCornerExtent = 48.0;
 
 /// Uses settings-card row sizing with equal widths, retaining state when
 /// resizing changes the number of columns. Card content is built outside the
@@ -68,7 +64,6 @@ class PreviewCard extends StatefulWidget {
     required this.theme,
     required this.isSelected,
     required this.backgroundBuilder,
-    this.recessedSelection = false,
     this.onTap,
     this.onDoubleTap,
     this.icon,
@@ -76,14 +71,13 @@ class PreviewCard extends StatefulWidget {
     this.backgroundIconColor,
     this.foreground,
     this.tapKey,
+    this.inlineLabel = false,
   });
 
   final String name;
   final AppThemeData theme;
   final bool isSelected;
 
-  /// Settings control selectors use a recessed selection instead of a glow.
-  final bool recessedSelection;
   final Widget Function(BuildContext context, double backgroundRadius)
   backgroundBuilder;
   final VoidCallback? onTap;
@@ -97,6 +91,11 @@ class PreviewCard extends StatefulWidget {
   /// Null lets a menu grid provide the height.
   final double? height;
   final Key? tapKey;
+
+  /// Shows the name as plain settings-card text centered on the left instead
+  /// of a label in the top-left corner, for single-row cards whose preview
+  /// sits beside it. Selection colors it like the selection border.
+  final bool inlineLabel;
 
   @override
   State<PreviewCard> createState() => _PreviewCardState();
@@ -155,10 +154,17 @@ class _PreviewCardState extends State<PreviewCard> {
 
   @override
   Widget build(BuildContext context) {
-    final borderWidth = widget.recessedSelection ? 1.0 : 2.0;
+    const borderWidth = 1.0;
     final outerRadius = BorderRadius.circular(widget.theme.cornerRadius);
     final innerRadius = math.max(0.0, widget.theme.cornerRadius - borderWidth);
+    // A selected card's name label carries the check in the secondary color.
     final secondary = Theme.of(context).colorScheme.secondary;
+    final inline = widget.inlineLabel;
+    final labelText = inline
+        ? (widget.isSelected ? widget.theme.accent : widget.theme.textPrimary)
+        : widget.isSelected
+        ? contrastColor(secondary)
+        : Colors.white;
     return Semantics(
       label: widget.name,
       button: widget.onTap != null,
@@ -171,191 +177,207 @@ class _PreviewCardState extends State<PreviewCard> {
           fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
-            _selectionSurface(
-              Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Compose the whole painted preview before clipping it. A
-                  // full-size background also covers the border's inner AA edge.
-                  ClipRRect(
-                    borderRadius: outerRadius,
-                    clipBehavior: Clip.antiAliasWithSaveLayer,
-                    child: widget.backgroundBuilder(
-                      context,
-                      widget.theme.cornerRadius,
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                // Compose the whole painted preview before clipping it. A
+                // full-size background also covers the border's inner AA edge.
+                ClipRRect(
+                  borderRadius: outerRadius,
+                  clipBehavior: Clip.antiAliasWithSaveLayer,
+                  child: widget.backgroundBuilder(
+                    context,
+                    widget.theme.cornerRadius,
+                  ),
+                ),
+                // The game card selection look, below the name and badge.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(end: widget.isSelected ? 1 : 0),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : kMediumAnimation,
+                      curve: Curves.easeOutCubic,
+                      builder: (context, t, _) => t == 0
+                          ? const SizedBox.shrink()
+                          : DecoratedBox(
+                              key: const ValueKey('preview-selection-overlay'),
+                              decoration: widget.theme
+                                  .selectionOverlayDecoration(t),
+                            ),
                     ),
                   ),
-                  Padding(
-                    padding: EdgeInsets.all(borderWidth),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(innerRadius),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (widget.icon != null)
-                            Positioned(
-                              right: 2,
-                              bottom: 0,
-                              child: Icon(
-                                widget.icon,
-                                size: widget.height == null ? 32 : 45,
-                                color:
-                                    widget.backgroundIconColor ??
-                                    widget.theme.surface.withValues(
-                                      alpha: 0.25,
-                                    ),
-                              ),
-                            ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(borderWidth),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(innerRadius),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (widget.icon != null)
                           Positioned(
-                            top: 4,
-                            left: 4,
-                            right: widget.isSelected
-                                ? _selectionCornerExtent - 6
-                                : 4,
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  borderRadius: outerRadius,
-                                ),
-                                child: ExcludeSemantics(
-                                  child: Text(
-                                    widget.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
+                            right: 2,
+                            bottom: 0,
+                            child: Icon(
+                              widget.icon,
+                              size: widget.height == null ? 32 : 45,
+                              color:
+                                  widget.backgroundIconColor ??
+                                  widget.theme.surface.withValues(alpha: 0.25),
+                            ),
+                          ),
+                        Positioned(
+                          top: inline ? 0 : 4,
+                          bottom: inline ? 0 : null,
+                          // Inline text keeps the settings-card text inset.
+                          left: inline ? 12 - borderWidth : 4,
+                          right: 4,
+                          child: Align(
+                            alignment: inline
+                                ? Alignment.centerLeft
+                                : Alignment.topLeft,
+                            child: Container(
+                              key: const ValueKey('preview-card-label'),
+                              padding: inline
+                                  ? EdgeInsets.zero
+                                  : const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
                                     ),
-                                  ),
+                              decoration: inline
+                                  ? null
+                                  : BoxDecoration(
+                                      color: widget.isSelected
+                                          ? secondary
+                                          : Colors.black.withValues(alpha: 0.5),
+                                      borderRadius: outerRadius,
+                                    ),
+                              child: ExcludeSemantics(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: labelText,
+                                          fontSize: inline ? null : 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (widget.isSelected) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.check,
+                                        key: const ValueKey(
+                                          'preview-selection-check',
+                                        ),
+                                        size: inline ? 18 : 15,
+                                        color: labelText,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ),
-                          ),
-                          // The live clip above controls every splash, including one
-                          // already running when a selected theme changes the corners.
-                          Material(
-                            type: MaterialType.transparency,
-                            child: InkWell(
-                              key: widget.tapKey,
-                              excludeFromSemantics: true,
-                              onTap: widget.onTap == null ? null : _onTap,
-                              onTapUp: widget.onDoubleTap == null
-                                  ? null
-                                  : _onTapUp,
-                              onTapCancel: widget.onDoubleTap == null
-                                  ? null
-                                  : _resetTapHistory,
-                              child: const SizedBox.expand(),
-                            ),
-                          ),
-                          if (widget.foreground != null) widget.foreground!,
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: outerRadius,
-                          border: Border.all(
-                            color:
-                                widget.isSelected && !widget.recessedSelection
-                                ? widget.theme.accent
-                                : widget.theme.border,
-                            width: borderWidth,
                           ),
                         ),
-                      ),
+                        // The live clip above controls every splash, including one
+                        // already running when a selected theme changes the corners.
+                        Material(
+                          type: MaterialType.transparency,
+                          child: InkWell(
+                            key: widget.tapKey,
+                            excludeFromSemantics: true,
+                            onTap: widget.onTap == null ? null : _onTap,
+                            onTapUp: widget.onDoubleTap == null
+                                ? null
+                                : _onTapUp,
+                            onTapCancel: widget.onDoubleTap == null
+                                ? null
+                                : _resetTapHistory,
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                        if (widget.foreground != null) widget.foreground!,
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            if (widget.isSelected)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: ExcludeSemantics(
-                    child: ClipPath(
-                      clipper: _SelectionCornerClipper(
-                        widget.theme.cornerRadius,
-                      ),
-                      child: DecoratedBox(
-                        key: const ValueKey('preview-selection-badge'),
-                        decoration: BoxDecoration(color: secondary),
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 6, right: 6),
-                            child: Icon(
-                              Icons.check,
-                              size: 20,
-                              color: contrastColor(secondary),
-                            ),
-                          ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: outerRadius,
+                        border: Border.all(
+                          color: widget.theme.border,
+                          width: borderWidth,
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _selectionSurface(Widget child) {
-    if (widget.recessedSelection) {
-      return SettingsCardInset(
-        active: widget.isSelected,
-        borderRadius: widget.theme.cornerRadius,
-        surfaceColor: widget.theme.background,
-        child: child,
-      );
-    }
-    return CardSelectionGlow(
-      selected: widget.isSelected,
-      color: widget.theme.accent,
-      borderRadius: widget.theme.cornerRadius,
-      child: child,
-    );
-  }
 }
 
-/// A filled upper-right corner, clipped to the card's live rounded outline.
-/// The check remains upright and does not take part in hit testing.
-class _SelectionCornerClipper extends CustomClipper<Path> {
-  const _SelectionCornerClipper(this.radius);
+/// A single-row style choice at settings-card height: the name label sits on
+/// the left and a live [preview] beside it, with the preview-card selection
+/// look. Shared by the Control Styles and Settings Card Style groupboxes.
+class StyleChoiceCard extends StatelessWidget {
+  const StyleChoiceCard({
+    super.key,
+    required this.name,
+    required this.theme,
+    required this.isSelected,
+    required this.onTap,
+    required this.preview,
+    this.previewAlignment = Alignment.centerRight,
+  });
 
-  final double radius;
+  /// Matches a settings card: one control row plus its vertical padding.
+  static const double height = kElementHeight + 20;
+
+  final String name;
+  final AppThemeData theme;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Widget preview;
+
+  /// [Alignment.topRight] places a corner preview flush with the card edge;
+  /// other alignments keep the settings-card inset.
+  final Alignment previewAlignment;
 
   @override
-  Path getClip(Size size) {
-    final extent = math.min(
-      _selectionCornerExtent,
-      math.min(size.width, size.height),
+  Widget build(BuildContext context) {
+    final inCorner = previewAlignment == Alignment.topRight;
+    return PreviewCard(
+      name: name,
+      height: height,
+      theme: theme,
+      isSelected: isSelected,
+      inlineLabel: true,
+      onTap: onTap,
+      backgroundBuilder: (_, _) =>
+          ColoredBox(color: theme.background.withValues(alpha: 0.65)),
+      foreground: Positioned.fill(
+        child: Padding(
+          padding: inCorner
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 12),
+          child: Align(alignment: previewAlignment, child: preview),
+        ),
+      ),
     );
-    final triangle = Path()
-      ..moveTo(size.width - extent, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, extent)
-      ..close();
-    final outline = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
-      );
-    return Path.combine(PathOperation.intersect, triangle, outline);
   }
-
-  @override
-  bool shouldReclip(_SelectionCornerClipper oldClipper) =>
-      oldClipper.radius != radius;
 }
