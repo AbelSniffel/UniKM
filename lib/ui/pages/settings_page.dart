@@ -20,12 +20,13 @@ import '../widgets/settings_section_grid.dart';
 import '../widgets/settings_section_family.dart';
 import 'settings_sections/settings_sections.dart';
 
+/// Every section widget shares this constructor shape, so the definitions
+/// below pass constructor tear-offs.
 typedef _SettingsSectionBuilder =
     Widget Function({
       required AppThemeData theme,
       required String searchQuery,
       required bool Function(String) matchesSearch,
-      bool attachesToAbove,
     });
 
 typedef _SectionExtraMatch =
@@ -56,7 +57,6 @@ class _SettingsSectionDefinition {
   bool shouldShow({
     required WidgetRef ref,
     required TargetPlatform platform,
-    required String searchQuery,
     required bool Function(String) matchesSearch,
     required bool showOnlyMatches,
   }) {
@@ -69,20 +69,6 @@ class _SettingsSectionDefinition {
           groups: platformSearchGroups?.call(platform) ?? searchGroups,
         ) ||
         (extraMatch?.call(ref, matchesSearch) ?? false);
-  }
-
-  Widget buildSection({
-    required AppThemeData theme,
-    required String searchQuery,
-    required bool Function(String) matchesSearch,
-    bool attachesToAbove = false,
-  }) {
-    return builder(
-      theme: theme,
-      searchQuery: searchQuery,
-      matchesSearch: matchesSearch,
-      attachesToAbove: attachesToAbove,
-    );
   }
 }
 
@@ -100,18 +86,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
           .getAllThemes()
           .any((themeData) => matchesSearch(themeData.name));
     },
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => AppearanceSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: AppearanceSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'navigation',
@@ -119,18 +94,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Navigation Panel',
     icon: Icons.view_sidebar,
     searchGroups: NavigationSection.searchGroups,
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => NavigationSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: NavigationSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'cards',
@@ -139,18 +103,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     icon: Icons.style,
     searchGroups: const [],
     platformSearchGroups: CardDisplaySection.searchGroupsFor,
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => CardDisplaySection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: CardDisplaySection.new,
   ),
   _SettingsSectionDefinition(
     id: 'database',
@@ -162,18 +115,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
       DatabaseSection.databaseSyncSearchGroup,
       DatabaseSection.keyVisibilitySearchGroup,
     ],
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => DatabaseSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: DatabaseSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'tags',
@@ -193,18 +135,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
               .map((tag) => tag.name),
         ) &&
         TagsSection.maintenanceSearchGroup.indexTexts.any(matchesSearch),
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => TagsSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: TagsSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'notifications',
@@ -212,18 +143,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Notifications',
     icon: Icons.notifications,
     searchGroups: [NotificationsSection.typesSearchGroup],
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => NotificationsSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: NotificationsSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'updates',
@@ -231,18 +151,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Updates',
     icon: Icons.download_rounded,
     searchGroups: UpdatesSection.searchGroups,
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => UpdatesSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: UpdatesSection.new,
   ),
   _SettingsSectionDefinition(
     id: 'advanced',
@@ -255,18 +164,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
       if (AdvancedSection.showExperimentalSettings)
         AdvancedSection.experimentalSearchGroup,
     ],
-    builder:
-        ({
-          required theme,
-          required searchQuery,
-          required matchesSearch,
-          bool attachesToAbove = false,
-        }) => AdvancedSection(
-          theme: theme,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          attachesToAbove: attachesToAbove,
-        ),
+    builder: AdvancedSection.new,
   ),
 ];
 
@@ -365,34 +263,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     bool matchesSearch(String text) => _matchesSearch(searchQuery, text);
 
+    // Created outside the layout callback: a resize then reuses these widgets,
+    // so the page lays out again at the new width without rebuilding. The
+    // rail changes only when the width crosses the very narrow breakpoint.
+    _SettingsSectionRail rail({required bool veryNarrow}) =>
+        _SettingsSectionRail(
+          selectedSection: selectedSection,
+          isSearching: isSearching,
+          isVeryNarrowLayout: veryNarrow,
+          onSectionSelected: (sectionId) => ref
+              .read(settingsPageSelectedSectionProvider.notifier)
+              .set(sectionId),
+        );
+    final wideRail = rail(veryNarrow: false);
+    final narrowRail = rail(veryNarrow: true);
+    final body = _SettingsPageBody(
+      sectionIndex: _settingsRailSections.indexWhere(
+        (section) => section.$1 == effectiveSection,
+      ),
+      scrollController: _contentScrollController,
+      searchController: _searchController,
+      searchQuery: searchQuery,
+      onSearchChanged: (value) => ref
+          .read(settingsPageSearchQueryProvider.notifier)
+          .set(value.toLowerCase()),
+      sections: effectiveSection == 'all'
+          ? _settingsSections
+          : [?selectedSectionDefinition],
+      matchesSearch: matchesSearch,
+      showOnlyMatches: searchQuery.isNotEmpty,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) => Row(
         children: [
-          _SettingsSectionRail(
-            selectedSection: selectedSection,
-            isSearching: isSearching,
-            isVeryNarrowLayout:
-                constraints.maxWidth < kVeryNarrowLayoutBreakpoint,
-            onSectionSelected: (sectionId) => ref
-                .read(settingsPageSelectedSectionProvider.notifier)
-                .set(sectionId),
-          ),
-          _SettingsPageBody(
-            sectionIndex: _settingsRailSections.indexWhere(
-              (section) => section.$1 == effectiveSection,
-            ),
-            scrollController: _contentScrollController,
-            searchController: _searchController,
-            searchQuery: searchQuery,
-            onSearchChanged: (value) => ref
-                .read(settingsPageSearchQueryProvider.notifier)
-                .set(value.toLowerCase()),
-            sections: effectiveSection == 'all'
-                ? _settingsSections
-                : [?selectedSectionDefinition],
-            matchesSearch: matchesSearch,
-            showOnlyMatches: searchQuery.isNotEmpty,
-          ),
+          constraints.maxWidth < kVeryNarrowLayoutBreakpoint
+              ? narrowRail
+              : wideRail,
+          body,
         ],
       ),
     );
@@ -597,12 +505,45 @@ class _SettingsPageBody extends ConsumerWidget {
           (s) => s.shouldShow(
             ref: ref,
             platform: Theme.of(context).platform,
-            searchQuery: searchQuery,
             matchesSearch: matchesSearch,
             showOnlyMatches: showOnlyMatches,
           ),
         )
         .toList(growable: false);
+    // As above, only the column count follows the width; the section widgets
+    // are reused by each layout pass.
+    final sectionCards = [
+      for (final section in visibleSections)
+        RepaintBoundary(
+          key: ValueKey('settings-section-card-${section.id}'),
+          child: SettingsSectionFamily(
+            header: GroupBoxFamilyTitle(
+              key: ValueKey<String>(
+                'settings-section-header-${section.headerTitle}',
+              ),
+              theme: theme,
+              title: section.headerTitle,
+              icon: section.icon,
+              trailingBuilder: switch (section.id) {
+                'appearance' => (bool expanded) => ThemeHeaderActions(
+                  expanded: expanded,
+                ),
+                'database' => (bool expanded) => DatabaseHeaderActions(
+                  expanded: expanded,
+                ),
+                _ => null,
+              },
+              searchQuery: searchQuery,
+              isSearchMatch: showOnlyMatches,
+            ),
+            child: section.builder(
+              theme: theme,
+              searchQuery: searchQuery,
+              matchesSearch: matchesSearch,
+            ),
+          ),
+        ),
+    ];
 
     return Expanded(
       child: Column(
@@ -646,51 +587,14 @@ class _SettingsPageBody extends ConsumerWidget {
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                         sliver: SliverToBoxAdapter(
                           child: LayoutBuilder(
-                            builder: (context, constraints) => SettingsSectionGrid(
-                              columns: settingsSectionColumnCount(
-                                constraints.maxWidth,
-                              ),
-                              spacing: kSettingsSectionSpacing,
-                              children: [
-                                for (final section in visibleSections)
-                                  RepaintBoundary(
-                                    key: ValueKey(
-                                      'settings-section-card-${section.id}',
-                                    ),
-                                    child: SettingsSectionFamily(
-                                      header: GroupBoxFamilyTitle(
-                                        key: ValueKey<String>(
-                                          'settings-section-header-${section.headerTitle}',
-                                        ),
-                                        theme: theme,
-                                        title: section.headerTitle,
-                                        icon: section.icon,
-                                        trailingBuilder: switch (section.id) {
-                                          'appearance' =>
-                                            (bool expanded) =>
-                                                ThemeHeaderActions(
-                                                  expanded: expanded,
-                                                ),
-                                          'database' =>
-                                            (bool expanded) =>
-                                                DatabaseHeaderActions(
-                                                  expanded: expanded,
-                                                ),
-                                          _ => null,
-                                        },
-                                        searchQuery: searchQuery,
-                                        isSearchMatch: showOnlyMatches,
-                                      ),
-                                      child: section.buildSection(
-                                        theme: theme,
-                                        searchQuery: searchQuery,
-                                        matchesSearch: matchesSearch,
-                                        attachesToAbove: false,
-                                      ),
-                                    ),
+                            builder: (context, constraints) =>
+                                SettingsSectionGrid(
+                                  columns: settingsSectionColumnCount(
+                                    constraints.maxWidth,
                                   ),
-                              ],
-                            ),
+                                  spacing: kSettingsSectionSpacing,
+                                  children: sectionCards,
+                                ),
                           ),
                         ),
                       ),

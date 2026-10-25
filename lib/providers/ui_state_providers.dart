@@ -10,7 +10,8 @@ import '../core/utils/batch_parser.dart';
 import '../models/game.dart';
 import '../shared/state/session_value.dart';
 import 'settings_providers.dart';
-import 'theme_providers.dart' show currentThemeIsBuiltInProvider;
+import '../core/theme/app_theme.dart' show AppThemeData;
+import 'theme_providers.dart' show builtInThemeIdsProvider, themeProvider;
 
 /// Window restoration belongs to the app session, rather than to a database
 /// shell which is recreated when a database is switched or reloaded.
@@ -69,11 +70,23 @@ final navigationThemeMenuTabProvider =
       NavigationThemeMenuTabNotifier.new,
     );
 
+/// A theme collection tab (0 Default, 1 Custom) that opens on the active
+/// theme's collection and moves to it whenever the active theme changes,
+/// including a newly created theme. Live editor previews leave it alone.
 class NavigationThemeMenuTabNotifier extends Notifier<int> {
+  // From the theme itself: providers derived from the theme may not have
+  // updated yet while it notifies.
+  int _tabFor(AppThemeData theme) =>
+      ref.read(builtInThemeIdsProvider).contains(theme.id) ? 0 : 1;
+
   @override
   int build() {
-    // Read once: subsequent theme selections must not replace the chosen tab.
-    return ref.read(currentThemeIsBuiltInProvider) ? 0 : 1;
+    ref.listen(themeProvider, (_, theme) {
+      if (!ref.read(themeProvider.notifier).isPreviewMode) {
+        state = _tabFor(theme);
+      }
+    });
+    return _tabFor(ref.read(themeProvider));
   }
 
   void setIndex(int index) {

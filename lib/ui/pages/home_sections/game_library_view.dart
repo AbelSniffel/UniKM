@@ -304,17 +304,8 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
             mainAxisSpacing: kGridCardSpacing,
           ),
           itemCount: gameIds.length,
-          itemBuilder: (context, index) {
-            final gameId = gameIds[index];
-            final card = _LibraryGameCard(
-              key: ValueKey(gameId),
-              gameId: gameId,
-              viewMode: viewMode,
-              dragSelectionHandledByParent: viewMode == GameListViewMode.list,
-            );
-
-            return _revealCard(gameId, card);
-          },
+          itemBuilder: (context, index) =>
+              _revealCard(gameIds[index], viewMode),
         ),
       );
     }
@@ -336,15 +327,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
         addAutomaticKeepAlives: false,
         itemCount: gameIds.length,
         itemBuilder: (context, index) {
-          final gameId = gameIds[index];
-          final card = _LibraryGameCard(
-            key: ValueKey(gameId),
-            gameId: gameId,
-            viewMode: viewMode,
-            dragSelectionHandledByParent: viewMode == GameListViewMode.list,
-          );
-
-          final revealed = _revealCard(gameId, card);
+          final revealed = _revealCard(gameIds[index], viewMode);
           return slimList
               ? revealed
               : Padding(
@@ -356,14 +339,23 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     );
   }
 
-  Widget _revealCard(int gameId, Widget card) => widget.animateEntries
-      ? AnimatedGameCard(
-          key: ValueKey('anim_$gameId'),
-          gameId: gameId,
-          coordinator: _revealCoordinator,
-          child: card,
-        )
-      : card;
+  /// The card for [gameId], revealed by an entry animation when enabled.
+  Widget _revealCard(int gameId, GameListViewMode viewMode) {
+    final card = _LibraryGameCard(
+      key: ValueKey(gameId),
+      gameId: gameId,
+      viewMode: viewMode,
+      dragSelectionHandledByParent: viewMode == GameListViewMode.list,
+    );
+    return widget.animateEntries
+        ? AnimatedGameCard(
+            key: ValueKey('anim_$gameId'),
+            gameId: gameId,
+            coordinator: _revealCoordinator,
+            child: card,
+          )
+        : card;
+  }
 
   Widget _wrapDragSelection(
     WidgetRef ref,

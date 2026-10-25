@@ -574,17 +574,19 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     _discoveryTimer = null;
   }
 
+  /// Queued automatic syncs run only while sync is enabled and idle.
+  bool get _canRunQueuedSync =>
+      ref.mounted &&
+      _foreground &&
+      state.value?.enabled == true &&
+      !_autoSyncInFlight &&
+      !_manualSyncInFlight &&
+      ref.read(databaseProvider) != null;
+
   void _scheduleQueuedSync({Duration? minimumDelay}) {
     _queueTimer?.cancel();
     _queueTimer = null;
-    if (!ref.mounted ||
-        !_foreground ||
-        state.value?.enabled != true ||
-        _autoSyncInFlight ||
-        _manualSyncInFlight ||
-        ref.read(databaseProvider) == null) {
-      return;
-    }
+    if (!_canRunQueuedSync) return;
     final readyAt = _syncQueue.nextReadyAt;
     if (readyAt == null) return;
     var delay = readyAt.difference(DateTime.now());
@@ -597,14 +599,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
   }
 
   Future<void> _drainSyncQueue() async {
-    if (!ref.mounted ||
-        !_foreground ||
-        state.value?.enabled != true ||
-        _autoSyncInFlight ||
-        _manualSyncInFlight ||
-        ref.read(databaseProvider) == null) {
-      return;
-    }
+    if (!_canRunQueuedSync) return;
     final service = ref.read(deviceSyncServiceProvider);
     if (service.isReceiverSyncInFlight) {
       _scheduleQueuedSync(minimumDelay: const Duration(seconds: 1));

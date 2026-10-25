@@ -1,6 +1,7 @@
 /// Settings providers: user preferences, slice providers for typed access.
 library;
 
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/settings/settings_model.dart';
@@ -43,7 +44,16 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
   /// Set multiple settings in a single state update.
   Future<void> setMany(Map<String, dynamic> updates) {
     if (updates.isEmpty) return Future.value();
-    final values = Map<String, dynamic>.from(updates);
+    // A list saved with unchanged contents keeps its instance, so slices
+    // holding it (compared by identity) do not notify.
+    final values = {
+      for (final MapEntry(:key, :value) in updates.entries)
+        key:
+            value is List &&
+                const ListEquality<Object?>().equals(value, state[key])
+            ? state[key]
+            : value,
+    };
     final store = _store;
     final afterReset = _pendingResets > 0;
     // Ordinary edits remain immediate; edits during reset publish after it.
@@ -108,19 +118,19 @@ final experimentalInteractionCardsProvider = _setting<bool>(
 ///
 /// Uses `select` + value equality to prevent rebuilding every card when
 /// unrelated settings change.
-final gameCardSettingsProvider = _settingsSlice(GameCardSettings.fromMap);
+final gameCardSettingsProvider = _settingsSlice(gameCardSettingsFromMap);
 
 final notificationsSettingsProvider = _settingsSlice(
-  NotificationsSettings.fromMap,
+  notificationsSettingsFromMap,
 );
 
-final updatesSettingsProvider = _settingsSlice(UpdatesSettings.fromMap);
+final updatesSettingsProvider = _settingsSlice(updatesSettingsFromMap);
 
-final securitySettingsProvider = _settingsSlice(SecuritySettings.fromMap);
+final securitySettingsProvider = _settingsSlice(securitySettingsFromMap);
 
-final appShellSettingsProvider = _settingsSlice(AppShellSettings.fromMap);
+final appShellSettingsProvider = _settingsSlice(appShellSettingsFromMap);
 
-final backupSettingsProvider = _settingsSlice(BackupSettings.fromMap);
+final backupSettingsProvider = _settingsSlice(backupSettingsFromMap);
 
 final toggleStyleProvider = _setting<ToggleStyle>(
   SettingsKeys.toggleStyle,

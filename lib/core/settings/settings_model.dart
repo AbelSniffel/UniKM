@@ -4,8 +4,6 @@ library;
 
 import 'dart:io';
 
-import 'package:collection/collection.dart';
-
 import '../constants/app_constants.dart';
 
 /// Navigation bar position options
@@ -373,8 +371,7 @@ class DefaultSettings {
   static const bool showPlatformOnHoverOnly = false;
   static const bool showDeadlineChip = true;
   static bool get slimListView => Platform.isAndroid || Platform.isIOS;
-  static const bool showRatings =
-      true; // Lives in "additional UI" section but included here for convenience
+  static const bool showRatings = true;
 
   // Toggle & Section Style
   static const ToggleStyle toggleStyle = ToggleStyle.morphDot;
@@ -423,356 +420,228 @@ class DefaultSettings {
   static const double windowHeight = 800;
 }
 
+// Typed settings slices. Records give each slice value equality, so a slice
+// provider notifies only when one of its own fields changes. List fields
+// compare by identity; saving a list with equal contents keeps its instance.
+
 /// Typed view of settings used by `GameCard`.
-///
-/// This keeps UI code smaller and lets Riverpod only rebuild cards when one of
-/// these fields actually changes.
-class GameCardSettings {
-  const GameCardSettings({
-    required this.showTitle,
-    required this.showTitleOnNoPicture,
-    required this.showPlatform,
-    required this.showTags,
-    required this.showTagsOnHoverOnly,
-    required this.showPlatformOnHoverOnly,
-    required this.showDeadline,
-    required this.showRatings,
-    required this.slimListView,
-  });
+typedef GameCardSettings = ({
+  bool showTitle,
+  bool showTitleOnNoPicture,
+  bool showPlatform,
+  bool showTags,
+  bool showTagsOnHoverOnly,
+  bool showPlatformOnHoverOnly,
+  bool showDeadline,
+  bool showRatings,
+  bool slimListView,
+});
 
-  factory GameCardSettings.fromMap(Map<String, dynamic> settings) {
-    final slimListView =
-        (settings[SettingsKeys.slimListView] as bool?) ??
-        DefaultSettings.slimListView;
+T _settingOr<T>(Map<String, dynamic> settings, String key, T fallback) =>
+    (settings[key] as T?) ?? fallback;
 
-    return GameCardSettings(
-      showTitle:
-          (settings[SettingsKeys.showTitleChip] as bool?) ??
-          DefaultSettings.showTitleChip,
-      showTitleOnNoPicture:
-          (settings[SettingsKeys.showTitleOnNoPicture] as bool?) ??
-          DefaultSettings.showTitleOnNoPicture,
-      showPlatform:
-          (settings[SettingsKeys.showPlatformChip] as bool?) ??
-          DefaultSettings.showPlatformChip,
-      showTags:
-          (settings[SettingsKeys.showTagsChip] as bool?) ??
-          DefaultSettings.showTagsChip,
-      showPlatformOnHoverOnly:
-          (settings[SettingsKeys.showPlatformOnHoverOnly] as bool?) ??
-          DefaultSettings.showPlatformOnHoverOnly,
-      showTagsOnHoverOnly:
-          (settings[SettingsKeys.showTagsOnHoverOnly] as bool?) ??
-          DefaultSettings.showTagsOnHoverOnly,
-      showDeadline:
-          (settings[SettingsKeys.showDeadlineChip] as bool?) ??
-          DefaultSettings.showDeadlineChip,
-      // Kept as a separate key because it lives in the "additional UI" section.
-      showRatings: (settings[SettingsKeys.showRatings] as bool?) ?? true,
-      slimListView: slimListView,
-    );
-  }
+GameCardSettings gameCardSettingsFromMap(Map<String, dynamic> settings) => (
+  showTitle: _settingOr(
+    settings,
+    SettingsKeys.showTitleChip,
+    DefaultSettings.showTitleChip,
+  ),
+  showTitleOnNoPicture: _settingOr(
+    settings,
+    SettingsKeys.showTitleOnNoPicture,
+    DefaultSettings.showTitleOnNoPicture,
+  ),
+  showPlatform: _settingOr(
+    settings,
+    SettingsKeys.showPlatformChip,
+    DefaultSettings.showPlatformChip,
+  ),
+  showTags: _settingOr(
+    settings,
+    SettingsKeys.showTagsChip,
+    DefaultSettings.showTagsChip,
+  ),
+  showTagsOnHoverOnly: _settingOr(
+    settings,
+    SettingsKeys.showTagsOnHoverOnly,
+    DefaultSettings.showTagsOnHoverOnly,
+  ),
+  showPlatformOnHoverOnly: _settingOr(
+    settings,
+    SettingsKeys.showPlatformOnHoverOnly,
+    DefaultSettings.showPlatformOnHoverOnly,
+  ),
+  showDeadline: _settingOr(
+    settings,
+    SettingsKeys.showDeadlineChip,
+    DefaultSettings.showDeadlineChip,
+  ),
+  showRatings: _settingOr(
+    settings,
+    SettingsKeys.showRatings,
+    DefaultSettings.showRatings,
+  ),
+  slimListView: _settingOr(
+    settings,
+    SettingsKeys.slimListView,
+    DefaultSettings.slimListView,
+  ),
+);
 
-  final bool showTitle;
-  final bool showTitleOnNoPicture;
-  final bool showPlatform;
-  final bool showTags;
-  final bool showTagsOnHoverOnly;
-  final bool showPlatformOnHoverOnly;
-  final bool showDeadline;
-  final bool showRatings;
-  final bool slimListView;
+typedef NotificationsSettings = ({
+  bool deadlineReminders,
+  bool updateNotifications,
+});
 
-  @override
-  bool operator ==(Object other) {
-    return other is GameCardSettings &&
-        other.showTitle == showTitle &&
-        other.showTitleOnNoPicture == showTitleOnNoPicture &&
-        other.showPlatform == showPlatform &&
-        other.showTags == showTags &&
-        other.showTagsOnHoverOnly == showTagsOnHoverOnly &&
-        other.showPlatformOnHoverOnly == showPlatformOnHoverOnly &&
-        other.showDeadline == showDeadline &&
-        other.showRatings == showRatings &&
-        other.slimListView == slimListView;
-  }
+NotificationsSettings notificationsSettingsFromMap(
+  Map<String, dynamic> settings,
+) => (
+  deadlineReminders: _settingOr(settings, SettingsKeys.deadlineReminders, true),
+  updateNotifications: _settingOr(
+    settings,
+    SettingsKeys.updateNotifications,
+    true,
+  ),
+);
 
-  @override
-  int get hashCode => Object.hash(
-    showTitle,
-    showTitleOnNoPicture,
-    showPlatform,
-    showTags,
-    showTagsOnHoverOnly,
-    showPlatformOnHoverOnly,
-    showDeadline,
-    showRatings,
-    slimListView,
-  );
-}
+typedef UpdatesSettings = ({
+  bool autoCheckEnabled,
+  int autoCheckIntervalMinutes,
+  bool includePrerelease,
+  List<String> skippedVersions,
+  String updateRepo,
+  String githubApiToken,
+});
 
-class NotificationsSettings {
-  const NotificationsSettings({
-    required this.deadlineReminders,
-    required this.updateNotifications,
-  });
+UpdatesSettings updatesSettingsFromMap(Map<String, dynamic> settings) => (
+  autoCheckEnabled: _settingOr(
+    settings,
+    SettingsKeys.autoUpdateCheck,
+    DefaultSettings.autoUpdateCheck,
+  ),
+  autoCheckIntervalMinutes: DefaultSettings.autoCheckIntervalMinutes,
+  includePrerelease: _settingOr(
+    settings,
+    SettingsKeys.includePreReleases,
+    DefaultSettings.includePreReleases,
+  ),
+  skippedVersions: _settingOr(
+    settings,
+    SettingsKeys.skippedVersions,
+    const <String>[],
+  ),
+  updateRepo: _settingOr(
+    settings,
+    SettingsKeys.updateRepo,
+    DefaultSettings.updateRepo,
+  ),
+  githubApiToken: _settingOr(
+    settings,
+    SettingsKeys.githubApiToken,
+    DefaultSettings.githubApiToken,
+  ),
+);
 
-  factory NotificationsSettings.fromMap(Map<String, dynamic> settings) {
-    return NotificationsSettings(
-      deadlineReminders:
-          (settings[SettingsKeys.deadlineReminders] as bool?) ?? true,
-      updateNotifications:
-          (settings[SettingsKeys.updateNotifications] as bool?) ?? true,
-    );
-  }
+typedef SecuritySettings = ({
+  bool maskKeys,
+  bool autoHideKeys,
+  bool encryptionEnabled,
+  List<String> recentDatabasePaths,
+});
 
-  final bool deadlineReminders;
-  final bool updateNotifications;
+SecuritySettings securitySettingsFromMap(Map<String, dynamic> settings) => (
+  maskKeys: _settingOr(settings, SettingsKeys.maskKeys, true),
+  autoHideKeys: _settingOr(settings, SettingsKeys.autoHideKeys, true),
+  encryptionEnabled: _settingOr(
+    settings,
+    SettingsKeys.encryptionEnabled,
+    false,
+  ),
+  recentDatabasePaths: _settingOr(
+    settings,
+    SettingsKeys.recentDatabasePaths,
+    const <String>[],
+  ),
+);
 
-  @override
-  bool operator ==(Object other) {
-    return other is NotificationsSettings &&
-        other.deadlineReminders == deadlineReminders &&
-        other.updateNotifications == updateNotifications;
-  }
+typedef AppShellSettings = ({
+  NavBarPosition navBarPosition,
+  NavBarAppearance navBarAppearance,
+  NavExpansionMode navExpansionMode,
+  GradientAnimation gradientAnimation,
+  bool settingsSectionPanelCollapsed,
+  bool autoBackupEnabled,
+  int autoBackupIntervalMinutes,
+  bool developerMode,
+  double windowWidth,
+  double windowHeight,
+  double? windowX,
+  double? windowY,
+  bool windowMaximized,
+});
 
-  @override
-  int get hashCode => Object.hash(deadlineReminders, updateNotifications);
-}
+AppShellSettings appShellSettingsFromMap(Map<String, dynamic> settings) => (
+  navBarPosition: _settingOr(
+    settings,
+    SettingsKeys.navBarPosition,
+    DefaultSettings.navBarPosition,
+  ),
+  navBarAppearance: _settingOr(
+    settings,
+    SettingsKeys.navBarAppearance,
+    DefaultSettings.navBarAppearance,
+  ),
+  navExpansionMode: _settingOr(
+    settings,
+    SettingsKeys.navExpansionMode,
+    DefaultSettings.navExpansionMode,
+  ),
+  gradientAnimation: _settingOr(
+    settings,
+    SettingsKeys.gradientAnimation,
+    DefaultSettings.gradientAnimation,
+  ),
+  settingsSectionPanelCollapsed: _settingOr(
+    settings,
+    SettingsKeys.settingsSectionPanelCollapsed,
+    DefaultSettings.settingsSectionPanelCollapsed,
+  ),
+  autoBackupEnabled: _settingOr(
+    settings,
+    SettingsKeys.autoBackupEnabled,
+    DefaultSettings.autoBackupEnabled,
+  ),
+  autoBackupIntervalMinutes: _settingOr(
+    settings,
+    SettingsKeys.autoBackupIntervalMinutes,
+    DefaultSettings.autoBackupIntervalMinutes,
+  ),
+  developerMode: _settingOr(
+    settings,
+    SettingsKeys.developerMode,
+    DefaultSettings.developerMode,
+  ),
+  windowWidth: _settingOr(
+    settings,
+    SettingsKeys.windowWidth,
+    DefaultSettings.windowWidth,
+  ),
+  windowHeight: _settingOr(
+    settings,
+    SettingsKeys.windowHeight,
+    DefaultSettings.windowHeight,
+  ),
+  windowX: settings[SettingsKeys.windowX] as double?,
+  windowY: settings[SettingsKeys.windowY] as double?,
+  windowMaximized: _settingOr(settings, SettingsKeys.windowMaximized, false),
+);
 
-class UpdatesSettings {
-  const UpdatesSettings({
-    required this.autoCheckEnabled,
-    required this.autoCheckIntervalMinutes,
-    required this.includePrerelease,
-    required this.skippedVersions,
-    required this.updateRepo,
-    required this.githubApiToken,
-  });
+typedef BackupSettings = ({int maxCount});
 
-  factory UpdatesSettings.fromMap(Map<String, dynamic> settings) {
-    return UpdatesSettings(
-      autoCheckEnabled:
-          (settings[SettingsKeys.autoUpdateCheck] as bool?) ??
-          DefaultSettings.autoUpdateCheck,
-      autoCheckIntervalMinutes: kDefaultAutoUpdateIntervalMinutes,
-      includePrerelease:
-          (settings[SettingsKeys.includePreReleases] as bool?) ??
-          DefaultSettings.includePreReleases,
-      skippedVersions:
-          (settings[SettingsKeys.skippedVersions] as List<String>?) ??
-          const <String>[],
-      updateRepo:
-          (settings[SettingsKeys.updateRepo] as String?) ??
-          DefaultSettings.updateRepo,
-      githubApiToken:
-          (settings[SettingsKeys.githubApiToken] as String?) ??
-          DefaultSettings.githubApiToken,
-    );
-  }
-
-  final bool autoCheckEnabled;
-  final int autoCheckIntervalMinutes;
-  final bool includePrerelease;
-  final List<String> skippedVersions;
-  final String updateRepo;
-  final String githubApiToken;
-
-  @override
-  bool operator ==(Object other) {
-    return other is UpdatesSettings &&
-        other.autoCheckEnabled == autoCheckEnabled &&
-        other.autoCheckIntervalMinutes == autoCheckIntervalMinutes &&
-        other.includePrerelease == includePrerelease &&
-        const ListEquality<String>().equals(
-          other.skippedVersions,
-          skippedVersions,
-        ) &&
-        other.updateRepo == updateRepo &&
-        other.githubApiToken == githubApiToken;
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    autoCheckEnabled,
-    autoCheckIntervalMinutes,
-    includePrerelease,
-    Object.hashAll(skippedVersions),
-    updateRepo,
-    githubApiToken,
-  );
-}
-
-class SecuritySettings {
-  const SecuritySettings({
-    required this.maskKeys,
-    required this.autoHideKeys,
-    required this.encryptionEnabled,
-    required this.recentDatabasePaths,
-  });
-
-  factory SecuritySettings.fromMap(Map<String, dynamic> settings) {
-    return SecuritySettings(
-      maskKeys: (settings[SettingsKeys.maskKeys] as bool?) ?? true,
-      autoHideKeys: (settings[SettingsKeys.autoHideKeys] as bool?) ?? true,
-      encryptionEnabled:
-          (settings[SettingsKeys.encryptionEnabled] as bool?) ?? false,
-      recentDatabasePaths:
-          (settings[SettingsKeys.recentDatabasePaths] as List<String>?) ??
-          const <String>[],
-    );
-  }
-
-  final bool maskKeys;
-  final bool autoHideKeys;
-  final bool encryptionEnabled;
-  final List<String> recentDatabasePaths;
-
-  @override
-  bool operator ==(Object other) {
-    return other is SecuritySettings &&
-        other.maskKeys == maskKeys &&
-        other.autoHideKeys == autoHideKeys &&
-        other.encryptionEnabled == encryptionEnabled &&
-        const ListEquality<String>().equals(
-          other.recentDatabasePaths,
-          recentDatabasePaths,
-        );
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    maskKeys,
-    autoHideKeys,
-    encryptionEnabled,
-    Object.hashAll(recentDatabasePaths),
-  );
-}
-
-class AppShellSettings {
-  const AppShellSettings({
-    required this.navBarPosition,
-    required this.navBarAppearance,
-    required this.navExpansionMode,
-    required this.gradientAnimation,
-    required this.settingsSectionPanelCollapsed,
-    required this.autoBackupEnabled,
-    required this.autoBackupIntervalMinutes,
-    required this.developerMode,
-    required this.windowWidth,
-    required this.windowHeight,
-    required this.windowX,
-    required this.windowY,
-    required this.windowMaximized,
-  });
-
-  factory AppShellSettings.fromMap(Map<String, dynamic> settings) {
-    return AppShellSettings(
-      navBarPosition:
-          (settings[SettingsKeys.navBarPosition] as NavBarPosition?) ??
-          DefaultSettings.navBarPosition,
-      navBarAppearance:
-          (settings[SettingsKeys.navBarAppearance] as NavBarAppearance?) ??
-          DefaultSettings.navBarAppearance,
-      navExpansionMode:
-          (settings[SettingsKeys.navExpansionMode] as NavExpansionMode?) ??
-          DefaultSettings.navExpansionMode,
-      gradientAnimation:
-          (settings[SettingsKeys.gradientAnimation] as GradientAnimation?) ??
-          DefaultSettings.gradientAnimation,
-      settingsSectionPanelCollapsed:
-          (settings[SettingsKeys.settingsSectionPanelCollapsed] as bool?) ??
-          DefaultSettings.settingsSectionPanelCollapsed,
-      autoBackupEnabled:
-          (settings[SettingsKeys.autoBackupEnabled] as bool?) ??
-          DefaultSettings.autoBackupEnabled,
-      autoBackupIntervalMinutes:
-          (settings[SettingsKeys.autoBackupIntervalMinutes] as int?) ??
-          DefaultSettings.autoBackupIntervalMinutes,
-      developerMode:
-          (settings[SettingsKeys.developerMode] as bool?) ??
-          DefaultSettings.developerMode,
-      windowWidth:
-          (settings[SettingsKeys.windowWidth] as double?) ??
-          DefaultSettings.windowWidth,
-      windowHeight:
-          (settings[SettingsKeys.windowHeight] as double?) ??
-          DefaultSettings.windowHeight,
-      windowX: settings[SettingsKeys.windowX] as double?,
-      windowY: settings[SettingsKeys.windowY] as double?,
-      windowMaximized:
-          (settings[SettingsKeys.windowMaximized] as bool?) ?? false,
-    );
-  }
-
-  final NavBarPosition navBarPosition;
-  final NavBarAppearance navBarAppearance;
-  final NavExpansionMode navExpansionMode;
-  final GradientAnimation gradientAnimation;
-  final bool settingsSectionPanelCollapsed;
-  final bool autoBackupEnabled;
-  final int autoBackupIntervalMinutes;
-  final bool developerMode;
-  final double windowWidth;
-  final double windowHeight;
-  final double? windowX;
-  final double? windowY;
-  final bool windowMaximized;
-
-  @override
-  bool operator ==(Object other) {
-    return other is AppShellSettings &&
-        other.navBarPosition == navBarPosition &&
-        other.navBarAppearance == navBarAppearance &&
-        other.navExpansionMode == navExpansionMode &&
-        other.gradientAnimation == gradientAnimation &&
-        other.settingsSectionPanelCollapsed == settingsSectionPanelCollapsed &&
-        other.autoBackupEnabled == autoBackupEnabled &&
-        other.autoBackupIntervalMinutes == autoBackupIntervalMinutes &&
-        other.developerMode == developerMode &&
-        other.windowWidth == windowWidth &&
-        other.windowHeight == windowHeight &&
-        other.windowX == windowX &&
-        other.windowY == windowY &&
-        other.windowMaximized == windowMaximized;
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    navBarPosition,
-    navBarAppearance,
-    navExpansionMode,
-    gradientAnimation,
-    settingsSectionPanelCollapsed,
-    autoBackupEnabled,
-    autoBackupIntervalMinutes,
-    developerMode,
-    windowWidth,
-    windowHeight,
-    windowX,
-    windowY,
-    windowMaximized,
-  );
-}
-
-class BackupSettings {
-  const BackupSettings({required this.maxCount});
-
-  factory BackupSettings.fromMap(Map<String, dynamic> settings) {
-    return BackupSettings(
-      maxCount:
-          (settings[SettingsKeys.backupMaxCount] as int?) ??
-          DefaultSettings.backupMaxCount,
-    );
-  }
-
-  final int maxCount;
-
-  @override
-  bool operator ==(Object other) {
-    return other is BackupSettings && other.maxCount == maxCount;
-  }
-
-  @override
-  int get hashCode => maxCount.hashCode;
-}
+BackupSettings backupSettingsFromMap(Map<String, dynamic> settings) => (
+  maxCount: _settingOr(
+    settings,
+    SettingsKeys.backupMaxCount,
+    DefaultSettings.backupMaxCount,
+  ),
+);

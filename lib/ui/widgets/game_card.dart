@@ -251,20 +251,7 @@ class _GameCardState extends ConsumerState<GameCard>
                       children: [
                         if (options.showDeadline &&
                             widget.game.hasDeadline) ...[
-                          GameCardBadges.deadlineBadge(
-                            theme,
-                            widget.game.deadlineDate,
-                            borderRadius: GameCardBadges.chipBorderRadius(
-                              theme,
-                              kBadgeHeight,
-                            ),
-                            showIcon: true,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            minHeight: kBadgeHeight,
-                          ),
+                          _buildDeadlineBadge(theme),
                           if (titleVisible) const SizedBox(height: 4),
                         ],
                         if (titleVisible)
@@ -385,21 +372,7 @@ class _GameCardState extends ConsumerState<GameCard>
             imageWidth: layout.cardImageWidth,
           ),
           if (options.showDeadline && widget.game.hasDeadline)
-            Positioned(
-              left: 8,
-              bottom: 8,
-              child: GameCardBadges.deadlineBadge(
-                theme,
-                widget.game.deadlineDate,
-                borderRadius: GameCardBadges.chipBorderRadius(
-                  theme,
-                  kBadgeHeight,
-                ),
-                showIcon: true,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minHeight: kBadgeHeight,
-              ),
-            ),
+            Positioned(left: 8, bottom: 8, child: _buildDeadlineBadge(theme)),
           _buildListContentPane(
             context,
             theme,
@@ -407,7 +380,6 @@ class _GameCardState extends ConsumerState<GameCard>
             tagsEnabled: tagsEnabled,
             tagsVisible: tagsVisible,
             showListSideChips: showListSideChips,
-            ratingLeftOfPlatform: false,
             cardImageWidth: layout.cardImageWidth,
           ),
         ],
@@ -606,6 +578,16 @@ class _GameCardState extends ConsumerState<GameCard>
     );
   }
 
+  Widget _buildDeadlineBadge(AppThemeData theme) =>
+      GameCardBadges.deadlineBadge(
+        theme,
+        widget.game.deadlineDate,
+        borderRadius: GameCardBadges.chipBorderRadius(theme, kBadgeHeight),
+        showIcon: true,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        minHeight: kBadgeHeight,
+      );
+
   Widget _buildListCoverPane(
     AppThemeData theme, {
     required double cardImageWidth,
@@ -662,7 +644,6 @@ class _GameCardState extends ConsumerState<GameCard>
     required bool tagsEnabled,
     required bool tagsVisible,
     required bool showListSideChips,
-    required bool ratingLeftOfPlatform,
     required double cardImageWidth,
   }) {
     return Positioned.fill(
@@ -709,7 +690,6 @@ class _GameCardState extends ConsumerState<GameCard>
                       showPlatform: options.showPlatform,
                       showRatings: options.showRatingsNow,
                       padding: EdgeInsets.zero,
-                      ratingLeftOfPlatform: ratingLeftOfPlatform,
                     ),
                   ],
                 ],

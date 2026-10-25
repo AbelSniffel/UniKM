@@ -116,6 +116,9 @@ class AppearanceSection extends ConsumerWidget {
         ? otherTab
         : selectedTab;
     final visibleThemes = themesForTab(visibleTab);
+    // Edit and Delete act on the active custom theme, on the Custom tab only.
+    final canManageCurrent =
+        visibleTab == 1 && !builtInIds.contains(current.id);
 
     // Check which sections match search
     final showThemeSection =
@@ -157,7 +160,7 @@ class AppearanceSection extends ConsumerWidget {
               builtInThemes.any((t) => matchesSearch(t.name)) ||
               customThemes.any((t) => matchesSearch(t.name)),
           childBuilder: () {
-            final child = Column(
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 AppTabBar(
@@ -169,71 +172,68 @@ class AppearanceSection extends ConsumerWidget {
                       .setIndex(index),
                 ),
                 const SizedBox(height: 10),
-                AppTabTransition(
-                  index: visibleTab,
-                  child: visibleThemes.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Text(
-                            'No custom themes yet. Create one from your current colors.',
-                            style: TextStyle(color: theme.textSecondary),
+                // Only the panel animates its height, so the actions below
+                // move with the groupbox instead of jumping to their place.
+                _animatedPanelHeight(
+                  context,
+                  AppTabTransition(
+                    index: visibleTab,
+                    child: visibleThemes.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Text(
+                              'No custom themes yet. Create one from your current colors.',
+                              style: TextStyle(color: theme.textSecondary),
+                            ),
+                          )
+                        : PreviewCardWrap(
+                            spacing: kElementHSpacing,
+                            runSpacing: 10,
+                            children: [
+                              for (final themeData in visibleThemes)
+                                ThemePreviewCard(
+                                  key: ValueKey(themeData.id),
+                                  data: themeData,
+                                  theme: theme,
+                                  preview: builtInIds.contains(themeData.id)
+                                      ? themeData.copyWith(
+                                          navPanelOverlayStyle:
+                                              builtInOverlayStyle,
+                                        )
+                                      : themeData,
+                                  selected: current.id == themeData.id,
+                                  onDoubleTap: builtInIds.contains(themeData.id)
+                                      ? null
+                                      : () => _openThemeEditor(
+                                          context,
+                                          ref,
+                                          existing: themeData,
+                                        ),
+                                  onTap: () => ref
+                                      .read(themeProvider.notifier)
+                                      .setTheme(themeData),
+                                ),
+                            ],
                           ),
-                        )
-                      : PreviewCardWrap(
-                          spacing: kElementHSpacing,
-                          runSpacing: 10,
-                          children: [
-                            for (final themeData in visibleThemes)
-                              ThemePreviewCard(
-                                key: ValueKey(themeData.id),
-                                data: themeData,
-                                theme: theme,
-                                preview: builtInIds.contains(themeData.id)
-                                    ? themeData.copyWith(
-                                        navPanelOverlayStyle:
-                                            builtInOverlayStyle,
-                                      )
-                                    : themeData,
-                                selected: current.id == themeData.id,
-                                onDoubleTap: builtInIds.contains(themeData.id)
-                                    ? null
-                                    : () => _openThemeEditor(
-                                        context,
-                                        ref,
-                                        existing: themeData,
-                                      ),
-                                onTap: () => ref
-                                    .read(themeProvider.notifier)
-                                    .setTheme(themeData),
-                              ),
-                          ],
-                        ),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ThemePickerActions(
                   theme: theme,
                   onCreate: () => _openThemeEditor(context, ref),
-                  onEdit: builtInIds.contains(current.id)
-                      ? null
-                      : () => _openThemeEditor(context, ref, existing: current),
-                  onDelete: builtInIds.contains(current.id)
-                      ? null
-                      : () => deleteCustomThemeWithConfirmation(
+                  onEdit: canManageCurrent
+                      ? () => _openThemeEditor(context, ref, existing: current)
+                      : null,
+                  onDelete: canManageCurrent
+                      ? () => deleteCustomThemeWithConfirmation(
                           context,
                           ref,
                           current.id,
                           current.name,
-                        ),
+                        )
+                      : null,
                 ),
               ],
-            );
-            if (MediaQuery.disableAnimationsOf(context)) return child;
-            return AnimatedSize(
-              key: const ValueKey('appearance-theme-size'),
-              duration: kTabTransition,
-              curve: kTabTransitionCurve,
-              alignment: Alignment.topLeft,
-              child: child,
             );
           },
         ),
@@ -261,6 +261,17 @@ class AppearanceSection extends ConsumerWidget {
     );
   }
 }
+
+Widget _animatedPanelHeight(BuildContext context, Widget panel) =>
+    MediaQuery.disableAnimationsOf(context)
+    ? panel
+    : AnimatedSize(
+        key: const ValueKey('appearance-theme-size'),
+        duration: kTabTransition,
+        curve: kTabTransitionCurve,
+        alignment: Alignment.topLeft,
+        child: panel,
+      );
 
 void _openThemeEditor(
   BuildContext context,

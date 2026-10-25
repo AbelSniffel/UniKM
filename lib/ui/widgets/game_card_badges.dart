@@ -451,68 +451,36 @@ abstract final class GameCardBadges {
       horizontal: 5.0,
       vertical: 5.0,
     ),
-    bool ratingLeftOfPlatform = false,
   }) {
     final bool showRatingChip = showRatings && game.reviewCount > 0;
-    final bool hasPlatform = showPlatform;
+    if (!showRatingChip && !showPlatform) return const SizedBox.shrink();
 
-    if (!showRatingChip && !hasPlatform) return const SizedBox.shrink();
-
-    const double gap = 4.0;
-    final platformW = platformBadge(
-      theme,
-      game,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      minHeight: kPlatformBadgeHeight,
-    );
-
-    final topAlignedRating = _animatedRatingChip(
-      theme,
-      game,
-      isVisible: showRatingChip,
-      fromTop: true,
-      borderRadius: chipBorderRadius(theme, kBadgeHeight),
-      minHeight: kBadgeHeight,
-    );
-
-    final sideRating = _animatedRatingChip(
-      theme,
-      game,
-      isVisible: showRatingChip,
-      fromTop: false,
-      borderRadius: chipBorderRadius(theme, kPlatformBadgeHeight),
-      minHeight: kPlatformBadgeHeight,
-    );
-
-    final stackedRating = _animatedRatingChip(
-      theme,
-      game,
-      isVisible: showRatingChip,
-      fromTop: true,
-      borderRadius: chipBorderRadius(theme, 20.0),
-      topPadding: 4,
-    );
-
-    final Widget content;
-    if (!hasPlatform) {
-      content = topAlignedRating;
-    } else if (ratingLeftOfPlatform && showRatingChip) {
-      content = Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          sideRating,
-          const SizedBox(width: gap),
-          platformW,
-        ],
-      );
-    } else {
-      content = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [platformW, if (showRatingChip) stackedRating],
-      );
-    }
+    final Widget content = showPlatform
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              platformBadge(
+                theme,
+                game,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                minHeight: kPlatformBadgeHeight,
+              ),
+              if (showRatingChip)
+                _animatedRatingChip(
+                  theme,
+                  game,
+                  borderRadius: chipBorderRadius(theme, 20.0),
+                  topPadding: 4,
+                ),
+            ],
+          )
+        : _animatedRatingChip(
+            theme,
+            game,
+            borderRadius: chipBorderRadius(theme, kBadgeHeight),
+            minHeight: kBadgeHeight,
+          );
 
     return Padding(padding: padding, child: content);
   }
@@ -614,8 +582,6 @@ abstract final class GameCardBadges {
   static Widget _animatedRatingChip(
     AppThemeData theme,
     Game game, {
-    required bool isVisible,
-    required bool fromTop,
     required BorderRadius borderRadius,
     double? minHeight,
     double topPadding = 0,
@@ -636,9 +602,9 @@ abstract final class GameCardBadges {
     }
 
     return VisibilityReveal(
-      isVisible: isVisible,
-      axisAlignment: fromTop ? -1.0 : 1.0,
-      alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+      isVisible: true,
+      axisAlignment: -1.0,
+      alignment: Alignment.topCenter,
       child: rating,
     );
   }

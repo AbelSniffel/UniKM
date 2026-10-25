@@ -1,6 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../constants/app_constants.dart';
 import 'settings_model.dart';
 
 /// Reads legacy preferences, encodes values, and preserves library paths and
@@ -41,7 +40,8 @@ class SettingsStore {
     return {
       for (final entry in _defaults.entries)
         entry.key: _readPreference(entry.key, entry.value),
-      SettingsKeys.autoCheckIntervalMinutes: kDefaultAutoUpdateIntervalMinutes,
+      SettingsKeys.autoCheckIntervalMinutes:
+          DefaultSettings.autoCheckIntervalMinutes,
       // The current-theme alias falls back to the legacy active-theme key.
       SettingsKeys.currentTheme:
           _prefs.getString(SettingsKeys.currentTheme) ??
@@ -143,7 +143,7 @@ class SettingsStore {
     SettingsKeys.slimListView: DefaultSettings.slimListView,
     SettingsKeys.showPlatformBadges: true,
     SettingsKeys.showTagChips: true,
-    SettingsKeys.showRatings: true,
+    SettingsKeys.showRatings: DefaultSettings.showRatings,
     SettingsKeys.useThemeToggleRadius: DefaultSettings.useThemeToggleRadius,
     SettingsKeys.experimentalInteractionCards:
         DefaultSettings.experimentalInteractionCards,
@@ -223,14 +223,16 @@ class SettingsStore {
   /// Reset all settings to defaults
   ///
   /// Preserve the active database choice, recent databases, and custom themes.
+  /// Typed reads matter: platform stores return saved lists untyped, which
+  /// [save] would not write back.
   Future<Map<String, dynamic>> resetToDefaults() async {
-    final preserved = {
+    final preserved = <String, Object>{
+      SettingsKeys.databasePath: ?_prefs.getString(SettingsKeys.databasePath),
       for (final key in [
-        SettingsKeys.databasePath,
         SettingsKeys.customThemes,
         SettingsKeys.recentDatabasePaths,
       ])
-        if (_prefs.get(key) case final Object value) key: value,
+        key: ?_prefs.getStringList(key),
     };
     await _prefs.clear();
     for (final entry in {

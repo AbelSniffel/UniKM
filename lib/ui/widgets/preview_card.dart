@@ -74,6 +74,10 @@ class PreviewCard extends StatefulWidget {
     this.inlineLabel = false,
   });
 
+  /// Selection tint strength, lighter than game cards so the preview beneath
+  /// stays readable.
+  static const double selectionFillAlpha = 0.4;
+
   final String name;
   final AppThemeData theme;
   final bool isSelected;
@@ -204,7 +208,10 @@ class _PreviewCardState extends State<PreviewCard> {
                           : DecoratedBox(
                               key: const ValueKey('preview-selection-overlay'),
                               decoration: widget.theme
-                                  .selectionOverlayDecoration(t),
+                                  .selectionOverlayDecoration(
+                                    t,
+                                    fillAlpha: PreviewCard.selectionFillAlpha,
+                                  ),
                             ),
                     ),
                   ),

@@ -48,6 +48,121 @@ final _nullDefaults = {
     },
 };
 
+/// A legacy column whose values are copied into its current column: [pending]
+/// finds rows still to copy, and [update] selects the rows the copy writes.
+typedef _LegacyCopy = ({
+  String table,
+  String from,
+  String to,
+  String pending,
+  String update,
+});
+
+// Applied in this order around the timestamp steps, keeping reports stable.
+const _gameCopiesBeforeDates = <_LegacyCopy>[
+  (
+    table: 'games',
+    from: 'platform_type',
+    to: 'platform',
+    pending:
+        "platform_type IS NOT NULL AND platform_type != '' "
+        "AND (platform IS NULL OR platform = '')",
+    update:
+        "platform_type IS NOT NULL AND platform_type != '' "
+        "AND (platform IS NULL OR platform = '')",
+  ),
+  (
+    table: 'games',
+    from: 'image_path',
+    to: 'cover_image',
+    pending:
+        "image_path IS NOT NULL AND image_path != '' "
+        "AND (cover_image IS NULL OR cover_image = '')",
+    update:
+        "image_path IS NOT NULL AND image_path != '' "
+        "AND (cover_image IS NULL OR cover_image = '')",
+  ),
+  (
+    table: 'games',
+    from: 'deadline_enabled',
+    to: 'has_deadline',
+    pending:
+        'deadline_enabled IS NOT NULL '
+        'AND (has_deadline IS NULL OR has_deadline != deadline_enabled)',
+    update: 'deadline_enabled IS NOT NULL',
+  ),
+  (
+    table: 'games',
+    from: 'deadline_at',
+    to: 'deadline_date',
+    pending:
+        'deadline_at IS NOT NULL '
+        "AND (deadline_at != '' OR typeof(deadline_at) = 'integer') "
+        'AND (deadline_date IS NULL OR deadline_date = 0)',
+    update:
+        'deadline_at IS NOT NULL '
+        "AND (deadline_at != '' OR typeof(deadline_at) = 'integer') "
+        'AND deadline_date IS NULL',
+  ),
+];
+
+const _gameCopiesAfterDates = <_LegacyCopy>[
+  (
+    table: 'games',
+    from: 'dlc_enabled',
+    to: 'is_dlc',
+    pending:
+        'dlc_enabled IS NOT NULL '
+        'AND (is_dlc IS NULL OR is_dlc != dlc_enabled)',
+    update: 'dlc_enabled IS NOT NULL',
+  ),
+  (
+    table: 'games',
+    from: 'steam_review_score',
+    to: 'review_score',
+    pending:
+        'steam_review_score IS NOT NULL AND steam_review_score != 0 '
+        'AND (review_score IS NULL OR review_score = 0)',
+    update:
+        'steam_review_score IS NOT NULL '
+        'AND (review_score IS NULL OR review_score = 0)',
+  ),
+  (
+    table: 'games',
+    from: 'steam_review_count',
+    to: 'review_count',
+    pending:
+        'steam_review_count IS NOT NULL AND steam_review_count != 0 '
+        'AND (review_count IS NULL OR review_count = 0)',
+    update:
+        'steam_review_count IS NOT NULL '
+        'AND (review_count IS NULL OR review_count = 0)',
+  ),
+];
+
+const _tagCopies = <_LegacyCopy>[
+  (
+    table: 'tags',
+    from: 'is_builtin',
+    to: 'is_steam_tag',
+    pending:
+        'is_builtin IS NOT NULL '
+        'AND (is_steam_tag IS NULL OR is_steam_tag != is_builtin)',
+    update: 'is_builtin IS NOT NULL',
+  ),
+];
+
+bool _hasPendingCopy(
+  sqlite3.Database db,
+  _LegacyCopy copy,
+  Set<String> columns,
+) =>
+    columns.contains(copy.from) &&
+    columns.contains(copy.to) &&
+    db
+        .select('SELECT 1 FROM ${copy.table} WHERE ${copy.pending} LIMIT 1')
+        .isNotEmpty;
+
 Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
   String dbPath,
 ) async {
@@ -81,14 +196,10 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
       !tagColumns.containsAll(_layoutColumns['tags']!.keys);
 
     final hasPendingLegacyData =
-      _hasPendingPlatformMigration(db, gameColumns) ||
-      _hasPendingImageMigration(db, gameColumns) ||
-      _hasPendingDeadlineEnabledMigration(db, gameColumns) ||
-      _hasPendingDeadlineDateMigration(db, gameColumns) ||
-      _hasPendingDlcMigration(db, gameColumns) ||
-      _hasPendingReviewScoreMigration(db, gameColumns) ||
-      _hasPendingReviewCountMigration(db, gameColumns) ||
-      _hasPendingBuiltinTagMigration(db, tagColumns);
+      [..._gameCopiesBeforeDates, ..._gameCopiesAfterDates].any(
+        (copy) => _hasPendingCopy(db, copy, gameColumns),
+      ) ||
+      _tagCopies.any((copy) => _hasPendingCopy(db, copy, tagColumns));
 
     final needsNullSanitization = _nullDefaults.entries.any(
       (table) => table.value.keys.any(
@@ -149,44 +260,25 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         }
       }
 
-      final refreshedGameColumns = _getTableColumns(db, 'games');
-      final refreshedTagColumns = _getTableColumns(db, 'tags');
-
-      if (_hasPendingPlatformMigration(db, refreshedGameColumns)) {
-        db.execute(
-          "UPDATE games SET platform = platform_type "
-          "WHERE platform_type IS NOT NULL AND platform_type != '' "
-          "AND (platform IS NULL OR platform = '')",
-        );
-        actions.add('Migrated platform_type → platform');
+      final refreshedColumns = {
+        'games': _getTableColumns(db, 'games'),
+        'tags': _getTableColumns(db, 'tags'),
+      };
+      void copyLegacyColumns(List<_LegacyCopy> copies) {
+        for (final copy in copies) {
+          if (!_hasPendingCopy(db, copy, refreshedColumns[copy.table]!)) {
+            continue;
+          }
+          db.execute(
+            'UPDATE ${copy.table} SET ${copy.to} = ${copy.from} '
+            'WHERE ${copy.update}',
+          );
+          final table = copy.table == 'games' ? '' : '${copy.table}.';
+          actions.add('Migrated $table${copy.from} → ${copy.to}');
+        }
       }
 
-      if (_hasPendingImageMigration(db, refreshedGameColumns)) {
-        db.execute(
-          "UPDATE games SET cover_image = image_path "
-          "WHERE image_path IS NOT NULL AND image_path != '' "
-          "AND (cover_image IS NULL OR cover_image = '')",
-        );
-        actions.add('Migrated image_path → cover_image');
-      }
-
-      if (_hasPendingDeadlineEnabledMigration(db, refreshedGameColumns)) {
-        db.execute(
-          'UPDATE games SET has_deadline = deadline_enabled '
-          'WHERE deadline_enabled IS NOT NULL',
-        );
-        actions.add('Migrated deadline_enabled → has_deadline');
-      }
-
-      if (_hasPendingDeadlineDateMigration(db, refreshedGameColumns)) {
-        db.execute(
-          'UPDATE games SET deadline_date = deadline_at '
-          'WHERE deadline_at IS NOT NULL '
-          "AND (deadline_at != '' OR typeof(deadline_at) = 'integer') "
-          'AND deadline_date IS NULL',
-        );
-        actions.add('Migrated deadline_at → deadline_date');
-      }
+      copyLegacyColumns(_gameCopiesBeforeDates);
 
       if (_normalizeTextDateColumnToEpoch(
         db,
@@ -206,31 +298,7 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         actions.add('Normalized games.deadline_date text timestamps');
       }
 
-      if (_hasPendingDlcMigration(db, refreshedGameColumns)) {
-        db.execute(
-          'UPDATE games SET is_dlc = dlc_enabled '
-          'WHERE dlc_enabled IS NOT NULL',
-        );
-        actions.add('Migrated dlc_enabled → is_dlc');
-      }
-
-      if (_hasPendingReviewScoreMigration(db, refreshedGameColumns)) {
-        db.execute(
-          'UPDATE games SET review_score = steam_review_score '
-          'WHERE steam_review_score IS NOT NULL '
-          'AND (review_score IS NULL OR review_score = 0)',
-        );
-        actions.add('Migrated steam_review_score → review_score');
-      }
-
-      if (_hasPendingReviewCountMigration(db, refreshedGameColumns)) {
-        db.execute(
-          'UPDATE games SET review_count = steam_review_count '
-          'WHERE steam_review_count IS NOT NULL '
-          'AND (review_count IS NULL OR review_count = 0)',
-        );
-        actions.add('Migrated steam_review_count → review_count');
-      }
+      copyLegacyColumns(_gameCopiesAfterDates);
 
       if (_hasMissingOrZeroValues(db, 'games', 'updated_at')) {
         db.execute(
@@ -249,13 +317,7 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         actions.add('Normalized games.updated_at text timestamps');
       }
 
-      if (_hasPendingBuiltinTagMigration(db, refreshedTagColumns)) {
-        db.execute(
-          'UPDATE tags SET is_steam_tag = is_builtin '
-          'WHERE is_builtin IS NOT NULL',
-        );
-        actions.add('Migrated tags.is_builtin → is_steam_tag');
-      }
+      copyLegacyColumns(_tagCopies);
 
       db.execute('COMMIT');
       db.execute('PRAGMA foreign_keys = ON');
@@ -289,32 +351,32 @@ bool _tableExists(sqlite3.Database db, String table) {
   return result.isNotEmpty;
 }
 
+/// Whether [table] has [column] and a row matching [condition].
+bool _hasRowWhere(
+  sqlite3.Database db,
+  String table,
+  String column,
+  String condition,
+) {
+  if (!_getTableColumns(db, table).contains(column)) return false;
+  return db
+      .select('SELECT 1 FROM $table WHERE $condition LIMIT 1')
+      .isNotEmpty;
+}
+
 bool _hasTextTimestampValues(
   sqlite3.Database db,
   String table,
   String column,
-) {
-  final columns = _getTableColumns(db, table);
-  if (!columns.contains(column)) return false;
-  final result = db.select(
-    "SELECT 1 FROM $table WHERE typeof($column) = 'text' "
-    "AND trim(COALESCE($column, '')) != '' LIMIT 1",
-  );
-  return result.isNotEmpty;
-}
+) => _hasRowWhere(
+  db,
+  table,
+  column,
+  "typeof($column) = 'text' AND trim(COALESCE($column, '')) != ''",
+);
 
-bool _hasNullValues(
-  sqlite3.Database db,
-  String table,
-  String column,
-) {
-  final columns = _getTableColumns(db, table);
-  if (!columns.contains(column)) return false;
-  final result = db.select(
-    'SELECT 1 FROM $table WHERE $column IS NULL LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
+bool _hasNullValues(sqlite3.Database db, String table, String column) =>
+    _hasRowWhere(db, table, column, '$column IS NULL');
 
 bool _setDefaultForNulls(
   sqlite3.Database db,
@@ -333,14 +395,7 @@ bool _hasMissingOrZeroValues(
   sqlite3.Database db,
   String table,
   String column,
-) {
-  final columns = _getTableColumns(db, table);
-  if (!columns.contains(column)) return false;
-  final result = db.select(
-    'SELECT 1 FROM $table WHERE $column IS NULL OR $column = 0 LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
+) => _hasRowWhere(db, table, column, '$column IS NULL OR $column = 0');
 
 bool _normalizeTextDateColumnToEpoch(
   sqlite3.Database db,
@@ -392,121 +447,6 @@ int _countTextTimestampValues(
     "AND trim(COALESCE($column, '')) != ''",
   );
   return result.first['count'] as int? ?? 0;
-}
-
-bool _hasPendingPlatformMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('platform_type') || !gameColumns.contains('platform')) {
-    return false;
-  }
-  final result = db.select(
-    "SELECT 1 FROM games WHERE platform_type IS NOT NULL AND platform_type != '' "
-    "AND (platform IS NULL OR platform = '') LIMIT 1",
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingImageMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('image_path') || !gameColumns.contains('cover_image')) {
-    return false;
-  }
-  final result = db.select(
-    "SELECT 1 FROM games WHERE image_path IS NOT NULL AND image_path != '' "
-    "AND (cover_image IS NULL OR cover_image = '') LIMIT 1",
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingDeadlineEnabledMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('deadline_enabled') || !gameColumns.contains('has_deadline')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM games WHERE deadline_enabled IS NOT NULL '
-    'AND (has_deadline IS NULL OR has_deadline != deadline_enabled) LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingDeadlineDateMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('deadline_at') || !gameColumns.contains('deadline_date')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM games WHERE deadline_at IS NOT NULL '
-    "AND (deadline_at != '' OR typeof(deadline_at) = 'integer') "
-    'AND (deadline_date IS NULL OR deadline_date = 0) LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingDlcMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('dlc_enabled') || !gameColumns.contains('is_dlc')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM games WHERE dlc_enabled IS NOT NULL '
-    'AND (is_dlc IS NULL OR is_dlc != dlc_enabled) LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingReviewScoreMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('steam_review_score') || !gameColumns.contains('review_score')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM games WHERE steam_review_score IS NOT NULL '
-    'AND steam_review_score != 0 '
-    'AND (review_score IS NULL OR review_score = 0) LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingReviewCountMigration(
-  sqlite3.Database db,
-  Set<String> gameColumns,
-) {
-  if (!gameColumns.contains('steam_review_count') || !gameColumns.contains('review_count')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM games WHERE steam_review_count IS NOT NULL '
-    'AND steam_review_count != 0 '
-    'AND (review_count IS NULL OR review_count = 0) LIMIT 1',
-  );
-  return result.isNotEmpty;
-}
-
-bool _hasPendingBuiltinTagMigration(
-  sqlite3.Database db,
-  Set<String> tagColumns,
-) {
-  if (!tagColumns.contains('is_builtin') || !tagColumns.contains('is_steam_tag')) {
-    return false;
-  }
-  final result = db.select(
-    'SELECT 1 FROM tags WHERE is_builtin IS NOT NULL '
-    'AND (is_steam_tag IS NULL OR is_steam_tag != is_builtin) LIMIT 1',
-  );
-  return result.isNotEmpty;
 }
 
 Set<String> _getTableColumns(sqlite3.Database db, String table) {

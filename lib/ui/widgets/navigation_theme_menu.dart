@@ -135,13 +135,6 @@ class _ThemePicker extends ConsumerStatefulWidget {
 class _ThemePickerState extends ConsumerState<_ThemePicker> {
   final _scrollControllers = <int, ScrollController>{};
   final _scrollStorage = PageStorageBucket();
-  late int _selectedTab;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTab = ref.read(navigationThemeMenuTabProvider);
-  }
 
   @override
   void dispose() {
@@ -158,12 +151,15 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     final current = ref.watch(themeProvider);
     final builtInIds = ref.watch(builtInThemeIdsProvider);
     final builtInOverlay = ref.watch(navPanelOverlayStyleSettingProvider);
+    final selectedTab = ref.watch(navigationThemeMenuTabProvider);
     final custom = ref
         .read(themeProvider.notifier)
         .getAllThemes()
         .where((data) => !builtInIds.contains(data.id))
         .toList();
-    final themes = _selectedTab == 0 ? kBuiltInThemes : custom;
+    final themes = selectedTab == 0 ? kBuiltInThemes : custom;
+    final canManageCurrent =
+        selectedTab == 1 && !builtInIds.contains(current.id);
     final media = MediaQuery.of(context);
     final width = math.min(
       296.0,
@@ -204,10 +200,12 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     // Lay out the list at its destination size throughout the height animation.
     // Changing the viewport on each frame would clamp bottom-aligned scrolling.
     final viewportHeight = height - tabHeight - footerHeight - verticalSpacing;
+    // Tabs and grid at the destination height, above the footer row.
+    final panelHeight = height - footerHeight - 20 - 8;
     final contentHeight = rows * tileHeight + math.max(0, rows - 1) * 6 + 6;
     final activeIndex = themes.indexWhere((data) => data.id == current.id);
     final scrollController = _scrollControllers.putIfAbsent(
-      _selectedTab,
+      selectedTab,
       () => ScrollController(
         initialScrollOffset: activeIndex < 0
             ? 0
@@ -231,104 +229,122 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
             alignment: Alignment.topLeft,
             minWidth: width,
             maxWidth: width,
-            minHeight: height,
-            maxHeight: height,
             child: Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  AppTabBar(
-                    theme: theme,
-                    tabs: const [AppTab('Default'), AppTab('Custom')],
-                    selectedIndex: _selectedTab,
-                    onChanged: (index) {
-                      ref
-                          .read(navigationThemeMenuTabProvider.notifier)
-                          .setIndex(index);
-                      setState(() {
-                        _selectedTab = index;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 8),
+                  // The tabs and grid keep their destination layout while the
+                  // menu resizes; the footer below follows the animated edge.
                   Expanded(
-                    child: AppTabTransition(
-                      index: _selectedTab,
-                      child: themes.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No custom themes yet.\nCreate one from your current colors.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: theme.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            )
-                          : PageStorage(
-                              bucket: _scrollStorage,
-                              child: Scrollbar(
-                                controller: scrollController,
-                                child: GridView.builder(
-                                  key: PageStorageKey(
-                                    'navigation-theme-grid-$_selectedTab',
-                                  ),
-                                  controller: scrollController,
-                                  padding: const EdgeInsets.all(3),
-                                  gridDelegate:
-                                      SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: columns,
-                                        mainAxisExtent: tileHeight,
-                                        mainAxisSpacing: 6,
-                                        crossAxisSpacing: 6,
-                                      ),
-                                  itemCount: themes.length,
-                                  itemBuilder: (context, index) =>
-                                      ThemePreviewCard(
-                                        key: ValueKey(themes[index].id),
-                                        tapKey: ValueKey(
-                                          'navigation-theme-${themes[index].id}',
+                    child: ClipRect(
+                      clipper: const _BottomEdgeClipper(),
+                      child: OverflowBox(
+                        alignment: Alignment.topLeft,
+                        minHeight: panelHeight,
+                        maxHeight: panelHeight,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AppTabBar(
+                              theme: theme,
+                              tabs: const [AppTab('Default'), AppTab('Custom')],
+                              selectedIndex: selectedTab,
+                              onChanged: ref
+                                  .read(navigationThemeMenuTabProvider.notifier)
+                                  .setIndex,
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: AppTabTransition(
+                                index: selectedTab,
+                                child: themes.isEmpty
+                                    ? Center(
+                                        child: Text(
+                                          'No custom themes yet.\nCreate one from your current colors.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 13,
+                                          ),
                                         ),
-                                        height: null,
-                                        data: themes[index],
-                                        preview:
-                                            builtInIds.contains(
-                                              themes[index].id,
-                                            )
-                                            ? themes[index].copyWith(
-                                                navPanelOverlayStyle:
-                                                    builtInOverlay,
-                                              )
-                                            : themes[index],
-                                        selected:
-                                            themes[index].id == current.id,
-                                        theme: theme,
-                                        onTap: () =>
-                                            widget.onSelected(themes[index]),
-                                        onDoubleTap:
-                                            builtInIds.contains(
-                                              themes[index].id,
-                                            )
-                                            ? null
-                                            : () =>
-                                                  widget.onEdit(themes[index]),
+                                      )
+                                    : PageStorage(
+                                        bucket: _scrollStorage,
+                                        child: Scrollbar(
+                                          controller: scrollController,
+                                          child: GridView.builder(
+                                            key: PageStorageKey(
+                                              'navigation-theme-grid-$selectedTab',
+                                            ),
+                                            controller: scrollController,
+                                            padding: const EdgeInsets.all(3),
+                                            gridDelegate:
+                                                SliverGridDelegateWithFixedCrossAxisCount(
+                                                  crossAxisCount: columns,
+                                                  mainAxisExtent: tileHeight,
+                                                  mainAxisSpacing: 6,
+                                                  crossAxisSpacing: 6,
+                                                ),
+                                            itemCount: themes.length,
+                                            itemBuilder: (context, index) =>
+                                                ThemePreviewCard(
+                                                  key: ValueKey(
+                                                    themes[index].id,
+                                                  ),
+                                                  tapKey: ValueKey(
+                                                    'navigation-theme-${themes[index].id}',
+                                                  ),
+                                                  height: null,
+                                                  data: themes[index],
+                                                  preview:
+                                                      builtInIds.contains(
+                                                        themes[index].id,
+                                                      )
+                                                      ? themes[index].copyWith(
+                                                          navPanelOverlayStyle:
+                                                              builtInOverlay,
+                                                        )
+                                                      : themes[index],
+                                                  selected:
+                                                      themes[index].id ==
+                                                      current.id,
+                                                  theme: theme,
+                                                  onTap: () =>
+                                                      widget.onSelected(
+                                                        themes[index],
+                                                      ),
+                                                  onDoubleTap:
+                                                      builtInIds.contains(
+                                                        themes[index].id,
+                                                      )
+                                                      ? null
+                                                      : () => widget.onEdit(
+                                                          themes[index],
+                                                        ),
+                                                ),
+                                          ),
+                                        ),
                                       ),
-                                ),
                               ),
                             ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   ThemePickerActions(
                     theme: theme,
                     onCreate: widget.onCreate,
-                    onEdit: builtInIds.contains(current.id)
-                        ? null
-                        : () => widget.onEdit(current),
-                    onDelete: builtInIds.contains(current.id)
-                        ? null
-                        : () => widget.onDelete(current),
+                    // Edit and Delete act on the active custom theme, on the
+                    // Custom tab only.
+                    onEdit: canManageCurrent
+                        ? () => widget.onEdit(current)
+                        : null,
+                    onDelete: canManageCurrent
+                        ? () => widget.onDelete(current)
+                        : null,
                   ),
                 ],
               ),
@@ -338,4 +354,17 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
       ),
     );
   }
+}
+
+/// Clips only below the bottom edge, so the content's shadows still show at
+/// the sides and top while the footer covers what lies beneath.
+class _BottomEdgeClipper extends CustomClipper<Rect> {
+  const _BottomEdgeClipper();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(-size.width, -size.height, size.width * 2, size.height);
+
+  @override
+  bool shouldReclip(_BottomEdgeClipper oldClipper) => false;
 }

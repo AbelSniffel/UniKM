@@ -584,7 +584,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         ? nav_panel.kNavigationPanelCollapsedWidth
         : nav_panel.kNavigationPanelExpandedWidth;
     const navPanelHorizontalExtent = nav_panel.kNavigationPanelHorizontalExtent;
-    final sideNavWidth = navWidth;
 
     final updateIsActive = ref.watch(
       updateProvider.select((s) => s.isChecking || s.isDownloading),
@@ -687,63 +686,47 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       final isVertical =
           position == NavBarPosition.left || position == NavBarPosition.right;
       final panel = buildNavPanel(position);
-      final panelChild = isVertical
-          ? AnimatedContainer(
-              duration: navMotionAnimationDuration,
-              curve: kNavPanelMotionCurve,
-              width: sideNavWidth,
-              child: panel,
-            )
-          : panel;
-      final slotChild = panelChild;
-      const slotHorizontalExtent = navPanelHorizontalExtent;
+      final slot = _NavPositionSlot(
+        key: ValueKey('nav-slot-${position.name}'),
+        position: position,
+        isActive: navPosition == position && !hideNavForSelection,
+        child: isVertical
+            ? AnimatedContainer(
+                duration: navMotionAnimationDuration,
+                curve: kNavPanelMotionCurve,
+                width: navWidth,
+                child: panel,
+              )
+            : panel,
+      );
 
+      // Each slot spans the edge it is docked to.
       return switch (position) {
         NavBarPosition.left => Positioned(
           left: 0,
           top: 0,
           bottom: 0,
-          child: _NavPositionSlot(
-            key: const ValueKey('nav-slot-left'),
-            position: position,
-            isActive: navPosition == position && !hideNavForSelection,
-            child: slotChild,
-          ),
+          child: slot,
         ),
         NavBarPosition.right => Positioned(
           right: 0,
           top: 0,
           bottom: 0,
-          child: _NavPositionSlot(
-            key: const ValueKey('nav-slot-right'),
-            position: position,
-            isActive: navPosition == position && !hideNavForSelection,
-            child: slotChild,
-          ),
+          child: slot,
         ),
         NavBarPosition.top => Positioned(
           left: 0,
           top: 0,
           right: 0,
-          height: slotHorizontalExtent,
-          child: _NavPositionSlot(
-            key: const ValueKey('nav-slot-top'),
-            position: position,
-            isActive: navPosition == position && !hideNavForSelection,
-            child: slotChild,
-          ),
+          height: navPanelHorizontalExtent,
+          child: slot,
         ),
         NavBarPosition.bottom => Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          height: slotHorizontalExtent,
-          child: _NavPositionSlot(
-            key: const ValueKey('nav-slot-bottom'),
-            position: position,
-            isActive: navPosition == position && !hideNavForSelection,
-            child: slotChild,
-          ),
+          height: navPanelHorizontalExtent,
+          child: slot,
         ),
       };
     }

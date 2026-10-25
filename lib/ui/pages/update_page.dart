@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/format_utils.dart';
 import '../../core/services/update_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
@@ -116,12 +117,6 @@ enum UpdatePreviewState {
   error,
 }
 
-String _formatBytesHuman(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-}
-
 String _formatMegabytes(int bytes) =>
     '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
@@ -169,14 +164,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   UpdateState build() {
     // Use ref.read so that writing to settings (e.g. skippedVersions) does not
     // retrigger build() and reset all accumulated state back to UpdateState().
-    final updatesSettings = ref.read(updatesSettingsProvider);
-    final customRepo = updatesSettings.updateRepo;
-    final githubToken = updatesSettings.githubApiToken;
-
-    _updateService = UpdateService(
-      customRepo: customRepo.isNotEmpty ? customRepo : null,
-      githubToken: githubToken.isNotEmpty ? githubToken : null,
-    );
+    _updateService = _serviceFor(ref.read(updatesSettingsProvider));
 
     // Load cached releases immediately so the changelog shows without a network hit.
     Future.microtask(_loadCachedReleases);
@@ -185,11 +173,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     ref.listen(currentNavProvider, (prev, next) {
       if (next == NavItem.updates) {
         // User arrived on the updates page — dismiss off-page notifications.
-        _updateNotificationHandle?.dismiss();
-        _updateNotificationHandle = null;
-        _downloadNotificationHandle?.dismiss();
-        _downloadNotificationHandle = null;
-        ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        _clearOffPageNotifications();
       } else if (prev == NavItem.updates) {
         // User navigated away from the updates page.
         if (state.isDownloading) {
@@ -205,6 +189,26 @@ class UpdateNotifier extends Notifier<UpdateState> {
     });
 
     return const UpdateState();
+  }
+
+  static UpdateService _serviceFor(UpdatesSettings settings) => UpdateService(
+    customRepo: settings.updateRepo.isNotEmpty ? settings.updateRepo : null,
+    githubToken: settings.githubApiToken.isNotEmpty
+        ? settings.githubApiToken
+        : null,
+  );
+
+  /// Dismisses the off-page notifications and clears the Updates badge.
+  void _clearOffPageNotifications({bool update = true, bool download = true}) {
+    if (update) {
+      _updateNotificationHandle?.dismiss();
+      _updateNotificationHandle = null;
+    }
+    if (download) {
+      _downloadNotificationHandle?.dismiss();
+      _downloadNotificationHandle = null;
+    }
+    ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
   }
 
   Future<void> _loadCachedReleases() async {
@@ -281,11 +285,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   void previewState(UpdatePreviewState preview) {
     if (!kDebugMode) return;
 
-    _updateNotificationHandle?.dismiss();
-    _updateNotificationHandle = null;
-    _downloadNotificationHandle?.dismiss();
-    _downloadNotificationHandle = null;
-    ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+    _clearOffPageNotifications();
 
     final cachedReleases = state.allReleases;
     _currentRelease = null;
@@ -355,14 +355,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
     try {
       final updatesSettings = ref.read(updatesSettingsProvider);
-      _updateService = UpdateService(
-        customRepo: updatesSettings.updateRepo.isNotEmpty
-            ? updatesSettings.updateRepo
-            : null,
-        githubToken: updatesSettings.githubApiToken.isNotEmpty
-            ? updatesSettings.githubApiToken
-            : null,
-      );
+      _updateService = _serviceFor(updatesSettings);
       final currentVersion = kAppVersion;
 
       // Run update check and full release list fetch in parallel.
@@ -481,9 +474,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     _currentRelease = release;
 
     if (isOnUpdatesPage) {
-      _downloadNotificationHandle?.dismiss();
-      _downloadNotificationHandle = null;
-      ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+      _clearOffPageNotifications(update: false);
     } else {
       _showOrUpdateDownloadNotification(
         downloadedBytes: 0,
@@ -513,9 +504,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       );
 
       if (downloadResult.openedExternally) {
-        _downloadNotificationHandle?.dismiss();
-        _downloadNotificationHandle = null;
-        ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        _clearOffPageNotifications(update: false);
         state = state.copyWith(isDownloading: false, switchingToVersion: null);
         NotificationManager.instance.info(
           switchingToVersion == null
@@ -539,9 +528,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       if (ref.read(currentNavProvider) != NavItem.updates) {
         _showDownloadReadyNotification();
       } else {
-        _downloadNotificationHandle?.dismiss();
-        _downloadNotificationHandle = null;
-        ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+        _clearOffPageNotifications(update: false);
         NotificationManager.instance.success(completionMessage);
       }
     } on DownloadCancelledException {
@@ -605,9 +592,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         hasChecked: false,
         release: null,
       );
-      _updateNotificationHandle?.dismiss();
-      _updateNotificationHandle = null;
-      ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+      _clearOffPageNotifications(download: false);
       NotificationManager.instance.info('Version $version skipped');
     }
   }
@@ -652,9 +637,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   /// Cancel any in-progress download and reset download state.
   void cancelDownload() {
     _updateService.cancelActiveDownload();
-    _downloadNotificationHandle?.dismiss();
-    _downloadNotificationHandle = null;
-    ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
+    _clearOffPageNotifications(update: false);
     state = state.copyWith(
       isDownloading: false,
       downloadProgress: 0,
@@ -667,12 +650,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Clear any update state.
   void clearUpdate() {
-    _updateNotificationHandle?.dismiss();
-    _updateNotificationHandle = null;
-    _downloadNotificationHandle?.dismiss();
-    _downloadNotificationHandle = null;
+    _clearOffPageNotifications();
     _currentRelease = null;
-    ref.read(pageNotificationsProvider.notifier).remove(NavItem.updates);
     state = UpdateState(allReleases: state.allReleases);
     NotificationManager.instance.info('Update cleared');
   }
@@ -1143,7 +1122,7 @@ class _UpdateStatusPanel extends ConsumerWidget {
             FooterWrap(
               leading: Text(
                 state.totalBytes > 0
-                    ? '${_formatBytesHuman(state.downloadedBytes)} / ${_formatBytesHuman(state.totalBytes)}'
+                    ? '${formatFileSize(state.downloadedBytes)} / ${formatFileSize(state.totalBytes)}'
                     : 'Preparing download…',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: theme.textSecondary, fontSize: 12),

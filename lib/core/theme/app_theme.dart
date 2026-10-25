@@ -285,9 +285,12 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   double get inputBorderWrapFocus => cornerRadius * 0.62;
 
   /// Selected-card overlay shared by game cards and preview cards: a
-  /// secondary tint inside an accent border, faded in by [t].
-  BoxDecoration selectionOverlayDecoration(double t) => BoxDecoration(
-    color: secondary.withValues(alpha: 0.55 * t),
+  /// secondary tint of [fillAlpha] inside an accent border, faded in by [t].
+  BoxDecoration selectionOverlayDecoration(
+    double t, {
+    double fillAlpha = 0.55,
+  }) => BoxDecoration(
+    color: secondary.withValues(alpha: fillAlpha * t),
     border: Border.all(color: accent.withValues(alpha: t), width: 3),
     borderRadius: BorderRadius.circular(cornerRadius),
   );
@@ -299,7 +302,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   Color get scrollbarHover => accentHover;
 
   /// Scrollbar track color.
-  Color get scrollbarTrack => accent.withValues(alpha: isDark ? 0.05 : 0.05);
+  Color get scrollbarTrack => accent.withValues(alpha: 0.05);
 
   /// Scrollbar track hover color.
   Color get scrollbarTrackHover =>
@@ -778,63 +781,43 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     );
   }
 
-  @override
-  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
-    if (a is BottomGlowInputBorder) {
-      return BottomGlowInputBorder(
-        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
-        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
-        gapPadding: lerpDouble(a.gapPadding, gapPadding, t)!,
-        glowColor: Color.lerp(a.glowColor, glowColor, t)!,
-        glowExtent: lerpDouble(a.glowExtent, glowExtent, t)!,
-        wrapExtent: lerpDouble(a.wrapExtent, wrapExtent, t)!,
-        showTopBorder: t < 0.5 ? a.showTopBorder : showTopBorder,
-        connection: lerpDouble(a.connection, connection, t)!,
-      );
-    }
-    if (a is OutlineInputBorder) {
-      return BottomGlowInputBorder(
-        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
-        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
-        gapPadding: lerpDouble(a.gapPadding, gapPadding, t)!,
-        glowColor: Color.lerp(Colors.transparent, glowColor, t)!,
-        glowExtent: lerpDouble(0.0, glowExtent, t)!,
-        wrapExtent: lerpDouble(0.0, wrapExtent, t)!,
-        showTopBorder: showTopBorder,
-        connection: lerpDouble(0.0, connection, t)!,
-      );
-    }
-    return super.lerpFrom(a, t);
-  }
+  /// A plain outline border as a glow border with no glow, so both lerp
+  /// directions share one interpolation.
+  BottomGlowInputBorder _asGlowBorder(OutlineInputBorder border) =>
+      border is BottomGlowInputBorder
+      ? border
+      : BottomGlowInputBorder(
+          borderSide: border.borderSide,
+          borderRadius: border.borderRadius,
+          gapPadding: border.gapPadding,
+          glowColor: Colors.transparent,
+          showTopBorder: showTopBorder,
+        );
+
+  static BottomGlowInputBorder _lerp(
+    BottomGlowInputBorder a,
+    BottomGlowInputBorder b,
+    double t,
+  ) => BottomGlowInputBorder(
+    borderSide: BorderSide.lerp(a.borderSide, b.borderSide, t),
+    borderRadius: BorderRadius.lerp(a.borderRadius, b.borderRadius, t)!,
+    gapPadding: lerpDouble(a.gapPadding, b.gapPadding, t)!,
+    glowColor: Color.lerp(a.glowColor, b.glowColor, t)!,
+    glowExtent: lerpDouble(a.glowExtent, b.glowExtent, t)!,
+    wrapExtent: lerpDouble(a.wrapExtent, b.wrapExtent, t)!,
+    showTopBorder: t < 0.5 ? a.showTopBorder : b.showTopBorder,
+    connection: lerpDouble(a.connection, b.connection, t)!,
+  );
 
   @override
-  ShapeBorder? lerpTo(ShapeBorder? b, double t) {
-    if (b is BottomGlowInputBorder) {
-      return BottomGlowInputBorder(
-        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
-        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
-        gapPadding: lerpDouble(gapPadding, b.gapPadding, t)!,
-        glowColor: Color.lerp(glowColor, b.glowColor, t)!,
-        glowExtent: lerpDouble(glowExtent, b.glowExtent, t)!,
-        wrapExtent: lerpDouble(wrapExtent, b.wrapExtent, t)!,
-        showTopBorder: t < 0.5 ? showTopBorder : b.showTopBorder,
-        connection: lerpDouble(connection, b.connection, t)!,
-      );
-    }
-    if (b is OutlineInputBorder) {
-      return BottomGlowInputBorder(
-        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
-        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
-        gapPadding: lerpDouble(gapPadding, b.gapPadding, t)!,
-        glowColor: Color.lerp(glowColor, Colors.transparent, t)!,
-        glowExtent: lerpDouble(glowExtent, 0.0, t)!,
-        wrapExtent: lerpDouble(wrapExtent, 0.0, t)!,
-        showTopBorder: showTopBorder,
-        connection: lerpDouble(connection, 0.0, t)!,
-      );
-    }
-    return super.lerpTo(b, t);
-  }
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) => a is OutlineInputBorder
+      ? _lerp(_asGlowBorder(a), this, t)
+      : super.lerpFrom(a, t);
+
+  @override
+  ShapeBorder? lerpTo(ShapeBorder? b, double t) => b is OutlineInputBorder
+      ? _lerp(this, _asGlowBorder(b), t)
+      : super.lerpTo(b, t);
 
   @override
   void paint(
@@ -1439,7 +1422,7 @@ const kDarkTheme = AppThemeData(
   baseBackground: Color(0xFF000000),
   baseSecondary: Color(0xFF965EED),
   baseAccent: Color(0xFFFF8964),
-  iconData: Icons.dark_mode, // Icons.dark_mode
+  iconData: Icons.dark_mode,
 );
 
 /// Light theme
@@ -1449,7 +1432,7 @@ const kLightTheme = AppThemeData(
   baseBackground: Color(0xFFF5F5F5),
   baseSecondary: Color(0xFF6797FF),
   baseAccent: Color(0xFF8B5CF6),
-  iconData: Icons.light_mode, // Icons.light_mode
+  iconData: Icons.light_mode,
 );
 
 /// Nebula theme (purple)
@@ -1459,42 +1442,27 @@ const kNebulaTheme = AppThemeData(
   baseBackground: Color(0xFF0E0E29),
   baseSecondary: Color(0xFF7B61FF),
   baseAccent: Color(0xFF3BF2FF),
-  iconData: Icons.auto_awesome, // Icons.auto_awesome
+  iconData: Icons.auto_awesome,
 );
 
 /// Sunset theme (orange/warm)
 const kSunsetTheme = AppThemeData(
   id: 'builtin-sunset',
   name: 'Sunset',
-  baseBackground: Color.fromARGB(
-    255,
-    64,
-    28,
-    39,
-  ), // convert this value 401C27 to ARGB
-  baseSecondary: Color.fromARGB(
-    255,
-    184,
-    55,
-    20,
-  ), // convert this value B83714 to ARGB
-  baseAccent: Color.fromARGB(
-    255,
-    244,
-    164,
-    97,
-  ), // convert this value F4A461 to ARGB
-  iconData: Icons.wb_twilight, // Icons.wb_twilight
+  baseBackground: Color(0xFF401C27),
+  baseSecondary: Color(0xFFB83714),
+  baseAccent: Color(0xFFF4A461),
+  iconData: Icons.wb_twilight,
 );
 
 /// Ocean theme (teal/blue)
 const kOceanTheme = AppThemeData(
   id: 'builtin-ocean',
   name: 'Ocean',
-  baseBackground: Color(0xFF00203C), // 00203C
-  baseSecondary: Color(0xFF0891FF), // 0891FF
-  baseAccent: Color(0xFF15FFF0), // 15FFF0
-  iconData: Icons.water, // Icons.water
+  baseBackground: Color(0xFF00203C),
+  baseSecondary: Color(0xFF0891FF),
+  baseAccent: Color(0xFF15FFF0),
+  iconData: Icons.water,
 );
 
 /// Forest theme (green)
@@ -1502,9 +1470,9 @@ const kForestTheme = AppThemeData(
   id: 'builtin-forest',
   name: 'Forest',
   baseBackground: Color(0xFF0D1F12),
-  baseSecondary: Color.fromARGB(255, 31, 179, 50),
+  baseSecondary: Color(0xFF1FB332),
   baseAccent: Color(0xFF4ADE80),
-  iconData: Icons.forest, // Icons.forest
+  iconData: Icons.forest,
 );
 
 /// Royal theme (deep blue / violet)
@@ -1514,7 +1482,7 @@ const kRoyalTheme = AppThemeData(
   baseBackground: Color(0xFF111827),
   baseSecondary: Color(0xFF14B8A6),
   baseAccent: Color(0xFFF4CBA7),
-  iconData: Icons.diamond, // Icons.diamond
+  iconData: Icons.diamond,
 );
 
 /// All built-in themes

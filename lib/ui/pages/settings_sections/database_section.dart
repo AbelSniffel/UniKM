@@ -195,6 +195,7 @@ class DatabaseHeaderActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
+    final switching = ref.watch(databaseSwitchingProvider);
     final buttons = <Widget>[
       SettingsHeaderAction(
         theme: theme,
@@ -212,9 +213,15 @@ class DatabaseHeaderActions extends ConsumerWidget {
         theme: theme,
         icon: Icons.note_add,
         tooltip: 'New DB',
-        onTap: ref.watch(databaseSwitchingProvider)
+        onTap: switching ? null : () => _createDatabase(context, ref),
+      ),
+      SettingsHeaderAction(
+        theme: theme,
+        icon: Icons.swap_horiz,
+        tooltip: 'Change DB',
+        onTap: switching
             ? null
-            : () => _createDatabase(context, ref),
+            : () => showChangeDatabaseDialog(context, theme),
       ),
     ];
     return SettingsHeaderActions(
@@ -692,7 +699,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         mainAxisSize: MainAxisSize.min,
         spacing: kElementHSpacing,
         children: [
-          _DatabaseEncryptionButton(theme: widget.theme),
           IconButton(
             tooltip: 'Backup Manager',
             style: widget.theme.compactIconButtonStyle,
@@ -738,15 +744,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                     height: 20,
                     child: AppCircularProgressIndicator(),
                   ),
-                IconButton(
-                  tooltip: 'Change DB',
-                  style: widget.theme.compactIconButtonStyle,
-                  icon: const Icon(Icons.swap_horiz, size: 26),
-                  color: widget.theme.accent,
-                  onPressed: databaseSwitching
-                      ? null
-                      : () => showChangeDatabaseDialog(context, widget.theme),
-                ),
+                _DatabaseEncryptionButton(theme: widget.theme),
               ],
             ),
           ),

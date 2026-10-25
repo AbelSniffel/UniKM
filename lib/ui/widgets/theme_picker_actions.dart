@@ -2,9 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Shared footer for the navigation picker and the Appearance theme group.
+/// Edit and Delete slide in and out beside Create as callers enable them.
 class ThemePickerActions extends StatelessWidget {
   const ThemePickerActions({
     super.key,
@@ -35,6 +37,36 @@ class ThemePickerActions extends StatelessWidget {
       visualDensity: VisualDensity.standard,
       shape: shape,
     );
+    final manage = onEdit == null && onDelete == null
+        ? const SizedBox.shrink(key: ValueKey('theme-manage-hidden'))
+        : Row(
+            key: const ValueKey('theme-manage'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onEdit != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Edit current theme',
+                  child: ElevatedButton(
+                    onPressed: onEdit,
+                    style: iconStyle,
+                    child: const Icon(Icons.edit_outlined, size: 18),
+                  ),
+                ),
+              ],
+              if (onDelete != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Delete current theme',
+                  child: ElevatedButton(
+                    onPressed: onDelete,
+                    style: iconStyle,
+                    child: const Icon(Icons.delete_outline, size: 18),
+                  ),
+                ),
+              ],
+            ],
+          );
     return Row(
       children: [
         Expanded(
@@ -61,28 +93,21 @@ class ThemePickerActions extends StatelessWidget {
             ),
           ),
         ),
-        if (onEdit != null) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: 'Edit current theme',
-            child: ElevatedButton(
-              onPressed: onEdit,
-              style: iconStyle,
-              child: const Icon(Icons.edit_outlined, size: 18),
-            ),
+        // Timed with the tab slide, so the buttons arrive with their tab.
+        AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : kTabTransition,
+          switchInCurve: kTabTransitionCurve,
+          switchOutCurve: kTabTransitionCurve.flipped,
+          transitionBuilder: (child, animation) => SizeTransition(
+            sizeFactor: animation,
+            axis: Axis.horizontal,
+            alignment: AlignmentDirectional.centerStart,
+            child: FadeTransition(opacity: animation, child: child),
           ),
-        ],
-        if (onDelete != null) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: 'Delete current theme',
-            child: ElevatedButton(
-              onPressed: onDelete,
-              style: iconStyle,
-              child: const Icon(Icons.delete_outline, size: 18),
-            ),
-          ),
-        ],
+          child: manage,
+        ),
       ],
     );
   }

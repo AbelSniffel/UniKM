@@ -38,10 +38,4 @@ class AppShortcuts {
     // Copy selected games: Ctrl + C
     const SingleActivator(LogicalKeyboardKey.keyC, control: true): const CopySelectionIntent(),
   };
-
-  /// Combined defaults (legacy support if needed)
-  static final Map<ShortcutActivator, Intent> defaults = {
-    ...global,
-    ...gameList,
-  };
 }
