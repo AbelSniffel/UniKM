@@ -647,9 +647,7 @@ class AppDatabase extends _$AppDatabase {
   Future<int> bumpLocalSyncRevision() async {
     final current = await getLocalSyncRevision();
     var next = DateTime.now().microsecondsSinceEpoch;
-    if (next <= current) {
-      next = current + 1;
-    }
+    if (next <= current) next = current + 1;
     await _writeSyncMetadataValue(
       _syncMetadataLocalRevisionKey,
       next.toString(),
@@ -703,9 +701,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> recordGameUpsert(int gameId, {int? localRevision}) async {
     if (gameId <= 0) return;
 
-    if (localRevision == null) {
-      await bumpLocalSyncRevision();
-    }
+    if (localRevision == null) await bumpLocalSyncRevision();
     await clearGameTombstone(gameId);
   }
 
@@ -830,9 +826,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get a single game by ID
-  Future<GameEntry?> getGameById(int id) {
-    return (select(games)..where((g) => g.id.equals(id))).getSingleOrNull();
-  }
+  Future<GameEntry?> getGameById(int id) =>
+      (select(games)..where((g) => g.id.equals(id))).getSingleOrNull();
 
   /// Get a game's id by key.
   Future<int?> getGameIdByKey(String key) async {
@@ -860,33 +855,27 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Insert a new game
-  Future<int> insertGame(GamesCompanion game) {
-    return transaction(() async {
-      final id = await into(games).insert(gameInsertWithDefaults(game));
-      final revision = await markLocalDataChanged();
-      await recordGameUpsert(id, localRevision: revision);
-      return id;
-    });
-  }
+  Future<int> insertGame(GamesCompanion game) => transaction(() async {
+    final id = await into(games).insert(gameInsertWithDefaults(game));
+    final revision = await markLocalDataChanged();
+    await recordGameUpsert(id, localRevision: revision);
+    return id;
+  });
 
   /// Insert multiple games in a batch
-  Future<void> insertGames(List<GamesCompanion> gamesList) {
-    return batch((b) {
-      b.insertAll(games, gamesList.map(gameInsertWithDefaults).toList());
-    });
-  }
+  Future<void> insertGames(List<GamesCompanion> gamesList) => batch((b) {
+    b.insertAll(games, gamesList.map(gameInsertWithDefaults).toList());
+  });
 
   /// Update a game
-  Future<bool> updateGame(GameEntry game) {
-    return transaction(() async {
-      final changed = await update(games).replace(game);
-      if (changed) {
-        final revision = await markLocalDataChanged();
-        await recordGameUpsert(game.id, localRevision: revision);
-      }
-      return changed;
-    });
-  }
+  Future<bool> updateGame(GameEntry game) => transaction(() async {
+    final changed = await update(games).replace(game);
+    if (changed) {
+      final revision = await markLocalDataChanged();
+      await recordGameUpsert(game.id, localRevision: revision);
+    }
+    return changed;
+  });
 
   /// Update specific fields of a game
   Future<int> updateGameFields(
@@ -907,9 +896,7 @@ class AppDatabase extends _$AppDatabase {
     DateTime? updatedAt,
   }) async {
     final existing = await getGameById(id);
-    if (existing == null) {
-      return 0;
-    }
+    if (existing == null) return 0;
 
     final updated = existing.copyWith(
       title: title ?? existing.title,
@@ -1009,13 +996,12 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<TagEntry>> watchAllTags() => select(tags).watch();
 
   /// Get tag by name (case-insensitive)
-  Future<TagEntry?> getTagByName(String name) {
-    return (select(tags)
-          ..where((t) => t.name.lower().equals(name.toLowerCase()))
-          ..orderBy([(t) => OrderingTerm.asc(t.id)])
-          ..limit(1))
-        .getSingleOrNull();
-  }
+  Future<TagEntry?> getTagByName(String name) =>
+      (select(tags)
+            ..where((t) => t.name.lower().equals(name.toLowerCase()))
+            ..orderBy([(t) => OrderingTerm.asc(t.id)])
+            ..limit(1))
+          .getSingleOrNull();
 
   /// Get or create tag by name
   Future<TagEntry> getOrCreateTag(
@@ -1053,25 +1039,19 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Insert a new tag
-  Future<int> insertTag(TagsCompanion tag) {
-    return into(tags).insert(tag);
-  }
+  Future<int> insertTag(TagsCompanion tag) => into(tags).insert(tag);
 
   /// Update a tag
-  Future<bool> updateTag(TagEntry tag) {
-    return update(tags).replace(tag);
-  }
+  Future<bool> updateTag(TagEntry tag) => update(tags).replace(tag);
 
   /// Delete a tag by ID
-  Future<int> deleteTag(int id) {
-    return (delete(tags)..where((t) => t.id.equals(id))).go();
-  }
+  Future<int> deleteTag(int id) =>
+      (delete(tags)..where((t) => t.id.equals(id))).go();
 
   /// Delete all custom tags in one statement. Foreign keys remove their game
   /// relationships atomically; Steam tags and their relationships are retained.
-  Future<int> deleteAllCustomTags() {
-    return (delete(tags)..where((t) => t.isSteamTag.equals(false))).go();
-  }
+  Future<int> deleteAllCustomTags() =>
+      (delete(tags)..where((t) => t.isSteamTag.equals(false))).go();
 
   /// Delete unused tags (tags not associated with any game)
   Future<int> deleteUnusedTags() async {
@@ -1176,12 +1156,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Add a tag to a game
-  Future<void> addTagToGame(int gameId, int tagId) {
-    return into(gameTags).insert(
-      GameTagsCompanion.insert(gameId: gameId, tagId: tagId),
-      mode: InsertMode.insertOrIgnore,
-    );
-  }
+  Future<void> addTagToGame(int gameId, int tagId) => into(gameTags).insert(
+    GameTagsCompanion.insert(gameId: gameId, tagId: tagId),
+    mode: InsertMode.insertOrIgnore,
+  );
 
   /// Set tags for a game (replaces existing tags)
   Future<void> setTagsForGame(
@@ -1228,9 +1206,7 @@ class AppDatabase extends _$AppDatabase {
 
     final missingSpecs = <({String name, String color, bool isSteamTag})>[];
     for (final entry in specsByNameLower.entries) {
-      if (!result.containsKey(entry.key)) {
-        missingSpecs.add(entry.value);
-      }
+      if (!result.containsKey(entry.key)) missingSpecs.add(entry.value);
     }
 
     if (missingSpecs.isNotEmpty) {
@@ -1308,16 +1284,12 @@ class AppDatabase extends _$AppDatabase {
   // ===========================================================================
 
   /// Get all backups
-  Future<List<BackupEntry>> getAllBackups() {
-    return (select(
-      backups,
-    )..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
-  }
+  Future<List<BackupEntry>> getAllBackups() =>
+      (select(backups)..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
 
   /// Insert a backup record
-  Future<int> insertBackup(BackupsCompanion backup) {
-    return into(backups).insert(backup);
-  }
+  Future<int> insertBackup(BackupsCompanion backup) =>
+      into(backups).insert(backup);
 
   // ===========================================================================
   // UTILITY METHODS
@@ -1327,9 +1299,7 @@ class AppDatabase extends _$AppDatabase {
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationDocumentsDirectory();
     final uniKMDir = Directory(p.join(dir.path, 'UniKM'));
-    if (!await uniKMDir.exists()) {
-      await uniKMDir.create(recursive: true);
-    }
+    if (!await uniKMDir.exists()) await uniKMDir.create(recursive: true);
     return p.join(uniKMDir.path, kDatabaseName);
   }
 
@@ -1340,9 +1310,7 @@ class AppDatabase extends _$AppDatabase {
     final dir = Directory(
       p.join(p.dirname(await getDatabasePath()), 'images', 'steam'),
     );
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
+    if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
 
@@ -1371,9 +1339,7 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Open the database connection
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final file = await AppDatabase.getDatabaseFile();
-    return NativeDatabase.createInBackground(file);
-  });
-}
+LazyDatabase _openConnection() => LazyDatabase(() async {
+  final file = await AppDatabase.getDatabaseFile();
+  return NativeDatabase.createInBackground(file);
+});

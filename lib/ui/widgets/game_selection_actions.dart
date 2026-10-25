@@ -43,9 +43,7 @@ abstract final class GameSelectionActions {
     required List<Game> targets,
     Game? initialGame,
   }) {
-    if (_syncOperationLocked(ref, action: 'edit games')) {
-      return;
-    }
+    if (_syncOperationLocked(ref, action: 'edit games')) return;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.info(
         'Please wait for the Steam fetch to complete before opening Game Editor',
@@ -156,9 +154,7 @@ abstract final class GameSelectionActions {
     List<Game> targets,
     bool nextValue,
   ) async {
-    if (_syncOperationLocked(ref, action: 'edit games')) {
-      return;
-    }
+    if (_syncOperationLocked(ref, action: 'edit games')) return;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.warning(
         'Cannot edit games while Steam data fetch is in progress',
@@ -196,9 +192,7 @@ abstract final class GameSelectionActions {
     AppThemeData theme,
     List<Game> targets,
   ) async {
-    if (_syncOperationLocked(ref, action: 'delete games')) {
-      return;
-    }
+    if (_syncOperationLocked(ref, action: 'delete games')) return;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.warning(
         'Cannot delete games while Steam data fetch is in progress',

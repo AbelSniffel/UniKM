@@ -60,14 +60,11 @@ class SyncFirewall {
   static const String _legacyUdpRuleName = 'UniKM Device Sync (UDP Discovery)';
   static const String _legacyTcpRuleName = 'UniKM Device Sync (TCP Transfer)';
 
-  String _normalizeWindowsPath(String value) {
-    return p.normalize(value).replaceAll('/', r'\').toLowerCase().trim();
-  }
+  String _normalizeWindowsPath(String value) =>
+      p.normalize(value).replaceAll('/', r'\').toLowerCase().trim();
 
   Future<WindowsFirewallCheckResult?> checkWindowsFirewallAccess() async {
-    if (kIsWeb || !Platform.isWindows) {
-      return null;
-    }
+    if (kIsWeb || !Platform.isWindows) return null;
 
     final executablePath = _normalizeWindowsPath(Platform.resolvedExecutable);
     try {
@@ -120,9 +117,7 @@ class SyncFirewall {
         }
 
         final delimiter = line.indexOf(':');
-        if (delimiter <= 0) {
-          continue;
-        }
+        if (delimiter <= 0) continue;
 
         final value = line.substring(delimiter + 1).trim();
         if (lower.startsWith('program:')) {
@@ -154,9 +149,7 @@ class SyncFirewall {
   }
 
   Future<bool> grantWindowsFirewallAccess() async {
-    if (kIsWeb || !Platform.isWindows) {
-      return false;
-    }
+    if (kIsWeb || !Platform.isWindows) return false;
 
     final appPath = Platform.resolvedExecutable;
     final scriptPath = p.join(
@@ -195,17 +188,13 @@ class SyncFirewall {
       return false;
     } finally {
       try {
-        if (await scriptFile.exists()) {
-          await scriptFile.delete();
-        }
+        if (await scriptFile.exists()) await scriptFile.delete();
       } catch (_) {}
     }
   }
 
   Future<bool> openWindowsFirewallAllowedApps() async {
-    if (kIsWeb || !Platform.isWindows) {
-      return false;
-    }
+    if (kIsWeb || !Platform.isWindows) return false;
 
     try {
       await Process.start('control.exe', [
@@ -226,9 +215,7 @@ class SyncFirewall {
   }
 
   Future<bool> openWindowsFirewallAdvancedSettings() async {
-    if (kIsWeb || !Platform.isWindows) {
-      return false;
-    }
+    if (kIsWeb || !Platform.isWindows) return false;
 
     try {
       await Process.start('wf.msc', const [], runInShell: true);
@@ -239,9 +226,7 @@ class SyncFirewall {
   }
 
   Future<LinuxFirewallCheckResult?> checkLinuxFirewallAccess() async {
-    if (kIsWeb || !Platform.isLinux) {
-      return null;
-    }
+    if (kIsWeb || !Platform.isLinux) return null;
 
     // Try ufw first (most common on Ubuntu/Debian)
     try {
@@ -376,9 +361,7 @@ class SyncFirewall {
       [action, 'INPUT', '-p', protocol, '--dport', '$port', '-j', 'ACCEPT'];
 
   Future<bool> grantLinuxFirewallAccess() async {
-    if (kIsWeb || !Platform.isLinux) {
-      return false;
-    }
+    if (kIsWeb || !Platform.isLinux) return false;
 
     // Try ufw
     try {
@@ -428,9 +411,7 @@ class SyncFirewall {
 
   /// Remove the firewall rules added by [grantLinuxFirewallAccess].
   Future<bool> clearLinuxFirewallAccess() async {
-    if (kIsWeb || !Platform.isLinux) {
-      return false;
-    }
+    if (kIsWeb || !Platform.isLinux) return false;
 
     bool anyRemoved = false;
 
@@ -458,9 +439,7 @@ class SyncFirewall {
         '--remove-port=${SyncPorts.transfer}/tcp',
         '--permanent',
       ]);
-      if (anyRemoved) {
-        await _runWithElevation('firewall-cmd', ['--reload']);
-      }
+      if (anyRemoved) await _runWithElevation('firewall-cmd', ['--reload']);
     } catch (_) {}
 
     // Try iptables

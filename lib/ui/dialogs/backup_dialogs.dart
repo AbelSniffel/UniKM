@@ -62,6 +62,22 @@ Future<void> _reloadDatabaseFromSettings(
   }
 }
 
+/// Reloads the restored database, or reports why the restore failed.
+Future<void> _finishRestore(
+  ProviderContainer container,
+  RestoreResult result, {
+  String? password,
+}) async {
+  if (!result.success) {
+    NotificationManager.instance.error(
+      result.error ?? 'Failed to restore backup',
+    );
+    return;
+  }
+  await _reloadDatabaseFromSettings(container, password: password);
+  NotificationManager.instance.success('Backup restored and reloaded');
+}
+
 /// Backup management dialog
 class _BackupDialog extends ConsumerStatefulWidget {
   const _BackupDialog({this.initialTab = 0});
@@ -99,13 +115,10 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     _loadBackups();
   }
 
-  void _onTabChanged() {
-    setState(() {});
-  }
+  void _onTabChanged() => setState(() {});
 
   @override
   void dispose() {
-    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -114,27 +127,20 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   Future<void> _loadBackups() async {
     setState(() => _isLoading = true);
     try {
-      final backupService = ref.read(backupServiceProvider);
-      final backups = await backupService.listBackups();
-      if (mounted) {
-        setState(() {
-          _backups = backups;
-          _isLoading = false;
-        });
-      }
+      final backups = await ref.read(backupServiceProvider).listBackups();
+      if (mounted) setState(() => _backups = backups);
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
         NotificationManager.instance.error('Failed to load backups: $e');
       }
     }
+    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _createBackup() async {
     setState(() => _isCreatingBackup = true);
     try {
-      final backupService = ref.read(backupServiceProvider);
-      final result = await backupService.createBackup();
+      final result = await ref.read(backupServiceProvider).createBackup();
       if (result.success) {
         NotificationManager.instance.success(
           'Backup created: ${result.backupInfo?.displayName}',
@@ -146,40 +152,51 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isCreatingBackup = false);
-      }
+      if (mounted) setState(() => _isCreatingBackup = false);
     }
   }
 
   Future<void> _deleteBackup(BackupInfo backup) async {
-    final theme = ref.read(themeProvider);
     final confirmed = await showConfirmDialog(
       context: context,
-      theme: theme,
+      theme: ref.read(themeProvider),
       title: 'Delete Backup',
       titleIcon: Icons.delete_forever,
       message: 'Are you sure you want to delete "${backup.displayName}"?',
       confirmLabel: 'Delete',
       destructive: true,
     );
+    if (!confirmed) return;
+    if (await ref.read(backupServiceProvider).deleteBackup(backup.filePath)) {
+      NotificationManager.instance.success('Backup deleted');
+      await _loadBackups();
+    } else {
+      NotificationManager.instance.error('Failed to delete backup');
+    }
+  }
 
-    if (confirmed) {
-      final backupService = ref.read(backupServiceProvider);
-      final deleted = await backupService.deleteBackup(backup.filePath);
-      if (deleted) {
-        NotificationManager.instance.success('Backup deleted');
-        await _loadBackups();
-      } else {
-        NotificationManager.instance.error('Failed to delete backup');
-      }
+  /// Closes the manager while confirming; reopens it if the user cancels.
+  Future<void> _restoreListedBackup(BackupInfo backup) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final container = ProviderScope.containerOf(context, listen: false);
+    Navigator.pop(context);
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (!rootContext.mounted) return;
+    final wasCancelled = await showRestoreConfirmDialog(
+      rootContext,
+      container,
+      backup,
+    );
+    if (wasCancelled && rootContext.mounted) {
+      await showBackupDialog(rootContext);
     }
   }
 
   Future<void> _openBackupFolder() async {
     try {
-      final backupService = ref.read(backupServiceProvider);
-      final backupsDir = await backupService.getBackupsDirectory();
+      final backupsDir = await ref
+          .read(backupServiceProvider)
+          .getBackupsDirectory();
       final opened = await PlatformFileActions.openDirectory(backupsDir.path);
       if (!opened && PlatformFileActions.isMobilePlatform) {
         await PlatformFileActions.shareText(
@@ -189,10 +206,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
         NotificationManager.instance.info(
           'Shared the backups folder path because the platform could not open it directly',
         );
-        return;
-      }
-
-      if (!opened) {
+      } else if (!opened) {
         NotificationManager.instance.error('Failed to open backup folder');
       }
     } catch (e) {
@@ -205,10 +219,8 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
       type: FileType.any,
       dialogTitle: 'Select Backup File',
     );
-
-    if (result != null && result.path != null) {
-      await _handleFilePath(result.path!);
-    }
+    final path = result?.path;
+    if (path != null) await _handleFilePath(path);
   }
 
   Future<void> _handleFilePath(String path) async {
@@ -261,33 +273,23 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     }
 
     setState(() => _isRestoring = true);
-
+    final password = _isEncryptedBackup ? _passwordController.text : null;
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final backupService = ref.read(backupServiceProvider);
-      final result = await backupService.restoreBackup(
-        backupPath: _selectedBackupPath!,
-        password: _isEncryptedBackup ? _passwordController.text : null,
-        createBackupFirst: _createBackupFirst,
-      );
-
+      final result = await ref
+          .read(backupServiceProvider)
+          .restoreBackup(
+            backupPath: _selectedBackupPath!,
+            password: password,
+            createBackupFirst: _createBackupFirst,
+          );
       if (result.success) {
         if (!mounted) return;
-        final container = ProviderScope.containerOf(context, listen: false);
         Navigator.pop(context);
-        await _reloadDatabaseFromSettings(
-          container,
-          password: _isEncryptedBackup ? _passwordController.text : null,
-        );
-        NotificationManager.instance.success('Backup restored and reloaded');
-      } else {
-        NotificationManager.instance.error(
-          result.error ?? 'Failed to restore backup',
-        );
       }
+      await _finishRestore(container, result, password: password);
     } finally {
-      if (mounted) {
-        setState(() => _isRestoring = false);
-      }
+      if (mounted) setState(() => _isRestoring = false);
     }
   }
 
@@ -379,31 +381,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                                     color: theme.accent,
                                   ),
                                   tooltip: 'Restore this backup',
-                                  onPressed: () async {
-                                    final rootContext = Navigator.of(
-                                      context,
-                                      rootNavigator: true,
-                                    ).context;
-                                    final container = ProviderScope.containerOf(
-                                      context,
-                                      listen: false,
-                                    );
-                                    Navigator.pop(context);
-                                    await Future.delayed(
-                                      const Duration(milliseconds: 50),
-                                    );
-                                    if (rootContext.mounted) {
-                                      final wasCancelled =
-                                          await showRestoreConfirmDialog(
-                                            rootContext,
-                                            container,
-                                            backup,
-                                          );
-                                      if (wasCancelled && rootContext.mounted) {
-                                        await showBackupDialog(rootContext);
-                                      }
-                                    }
-                                  },
+                                  onPressed: () => _restoreListedBackup(backup),
                                 ),
                                 IconButton(
                                   icon: Icon(
@@ -595,24 +573,15 @@ Future<bool> showRestoreConfirmDialog(
 
   if (confirmed != true) return true;
 
-  // Perform the restore
-  final backupService = container.read(backupServiceProvider);
-  final result = await backupService.restoreBackup(
-    backupPath: backup.filePath,
-    password: password,
-    createBackupFirst: createBackupFirst,
-  );
-
-  if (!context.mounted) return false;
-
-  if (result.success) {
-    await _reloadDatabaseFromSettings(container, password: password);
-    NotificationManager.instance.success('Backup restored and reloaded');
-  } else {
-    NotificationManager.instance.error(
-      result.error ?? 'Failed to restore backup',
-    );
+  final result = await container
+      .read(backupServiceProvider)
+      .restoreBackup(
+        backupPath: backup.filePath,
+        password: password,
+        createBackupFirst: createBackupFirst,
+      );
+  if (context.mounted) {
+    await _finishRestore(container, result, password: password);
   }
-
   return false;
 }

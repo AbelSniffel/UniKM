@@ -277,9 +277,7 @@ class UpdateService {
   }) async {
     try {
       final releases = await _fetchReleases();
-      if (releases.isEmpty) {
-        return const UpdateCheckResult(hasUpdate: false);
-      }
+      if (releases.isEmpty) return const UpdateCheckResult(hasUpdate: false);
 
       final release = _selectBestUpdateRelease(
         releases,
@@ -322,9 +320,7 @@ class UpdateService {
           .map(GitHubRelease.fromJson)
           .toList();
     } finally {
-      if (_githubClient == null) {
-        client.close();
-      }
+      if (_githubClient == null) client.close();
     }
   }
 
@@ -337,18 +333,14 @@ class UpdateService {
     GitHubRelease? bestRelease;
 
     for (final release in releases) {
-      if (release.isPrerelease && !includePrerelease) {
-        continue;
-      }
+      if (release.isPrerelease && !includePrerelease) continue;
 
       if (skippedVersions.contains(release.version) ||
           skippedVersions.contains(release.tagName)) {
         continue;
       }
 
-      if (compareVersions(release.version, currentVersion) <= 0) {
-        continue;
-      }
+      if (compareVersions(release.version, currentVersion) <= 0) continue;
 
       if (bestRelease == null ||
           _isBetterUpdateCandidate(release, bestRelease)) {
@@ -367,9 +359,7 @@ class UpdateService {
       candidate.version,
       currentBest.version,
     );
-    if (versionComparison != 0) {
-      return versionComparison > 0;
-    }
+    if (versionComparison != 0) return versionComparison > 0;
 
     if (candidate.isPrerelease != currentBest.isPrerelease) {
       return !candidate.isPrerelease;
@@ -494,14 +484,10 @@ class UpdateService {
 
     if (Platform.isWindows) {
       final userProfile = Platform.environment['USERPROFILE'];
-      if (userProfile != null) {
-        downloadsPath = p.join(userProfile, 'Downloads');
-      }
+      if (userProfile != null) downloadsPath = p.join(userProfile, 'Downloads');
     } else if (Platform.isMacOS || Platform.isLinux) {
       final home = Platform.environment['HOME'];
-      if (home != null) {
-        downloadsPath = p.join(home, 'Downloads');
-      }
+      if (home != null) downloadsPath = p.join(home, 'Downloads');
     }
 
     if (downloadsPath != null) {

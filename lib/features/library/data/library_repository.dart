@@ -128,9 +128,7 @@ class LibraryRepository {
         if (!await database.updateGame(game)) {
           throw StateError('The game no longer exists');
         }
-        if (tagIds != null) {
-          await database.setTagsForGame(game.id, tagIds);
-        }
+        if (tagIds != null) await database.setTagsForGame(game.id, tagIds);
         final revision = await database.markLocalDataChanged();
         await database.recordGameUpsert(game.id, localRevision: revision);
       });

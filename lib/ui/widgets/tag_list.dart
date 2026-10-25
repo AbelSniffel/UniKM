@@ -200,9 +200,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
       );
     }
 
-    if (widget.scrollable) {
-      return _buildScrollableContent(tags);
-    }
+    if (widget.scrollable) return _buildScrollableContent(tags);
 
     return _buildWrap(tags);
   }
@@ -237,9 +235,10 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
             }
             // Restart debounce: show chips once width has settled.
             _resizeDebounce?.cancel();
-            _resizeDebounce = Timer(const Duration(milliseconds: 150), () {
-              _showTags(width);
-            });
+            _resizeDebounce = Timer(
+              const Duration(milliseconds: 150),
+              () => _showTags(width),
+            );
           }
 
           final preservedHeight = _lastKnownHeight ?? 80.0;
@@ -388,13 +387,11 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   // Non-scrollable (plain Wrap)
   // ---------------------------------------------------------------------------
 
-  Widget _buildWrap(List<Tag> tags) {
-    return Wrap(
-      spacing: _spacing,
-      runSpacing: _runSpacing,
-      children: tags.map(_buildButton).toList(),
-    );
-  }
+  Widget _buildWrap(List<Tag> tags) => Wrap(
+    spacing: _spacing,
+    runSpacing: _runSpacing,
+    children: tags.map(_buildButton).toList(),
+  );
 
   // ---------------------------------------------------------------------------
   // Button builder

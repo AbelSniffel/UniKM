@@ -530,53 +530,49 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Interactive wrapper ────────────────────────────────────────────────────
 
-  Widget _buildInteractive(Widget child) {
-    return Listener(
-      onPointerDown: handlePointerDown,
-      onPointerMove: handlePointerMove,
-      onPointerUp: handlePointerUp,
-      onPointerCancel: handlePointerCancel,
-      child: MouseRegion(
-        onEnter: (event) {
-          handleDragSelectionEvent(event);
-          if (!mounted) return;
-          setState(() => _isHovered = true);
-          _hoverController.forward();
-        },
-        onExit: (_) {
-          if (!dragSelectionHandledByParent) {
-            ref
-                .read(dragSelectionProvider.notifier)
-                .unmarkVisited(widget.game.id);
-          }
-          if (!mounted) return;
-          setState(() => _isHovered = false);
-          _hoverController.reverse();
-        },
-        child: GestureDetector(
-          onDoubleTap: handleDoubleTap,
-          onLongPress: handleLongPress,
-          onSecondaryTapDown: (details) =>
-              _showContextMenu(context, details.globalPosition),
-          child: child,
-        ),
+  Widget _buildInteractive(Widget child) => Listener(
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+    onPointerCancel: handlePointerCancel,
+    child: MouseRegion(
+      onEnter: (event) {
+        handleDragSelectionEvent(event);
+        if (!mounted) return;
+        setState(() => _isHovered = true);
+        _hoverController.forward();
+      },
+      onExit: (_) {
+        if (!dragSelectionHandledByParent) {
+          ref
+              .read(dragSelectionProvider.notifier)
+              .unmarkVisited(widget.game.id);
+        }
+        if (!mounted) return;
+        setState(() => _isHovered = false);
+        _hoverController.reverse();
+      },
+      child: GestureDetector(
+        onDoubleTap: handleDoubleTap,
+        onLongPress: handleLongPress,
+        onSecondaryTapDown: (details) =>
+            _showContextMenu(context, details.globalPosition),
+        child: child,
       ),
-    );
-  }
+    ),
+  );
 
   // ── Sub-section builders ───────────────────────────────────────────────────
 
-  Widget _buildCoverImage(AppThemeData theme) {
-    return GameCoverImage(
-      theme: theme,
-      coverImage: widget.game.hasCoverImage ? widget.game.coverImage : null,
-      onError: _imageLoadFailed
-          ? null
-          : () {
-              if (mounted) setState(() => _imageLoadFailed = true);
-            },
-    );
-  }
+  Widget _buildCoverImage(AppThemeData theme) => GameCoverImage(
+    theme: theme,
+    coverImage: widget.game.hasCoverImage ? widget.game.coverImage : null,
+    onError: _imageLoadFailed
+        ? null
+        : () {
+            if (mounted) setState(() => _imageLoadFailed = true);
+          },
+  );
 
   Widget _buildDeadlineBadge(AppThemeData theme) =>
       GameCardBadges.deadlineBadge(

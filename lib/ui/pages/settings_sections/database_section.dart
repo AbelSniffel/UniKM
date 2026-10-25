@@ -196,38 +196,37 @@ class DatabaseHeaderActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
     final switching = ref.watch(databaseSwitchingProvider);
-    final buttons = <Widget>[
-      SettingsHeaderAction(
-        theme: theme,
-        icon: Icons.download,
-        tooltip: 'Import DB',
-        onTap: () => showImportDialog(context),
-      ),
-      SettingsHeaderAction(
-        theme: theme,
-        icon: Icons.upload,
-        tooltip: 'Export DB',
-        onTap: () => showExportDialog(context),
-      ),
-      SettingsHeaderAction(
-        theme: theme,
-        icon: Icons.note_add,
-        tooltip: 'New DB',
-        onTap: switching ? null : () => _createDatabase(context, ref),
-      ),
-      SettingsHeaderAction(
-        theme: theme,
-        icon: Icons.swap_horiz,
-        tooltip: 'Change DB',
-        onTap: switching
-            ? null
-            : () => showChangeDatabaseDialog(context, theme),
-      ),
-    ];
     return SettingsHeaderActions(
       theme: theme,
       expanded: expanded,
-      children: buttons,
+      children: [
+        SettingsHeaderAction(
+          theme: theme,
+          icon: Icons.download,
+          tooltip: 'Import DB',
+          onTap: () => showImportDialog(context),
+        ),
+        SettingsHeaderAction(
+          theme: theme,
+          icon: Icons.upload,
+          tooltip: 'Export DB',
+          onTap: () => showExportDialog(context),
+        ),
+        SettingsHeaderAction(
+          theme: theme,
+          icon: Icons.note_add,
+          tooltip: 'New DB',
+          onTap: switching ? null : () => _createDatabase(context, ref),
+        ),
+        SettingsHeaderAction(
+          theme: theme,
+          icon: Icons.swap_horiz,
+          tooltip: 'Change DB',
+          onTap: switching
+              ? null
+              : () => showChangeDatabaseDialog(context, theme),
+        ),
+      ],
     );
   }
 }
@@ -451,14 +450,11 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
   Widget _buildResponsiveSettingRow({
     required String label,
     String? description,
-    Color? labelColor,
-    double stackedBreakpoint = 220,
-    required Widget Function(bool stacked) trailingBuilder,
+    required Widget trailing,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stacked = constraints.maxWidth < stackedBreakpoint;
-        final trailing = trailingBuilder(stacked);
+        final stacked = constraints.maxWidth < 220;
         final labelWidget = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -466,7 +462,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             Text(
               label,
               style: TextStyle(
-                color: labelColor ?? widget.theme.textPrimary,
+                color: widget.theme.textPrimary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -506,27 +502,14 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
   }
 
   String _formatNextBackupTime(DateTime nextTime) {
-    final now = DateTime.now();
-    final diff = nextTime.difference(now);
-
-    if (diff.isNegative) {
-      return 'Running now...';
-    }
-
-    if (diff.inMinutes < 1) {
-      return 'In less than a minute';
-    } else if (diff.inMinutes == 1) {
-      return 'In 1 minute';
-    } else if (diff.inMinutes < 60) {
-      return 'In ${diff.inMinutes} minutes';
-    } else {
-      final hours = diff.inHours;
-      final mins = diff.inMinutes % 60;
-      if (mins == 0) {
-        return 'In $hours hour${hours > 1 ? 's' : ''}';
-      }
-      return 'In $hours hour${hours > 1 ? 's' : ''} $mins min';
-    }
+    final diff = nextTime.difference(DateTime.now());
+    final minutes = diff.inMinutes;
+    if (diff.isNegative) return 'Running now...';
+    if (minutes < 1) return 'In less than a minute';
+    if (minutes == 1) return 'In 1 minute';
+    if (minutes < 60) return 'In $minutes minutes';
+    final hours = '${diff.inHours} hour${diff.inHours > 1 ? 's' : ''}';
+    return minutes % 60 == 0 ? 'In $hours' : 'In $hours ${minutes % 60} min';
   }
 
   @override
@@ -535,41 +518,29 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final syncNotifier = ref.read(deviceSyncProvider.notifier);
     final syncAsync = ref.watch(deviceSyncProvider);
-    final fallbackSyncEnabled = ref.watch(
-      settingsProvider.select(
-        (s) =>
-            (s[SettingsKeys.syncEnabled] as bool?) ??
-            DefaultSettings.syncEnabled,
-      ),
+    bool storedFlag(String key, bool fallback) => ref.watch(
+      settingsProvider.select((s) => (s[key] as bool?) ?? fallback),
     );
-    final fallbackSyncAutoOnStartup = ref.watch(
-      settingsProvider.select(
-        (s) =>
-            (s[SettingsKeys.syncAutoOnStartup] as bool?) ??
-            DefaultSettings.syncAutoOnStartup,
-      ),
-    );
-    final syncEnabled = syncAsync.asData?.value.enabled ?? fallbackSyncEnabled;
+    final syncEnabled =
+        syncAsync.asData?.value.enabled ??
+        storedFlag(SettingsKeys.syncEnabled, DefaultSettings.syncEnabled);
     final syncAutoOnStartup =
-        syncAsync.asData?.value.autoOnStartup ?? fallbackSyncAutoOnStartup;
+        syncAsync.asData?.value.autoOnStartup ??
+        storedFlag(
+          SettingsKeys.syncAutoOnStartup,
+          DefaultSettings.syncAutoOnStartup,
+        );
     final nextBackupTime = ref.watch(nextAutoBackupTimeProvider);
     final databaseSwitching = ref.watch(databaseSwitchingProvider);
     final isSearching = widget.searchQuery.trim().isNotEmpty;
-    final showDataManagement = shouldShowSettingsGroup(
+    bool shows(SettingsSearchGroup group) => shouldShowSettingsGroup(
       query: widget.searchQuery,
       matchesSearch: widget.matchesSearch,
-      group: DatabaseSection.dataManagementSearchGroup,
+      group: group,
     );
-    final showKeyVisibility = shouldShowSettingsGroup(
-      query: widget.searchQuery,
-      matchesSearch: widget.matchesSearch,
-      group: DatabaseSection.keyVisibilitySearchGroup,
-    );
-    final showDatabaseSync = shouldShowSettingsGroup(
-      query: widget.searchQuery,
-      matchesSearch: widget.matchesSearch,
-      group: DatabaseSection.databaseSyncSearchGroup,
-    );
+    final showDataManagement = shows(DatabaseSection.dataManagementSearchGroup);
+    final showKeyVisibility = shows(DatabaseSection.keyVisibilitySearchGroup);
+    final showDatabaseSync = shows(DatabaseSection.databaseSyncSearchGroup);
 
     if (isSearching &&
         !showDataManagement &&
@@ -620,9 +591,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   description:
                       DatabaseSection.enableLocalDeviceSyncSpec.description,
                   value: syncEnabled,
-                  onChanged: (value) {
-                    syncNotifier.setEnabled(value);
-                  },
+                  onChanged: syncNotifier.setEnabled,
                 ),
                 SettingsToggleCard(
                   theme: widget.theme,
@@ -630,9 +599,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   description:
                       DatabaseSection.autoSyncOnStartupSpec.description,
                   value: syncAutoOnStartup,
-                  onChanged: syncEnabled
-                      ? (value) => syncNotifier.setAutoOnStartup(value)
-                      : null,
+                  onChanged: syncEnabled ? syncNotifier.setAutoOnStartup : null,
                 ),
               ],
             ),
@@ -664,10 +631,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   label: DatabaseSection.autoHideKeysSpec.label,
                   description: DatabaseSection.autoHideKeysSpec.description,
                   value: security.autoHideKeys,
-                  onChanged: (value) => settingsNotifier.setSetting(
-                    SettingsKeys.autoHideKeys,
-                    value,
-                  ),
+                  onChanged: settingsNotifier.setter(SettingsKeys.autoHideKeys),
                 ),
               ],
             ),
@@ -734,7 +698,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
           _buildResponsiveSettingRow(
             label: DatabaseSection.activeDatabaseSpec.label,
             description: _activeDbPath,
-            trailingBuilder: (stacked) => Row(
+            trailing: Row(
               mainAxisSize: MainAxisSize.min,
               spacing: kElementHSpacing,
               children: [
@@ -869,12 +833,9 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
     }
   }
 
-  Future<void> _useDefaultDatabase() async {
-    if (_defaultDbPath.isEmpty || _defaultDbPath == _activeDbPath) return;
-    final callback = widget.container.read(databaseSwitchCallbackProvider);
-    if (callback == null) return;
-    await callback(OpenDatabaseRequest(_defaultDbPath));
-  }
+  Future<void> _switchTo(String path) async => await widget.container
+      .read(databaseSwitchCallbackProvider)
+      ?.call(OpenDatabaseRequest(path));
 
   Future<void> _openDatabase() async {
     if (_choosingFile) return;
@@ -906,30 +867,22 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
       );
       return;
     }
-    if (!mounted) return;
-    final callback = widget.container.read(databaseSwitchCallbackProvider);
-    if (callback == null) return;
+    if (!mounted ||
+        widget.container.read(databaseSwitchCallbackProvider) == null) {
+      return;
+    }
     Navigator.pop(context);
-    await callback(OpenDatabaseRequest(selectedPath));
-  }
-
-  Future<void> _openRecentDatabase(String baseDbPath) async {
-    final callback = widget.container.read(databaseSwitchCallbackProvider);
-    if (callback == null) return;
-    await callback(OpenDatabaseRequest(baseDbPath));
+    await _switchTo(selectedPath);
   }
 
   Future<void> _removeRecentDatabasePath(String baseDbPath) async {
-    final settingsNotifier = widget.container.read(settingsProvider.notifier);
     final recents = List<String>.from(
       widget.container.read(securitySettingsProvider).recentDatabasePaths,
     );
-    final removed = recents.remove(baseDbPath);
-    if (!removed) return;
-    await settingsNotifier.setSetting(
-      SettingsKeys.recentDatabasePaths,
-      recents,
-    );
+    if (!recents.remove(baseDbPath)) return;
+    await widget.container
+        .read(settingsProvider.notifier)
+        .setSetting(SettingsKeys.recentDatabasePaths, recents);
   }
 
   String _formatBytes(int bytes) {
@@ -962,7 +915,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
         ? null
         : () async {
             Navigator.pop(context);
-            await _useDefaultDatabase();
+            await _switchTo(_defaultDbPath);
           };
     return LayoutBuilder(
       builder: (context, constraints) => ThemedAlertDialog(
@@ -1100,7 +1053,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                                 onTap: file?.exists == true
                                     ? () async {
                                         Navigator.pop(context);
-                                        await _openRecentDatabase(resolvedPath);
+                                        await _switchTo(resolvedPath);
                                       }
                                     : null,
                                 actions: [

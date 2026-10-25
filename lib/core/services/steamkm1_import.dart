@@ -33,13 +33,9 @@ bool looksLikeSteamKm1JsonExportData(Object? data) {
   }
 
   if (data is Map) {
-    if (data['games'] is List) {
-      return false;
-    }
+    if (data['games'] is List) return false;
 
-    if (_looksLikeSteamKm1GameMap(data)) {
-      return true;
-    }
+    if (_looksLikeSteamKm1GameMap(data)) return true;
 
     return data.values.whereType<Map>().any(_looksLikeSteamKm1GameMap);
   }
@@ -66,9 +62,7 @@ List<SteamKm1ImportedGame> parseSteamKm1JsonExportData(Object? data) {
   final records = <SteamKm1ImportedGame>[];
   for (final item in sourceItems) {
     final record = _fromSteamKm1Map(item);
-    if (record != null) {
-      records.add(record);
-    }
+    if (record != null) records.add(record);
   }
   return records;
 }
@@ -77,9 +71,7 @@ List<SteamKm1ImportedGame> parseSteamKm1TextExport(String content) {
   final records = <SteamKm1ImportedGame>[];
   for (final rawLine in content.split(_lineBreakPattern)) {
     final line = rawLine.trim();
-    if (line.isEmpty) {
-      continue;
-    }
+    if (line.isEmpty) continue;
 
     final pipeIndex = line.lastIndexOf('|');
     String? title;
@@ -97,9 +89,7 @@ List<SteamKm1ImportedGame> parseSteamKm1TextExport(String content) {
     }
 
     final normalizedKey = _normalizeKey(key);
-    if (title == null || title.isEmpty || normalizedKey == null) {
-      continue;
-    }
+    if (title == null || title.isEmpty || normalizedKey == null) continue;
 
     records.add(SteamKm1ImportedGame(title: title, key: normalizedKey));
   }
@@ -107,18 +97,15 @@ List<SteamKm1ImportedGame> parseSteamKm1TextExport(String content) {
   return records;
 }
 
-bool _looksLikeSteamKm1GameMap(Map<dynamic, dynamic> data) {
-  return (data['title'] is String &&
-          (data['key'] is String || data['code'] is String)) ||
-      (data['app_id'] is String && data['category'] is String);
-}
+bool _looksLikeSteamKm1GameMap(Map<dynamic, dynamic> data) =>
+    (data['title'] is String &&
+        (data['key'] is String || data['code'] is String)) ||
+    (data['app_id'] is String && data['category'] is String);
 
 SteamKm1ImportedGame? _fromSteamKm1Map(Map<dynamic, dynamic> data) {
   final title = (data['title'] as String?)?.trim();
   final key = _normalizeKey((data['key'] ?? data['code']) as String?);
-  if (title == null || title.isEmpty || key == null) {
-    return null;
-  }
+  if (title == null || title.isEmpty || key == null) return null;
 
   final reviewData = data['review_data'];
   final reviewScore = _parseOptionalInt(
@@ -141,27 +128,17 @@ SteamKm1ImportedGame? _fromSteamKm1Map(Map<dynamic, dynamic> data) {
 }
 
 String? _normalizeKey(String? rawKey) {
-  if (rawKey == null) {
-    return null;
-  }
+  if (rawKey == null) return null;
 
   final compact = rawKey.replaceAll(_nonAlphanumericPattern, '').toUpperCase();
-  if (compact.length != 15) {
-    return null;
-  }
+  if (compact.length != 15) return null;
 
   return '${compact.substring(0, 5)}-${compact.substring(5, 10)}-${compact.substring(10)}';
 }
 
 int? _parseOptionalInt(Object? value) {
-  if (value is int) {
-    return value;
-  }
-  if (value is num) {
-    return value.toInt();
-  }
-  if (value is String) {
-    return int.tryParse(value.trim());
-  }
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
   return null;
 }

@@ -178,9 +178,7 @@ class NotificationManager {
 
   void setEnabled(bool enabled) {
     _enabled = enabled;
-    if (!enabled) {
-      dismissAll();
-    }
+    if (!enabled) dismissAll();
   }
 
   Stream<List<AppNotification>> get notifications => _controller.stream;
@@ -189,9 +187,7 @@ class NotificationManager {
   NotificationPosition _position = NotificationPosition.topRight;
   NotificationPosition get position => _position;
 
-  void setPosition(NotificationPosition position) {
-    _position = position;
-  }
+  void setPosition(NotificationPosition position) => _position = position;
 
   /// Auto-hide delay; zero keeps update and progress/task notifications.
   static Duration defaultDuration(NotificationType type) => switch (type) {
@@ -219,9 +215,7 @@ class NotificationManager {
     bool dismissible = true,
     Duration? autoDismissAfter,
   }) {
-    if (!_enabled) {
-      return NotificationHandle(this, 'disabled');
-    }
+    if (!_enabled) return NotificationHandle(this, 'disabled');
 
     final existing = dedupe
         ? _notifications
@@ -405,9 +399,7 @@ class NotificationOverlay extends StatelessWidget {
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? [];
 
-        if (notifications.isEmpty) {
-          return const SizedBox.shrink();
-        }
+        if (notifications.isEmpty) return const SizedBox.shrink();
 
         return Positioned(
           top: _isTop ? 16 : null,

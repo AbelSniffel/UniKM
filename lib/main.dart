@@ -17,9 +17,7 @@ import 'providers/database_providers.dart';
 export 'app/unikm_app.dart' show UniKMApp;
 
 Future<void> _configureSystemUiForMobile() async {
-  if (!Platform.isAndroid) {
-    return;
-  }
+  if (!Platform.isAndroid) return;
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 }

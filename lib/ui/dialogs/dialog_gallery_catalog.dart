@@ -523,14 +523,11 @@ class _GallerySettings extends SettingsNotifier {
     SettingsKeys.skippedVersions: ['v1.3.0', 'v1.2.0'],
   };
   @override
-  Future<void> setMany(Map<String, dynamic> updates) async {
-    state = {...state, ...updates};
-  }
+  Future<void> setMany(Map<String, dynamic> updates) async =>
+      state = {...state, ...updates};
 
   @override
-  Future<void> resetToDefaults() async {
-    state = build();
-  }
+  Future<void> resetToDefaults() async => state = build();
 }
 
 class _GalleryTheme extends ThemeNotifier {

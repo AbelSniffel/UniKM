@@ -591,9 +591,7 @@ class _RenderBatchRows extends RenderBox
 RenderEditable? _findEditable(RenderObject root) {
   if (root is RenderEditable) return root;
   RenderEditable? result;
-  root.visitChildren((child) {
-    result ??= _findEditable(child);
-  });
+  root.visitChildren((child) => result ??= _findEditable(child));
   return result;
 }
 

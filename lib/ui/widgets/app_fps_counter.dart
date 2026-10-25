@@ -51,14 +51,12 @@ class _AppFpsCounterState extends State<AppFpsCounter>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Text(
-      '${_fps > 0 ? _fps : '--'} FPS',
-      style: TextStyle(
-        color: widget.theme.textSecondary,
-        fontSize: 11,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    '${_fps > 0 ? _fps : '--'} FPS',
+    style: TextStyle(
+      color: widget.theme.textSecondary,
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+    ),
+  );
 }

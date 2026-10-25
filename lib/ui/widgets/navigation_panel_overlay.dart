@@ -273,11 +273,10 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _NavigationPanelOverlayPainter oldDelegate) {
-    return oldDelegate.preview != preview ||
-        oldDelegate.isHorizontal != isHorizontal ||
-        oldDelegate.theme.accent != theme.accent ||
-        oldDelegate.theme.secondary != theme.secondary ||
-        oldDelegate.theme.navPanelOverlayStyle != theme.navPanelOverlayStyle;
-  }
+  bool shouldRepaint(covariant _NavigationPanelOverlayPainter oldDelegate) =>
+      oldDelegate.preview != preview ||
+      oldDelegate.isHorizontal != isHorizontal ||
+      oldDelegate.theme.accent != theme.accent ||
+      oldDelegate.theme.secondary != theme.secondary ||
+      oldDelegate.theme.navPanelOverlayStyle != theme.navPanelOverlayStyle;
 }

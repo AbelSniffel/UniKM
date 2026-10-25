@@ -66,7 +66,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     );
 
     if (isLoading) return _buildLoadingState(theme);
-    if (error != null) return _buildErrorState(ref, theme, error);
+    if (error != null) return _buildErrorState(theme, error);
     if (gameIds.isEmpty) {
       final hasActiveFilters = ref.watch(
         gamesProvider.select(
@@ -81,13 +81,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
         ),
       );
 
-      return _buildEmptyState(
-        context,
-        ref,
-        theme,
-        gameIds.isEmpty,
-        hasActiveFilters,
-      );
+      return _buildEmptyState(theme, hasActiveFilters);
     }
 
     // List is ready
@@ -121,221 +115,179 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
             FocusScope.of(context).requestFocus(widget.gameListFocusNode);
           }
         },
-        child: _buildGameList(
-          context,
-          ref,
-          theme,
-          gameIds,
-          viewMode,
-          widget.scrollController,
-          slimList,
+        child: _buildGameList(theme, gameIds, viewMode, slimList),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(AppThemeData theme) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const AppCircularProgressIndicator(),
+        const SizedBox(height: 16),
+        Text('Loading games...', style: TextStyle(color: theme.textSecondary)),
+      ],
+    ),
+  );
+
+  Widget _buildErrorState(AppThemeData theme, String error) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.error, size: 64, color: theme.error),
+        const SizedBox(height: 16),
+        Text(
+          'Error loading games',
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-    );
-  }
+        const SizedBox(height: kElementVSpacing),
+        Text(
+          error,
+          style: TextStyle(color: theme.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: () => ref.read(gamesProvider.notifier).refresh(),
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+        ),
+      ],
+    ),
+  );
 
-  Widget _buildLoadingState(AppThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const AppCircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(
-            'Loading games...',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildEmptyState(AppThemeData theme, bool hasFilters) => LayoutBuilder(
+    builder: (context, constraints) {
+      final minHeight = constraints.hasBoundedHeight
+          ? (constraints.maxHeight - 16).clamp(0.0, double.infinity).toDouble()
+          : 0.0;
 
-  Widget _buildErrorState(WidgetRef ref, AppThemeData theme, String error) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error, size: 64, color: theme.error),
-          const SizedBox(height: 16),
-          Text(
-            'Error loading games',
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: kElementVSpacing),
-          Text(
-            error,
-            style: TextStyle(color: theme.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () => ref.read(gamesProvider.notifier).refresh(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(
-    BuildContext context,
-    WidgetRef ref,
-    AppThemeData theme,
-    bool isEmpty,
-    bool hasFilters,
-  ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final minHeight = constraints.hasBoundedHeight
-            ? (constraints.maxHeight - 16)
-                  .clamp(0.0, double.infinity)
-                  .toDouble()
-            : 0.0;
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minHeight),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasFilters
-                        ? Icons.filter_alt_off
-                        : Icons.videogame_asset_off,
-                    size: 80,
-                    color: theme.textHint,
+      return SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: minHeight),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hasFilters ? Icons.filter_alt_off : Icons.videogame_asset_off,
+                  size: 80,
+                  color: theme.textHint,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  hasFilters ? 'No games match your filters' : 'No games yet',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
+                const SizedBox(height: kElementVSpacing),
+                Text(
+                  hasFilters
+                      ? 'Try adjusting your filters or search query'
+                      : 'Add your first game to get started',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.textSecondary),
+                ),
+                if (hasFilters) ...[
                   const SizedBox(height: 16),
-                  Text(
-                    hasFilters ? 'No games match your filters' : 'No games yet',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  ElevatedButton(
+                    onPressed: () {
+                      ref.read(gamesProvider.notifier).setSearchQuery('');
+                      ref.read(gamesProvider.notifier).clearAllFilters();
+                    },
+                    child: const Text('Clear Filters'),
                   ),
-                  const SizedBox(height: kElementVSpacing),
-                  Text(
-                    hasFilters
-                        ? 'Try adjusting your filters or search query'
-                        : 'Add your first game to get started',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: theme.textSecondary),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => ref
+                        .read(currentNavProvider.notifier)
+                        .set(NavItem.addGames),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Game'),
                   ),
-                  if (hasFilters) ...[
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        ref.read(gamesProvider.notifier).setSearchQuery('');
-                        ref.read(gamesProvider.notifier).clearAllFilters();
-                      },
-                      child: const Text('Clear Filters'),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => ref
-                          .read(currentNavProvider.notifier)
-                          .set(NavItem.addGames),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Game'),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => showImportDialog(context),
-                      icon: const Icon(Icons.download),
-                      label: const Text('Import Games'),
-                    ),
-                  ],
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => showImportDialog(context),
+                    icon: const Icon(Icons.download),
+                    label: const Text('Import Games'),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
 
   Widget _buildGameList(
-    BuildContext context,
-    WidgetRef ref,
     AppThemeData theme,
     List<int> gameIds,
     GameListViewMode viewMode,
-    ScrollController scrollController,
     bool slimList,
   ) {
+    final scrollController = widget.scrollController;
     final listSpacing = slimList ? kSlimListCardSpacing : kListCardSpacing;
     final listItemExtent =
         (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
-    final listCacheExtent = listItemExtent * 2;
 
     // NOTE: selectedGameIds is intentionally NOT watched here.
     // The shell owns the selection ribbon, so selection changes do not
     // rebuild the grid/list.
-
-    if (viewMode == GameListViewMode.grid) {
-      return _wrapDragSelection(
-        ref,
-        theme,
-        gameIds,
-        viewMode,
-        scrollController,
-        listItemExtent,
-        GridView.builder(
-          scrollCacheExtent: ScrollCacheExtent.pixels(_gridCacheExtent),
-          key: const PageStorageKey('game-library-scroll'),
-          controller: scrollController,
-          padding: const EdgeInsets.all(12),
-          clipBehavior: Clip.hardEdge,
-          addAutomaticKeepAlives: false,
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
-            mainAxisExtent: kGridCardHeight + kGridCardSpacing,
-            crossAxisSpacing: kGridCardSpacing,
-            mainAxisSpacing: kGridCardSpacing,
-          ),
-          itemCount: gameIds.length,
-          itemBuilder: (context, index) =>
-              _revealCard(gameIds[index], viewMode),
-        ),
-      );
-    }
-
-    return _wrapDragSelection(
-      ref,
-      theme,
-      gameIds,
-      viewMode,
-      scrollController,
-      listItemExtent,
-      ListView.builder(
-        scrollCacheExtent: ScrollCacheExtent.pixels(listCacheExtent),
-        key: const PageStorageKey('game-library-scroll'),
-        controller: scrollController,
-        itemExtent: listItemExtent,
-        padding: const EdgeInsets.all(12),
-        clipBehavior: Clip.hardEdge,
-        addAutomaticKeepAlives: false,
-        itemCount: gameIds.length,
-        itemBuilder: (context, index) {
-          final revealed = _revealCard(gameIds[index], viewMode);
-          return slimList
-              ? revealed
-              : Padding(
-                  padding: EdgeInsets.only(bottom: listSpacing),
-                  child: revealed,
-                );
-        },
-      ),
+    return _GameLibraryDragSelectionLayer(
+      theme: theme,
+      gameIds: gameIds,
+      viewMode: viewMode,
+      scrollController: scrollController,
+      listItemExtent: listItemExtent,
+      child: viewMode == GameListViewMode.grid
+          ? GridView.builder(
+              scrollCacheExtent: ScrollCacheExtent.pixels(_gridCacheExtent),
+              key: const PageStorageKey('game-library-scroll'),
+              controller: scrollController,
+              padding: const EdgeInsets.all(12),
+              clipBehavior: Clip.hardEdge,
+              addAutomaticKeepAlives: false,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
+                mainAxisExtent: kGridCardHeight + kGridCardSpacing,
+                crossAxisSpacing: kGridCardSpacing,
+                mainAxisSpacing: kGridCardSpacing,
+              ),
+              itemCount: gameIds.length,
+              itemBuilder: (context, index) =>
+                  _revealCard(gameIds[index], viewMode),
+            )
+          : ListView.builder(
+              scrollCacheExtent: ScrollCacheExtent.pixels(listItemExtent * 2),
+              key: const PageStorageKey('game-library-scroll'),
+              controller: scrollController,
+              itemExtent: listItemExtent,
+              padding: const EdgeInsets.all(12),
+              clipBehavior: Clip.hardEdge,
+              addAutomaticKeepAlives: false,
+              itemCount: gameIds.length,
+              itemBuilder: (context, index) {
+                final revealed = _revealCard(gameIds[index], viewMode);
+                return slimList
+                    ? revealed
+                    : Padding(
+                        padding: EdgeInsets.only(bottom: listSpacing),
+                        child: revealed,
+                      );
+              },
+            ),
     );
   }
 
@@ -355,25 +307,6 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
             child: card,
           )
         : card;
-  }
-
-  Widget _wrapDragSelection(
-    WidgetRef ref,
-    AppThemeData theme,
-    List<int> gameIds,
-    GameListViewMode viewMode,
-    ScrollController scrollController,
-    double listItemExtent,
-    Widget child,
-  ) {
-    return _GameLibraryDragSelectionLayer(
-      theme: theme,
-      gameIds: gameIds,
-      viewMode: viewMode,
-      scrollController: scrollController,
-      listItemExtent: listItemExtent,
-      child: child,
-    );
   }
 }
 
@@ -441,13 +374,11 @@ class _GameLibraryDragSelectionLayerState
   bool _painting = false;
   final Set<int> _paintVisited = {};
 
-  bool get _isCtrlPressed {
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    return keys.contains(LogicalKeyboardKey.controlLeft) ||
-        keys.contains(LogicalKeyboardKey.controlRight) ||
-        keys.contains(LogicalKeyboardKey.metaLeft) ||
-        keys.contains(LogicalKeyboardKey.metaRight);
-  }
+  bool get _isCtrlPressed =>
+      HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isMetaPressed;
+
+  bool get _isShiftPressed => HardwareKeyboard.instance.isShiftPressed;
 
   // Sweep every row between raw pointer samples. MouseRegion.onEnter only sees
   // the row under a sampled position and can miss rows during a fast drag.
@@ -519,38 +450,20 @@ class _GameLibraryDragSelectionLayerState
   Timer? _autoScrollTimer;
   double _autoScrollStep = 0.0;
 
-  bool get _isShiftPressed {
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    return keys.contains(LogicalKeyboardKey.shiftLeft) ||
-        keys.contains(LogicalKeyboardKey.shiftRight);
-  }
-
   RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
 
   Offset? _toLocal(Offset globalPosition) {
     final box = _renderBox;
-    if (box == null || !box.hasSize) {
-      return null;
-    }
-    return box.globalToLocal(globalPosition);
+    return box == null || !box.hasSize
+        ? null
+        : box.globalToLocal(globalPosition);
   }
 
   double get _scrollOffset =>
       widget.scrollController.hasClients ? widget.scrollController.offset : 0.0;
 
-  Offset _toContentOffset(Offset localOffset, {double? scrollOffset}) {
-    return Offset(
-      localOffset.dx,
-      localOffset.dy + (scrollOffset ?? _scrollOffset),
-    );
-  }
-
-  Offset _toViewportOffset(Offset contentOffset, {double? scrollOffset}) {
-    return Offset(
-      contentOffset.dx,
-      contentOffset.dy - (scrollOffset ?? _scrollOffset),
-    );
-  }
+  Offset _toContentOffset(Offset localOffset) =>
+      localOffset.translate(0, _scrollOffset);
 
   @override
   void dispose() {
@@ -566,10 +479,7 @@ class _GameLibraryDragSelectionLayerState
 
   void _refreshMarqueeSelection(Offset currentLocal) {
     final startContent = _marqueeStartContent;
-    if (startContent == null) {
-      return;
-    }
-
+    if (startContent == null) return;
     final nextSelection = _computeMarqueeSelection(
       startContent,
       _toContentOffset(currentLocal),
@@ -586,35 +496,22 @@ class _GameLibraryDragSelectionLayerState
     });
   }
 
-  double _computeAutoScrollStep({
-    required double pointerDy,
-    required double viewportHeight,
-  }) {
-    if (viewportHeight <= 0) {
-      return 0.0;
-    }
-
-    if (pointerDy < _autoScrollEdgeExtent) {
-      final distance = pointerDy.clamp(0.0, _autoScrollEdgeExtent);
-      final proximity = 1.0 - (distance / _autoScrollEdgeExtent);
-      final eased = proximity * proximity;
-      return -(_autoScrollMinStep +
-          ((_autoScrollMaxStep - _autoScrollMinStep) * eased));
-    }
-
-    final bottomThreshold = viewportHeight - _autoScrollEdgeExtent;
-    if (pointerDy > bottomThreshold) {
-      final distanceFromBottom = (viewportHeight - pointerDy).clamp(
-        0.0,
-        _autoScrollEdgeExtent,
-      );
-      final proximity = 1.0 - (distanceFromBottom / _autoScrollEdgeExtent);
-      final eased = proximity * proximity;
-      return _autoScrollMinStep +
-          ((_autoScrollMaxStep - _autoScrollMinStep) * eased);
-    }
-
-    return 0.0;
+  /// Scrolls faster the closer the pointer is to the top or bottom edge.
+  double _computeAutoScrollStep(double pointerDy, double viewportHeight) {
+    if (viewportHeight <= 0) return 0.0;
+    final (direction, distance) = pointerDy < _autoScrollEdgeExtent
+        ? (-1.0, pointerDy)
+        : pointerDy > viewportHeight - _autoScrollEdgeExtent
+        ? (1.0, viewportHeight - pointerDy)
+        : (0.0, 0.0);
+    if (direction == 0) return 0.0;
+    final proximity =
+        1.0 -
+        (distance.clamp(0.0, _autoScrollEdgeExtent) / _autoScrollEdgeExtent);
+    return direction *
+        (_autoScrollMinStep +
+            ((_autoScrollMaxStep - _autoScrollMinStep) *
+                (proximity * proximity)));
   }
 
   void _updateAutoScroll(Offset currentLocal) {
@@ -625,10 +522,7 @@ class _GameLibraryDragSelectionLayerState
       return;
     }
 
-    final nextStep = _computeAutoScrollStep(
-      pointerDy: currentLocal.dy,
-      viewportHeight: box.size.height,
-    );
+    final nextStep = _computeAutoScrollStep(currentLocal.dy, box.size.height);
     if (nextStep.abs() < 0.01) {
       _stopAutoScroll();
       return;
@@ -668,29 +562,26 @@ class _GameLibraryDragSelectionLayerState
     _activePointer = null;
     _pointerDownGlobal = null;
     _stopAutoScroll();
-    if (_isShiftMarqueeActive ||
+    final visible =
+        _isShiftMarqueeActive ||
         _marqueeStartContent != null ||
         _marqueeCurrentLocal != null ||
-        _marqueeSelectedIds.isNotEmpty) {
-      setState(() {
-        _isShiftMarqueeActive = false;
-        _marqueeStartContent = null;
-        _marqueeCurrentLocal = null;
-        _marqueeSelectedIds = const <int>{};
-      });
-      return;
+        _marqueeSelectedIds.isNotEmpty;
+    void reset() {
+      _isShiftMarqueeActive = false;
+      _marqueeStartContent = null;
+      _marqueeCurrentLocal = null;
+      _marqueeSelectedIds = const <int>{};
     }
-    _isShiftMarqueeActive = false;
-    _marqueeStartContent = null;
-    _marqueeCurrentLocal = null;
-    _marqueeSelectedIds = const <int>{};
+
+    visible ? setState(reset) : reset();
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (event.kind != PointerDeviceKind.mouse) {
+    if (event.kind != PointerDeviceKind.mouse ||
+        (event.buttons & kPrimaryMouseButton) == 0) {
       return;
     }
-    if ((event.buttons & kPrimaryMouseButton) == 0) return;
     if (widget.viewMode == GameListViewMode.list &&
         !_isShiftPressed &&
         (_isCtrlPressed || ref.read(selectionMultiSelectModeProvider))) {
@@ -720,9 +611,7 @@ class _GameLibraryDragSelectionLayerState
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
-    if (event.kind != PointerDeviceKind.mouse) {
-      return;
-    }
+    if (event.kind != PointerDeviceKind.mouse) return;
     if (event.pointer == _paintPointer &&
         (event.buttons & kPrimaryMouseButton) != 0) {
       if (!_painting &&
@@ -733,64 +622,41 @@ class _GameLibraryDragSelectionLayerState
       if (_painting) _paintListSelection(event.position);
       return;
     }
-    if (event.pointer != _activePointer || !_isShiftPressed) {
-      return;
-    }
-    if ((event.buttons & kPrimaryMouseButton) == 0) {
-      return;
-    }
-
     final downGlobal = _pointerDownGlobal;
-    if (downGlobal == null || _marqueeStartContent == null) {
+    if (event.pointer != _activePointer ||
+        !_isShiftPressed ||
+        (event.buttons & kPrimaryMouseButton) == 0 ||
+        downGlobal == null ||
+        _marqueeStartContent == null) {
       return;
     }
-
     final currentLocal = _toLocal(event.position);
-    if (currentLocal == null) {
-      return;
-    }
-
+    if (currentLocal == null) return;
     final exceededSlop =
         (event.position - downGlobal).distance > _dragStartSlop;
-    if (!exceededSlop && !_isShiftMarqueeActive) {
-      return;
-    }
-
+    if (!exceededSlop && !_isShiftMarqueeActive) return;
     _refreshMarqueeSelection(currentLocal);
     _updateAutoScroll(currentLocal);
   }
 
-  void _handlePointerUp(PointerUpEvent event) {
+  /// Pointer up finishes a paint sweep; cancel drops it.
+  void _handlePointerEnd(PointerEvent event) {
     if (event.pointer == _paintPointer) {
-      if (_painting) _paintListSelection(event.position);
+      if (_painting && event is PointerUpEvent) {
+        _paintListSelection(event.position);
+      }
       _clearPaintTracking();
     }
     if (event.kind == PointerDeviceKind.mouse) {
       ref.read(dragSelectionProvider.notifier).stop();
     }
-    if (event.pointer == _activePointer) {
-      _clearMarqueeTracking();
-    }
-  }
-
-  void _handlePointerCancel(PointerCancelEvent event) {
-    if (event.pointer == _paintPointer) _clearPaintTracking();
-    if (event.kind == PointerDeviceKind.mouse) {
-      ref.read(dragSelectionProvider.notifier).stop();
-    }
-    if (event.pointer == _activePointer) {
-      _clearMarqueeTracking();
-    }
+    if (event.pointer == _activePointer) _clearMarqueeTracking();
   }
 
   List<int> _computeMarqueeSelection(Offset start, Offset current) {
     final box = _renderBox;
-    if (box == null || !box.hasSize) {
-      return const <int>[];
-    }
-
     final rect = Rect.fromPoints(start, current);
-    if (rect.width <= 0 && rect.height <= 0) {
+    if (box == null || !box.hasSize || rect.width <= 0 && rect.height <= 0) {
       return const <int>[];
     }
 
@@ -822,9 +688,7 @@ class _GameLibraryDragSelectionLayerState
         rowWidth,
         widget.listItemExtent,
       );
-      if (itemRect.overlaps(rect)) {
-        selectedIds.add(widget.gameIds[index]);
-      }
+      if (itemRect.overlaps(rect)) selectedIds.add(widget.gameIds[index]);
     }
     return selectedIds;
   }
@@ -860,25 +724,24 @@ class _GameLibraryDragSelectionLayerState
       final left = _contentPadding + (column * (tileWidth + kGridCardSpacing));
       final top = _contentPadding + (row * rowExtent);
       final itemRect = Rect.fromLTWH(left, top, tileWidth, rowExtent);
-      if (itemRect.overlaps(rect)) {
-        selectedIds.add(widget.gameIds[index]);
-      }
+      if (itemRect.overlaps(rect)) selectedIds.add(widget.gameIds[index]);
     }
     return selectedIds;
   }
 
   @override
   Widget build(BuildContext context) {
-    final marqueeStartLocal = _marqueeStartContent == null
-        ? null
-        : _toViewportOffset(_marqueeStartContent!);
+    final marqueeStartLocal = _marqueeStartContent?.translate(
+      0,
+      -_scrollOffset,
+    );
 
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
-      onPointerUp: _handlePointerUp,
-      onPointerCancel: _handlePointerCancel,
+      onPointerUp: _handlePointerEnd,
+      onPointerCancel: _handlePointerEnd,
       child: Stack(
         fit: StackFit.expand,
         children: [

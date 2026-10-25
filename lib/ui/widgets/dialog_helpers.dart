@@ -49,18 +49,14 @@ ButtonStyle themedFilledButtonStyle(
 
   return ButtonStyle(
     backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) {
-        return disabledBackground;
-      }
+      if (states.contains(WidgetState.disabled)) return disabledBackground;
       if (states.contains(WidgetState.pressed)) {
         return backgroundColor.withValues(alpha: 0.9);
       }
       return backgroundColor;
     }),
     foregroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) {
-        return disabledForeground;
-      }
+      if (states.contains(WidgetState.disabled)) return disabledForeground;
       return foregroundColor;
     }),
   );
@@ -84,54 +80,48 @@ class DialogInteractionScope extends StatelessWidget {
 
   bool _shouldHandlePrimaryAction() {
     final focusedContext = FocusManager.instance.primaryFocus?.context;
-    if (focusedContext == null) {
-      return true;
-    }
+    if (focusedContext == null) return true;
 
     final focusedWidget = focusedContext.widget;
     if (focusedWidget is EditableText) {
       final maxLines = focusedWidget.maxLines;
-      if (maxLines == null || maxLines > 1) {
-        return false;
-      }
+      if (maxLines == null || maxLines > 1) return false;
     }
 
     return true;
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+  Widget build(BuildContext context) => Shortcuts(
+    shortcuts: const <ShortcutActivator, Intent>{
+      SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+      SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+      SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+    },
+    child: Actions(
+      actions: <Type, Action<Intent>>{
+        DismissIntent: CallbackAction<DismissIntent>(
+          onInvoke: (intent) {
+            if (enableEscapeDismiss) {
+              (onDismiss ?? () => Navigator.of(context).maybePop()).call();
+            }
+            return null;
+          },
+        ),
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            if (enableEnterToPrimary &&
+                onPrimaryAction != null &&
+                _shouldHandlePrimaryAction()) {
+              onPrimaryAction!.call();
+            }
+            return null;
+          },
+        ),
       },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          DismissIntent: CallbackAction<DismissIntent>(
-            onInvoke: (intent) {
-              if (enableEscapeDismiss) {
-                (onDismiss ?? () => Navigator.of(context).maybePop()).call();
-              }
-              return null;
-            },
-          ),
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (intent) {
-              if (enableEnterToPrimary &&
-                  onPrimaryAction != null &&
-                  _shouldHandlePrimaryAction()) {
-                onPrimaryAction!.call();
-              }
-              return null;
-            },
-          ),
-        },
-        child: Focus(autofocus: true, child: child),
-      ),
-    );
-  }
+      child: Focus(autofocus: true, child: child),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -130,17 +130,15 @@ class _SteamOptionsGrid extends StatelessWidget {
   }
 }
 
-List<Tag> _steamPreviewTags(List<String> names) {
-  return List.generate(
-    names.length,
-    (index) => Tag(
-      id: -(index + 1),
-      name: names[index],
-      colorHex: '#000000',
-      isSteamTag: true,
-    ),
-  );
-}
+List<Tag> _steamPreviewTags(List<String> names) => List.generate(
+  names.length,
+  (index) => Tag(
+    id: -(index + 1),
+    name: names[index],
+    colorHex: '#000000',
+    isSteamTag: true,
+  ),
+);
 
 /// Apply a SteamSearchResult to a game with the given options.
 /// Returns null on success or an error message on failure.
@@ -608,9 +606,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       setState(() {
         _result = result;
         _isSearching = false;
-        if (result == null) {
-          _error = 'No matching game found on Steam';
-        }
+        if (result == null) _error = 'No matching game found on Steam';
       });
     } catch (e) {
       if (!mounted) return;
@@ -691,66 +687,62 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  Widget _buildSearchingState(AppThemeData theme) {
-    return SectionGroupBox(
-      title: 'Searching Steam...',
-      theme: theme,
-      titleIcon: FontAwesomeIcons.steam.data,
-      titleLocation: SectionTitleLocation.top,
-      alternateBackground: true,
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Center(child: AppCircularProgressIndicator()),
-            const SizedBox(height: kDialogSpacing),
-            Text(
-              widget.game.title,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(AppThemeData theme) {
-    return SectionGroupBox(
-      title: 'Search Failed',
-      theme: theme,
-      titleIcon: Icons.error,
-      titleLocation: SectionTitleLocation.top,
-      alternateBackground: true,
+  Widget _buildSearchingState(AppThemeData theme) => SectionGroupBox(
+    title: 'Searching Steam...',
+    theme: theme,
+    titleIcon: FontAwesomeIcons.steam.data,
+    titleLocation: SectionTitleLocation.top,
+    alternateBackground: true,
+    child: Padding(
+      padding: EdgeInsets.all(24),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error, color: theme.error, size: 48),
+          const Center(child: AppCircularProgressIndicator()),
           const SizedBox(height: kDialogSpacing),
           Text(
             widget.game.title,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: kDialogSpacing),
-          Text(
-            _error!,
             style: TextStyle(color: theme.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: kDialogSpacing),
-          TextButton.icon(
-            onPressed: _searchSteam,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Try Again'),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+
+  Widget _buildErrorState(AppThemeData theme) => SectionGroupBox(
+    title: 'Search Failed',
+    theme: theme,
+    titleIcon: Icons.error,
+    titleLocation: SectionTitleLocation.top,
+    alternateBackground: true,
+    child: Column(
+      children: [
+        Icon(Icons.error, color: theme.error, size: 48),
+        const SizedBox(height: kDialogSpacing),
+        Text(
+          widget.game.title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: kDialogSpacing),
+        Text(
+          _error!,
+          style: TextStyle(color: theme.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: kDialogSpacing),
+        TextButton.icon(
+          onPressed: _searchSteam,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Try Again'),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildResultState(AppThemeData theme) {
     final result = _result!;

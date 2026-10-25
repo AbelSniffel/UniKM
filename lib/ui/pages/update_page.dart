@@ -130,15 +130,13 @@ String _downloadNotificationMessage({
   return 'Downloaded ${_formatMegabytes(downloadedBytes)}';
 }
 
-bool canRunAutomaticUpdateCheck(UpdateState state) {
-  return !state.isChecking &&
-      !state.isDownloading &&
-      state.downloadedFilePath == null;
-}
+bool canRunAutomaticUpdateCheck(UpdateState state) =>
+    !state.isChecking &&
+    !state.isDownloading &&
+    state.downloadedFilePath == null;
 
-bool canShowUpdateAvailableNotification(UpdateState state) {
-  return !state.isDownloading && state.downloadedFilePath == null;
-}
+bool canShowUpdateAvailableNotification(UpdateState state) =>
+    !state.isDownloading && state.downloadedFilePath == null;
 
 /// Update notifier using real GitHub API
 class UpdateNotifier extends Notifier<UpdateState> {
@@ -214,9 +212,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   Future<void> _loadCachedReleases() async {
     final cached = await _updateService.loadCachedReleases();
-    if (cached.isNotEmpty) {
-      state = state.copyWith(allReleases: cached);
-    }
+    if (cached.isNotEmpty) state = state.copyWith(allReleases: cached);
   }
 
   /// Shows or updates the persistent download notification. Without a
@@ -657,9 +653,7 @@ class _UpdatePageState extends ConsumerState<UpdatePage> {
 
         return RefreshIndicator(
           onRefresh: () async {
-            if (!canRunAutomaticUpdateCheck(updateState)) {
-              return;
-            }
+            if (!canRunAutomaticUpdateCheck(updateState)) return;
             await ref.read(updateProvider.notifier).checkForUpdates();
           },
           child: SingleChildScrollView(
@@ -1101,29 +1095,32 @@ class _UpdateStatusPanel extends ConsumerWidget {
   }
 }
 
-MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) {
-  return MarkdownStyleSheet(
-    p: TextStyle(color: theme.textPrimary, fontSize: 13),
-    h1: TextStyle(
-      color: theme.textPrimary,
-      fontSize: 16,
-      fontWeight: FontWeight.bold,
-    ),
-    h2: TextStyle(
-      color: theme.textPrimary,
-      fontSize: 14,
-      fontWeight: FontWeight.bold,
-    ),
-    h3: TextStyle(
-      color: theme.textPrimary,
-      fontSize: 13,
-      fontWeight: FontWeight.bold,
-    ),
-    code: TextStyle(color: theme.accent, fontFamily: 'monospace', fontSize: 12),
-    blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
-    listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
-  );
-}
+MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) =>
+    MarkdownStyleSheet(
+      p: TextStyle(color: theme.textPrimary, fontSize: 13),
+      h1: TextStyle(
+        color: theme.textPrimary,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+      h2: TextStyle(
+        color: theme.textPrimary,
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+      ),
+      h3: TextStyle(
+        color: theme.textPrimary,
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+      ),
+      code: TextStyle(
+        color: theme.accent,
+        fontFamily: 'monospace',
+        fontSize: 12,
+      ),
+      blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
+      listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
+    );
 
 /// Opens the release archive from the changelog title bar.
 class _ReleasesLinkButton extends ConsumerWidget {
@@ -1226,9 +1223,8 @@ class SkippedVersionsDialog extends ConsumerWidget {
                         style: TextStyle(color: theme.textPrimary),
                       ),
                       trailing: OutlinedButton(
-                        onPressed: () async {
-                          await notifier.unskipVersion(version);
-                        },
+                        onPressed: () async =>
+                            await notifier.unskipVersion(version),
                         child: const Text('Unskip'),
                       ),
                     ),

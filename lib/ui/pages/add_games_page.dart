@@ -136,9 +136,7 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
   }
 
   void _handleTabChanged() {
-    if (_tabController.indexIsChanging) {
-      return;
-    }
+    if (_tabController.indexIsChanging) return;
 
     final selectedTab = ref.read(addGamesSelectedTabProvider);
     if (selectedTab != _tabController.index) {
@@ -268,19 +266,19 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
         );
   }
 
+  /// Applies a form change and keeps the session draft in step.
+  void _update(VoidCallback change) {
+    setState(change);
+    _saveDraft();
+  }
+
   bool get _usesAutoDetectPlatform => _platform == kAutoDetectPlatformValue;
 
-  GamePlatform get _resolvedGamePlatform {
-    if (_usesAutoDetectPlatform) {
-      return PlatformDetector.detectPlatform(_fields.gameKey.text);
-    }
+  GamePlatform get _resolvedGamePlatform => _usesAutoDetectPlatform
+      ? PlatformDetector.detectPlatform(_fields.gameKey.text)
+      : GamePlatform.fromDisplayName(_platform);
 
-    return GamePlatform.fromDisplayName(_platform);
-  }
-
-  String get _resolvedPlatform {
-    return _resolvedGamePlatform.displayName;
-  }
+  String get _resolvedPlatform => _resolvedGamePlatform.displayName;
 
   bool get _isSteamPlatform => _resolvedGamePlatform == GamePlatform.steam;
 
@@ -292,16 +290,8 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
   }
 
   void _handleKeyChanged(String _) {
-    if (_usesAutoDetectPlatform) {
-      setState(() {});
-    }
+    if (_usesAutoDetectPlatform) setState(() {});
     _saveDraft();
-  }
-
-  /// Check if any existing game has the given key
-  Game? _findExistingGameByKey(String key) {
-    final games = ref.read(allGamesProvider);
-    return DuplicateKeyChecker.findExistingByKey(key, games);
   }
 
   Future<void> _submit() async {
@@ -323,7 +313,10 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     final isSteam = resolvedPlatform == GamePlatform.steam.displayName;
 
     // Check for duplicate key
-    final existingGame = _findExistingGameByKey(gameKey);
+    final existingGame = DuplicateKeyChecker.findExistingByKey(
+      gameKey,
+      ref.read(allGamesProvider),
+    );
     if (existingGame != null) {
       final action = await showDuplicateKeyDialog(context, widget.theme, [
         MapEntry(existingGame.gameKey, existingGame),
@@ -394,29 +387,23 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     }
   }
 
-  void _resetSteamPreview() {
-    setState(() {
-      _fetchedSteamTags = [];
-      _steamPreview = null;
-    });
-    _saveDraft();
-  }
+  void _resetSteamPreview() => _update(() {
+    _fetchedSteamTags = [];
+    _steamPreview = null;
+  });
 
   void _applySteamPreview({
     required SteamSearchResult result,
     required List<Tag> steamTags,
     String? coverImage,
     DateTime? cacheAt,
-  }) {
-    setState(() {
-      _fetchedSteamTags = steamTags;
-      _steamPreview = result;
-      _isDlc = result.isDlc;
-      if (coverImage != null) _fields.coverImage.text = coverImage;
-      if (cacheAt != null) _singleSteamCacheAt = cacheAt;
-    });
-    _saveDraft();
-  }
+  }) => _update(() {
+    _fetchedSteamTags = steamTags;
+    _steamPreview = result;
+    _isDlc = result.isDlc;
+    if (coverImage != null) _fields.coverImage.text = coverImage;
+    if (cacheAt != null) _singleSteamCacheAt = cacheAt;
+  });
 
   /// Fetch full Steam data (tags, image, reviews) for the current title and prepare a preview
   Future<void> _fetchSteamData() async {
@@ -522,10 +509,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                     value: _platform,
                     detectedPlatform: _resolvedGamePlatform,
                     tooltip: '$_gameKeyPlatformTooltip. Choose platform',
-                    onSelected: (value) {
-                      setState(() => _platform = value);
-                      _saveDraft();
-                    },
+                    onSelected: (value) => _update(() => _platform = value),
                   ),
                   titleController: _fields.title,
                   keyController: _fields.gameKey,
@@ -578,16 +562,11 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   theme: theme,
                   customTags: customTags,
                   selectedTagIds: _selectedTagIds,
-                  onTagToggled: (tagId) {
-                    setState(() {
-                      if (_selectedTagIds.contains(tagId)) {
-                        _selectedTagIds.remove(tagId);
-                      } else {
-                        _selectedTagIds.add(tagId);
-                      }
-                    });
-                    _saveDraft();
-                  },
+                  onTagToggled: (tagId) => _update(() {
+                    if (!_selectedTagIds.add(tagId)) {
+                      _selectedTagIds.remove(tagId);
+                    }
+                  }),
                   steamTags: _isSteamPlatform ? _fetchedSteamTags : const [],
                 ),
               ),
@@ -652,28 +631,16 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
           child: GameOptionsRow(
             theme: theme,
             isDlc: _isDlc,
-            onDlcChanged: (value) {
-              setState(() => _isDlc = value);
-              _saveDraft();
-            },
+            onDlcChanged: (value) => _update(() => _isDlc = value),
             deadline: DeadlineChip(
               theme: theme,
               hasDeadline: _hasDeadline,
               date: _deadlineDate,
-              onEnabledChanged: (value) {
-                setState(() => _hasDeadline = value);
-                _saveDraft();
-              },
-              onDateChanged: (value) {
-                setState(() => _deadlineDate = value);
-                _saveDraft();
-              },
+              onEnabledChanged: (value) => _update(() => _hasDeadline = value),
+              onDateChanged: (value) => _update(() => _deadlineDate = value),
             ),
             isUsed: _isUsed,
-            onUsedChanged: (value) {
-              setState(() => _isUsed = value);
-              _saveDraft();
-            },
+            onUsedChanged: (value) => _update(() => _isUsed = value),
           ),
         ),
       );
@@ -982,145 +949,143 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Paste input
-                SectionGroupBox(
-                  title: 'Paste Games',
+  Widget build(BuildContext context) => Column(
+    children: [
+      Expanded(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Paste input
+              SectionGroupBox(
+                title: 'Paste Games',
+                theme: widget.theme,
+                titleIcon: Icons.content_paste,
+                groupPosition: SectionGroupPosition.first,
+                titleLocation: SectionTitleLocation.top,
+                headerCrossAxisAlignment: CrossAxisAlignment.center,
+                trailing: PlatformMenuButton(
                   theme: widget.theme,
-                  titleIcon: Icons.content_paste,
-                  groupPosition: SectionGroupPosition.first,
-                  titleLocation: SectionTitleLocation.top,
-                  headerCrossAxisAlignment: CrossAxisAlignment.center,
-                  trailing: PlatformMenuButton(
-                    theme: widget.theme,
-                    value: _platform,
-                    tooltip: _platform == kAutoDetectPlatformValue
-                        ? 'Platform Override: Disabled'
-                        : 'Platform Override: $_platform',
-                    onSelected: (value) {
-                      setState(() => _platform = value);
-                      _parseInput();
-                    },
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      BatchGamesEditor(
-                        controller: _textController,
-                        theme: widget.theme,
-                        platformOverride: _platform == kAutoDetectPlatformValue
-                            ? null
-                            : GamePlatform.fromDisplayName(_platform),
-                        onChanged: (_) => _parseInput(),
-                      ),
-                      if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Tooltip(
-                            message: _steamErrors.values
-                                .whereType<String>()
-                                .join('\n'),
-                            child: Text(
-                              'Steam data: ${_steamResults.values.where((result) => result != null).length} loaded'
-                              '${_steamErrors.isEmpty ? "" : ", ${_steamErrors.length} failed"}',
-                              style: TextStyle(
-                                color: widget.theme.textSecondary,
-                                fontSize: 12,
-                              ),
+                  value: _platform,
+                  tooltip: _platform == kAutoDetectPlatformValue
+                      ? 'Platform Override: Disabled'
+                      : 'Platform Override: $_platform',
+                  onSelected: (value) {
+                    setState(() => _platform = value);
+                    _parseInput();
+                  },
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    BatchGamesEditor(
+                      controller: _textController,
+                      theme: widget.theme,
+                      platformOverride: _platform == kAutoDetectPlatformValue
+                          ? null
+                          : GamePlatform.fromDisplayName(_platform),
+                      onChanged: (_) => _parseInput(),
+                    ),
+                    if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Tooltip(
+                          message: _steamErrors.values.whereType<String>().join(
+                            '\n',
+                          ),
+                          child: Text(
+                            'Steam data: ${_steamResults.values.where((result) => result != null).length} loaded'
+                            '${_steamErrors.isEmpty ? "" : ", ${_steamErrors.length} failed"}',
+                            style: TextStyle(
+                              color: widget.theme.textSecondary,
+                              fontSize: 12,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                ),
-                SectionGroupBox(
-                  title: 'Options',
-                  theme: widget.theme,
-                  titleIcon: Icons.tune,
-                  groupPosition: SectionGroupPosition.last,
-                  alternateBackground: true,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      DeadlineChip(
-                        theme: widget.theme,
-                        hasDeadline: _hasDeadline,
-                        date: _deadlineDate,
-                        firstDate: DateTime.now(),
-                        onEnabledChanged: (value) {
-                          setState(() => _hasDeadline = value);
-                          _saveDraft();
-                        },
-                        onDateChanged: (value) {
-                          setState(() => _deadlineDate = value);
-                          _saveDraft();
-                        },
                       ),
-                    ],
+                  ],
+                ),
+              ),
+              SectionGroupBox(
+                title: 'Options',
+                theme: widget.theme,
+                titleIcon: Icons.tune,
+                groupPosition: SectionGroupPosition.last,
+                alternateBackground: true,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    DeadlineChip(
+                      theme: widget.theme,
+                      hasDeadline: _hasDeadline,
+                      date: _deadlineDate,
+                      firstDate: DateTime.now(),
+                      onEnabledChanged: (value) {
+                        setState(() => _hasDeadline = value);
+                        _saveDraft();
+                      },
+                      onDateChanged: (value) {
+                        setState(() => _deadlineDate = value);
+                        _saveDraft();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      // Pinned Import buttons at bottom
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: widget.theme.surface,
+          border: Border(top: BorderSide(color: widget.theme.border)),
+        ),
+        width: double.infinity,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final actions = Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: kElementHSpacing,
+              runSpacing: kElementVSpacing,
+              children: [
+                if (_parsedGames.isNotEmpty)
+                  TextButton(
+                    onPressed: _clearBatchInput,
+                    child: const Text('Clear'),
                   ),
+                ElevatedButton.icon(
+                  onPressed: _parsedGames.isEmpty || _isImporting
+                      ? null
+                      : _import,
+                  icon: _isImporting
+                      ? const AppCircularProgressIndicator(size: 18)
+                      : const Icon(Icons.save),
+                  label: Text('Save ${_parsedGames.length} Games'),
                 ),
               ],
-            ),
-          ),
+            );
+            return FooterWrap(
+              leading: _parsedGames.isNotEmpty && _hasSteamGames
+                  ? OutlinedButton.icon(
+                      onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
+                      icon: _isFetchingSteam
+                          ? const AppCircularProgressIndicator(size: 16)
+                          : const FaIcon(FontAwesomeIcons.steam, size: 18),
+                      label: const Text('Fetch'),
+                    )
+                  : const SizedBox.shrink(),
+              trailing: actions,
+            );
+          },
         ),
-        // Pinned Import buttons at bottom
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: widget.theme.surface,
-            border: Border(top: BorderSide(color: widget.theme.border)),
-          ),
-          width: double.infinity,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final actions = Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: kElementHSpacing,
-                runSpacing: kElementVSpacing,
-                children: [
-                  if (_parsedGames.isNotEmpty)
-                    TextButton(
-                      onPressed: _clearBatchInput,
-                      child: const Text('Clear'),
-                    ),
-                  ElevatedButton.icon(
-                    onPressed: _parsedGames.isEmpty || _isImporting
-                        ? null
-                        : _import,
-                    icon: _isImporting
-                        ? const AppCircularProgressIndicator(size: 18)
-                        : const Icon(Icons.save),
-                    label: Text('Save ${_parsedGames.length} Games'),
-                  ),
-                ],
-              );
-              return FooterWrap(
-                leading: _parsedGames.isNotEmpty && _hasSteamGames
-                    ? OutlinedButton.icon(
-                        onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
-                        icon: _isFetchingSteam
-                            ? const AppCircularProgressIndicator(size: 16)
-                            : const FaIcon(FontAwesomeIcons.steam, size: 18),
-                        label: const Text('Fetch'),
-                      )
-                    : const SizedBox.shrink(),
-                trailing: actions,
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }

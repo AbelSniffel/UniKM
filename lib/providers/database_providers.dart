@@ -14,9 +14,11 @@ import '../core/services/database_switching.dart';
 // =============================================================================
 
 /// Provider for SharedPreferences instance
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('SharedPreferences must be initialized before use');
-});
+final sharedPreferencesProvider = Provider<SharedPreferences>(
+  (ref) => throw UnimplementedError(
+    'SharedPreferences must be initialized before use',
+  ),
+);
 
 // =============================================================================
 // DATABASE PROVIDER
@@ -40,14 +42,12 @@ class DatabaseNotifier extends Notifier<DatabaseState> {
   DatabaseState build() => const DatabaseState();
 
   /// Sets the active database. Call this from the bootstrap process.
-  void setDatabase(AppDatabase db) {
-    state = DatabaseState(database: db, revision: state.revision + 1);
-  }
+  void setDatabase(AppDatabase db) =>
+      state = DatabaseState(database: db, revision: state.revision + 1);
 
   /// Clears the current database (call before switching).
-  void clearDatabase() {
-    state = DatabaseState(database: null, revision: state.revision + 1);
-  }
+  void clearDatabase() =>
+      state = DatabaseState(database: null, revision: state.revision + 1);
 }
 
 /// Provider for the database state notifier.
@@ -70,9 +70,7 @@ final databaseProvider = Provider<AppDatabase?>((ref) {
 /// Use this in methods that absolutely require the database to be present.
 final requireDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = ref.watch(databaseProvider);
-  if (db == null) {
-    throw StateError('Database not available');
-  }
+  if (db == null) throw StateError('Database not available');
   return db;
 });
 
@@ -92,9 +90,7 @@ Future<void> persistEncryptedDbIfNeeded(
     throw StateError('Database session changed during the operation');
   }
   final session = ref.read(encryptedDbSessionProvider);
-  if (session != null) {
-    await session.persistFromTemp();
-  }
+  if (session != null) await session.persistFromTemp();
 }
 
 /// Holds the callback for database switching, set by the application bootstrap.

@@ -7,22 +7,20 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/constants/platform_patterns.dart';
 
-FaIconData platformIconFor(GamePlatform platform) {
-  return switch (platform) {
-    GamePlatform.steam => FontAwesomeIcons.steamSymbol,
-    GamePlatform.epicGames => FontAwesomeIcons.store,
-    GamePlatform.gog => FontAwesomeIcons.solidFloppyDisk,
-    GamePlatform.origin => FontAwesomeIcons.circleDot,
-    GamePlatform.ubisoft => FontAwesomeIcons.coins,
-    GamePlatform.xbox => FontAwesomeIcons.xbox,
-    GamePlatform.playStation => FontAwesomeIcons.playstation,
-    GamePlatform.nintendo => FontAwesomeIcons.gamepad,
-    GamePlatform.humble => FontAwesomeIcons.store,
-    GamePlatform.itchio => FontAwesomeIcons.gamepad,
-    GamePlatform.webLink => FontAwesomeIcons.link,
-    GamePlatform.other => FontAwesomeIcons.question,
-  };
-}
+FaIconData platformIconFor(GamePlatform platform) => switch (platform) {
+  GamePlatform.steam => FontAwesomeIcons.steamSymbol,
+  GamePlatform.epicGames => FontAwesomeIcons.store,
+  GamePlatform.gog => FontAwesomeIcons.solidFloppyDisk,
+  GamePlatform.origin => FontAwesomeIcons.circleDot,
+  GamePlatform.ubisoft => FontAwesomeIcons.coins,
+  GamePlatform.xbox => FontAwesomeIcons.xbox,
+  GamePlatform.playStation => FontAwesomeIcons.playstation,
+  GamePlatform.nintendo => FontAwesomeIcons.gamepad,
+  GamePlatform.humble => FontAwesomeIcons.store,
+  GamePlatform.itchio => FontAwesomeIcons.gamepad,
+  GamePlatform.webLink => FontAwesomeIcons.link,
+  GamePlatform.other => FontAwesomeIcons.question,
+};
 
 double platformIconSizeFor(GamePlatform platform, {double? minHeight}) {
   final double base = minHeight != null
@@ -55,11 +53,9 @@ class PlatformIcon extends StatelessWidget {
   final double? size;
 
   @override
-  Widget build(BuildContext context) {
-    return FaIcon(
-      platformIconFor(platform),
-      size: size ?? platformIconSizeFor(platform),
-      color: color,
-    );
-  }
+  Widget build(BuildContext context) => FaIcon(
+    platformIconFor(platform),
+    size: size ?? platformIconSizeFor(platform),
+    color: color,
+  );
 }

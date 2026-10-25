@@ -89,9 +89,7 @@ class EncryptedDbSession {
   Future<void> _cleanupTempFiles() async {
     try {
       final file = File(tempDbPath);
-      if (await file.exists()) {
-        await file.delete();
-      }
+      if (await file.exists()) await file.delete();
       // Also try to delete the temp directory
       final dir = file.parent;
       if (await dir.exists() && dir.path.contains('UniKM_db_')) {

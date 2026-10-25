@@ -389,9 +389,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   }
 
-  void _dismissDialog() {
-    Navigator.pop(context, false);
-  }
+  void _dismissDialog() => Navigator.pop(context, false);
 
   @override
   Widget build(BuildContext context) {
@@ -546,92 +544,88 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   }
 
-  Widget _buildNavigationBar(AppThemeData theme) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.background,
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(
-                Icons.chevron_left,
-                color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
-              ),
-              tooltip: 'Previous Game',
-              onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                '${_currentIndex + 1}/${_gameIds.length}',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.chevron_right,
-                color: _currentIndex < _gameIds.length - 1
-                    ? theme.textPrimary
-                    : theme.textHint,
-              ),
-              tooltip: 'Next Game',
-              onPressed: _currentIndex < _gameIds.length - 1
-                  ? () => _navigate(1)
-                  : null,
-            ),
-          ],
-        ),
+  Widget _buildNavigationBar(AppThemeData theme) => Center(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
       ),
-    );
-  }
-
-  Widget _buildFooter(AppThemeData theme) {
-    return Row(
-      spacing: kElementHSpacing,
-      children: [
-        // Delete icon button
-        IconButton(
-          tooltip: 'Delete',
-          onPressed: _confirmDelete,
-          icon: const Icon(Icons.delete),
-          color: theme.secondary,
-        ),
-
-        if (_platform == 'Steam') ...[
-          Tooltip(
-            message: 'Fetch',
-            child: IconButton(
-              onPressed: _isFetching ? null : _fetchSteamData,
-              icon: _isFetching
-                  ? const AppCircularProgressIndicator(size: 18)
-                  : const FaIcon(FontAwesomeIcons.steam, size: 18),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              Icons.chevron_left,
+              color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
+            ),
+            tooltip: 'Previous Game',
+            onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              '${_currentIndex + 1}/${_gameIds.length}',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(
-            tooltip: 'Steam Page',
-            onPressed: _openSteamPage,
-            icon: const Icon(Icons.open_in_new),
+            icon: Icon(
+              Icons.chevron_right,
+              color: _currentIndex < _gameIds.length - 1
+                  ? theme.textPrimary
+                  : theme.textHint,
+            ),
+            tooltip: 'Next Game',
+            onPressed: _currentIndex < _gameIds.length - 1
+                ? () => _navigate(1)
+                : null,
           ),
         ],
+      ),
+    ),
+  );
 
-        const Spacer(),
+  Widget _buildFooter(AppThemeData theme) => Row(
+    spacing: kElementHSpacing,
+    children: [
+      // Delete icon button
+      IconButton(
+        tooltip: 'Delete',
+        onPressed: _confirmDelete,
+        icon: const Icon(Icons.delete),
+        color: theme.secondary,
+      ),
 
-        // Save button
-        ElevatedButton.icon(
-          onPressed: _hasChanges && !_isSaving ? _save : null,
-          icon: _isSaving
-              ? const AppCircularProgressIndicator(size: 18)
-              : const Icon(Icons.save),
-          label: const Text('Save'),
+      if (_platform == 'Steam') ...[
+        Tooltip(
+          message: 'Fetch',
+          child: IconButton(
+            onPressed: _isFetching ? null : _fetchSteamData,
+            icon: _isFetching
+                ? const AppCircularProgressIndicator(size: 18)
+                : const FaIcon(FontAwesomeIcons.steam, size: 18),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Steam Page',
+          onPressed: _openSteamPage,
+          icon: const Icon(Icons.open_in_new),
         ),
       ],
-    );
-  }
+
+      const Spacer(),
+
+      // Save button
+      ElevatedButton.icon(
+        onPressed: _hasChanges && !_isSaving ? _save : null,
+        icon: _isSaving
+            ? const AppCircularProgressIndicator(size: 18)
+            : const Icon(Icons.save),
+        label: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 /// Details tab
@@ -669,107 +663,103 @@ class _DetailsTab extends StatelessWidget {
   final int? steamReviewCount;
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ?information,
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.only(top: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ?information,
 
-          SectionGroupBox(
-            title: 'Options',
-            theme: theme,
-            titleIcon: Icons.tune,
-            groupPosition: information == null
-                ? SectionGroupPosition.first
-                : SectionGroupPosition.middle,
-            alternateBackground: true,
-            child: options,
-          ),
+        SectionGroupBox(
+          title: 'Options',
+          theme: theme,
+          titleIcon: Icons.tune,
+          groupPosition: information == null
+              ? SectionGroupPosition.first
+              : SectionGroupPosition.middle,
+          alternateBackground: true,
+          child: options,
+        ),
 
-          // Metadata
-          SectionGroupBox(
-            title: showGameDetailsSkmId
-                ? 'Metadata / SKM-ID ${game.id}'
-                : 'Metadata',
-            theme: theme,
-            titleIcon: Icons.schedule,
-            groupPosition: SectionGroupPosition.last,
-            alternateBackground: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        // Metadata
+        SectionGroupBox(
+          title: showGameDetailsSkmId
+              ? 'Metadata / SKM-ID ${game.id}'
+              : 'Metadata',
+          theme: theme,
+          titleIcon: Icons.schedule,
+          groupPosition: SectionGroupPosition.last,
+          alternateBackground: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GameMetadataRow(
+                theme: theme,
+                label: 'Added',
+                value: DateFormat('dd/MM/yyyy HH:mm').format(game.createdAt),
+              ),
+              GameMetadataRow(
+                theme: theme,
+                label: 'Updated',
+                value: DateFormat(
+                  'dd/MM/yyyy HH:mm',
+                ).format(lastUpdatedAt ?? game.updatedAt),
+              ),
+              if (platform == 'Steam')
                 GameMetadataRow(
                   theme: theme,
-                  label: 'Added',
-                  value: DateFormat('dd/MM/yyyy HH:mm').format(game.createdAt),
+                  label: 'Cache',
+                  value: steamCacheAt != null
+                      ? DateFormat('dd/MM/yyyy HH:mm').format(steamCacheAt!)
+                      : 'No cached data',
                 ),
+              if (steamDeveloper != null && steamDeveloper!.isNotEmpty)
                 GameMetadataRow(
                   theme: theme,
-                  label: 'Updated',
-                  value: DateFormat(
-                    'dd/MM/yyyy HH:mm',
-                  ).format(lastUpdatedAt ?? game.updatedAt),
+                  label: 'Developer',
+                  value: steamDeveloper!,
                 ),
-                if (platform == 'Steam')
-                  GameMetadataRow(
-                    theme: theme,
-                    label: 'Cache',
-                    value: steamCacheAt != null
-                        ? DateFormat('dd/MM/yyyy HH:mm').format(steamCacheAt!)
-                        : 'No cached data',
-                  ),
-                if (steamDeveloper != null && steamDeveloper!.isNotEmpty)
-                  GameMetadataRow(
-                    theme: theme,
-                    label: 'Developer',
-                    value: steamDeveloper!,
-                  ),
-                if (platform == 'Steam')
-                  GameMetadataRow(
-                    theme: theme,
-                    label: 'Reviews',
-                    value: (steamReviewCount == null || steamReviewCount == 0)
-                        ? 'No reviews'
-                        : '${steamReviewScore ?? game.reviewScore}% · ${Game.reviewRatingFor(steamReviewScore ?? game.reviewScore)} · ${NumberFormat.compact().format(steamReviewCount)} reviews',
-                  ),
-                // Steam AppID (only shown for Steam platform)
-                if (platform == 'Steam')
-                  GameMetadataRow(
-                    theme: theme,
-                    label: 'Steam AppID',
-                    value: steamAppId.isEmpty ? 'Not set' : steamAppId,
-                    labelWidth: 95,
-                    trailing: IconButton(
-                      icon: Icon(
-                        Icons.copy,
-                        color: theme.textSecondary,
-                        size: 20,
-                      ),
-                      tooltip: 'Copy AppID',
-                      iconSize: 20,
-                      padding: const EdgeInsets.all(5),
-                      constraints: const BoxConstraints(),
-                      onPressed: steamAppId.isEmpty
-                          ? null
-                          : () {
-                              Clipboard.setData(
-                                ClipboardData(text: steamAppId),
-                              );
-                              NotificationManager.instance.success(
-                                'Steam AppID copied to clipboard',
-                              );
-                            },
+              if (platform == 'Steam')
+                GameMetadataRow(
+                  theme: theme,
+                  label: 'Reviews',
+                  value: (steamReviewCount == null || steamReviewCount == 0)
+                      ? 'No reviews'
+                      : '${steamReviewScore ?? game.reviewScore}% · ${Game.reviewRatingFor(steamReviewScore ?? game.reviewScore)} · ${NumberFormat.compact().format(steamReviewCount)} reviews',
+                ),
+              // Steam AppID (only shown for Steam platform)
+              if (platform == 'Steam')
+                GameMetadataRow(
+                  theme: theme,
+                  label: 'Steam AppID',
+                  value: steamAppId.isEmpty ? 'Not set' : steamAppId,
+                  labelWidth: 95,
+                  trailing: IconButton(
+                    icon: Icon(
+                      Icons.copy,
+                      color: theme.textSecondary,
+                      size: 20,
                     ),
+                    tooltip: 'Copy AppID',
+                    iconSize: 20,
+                    padding: const EdgeInsets.all(5),
+                    constraints: const BoxConstraints(),
+                    onPressed: steamAppId.isEmpty
+                        ? null
+                        : () {
+                            Clipboard.setData(ClipboardData(text: steamAppId));
+                            NotificationManager.instance.success(
+                              'Steam AppID copied to clipboard',
+                            );
+                          },
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 Future<String?> showUnsavedGameChangesDialog(

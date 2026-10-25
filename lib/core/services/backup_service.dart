@@ -85,10 +85,9 @@ class BackupInfo {
     };
   }
 
-  String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
+  String _formatDate(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 }
 
 /// Result of a backup operation
@@ -247,18 +246,14 @@ class BackupService {
   Future<Directory> getBackupsDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
     final backupsDir = Directory(p.join(appDir.path, 'UniKM', 'backups'));
-    if (!await backupsDir.exists()) {
-      await backupsDir.create(recursive: true);
-    }
+    if (!await backupsDir.exists()) await backupsDir.create(recursive: true);
     return backupsDir;
   }
 
   /// Get the current database path (configured or default)
   Future<String> _getBaseDatabasePath() async {
     final configured = ref.read(currentDatabasePathProvider);
-    if (configured.isNotEmpty) {
-      return configured;
-    }
+    if (configured.isNotEmpty) return configured;
     return AppDatabase.getDatabasePath();
   }
 
@@ -319,9 +314,7 @@ class BackupService {
 
       if (isEncrypted) {
         // For encrypted database, persist any pending changes first
-        if (session != null) {
-          await session.persistFromTemp();
-        }
+        if (session != null) await session.persistFromTemp();
 
         // Copy the encrypted file
         final encPath = '$basePath.enc';
@@ -374,9 +367,7 @@ class BackupService {
     final backupsDir = await getBackupsDirectory();
     final backups = <(BackupInfo, int)>[];
 
-    if (!await backupsDir.exists()) {
-      return const [];
-    }
+    if (!await backupsDir.exists()) return const [];
 
     await for (final entity in backupsDir.list()) {
       if (entity is File) {
@@ -421,9 +412,7 @@ class BackupService {
     final backups = await listBackups();
     var deletedCount = 0;
 
-    if (backups.length <= maxBackupCount) {
-      return 0;
-    }
+    if (backups.length <= maxBackupCount) return 0;
 
     // Delete oldest backups
     final toDelete = backups.skip(maxBackupCount);

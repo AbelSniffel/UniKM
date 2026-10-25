@@ -104,9 +104,8 @@ class AdvancedSection extends ConsumerWidget {
                   label: interactionCardsSpec.label,
                   description: interactionCardsSpec.description,
                   value: ref.watch(experimentalInteractionCardsProvider),
-                  onChanged: (value) => settingsNotifier.setSetting(
+                  onChanged: settingsNotifier.setter(
                     SettingsKeys.experimentalInteractionCards,
-                    value,
                   ),
                 ),
               ],
@@ -129,9 +128,8 @@ class AdvancedSection extends ConsumerWidget {
                   for (final option in _frameRateOptions)
                     SettingsChoice(option.key, option.value),
                 ],
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.frameRatePreference,
-                  value,
                 ),
               ),
             ],
@@ -149,9 +147,7 @@ class AdvancedSection extends ConsumerWidget {
                 theme: theme,
                 spec: devWindowSpec,
                 child: OutlinedButton(
-                  onPressed: () {
-                    DevWindowOverlay.toggle(context);
-                  },
+                  onPressed: () => DevWindowOverlay.toggle(context),
                   child: const Text('Open'),
                 ),
               ),

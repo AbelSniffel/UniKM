@@ -92,9 +92,7 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
     // next iteration, but if the loop is between items the overlay would linger
     // for that gap. Clearing state now gives an instant visual response while
     // the flag still prevents any further DB writes.
-    if (state.currentGameId == null) {
-      state = const BatchFetchState();
-    }
+    if (state.currentGameId == null) state = const BatchFetchState();
   }
 
   /// Mark a game as currently processing

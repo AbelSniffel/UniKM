@@ -19,12 +19,10 @@ import '../widgets/groupbox_family_title.dart';
 import '../widgets/settings_header_actions.dart';
 import '../widgets/toggle_switch.dart';
 
-Future<void> showDeviceSyncDialog(BuildContext context) {
-  return showAppDialog<void>(
-    context: context,
-    builder: (_) => const _DeviceSyncDialog(),
-  );
-}
+Future<void> showDeviceSyncDialog(BuildContext context) => showAppDialog<void>(
+  context: context,
+  builder: (_) => const _DeviceSyncDialog(),
+);
 
 /// Shows the sync direction choice dialog for a trusted peer.
 ///
@@ -335,20 +333,16 @@ class _SyncContent extends ConsumerWidget {
   final bool refreshing;
   final VoidCallback onRefresh;
 
-  IconData _statusIcon(DeviceSyncStatus status) {
-    return switch (status) {
-      DeviceSyncStatus.discovering => Icons.radar,
-      DeviceSyncStatus.syncing => Icons.sync,
-      DeviceSyncStatus.error => Icons.link_off,
-      _ => Icons.link,
-    };
-  }
+  IconData _statusIcon(DeviceSyncStatus status) => switch (status) {
+    DeviceSyncStatus.discovering => Icons.radar,
+    DeviceSyncStatus.syncing => Icons.sync,
+    DeviceSyncStatus.error => Icons.link_off,
+    _ => Icons.link,
+  };
 
   bool _isPlaceholderName(String? value) {
     final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.isEmpty) {
-      return true;
-    }
+    if (normalized.isEmpty) return true;
     return normalized == 'localhost' ||
         normalized == '127.0.0.1' ||
         normalized == '::1' ||
@@ -358,9 +352,7 @@ class _SyncContent extends ConsumerWidget {
 
   bool _isGenericDeviceName(String? value) {
     final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.isEmpty) {
-      return true;
-    }
+    if (normalized.isEmpty) return true;
     return normalized == 'unikm device' ||
         normalized == 'mobile device' ||
         normalized == 'desktop device' ||
@@ -379,31 +371,19 @@ class _SyncContent extends ConsumerWidget {
     final secondUsable =
         !_isPlaceholderName(second) && !_isGenericDeviceName(second);
 
-    if (firstUsable) {
-      return first;
-    }
-    if (secondUsable) {
-      return second;
-    }
-    if (!_isPlaceholderName(first)) {
-      return first;
-    }
-    if (!_isPlaceholderName(second)) {
-      return second;
-    }
+    if (firstUsable) return first;
+    if (secondUsable) return second;
+    if (!_isPlaceholderName(first)) return first;
+    if (!_isPlaceholderName(second)) return second;
     return 'UniKM Device';
   }
 
   SyncDeviceType _effectiveDeviceType(_UnifiedDeviceRow row) {
     final trustedType = row.trusted?.deviceType ?? SyncDeviceType.unknown;
-    if (trustedType != SyncDeviceType.unknown) {
-      return trustedType;
-    }
+    if (trustedType != SyncDeviceType.unknown) return trustedType;
 
     final discoveredType = row.discovered?.deviceType ?? SyncDeviceType.unknown;
-    if (discoveredType != SyncDeviceType.unknown) {
-      return discoveredType;
-    }
+    if (discoveredType != SyncDeviceType.unknown) return discoveredType;
 
     final lower = row.name.toLowerCase();
     final looksMobile =
@@ -417,11 +397,10 @@ class _SyncContent extends ConsumerWidget {
     return looksMobile ? SyncDeviceType.mobile : SyncDeviceType.desktop;
   }
 
-  IconData _deviceTypeIcon(_UnifiedDeviceRow row) {
-    return _effectiveDeviceType(row) == SyncDeviceType.mobile
-        ? Icons.smartphone
-        : Icons.desktop_windows;
-  }
+  IconData _deviceTypeIcon(_UnifiedDeviceRow row) =>
+      _effectiveDeviceType(row) == SyncDeviceType.mobile
+      ? Icons.smartphone
+      : Icons.desktop_windows;
 
   ({Color color, String label}) _deviceVisual(_UnifiedDeviceRow row) {
     if (row.discovered?.isSyncCompatible == false) {
@@ -432,9 +411,7 @@ class _SyncContent extends ConsumerWidget {
     }
 
     if (row.trusted != null) {
-      if (!sync.enabled) {
-        return (color: theme.textSecondary, label: 'Trusted');
-      }
+      if (!sync.enabled) return (color: theme.textSecondary, label: 'Trusted');
       // DB mismatch takes highest priority — warn regardless of online state.
       if (sync.dbMismatchPeerIds.contains(row.id)) {
         return (color: Colors.orange, label: 'DB Mismatch');
@@ -789,9 +766,7 @@ class _SyncContent extends ConsumerWidget {
                 );
 
             await pairingFuture
-                .then((result) {
-                  pairingCompleter.complete();
-                })
+                .then((result) => pairingCompleter.complete())
                 .catchError((error) {
                   pairingCompleter.completeError(error);
                   throw error;
@@ -836,18 +811,16 @@ class _ErrorView extends StatelessWidget {
   final AppThemeData theme;
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 120,
-      child: Center(
-        child: Text(
-          error,
-          style: TextStyle(color: theme.error),
-          textAlign: TextAlign.center,
-        ),
+  Widget build(BuildContext context) => SizedBox(
+    height: 120,
+    child: Center(
+      child: Text(
+        error,
+        style: TextStyle(color: theme.error),
+        textAlign: TextAlign.center,
       ),
-    );
-  }
+    ),
+  );
 }
 
 // Match the click-to-show info buttons used on the settings page.

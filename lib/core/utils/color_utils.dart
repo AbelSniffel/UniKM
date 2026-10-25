@@ -1,5 +1,5 @@
 /// Shared color parsing and conversion utilities
-/// 
+///
 /// Consolidates duplicate color logic from app_theme.dart, settings_page.dart,
 /// and game.dart into a single source of truth.
 library;
@@ -24,11 +24,9 @@ String colorToHex(Color color) {
 }
 
 /// Get a contrasting text color (black or white) for the given [color].
-Color contrastColor(Color color) {
-  return color.computeLuminance() > 0.5 ? Colors.black : Colors.white;
-}
+Color contrastColor(Color color) =>
+    color.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
 /// Blend two colors together by [amount] (0.0 = color1, 1.0 = color2).
-Color blendColors(Color color1, Color color2, double amount) {
-  return Color.lerp(color1, color2, amount)!;
-}
+Color blendColors(Color color1, Color color2, double amount) =>
+    Color.lerp(color1, color2, amount)!;

@@ -1,5 +1,5 @@
 /// Reusable hover state builder widget
-/// 
+///
 /// Eliminates the repeated pattern of:
 /// - bool _isHovered = false;
 /// - MouseRegion with onEnter/onExit setState calls
@@ -8,10 +8,10 @@ library;
 import 'package:flutter/material.dart';
 
 /// A builder widget that provides hover state management.
-/// 
+///
 /// This widget encapsulates the common hover pattern used throughout the app,
 /// reducing boilerplate code and ensuring consistent hover behavior.
-/// 
+///
 /// Example usage:
 /// ```dart
 /// HoverBuilder(
@@ -66,13 +66,11 @@ class _HoverBuilderState extends State<HoverBuilder> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: widget.cursor,
-      onEnter: widget.enabled ? _onEnter : null,
-      onExit: widget.enabled ? _onExit : null,
-      opaque: false,
-      child: widget.builder(context, _isHovered && widget.enabled),
-    );
-  }
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: widget.cursor,
+    onEnter: widget.enabled ? _onEnter : null,
+    onExit: widget.enabled ? _onExit : null,
+    opaque: false,
+    child: widget.builder(context, _isHovered && widget.enabled),
+  );
 }

@@ -240,14 +240,12 @@ class Tag {
   Color? _cachedColor;
 
   /// Create from database entry
-  factory Tag.fromEntry(TagEntry entry) {
-    return Tag(
-      id: entry.id,
-      name: entry.name,
-      colorHex: entry.color,
-      isSteamTag: entry.isSteamTag,
-    );
-  }
+  factory Tag.fromEntry(TagEntry entry) => Tag(
+    id: entry.id,
+    name: entry.name,
+    colorHex: entry.color,
+    isSteamTag: entry.isSteamTag,
+  );
 
   /// Parse and cache color from hex string
   Color get color => _cachedColor ??= parseHexColor(colorHex);

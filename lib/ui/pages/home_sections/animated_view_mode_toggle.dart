@@ -31,9 +31,7 @@ class AnimatedViewModeToggle extends StatefulWidget {
 }
 
 class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
-  void _handleTap() {
-    widget.onToggle();
-  }
+  void _handleTap() => widget.onToggle();
 
   Future<void> _showContextMenu(Offset globalPosition) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -63,9 +61,7 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
       ],
     );
 
-    if (!mounted || action == null) {
-      return;
-    }
+    if (!mounted || action == null) return;
 
     if (action == GameListViewMode.grid.name) {
       widget.onSelectGridView();

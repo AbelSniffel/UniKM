@@ -207,6 +207,16 @@ class _PairAckResponse {
   final String? remoteStaticPubB64;
 }
 
+/// UTF-8 JSON bytes of a control packet or payload.
+Uint8List _jsonBytes(Object? value) => utf8.encode(jsonEncode(value));
+
+/// Where a pairing reply is sent.
+typedef _PairReply = ({
+  RawDatagramSocket socket,
+  InternetAddress address,
+  int port,
+});
+
 class _IncomingPairRequestState {
   const _IncomingPairRequestState({
     required this.requestId,
@@ -353,22 +363,14 @@ class _ProgressReporter {
 @visibleForTesting
 bool isValidSyncDatabaseFileName(String fileName) {
   final trimmed = fileName.trim();
-  if (trimmed.isEmpty || trimmed == '.' || trimmed == '..') {
-    return false;
-  }
-  if (trimmed != p.basename(trimmed)) {
-    return false;
-  }
+  if (trimmed.isEmpty || trimmed == '.' || trimmed == '..') return false;
+  if (trimmed != p.basename(trimmed)) return false;
   if (!kIsWeb && Platform.isWindows) {
-    if (RegExp(r'[<>:"/\\|?*]').hasMatch(trimmed)) {
-      return false;
-    }
+    if (RegExp(r'[<>:"/\\|?*]').hasMatch(trimmed)) return false;
   }
   if (!kIsWeb && Platform.isLinux) {
     // NUL character is the only character not allowed in Linux filenames
-    if (trimmed.contains('\x00')) {
-      return false;
-    }
+    if (trimmed.contains('\x00')) return false;
   }
   return true;
 }
@@ -431,12 +433,8 @@ class DeviceSyncService {
     _activeSyncSockets.add(socket);
     unawaited(
       socket.done.then<void>(
-        (_) {
-          _activeSyncSockets.remove(socket);
-        },
-        onError: (Object _) {
-          _activeSyncSockets.remove(socket);
-        },
+        (_) => _activeSyncSockets.remove(socket),
+        onError: (Object _) => _activeSyncSockets.remove(socket),
       ),
     );
   }
@@ -547,7 +545,7 @@ class DeviceSyncService {
             peerId: peer.id,
           );
           socket.send(
-            utf8.encode(jsonEncode(payload)),
+            _jsonBytes(payload),
             InternetAddress(endpoint?.host ?? peer.host),
             endpoint?.port ?? peer.port,
           );
@@ -638,26 +636,20 @@ class DeviceSyncService {
   Timer? _changeSignalTimer;
 
   SyncDeviceType _currentDeviceType() {
-    if (kIsWeb) {
-      return SyncDeviceType.web;
-    }
-    if (Platform.isAndroid || Platform.isIOS) {
-      return SyncDeviceType.mobile;
-    }
+    if (kIsWeb) return SyncDeviceType.web;
+    if (Platform.isAndroid || Platform.isIOS) return SyncDeviceType.mobile;
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       return SyncDeviceType.desktop;
     }
     return SyncDeviceType.unknown;
   }
 
-  String _defaultDeviceName(SyncDeviceType type) {
-    return switch (type) {
-      SyncDeviceType.mobile => 'Mobile Device',
-      SyncDeviceType.desktop => 'Desktop Device',
-      SyncDeviceType.web => 'UniKM Web',
-      SyncDeviceType.unknown => 'UniKM Device',
-    };
-  }
+  String _defaultDeviceName(SyncDeviceType type) => switch (type) {
+    SyncDeviceType.mobile => 'Mobile Device',
+    SyncDeviceType.desktop => 'Desktop Device',
+    SyncDeviceType.web => 'UniKM Web',
+    SyncDeviceType.unknown => 'UniKM Device',
+  };
 
   static const _placeholderNames = {
     'localhost',
@@ -678,21 +670,17 @@ class DeviceSyncService {
       names.where((name) => !_isPlaceholderName(name)).firstOrNull?.trim();
 
   String _normalizeDeviceName(String? value, {SyncDeviceType? fallbackType}) {
-    if (!_isPlaceholderName(value)) {
-      return value!.trim();
-    }
+    if (!_isPlaceholderName(value)) return value!.trim();
     return _defaultDeviceName(fallbackType ?? SyncDeviceType.unknown);
   }
 
-  Map<String, dynamic> _localIdentityMap(String deviceId) {
-    return {
-      'id': deviceId,
-      'name': _currentDeviceName(),
-      'deviceType': syncDeviceTypeToWire(_currentDeviceType()),
-      'port': discoveryPort,
-      'transferPort': transferPort,
-    };
-  }
+  Map<String, dynamic> _localIdentityMap(String deviceId) => {
+    'id': deviceId,
+    'name': _currentDeviceName(),
+    'deviceType': syncDeviceTypeToWire(_currentDeviceType()),
+    'port': discoveryPort,
+    'transferPort': transferPort,
+  };
 
   Future<Map<String, dynamic>> _getLocalSyncStateForPeer(String peerId) async {
     final db = ref.read(databaseProvider);
@@ -755,9 +743,7 @@ class DeviceSyncService {
 
   Future<List<DiscoveredSyncPeer>> discoverPeers() async {
     if (!_foreground) return const [];
-    if (kIsWeb) {
-      return const [];
-    }
+    if (kIsWeb) return const [];
 
     final deviceId = await _ensureDeviceId();
     await ensureDiscoveryResponder(deviceId: deviceId);
@@ -782,16 +768,12 @@ class DeviceSyncService {
         final (:datagram, :payload) = packet;
 
         final type = payload['type'];
-        if (type != _discoverResponseType && type != _announceType) {
-          return;
-        }
+        if (type != _discoverResponseType && type != _announceType) return;
 
         final fromMap = _sender(payload);
         if (fromMap == null) return;
         final peerId = (fromMap['id'] as String?)?.trim() ?? '';
-        if (peerId.isEmpty || peerId == deviceId) {
-          return;
-        }
+        if (peerId.isEmpty || peerId == deviceId) return;
 
         final peerName = (fromMap['name'] as String?)?.trim();
         final peerType = syncDeviceTypeFromWire(
@@ -815,14 +797,12 @@ class DeviceSyncService {
         );
       });
 
-      final discoverPacket = utf8.encode(
-        jsonEncode({
-          'type': _discoverType,
-          'protocol': _protocolVersion,
-          'from': _localIdentityMap(deviceId),
-          'replyPort': socket.port,
-        }),
-      );
+      final discoverPacket = _jsonBytes({
+        'type': _discoverType,
+        'protocol': _protocolVersion,
+        'from': _localIdentityMap(deviceId),
+        'replyPort': socket.port,
+      });
 
       socket.send(
         discoverPacket,
@@ -949,14 +929,12 @@ class DeviceSyncService {
       }
     });
     void probe() => socket.send(
-      utf8.encode(
-        jsonEncode({
-          'type': _discoverType,
-          'protocol': _protocolVersion,
-          'from': _localIdentityMap(localDeviceId),
-          'replyPort': socket.port,
-        }),
-      ),
+      _jsonBytes({
+        'type': _discoverType,
+        'protocol': _protocolVersion,
+        'from': _localIdentityMap(localDeviceId),
+        'replyPort': socket.port,
+      }),
       address,
       peer.port,
     );
@@ -1039,9 +1017,7 @@ class DeviceSyncService {
       await signal.future;
       decisionAvailable = null;
 
-      if (pendingDecisionResponses.isEmpty) {
-        return waitForReceiverDecision();
-      }
+      if (pendingDecisionResponses.isEmpty) return waitForReceiverDecision();
       return pendingDecisionResponses.removeFirst();
     }
 
@@ -1072,18 +1048,12 @@ class DeviceSyncService {
       final (:datagram, :payload) = packet;
 
       final incomingRequestId = (payload['requestId'] as String?)?.trim();
-      if (incomingRequestId != requestId) {
-        return;
-      }
+      if (incomingRequestId != requestId) return;
 
       final fromId = _senderId(payload);
       if (fromId == null) return;
-      if (fromId != peer.id) {
-        return;
-      }
-      if (datagram.address.address != peer.host) {
-        return;
-      }
+      if (fromId != peer.id) return;
+      if (datagram.address.address != peer.host) return;
 
       final type = payload['type'];
       if (type == _pairReceiverDecisionType) {
@@ -1125,17 +1095,15 @@ class DeviceSyncService {
       }
     });
     try {
-      final pairRequestPacket = utf8.encode(
-        jsonEncode({
-          'type': _pairRequestType,
-          'protocol': _protocolVersion,
-          'requestId': requestId,
-          'replyPort': socket.port,
-          'spub': localStaticPubB64,
-          'proofAlg': _pairCodeProofAlg,
-          'from': _localIdentityMap(localDeviceId),
-        }),
-      );
+      final pairRequestPacket = _jsonBytes({
+        'type': _pairRequestType,
+        'protocol': _protocolVersion,
+        'requestId': requestId,
+        'replyPort': socket.port,
+        'spub': localStaticPubB64,
+        'proofAlg': _pairCodeProofAlg,
+        'from': _localIdentityMap(localDeviceId),
+      });
       sendStage(pairRequestPacket);
 
       // Show code to sender now that request has been sent
@@ -1247,21 +1215,19 @@ class DeviceSyncService {
         required String identityChangedMessage,
       }) async {
         sendStage(
-          utf8.encode(
-            jsonEncode(
-              await _attachControlAuthForFingerprint(
-                payload: {
-                  'type': type,
-                  'protocol': _protocolVersion,
-                  'requestId': requestId,
-                  'replyPort': socket.port,
-                  'spub': localStaticPubB64,
-                  'ok': true,
-                  'from': _localIdentityMap(localDeviceId),
-                },
-                remoteStaticPubB64: remoteDecisionSpub,
-                pairingId: requestId,
-              ),
+          _jsonBytes(
+            await _attachControlAuthForFingerprint(
+              payload: {
+                'type': type,
+                'protocol': _protocolVersion,
+                'requestId': requestId,
+                'replyPort': socket.port,
+                'spub': localStaticPubB64,
+                'ok': true,
+                'from': _localIdentityMap(localDeviceId),
+              },
+              remoteStaticPubB64: remoteDecisionSpub,
+              pairingId: requestId,
             ),
           ),
         );
@@ -1416,19 +1382,17 @@ class DeviceSyncService {
     );
 
     try {
-      final decisionPacket = utf8.encode(
-        jsonEncode({
-          'type': _pairReceiverDecisionType,
-          'protocol': _protocolVersion,
-          'requestId': requestId,
-          'accepted': accept,
-          if (accept && localStaticPubB64 != null) 'spub': localStaticPubB64,
-          if (accept && encryptedCodeProof != null) 'proof': encryptedCodeProof,
-          if (accept) 'proofAlg': _pairCodeProofAlg,
-          if (!accept) 'reason': 'declined',
-          'from': _localIdentityMap(localDeviceId),
-        }),
-      );
+      final decisionPacket = _jsonBytes({
+        'type': _pairReceiverDecisionType,
+        'protocol': _protocolVersion,
+        'requestId': requestId,
+        'accepted': accept,
+        if (accept && localStaticPubB64 != null) 'spub': localStaticPubB64,
+        if (accept && encryptedCodeProof != null) 'proof': encryptedCodeProof,
+        if (accept) 'proofAlg': _pairCodeProofAlg,
+        if (!accept) 'reason': 'declined',
+        'from': _localIdentityMap(localDeviceId),
+      });
 
       _pairDecisions[requestId] = decisionPacket;
       socket.send(decisionPacket, request.sourceAddress, request.replyPort);
@@ -1539,7 +1503,7 @@ class DeviceSyncService {
   ) async {
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     try {
-      socket.send(utf8.encode(jsonEncode(payload)), address, port);
+      socket.send(_jsonBytes(payload), address, port);
     } finally {
       socket.close();
     }
@@ -1560,9 +1524,8 @@ class DeviceSyncService {
     }
   }
 
-  Future<void> setAutoOnStartup(bool value) async {
-    await _setSetting(SettingsKeys.syncAutoOnStartup, value);
-  }
+  Future<void> setAutoOnStartup(bool value) async =>
+      await _setSetting(SettingsKeys.syncAutoOnStartup, value);
 
   /// Records a completed sync once: timestamps, the active peer, and (for
   /// manual sync) the revision ID both devices now share.
@@ -1577,9 +1540,7 @@ class DeviceSyncService {
     final db = ref.read(databaseProvider);
     final timestampMillis =
         authoritativeTimestampMillis ?? DateTime.now().millisecondsSinceEpoch;
-    if (db != null) {
-      await db.setSyncDbTimestampMillis(timestampMillis);
-    }
+    if (db != null) await db.setSyncDbTimestampMillis(timestampMillis);
     await _setSetting(
       SettingsKeys.syncLastSyncAtIso,
       DateTime.fromMillisecondsSinceEpoch(timestampMillis).toIso8601String(),
@@ -1607,12 +1568,11 @@ class DeviceSyncService {
     );
   }
 
-  bool _peerEndpointChanged(TrustedSyncPeer a, TrustedSyncPeer b) {
-    return a.host != b.host ||
-        a.port != b.port ||
-        a.name != b.name ||
-        a.deviceType != b.deviceType;
-  }
+  bool _peerEndpointChanged(TrustedSyncPeer a, TrustedSyncPeer b) =>
+      a.host != b.host ||
+      a.port != b.port ||
+      a.name != b.name ||
+      a.deviceType != b.deviceType;
 
   DiscoveredSyncPeer? _freshAnnouncedPeerById(String peerId) {
     final announced = _announcedPeers[peerId];
@@ -1639,14 +1599,10 @@ class DeviceSyncService {
       trustedPeer: peer,
       discoveredPeer: discovered,
     );
-    if (!_peerEndpointChanged(peer, refreshed)) {
-      return peer;
-    }
+    if (!_peerEndpointChanged(peer, refreshed)) return peer;
 
     final probe = await _pingPeer(refreshed);
-    if (!probe.reachable || !probe.remoteTrusted) {
-      return null;
-    }
+    if (!probe.reachable || !probe.remoteTrusted) return null;
 
     return _upsertTrustedPeer(
       DiscoveredSyncPeer(
@@ -1884,9 +1840,7 @@ class DeviceSyncService {
     final enabled =
         (settings[SettingsKeys.syncEnabled] as bool?) ??
         DefaultSettings.syncEnabled;
-    if (!enabled) {
-      throw const DeviceSyncException('Device sync is disabled.');
-    }
+    if (!enabled) throw const DeviceSyncException('Device sync is disabled.');
 
     final trustedPeers = _trustedPeers;
     if (trustedPeers.isEmpty) {
@@ -2288,7 +2242,7 @@ class DeviceSyncService {
 
   /// Steam metadata travels only when the two caches differ.
   Future<String> _steamCacheDigest() async => SyncEntryFingerprint.hashBytes(
-    utf8.encode(jsonEncode(_canonicalizeJson(await _codec.exportSteamCache()))),
+    _jsonBytes(_canonicalizeJson(await _codec.exportSteamCache())),
   );
 
   // ── Transfer helpers ──────────────────────────────────────────────────────
@@ -2324,9 +2278,8 @@ class DeviceSyncService {
     return parts.join(' and ');
   }
 
-  Future<void> _setSetting<T>(String key, T value) {
-    return ref.read(settingsProvider.notifier).setSetting(key, value);
-  }
+  Future<void> _setSetting<T>(String key, T value) =>
+      ref.read(settingsProvider.notifier).setSetting(key, value);
 
   Future<String> _ensureDeviceId() async {
     final settings = ref.read(settingsProvider);
@@ -2386,40 +2339,34 @@ class DeviceSyncService {
               datagram: datagram,
               payload: payload,
               deviceId: deviceId,
-            ).catchError((Object error, StackTrace stack) {
-              debugPrint('Sync control packet ignored: $error');
-            }),
+            ).catchError(
+              (Object error, StackTrace stack) =>
+                  debugPrint('Sync control packet ignored: $error'),
+            ),
           );
           return;
         }
 
         final fromId = _senderId(payload);
         if (fromId == null) return;
-        if (fromId.isNotEmpty && fromId == deviceId) {
-          return;
-        }
+        if (fromId.isNotEmpty && fromId == deviceId) return;
 
         final replyPort =
             (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
 
-        final replyPacket = utf8.encode(
-          jsonEncode({
-            'type': _discoverResponseType,
-            'protocol': _protocolVersion,
-            'from': _localIdentityMap(deviceId),
-            'port': discoveryPort,
-            'transferPort': transferPort,
-          }),
-        );
+        final replyPacket = _jsonBytes({
+          'type': _discoverResponseType,
+          'protocol': _protocolVersion,
+          'from': _localIdentityMap(deviceId),
+          'port': discoveryPort,
+          'transferPort': transferPort,
+        });
 
         socket.send(replyPacket, datagram.address, replyPort);
       },
-      onError: (Object error, StackTrace stackTrace) async {
-        await stopDiscoveryResponder();
-      },
-      onDone: () async {
-        await stopDiscoveryResponder();
-      },
+      onError: (Object error, StackTrace stackTrace) async =>
+          await stopDiscoveryResponder(),
+      onDone: () async => await stopDiscoveryResponder(),
     );
 
     // Start the TCP sync data server alongside the UDP responder.
@@ -2766,17 +2713,13 @@ class DeviceSyncService {
 
     final fromId = _senderId(payload);
     if (fromId == null) return;
-    if (fromId.isEmpty || fromId != pending.expectedPeerId) {
-      return;
-    }
+    if (fromId.isEmpty || fromId != pending.expectedPeerId) return;
 
     final isAuthentic = await _verifyTrustedControlPacketAuth(
       payload: payload,
       fromPeerId: fromId,
     );
-    if (!isAuthentic) {
-      return;
-    }
+    if (!isAuthentic) return;
 
     if (payload['trusted'] == false) {
       await removeTrustedPeer(fromId, notifyRemote: false);
@@ -2795,9 +2738,7 @@ class DeviceSyncService {
   ) async {
     final fromId = _senderId(payload);
     if (fromId == null) return;
-    if (fromId.isNotEmpty && fromId == deviceId) {
-      return;
-    }
+    if (fromId.isNotEmpty && fromId == deviceId) return;
 
     final revoked = _revocationLedger.find(
       fromId,
@@ -2832,7 +2773,7 @@ class DeviceSyncService {
         pairingId: revoked.pairingId,
       );
       socket.send(
-        utf8.encode(jsonEncode(rejection)),
+        _jsonBytes(rejection),
         datagram.address,
         (payload['replyPort'] as num?)?.toInt() ?? datagram.port,
       );
@@ -2869,7 +2810,7 @@ class DeviceSyncService {
       },
       peerId: fromId,
     );
-    final pongPacket = utf8.encode(jsonEncode(pongPayload));
+    final pongPacket = _jsonBytes(pongPayload);
 
     socket.send(pongPacket, datagram.address, replyPort);
   }
@@ -2891,14 +2832,10 @@ class DeviceSyncService {
   }
 
   Future<_PeerPingResult> _pingPeer(TrustedSyncPeer peer) async {
-    if (kIsWeb) {
-      return const _PeerPingResult(reachable: false);
-    }
+    if (kIsWeb) return const _PeerPingResult(reachable: false);
 
     final targetHost = peer.host.trim();
-    if (targetHost.isEmpty) {
-      return const _PeerPingResult(reachable: false);
-    }
+    if (targetHost.isEmpty) return const _PeerPingResult(reachable: false);
 
     final localDeviceId = await _ensureDeviceId();
     final token = _uuid.v4();
@@ -2941,24 +2878,18 @@ class DeviceSyncService {
         if (payload == null || payload['type'] != _syncPongType) return;
 
         final incomingToken = (payload['token'] as String?)?.trim();
-        if (incomingToken != token) {
-          return;
-        }
+        if (incomingToken != token) return;
 
         final fromId = _senderId(payload);
         if (fromId == null) return;
-        if (fromId.isEmpty || fromId != peer.id) {
-          return;
-        }
+        if (fromId.isEmpty || fromId != peer.id) return;
 
         unawaited(() async {
           final isAuthentic = await _verifyTrustedControlPacketAuth(
             payload: payload,
             fromPeerId: fromId,
           );
-          if (!isAuthentic || completer.isCompleted) {
-            return;
-          }
+          if (!isAuthentic || completer.isCompleted) return;
 
           completer.complete(_PeerPingResult.fromPong(payload));
         }());
@@ -2976,7 +2907,7 @@ class DeviceSyncService {
       },
       peerId: peer.id,
     );
-    final packet = utf8.encode(jsonEncode(packetPayload));
+    final packet = _jsonBytes(packetPayload);
 
     socket.send(packet, InternetAddress(targetHost), peer.port);
 
@@ -3214,9 +3145,7 @@ class DeviceSyncService {
       payload: payload,
       fromPeerId: fromId,
     );
-    if (!isAuthentic || !_acceptFreshControl(payload, fromId)) {
-      return;
-    }
+    if (!isAuthentic || !_acceptFreshControl(payload, fromId)) return;
 
     await removeTrustedPeer(fromId, notifyRemote: false);
     _emitSyncEvent(PeerRemovedEvent(fromId));
@@ -3228,15 +3157,11 @@ class DeviceSyncService {
     String deviceId,
   ) async {
     final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) {
-      return;
-    }
+    if (requestId.isEmpty) return;
     final fromMap = _sender(payload);
     if (fromMap == null) return;
     final fromId = (fromMap['id'] as String?)?.trim() ?? '';
-    if (fromId.isEmpty || fromId == deviceId) {
-      return;
-    }
+    if (fromId.isEmpty || fromId == deviceId) return;
     if (_trustedPeerById(fromId)?.pairingId == requestId) return;
 
     final existing = _pendingPairRequests[requestId];
@@ -3295,23 +3220,15 @@ class DeviceSyncService {
     Map<String, dynamic> payload,
   ) {
     final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) {
-      return null;
-    }
+    if (requestId.isEmpty) return null;
 
     final request = _pendingPairRequests[requestId];
-    if (request == null || !request.receiverAccepted) {
-      return null;
-    }
+    if (request == null || !request.receiverAccepted) return null;
 
     final fromId = _senderId(payload);
     if (fromId == null) return null;
-    if (fromId.isEmpty || fromId != request.peer.id) {
-      return null;
-    }
-    if (datagram.address.address != request.sourceAddress.address) {
-      return null;
-    }
+    if (fromId.isEmpty || fromId != request.peer.id) return null;
+    if (datagram.address.address != request.sourceAddress.address) return null;
 
     return request;
   }
@@ -3336,24 +3253,9 @@ class DeviceSyncService {
     )) {
       return;
     }
-    final commitOk = payload['ok'] == true;
-
-    if (initiatorSpub.isEmpty ||
-        (expectedInitiatorSpub.isNotEmpty &&
-            initiatorSpub != expectedInitiatorSpub) ||
-        !commitOk) {
-      final nackPacket = utf8.encode(
-        jsonEncode({
-          'type': _pairCommitAckType,
-          'protocol': _protocolVersion,
-          'requestId': requestId,
-          'accepted': false,
-          'reason': 'invalid_commit',
-          'from': _localIdentityMap(deviceId),
-        }),
-      );
-      socket.send(nackPacket, datagram.address, replyPort);
-      _pendingPairRequests.remove(requestId);
+    final reply = (socket: socket, address: datagram.address, port: replyPort);
+    if (!_validPairStep(payload, initiatorSpub, expectedInitiatorSpub)) {
+      _rejectPairStep(reply, _pairCommitAckType, requestId, deviceId);
       return;
     }
 
@@ -3361,31 +3263,76 @@ class DeviceSyncService {
       initiatorCommitAccepted: true,
       initiatorStaticPubB64: initiatorSpub,
     );
+    await _acceptPairStep(
+      reply,
+      _pairCommitAckType,
+      request,
+      initiatorSpub,
+      deviceId,
+    );
+  }
 
-    // Include our own static public key in the ack so the initiator can pin us.
+  /// The initiator confirmed the step and presented the expected key.
+  static bool _validPairStep(
+    Map<String, dynamic> payload,
+    String initiatorSpub,
+    String expectedInitiatorSpub,
+  ) =>
+      payload['ok'] == true &&
+      initiatorSpub.isNotEmpty &&
+      (expectedInitiatorSpub.isEmpty || initiatorSpub == expectedInitiatorSpub);
+
+  /// Declines a commit or finalize step and forgets the request.
+  void _rejectPairStep(
+    _PairReply reply,
+    String type,
+    String requestId,
+    String deviceId,
+  ) {
+    reply.socket.send(
+      _jsonBytes({
+        'type': type,
+        'protocol': _protocolVersion,
+        'requestId': requestId,
+        'accepted': false,
+        'reason': type == _pairCommitAckType
+            ? 'invalid_commit'
+            : 'invalid_finalize',
+        'from': _localIdentityMap(deviceId),
+      }),
+      reply.address,
+      reply.port,
+    );
+    _pendingPairRequests.remove(requestId);
+  }
+
+  /// Accepts a commit or finalize step. The ack carries our static public
+  /// key so the initiator can pin us.
+  Future<void> _acceptPairStep(
+    _PairReply reply,
+    String type,
+    _IncomingPairRequestState request,
+    String initiatorSpub,
+    String deviceId,
+  ) async {
     var localStaticPubB64 = (request.receiverStaticPubB64 ?? '').trim();
     if (localStaticPubB64.isEmpty) {
       localStaticPubB64 = await _localStaticPubB64();
     }
-
-    final ackPacket = utf8.encode(
-      jsonEncode(
-        await _attachControlAuthForFingerprint(
-          payload: {
-            'type': _pairCommitAckType,
-            'protocol': _protocolVersion,
-            'requestId': requestId,
-            'accepted': true,
-            'spub': localStaticPubB64,
-            'ok': true,
-            'from': _localIdentityMap(deviceId),
-          },
-          remoteStaticPubB64: initiatorSpub,
-          pairingId: requestId,
-        ),
-      ),
+    final ack = await _attachControlAuthForFingerprint(
+      payload: {
+        'type': type,
+        'protocol': _protocolVersion,
+        'requestId': request.requestId,
+        'accepted': true,
+        'spub': localStaticPubB64,
+        'ok': true,
+        'from': _localIdentityMap(deviceId),
+      },
+      remoteStaticPubB64: initiatorSpub,
+      pairingId: request.requestId,
     );
-    socket.send(ackPacket, datagram.address, replyPort);
+    reply.socket.send(_jsonBytes(ack), reply.address, reply.port);
   }
 
   Future<void> _handlePairFinalize(
@@ -3395,9 +3342,7 @@ class DeviceSyncService {
     String deviceId,
   ) async {
     final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) {
-      return;
-    }
+    if (requestId.isEmpty) return;
 
     final from = payload['from'];
     final fromId = from is Map ? from['id'] as String? ?? '' : '';
@@ -3421,7 +3366,7 @@ class DeviceSyncService {
         peerId: fromId,
       );
       socket.send(
-        utf8.encode(jsonEncode(ack)),
+        _jsonBytes(ack),
         datagram.address,
         (payload['replyPort'] as num?)?.toInt() ?? datagram.port,
       );
@@ -3434,18 +3379,11 @@ class DeviceSyncService {
       return;
     }
 
-    if (from is! Map) {
-      return;
-    }
+    if (from is! Map) return;
     final fromMap = Map<String, dynamic>.from(from);
-    if (fromId.isEmpty || fromId != request.peer.id) {
-      return;
-    }
-    if (datagram.address.address != request.sourceAddress.address) {
-      return;
-    }
+    if (fromId.isEmpty || fromId != request.peer.id) return;
+    if (datagram.address.address != request.sourceAddress.address) return;
 
-    final finalizeOk = payload['ok'] == true;
     final initiatorSpub = (payload['spub'] as String?)?.trim() ?? '';
     final expectedInitiatorSpub = (request.initiatorStaticPubB64 ?? '').trim();
     final replyPort = (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
@@ -3457,22 +3395,9 @@ class DeviceSyncService {
       return;
     }
 
-    if (!finalizeOk ||
-        initiatorSpub.isEmpty ||
-        (expectedInitiatorSpub.isNotEmpty &&
-            initiatorSpub != expectedInitiatorSpub)) {
-      final nackPacket = utf8.encode(
-        jsonEncode({
-          'type': _pairFinalizeAckType,
-          'protocol': _protocolVersion,
-          'requestId': requestId,
-          'accepted': false,
-          'reason': 'invalid_finalize',
-          'from': _localIdentityMap(deviceId),
-        }),
-      );
-      socket.send(nackPacket, datagram.address, replyPort);
-      _pendingPairRequests.remove(requestId);
+    final reply = (socket: socket, address: datagram.address, port: replyPort);
+    if (!_validPairStep(payload, initiatorSpub, expectedInitiatorSpub)) {
+      _rejectPairStep(reply, _pairFinalizeAckType, requestId, deviceId);
       return;
     }
 
@@ -3505,30 +3430,13 @@ class DeviceSyncService {
         pairingId: requestId,
       );
       _emitSyncEvent(PeerTrustedEvent(trusted));
-
-      var localStaticPubB64 = (request.receiverStaticPubB64 ?? '').trim();
-      if (localStaticPubB64.isEmpty) {
-        localStaticPubB64 = await _localStaticPubB64();
-      }
-
-      final ackPacket = utf8.encode(
-        jsonEncode(
-          await _attachControlAuthForFingerprint(
-            payload: {
-              'type': _pairFinalizeAckType,
-              'protocol': _protocolVersion,
-              'requestId': requestId,
-              'accepted': true,
-              'spub': localStaticPubB64,
-              'ok': true,
-              'from': _localIdentityMap(deviceId),
-            },
-            remoteStaticPubB64: initiatorSpub,
-            pairingId: requestId,
-          ),
-        ),
+      await _acceptPairStep(
+        reply,
+        _pairFinalizeAckType,
+        request,
+        initiatorSpub,
+        deviceId,
       );
-      socket.send(ackPacket, datagram.address, replyPort);
       _pendingPairRequests.remove(requestId);
       _pairDecisions.remove(requestId);
     } finally {
@@ -3637,9 +3545,7 @@ class DeviceSyncService {
   }
 
   bool _constantTimeBytesEqual(List<int> a, List<int> b) {
-    if (a.length != b.length) {
-      return false;
-    }
+    if (a.length != b.length) return false;
     var diff = 0;
     for (var i = 0; i < a.length; i++) {
       diff |= a[i] ^ b[i];
@@ -3687,9 +3593,7 @@ class DeviceSyncService {
     String pairingId = '',
   }) async {
     final remoteFingerprint = (remoteStaticPubB64 ?? '').trim();
-    if (remoteFingerprint.isEmpty) {
-      return payload;
-    }
+    if (remoteFingerprint.isEmpty) return payload;
     if (pairingId.isNotEmpty) payload['pairingId'] = pairingId;
 
     final localStaticPubB64 = await _localStaticPubB64();
@@ -3729,15 +3633,11 @@ class DeviceSyncService {
     required String expectedFingerprint,
     required String pairingId,
   }) async {
-    if (expectedFingerprint.isEmpty) {
-      return false;
-    }
+    if (expectedFingerprint.isEmpty) return false;
     if (pairingId.isNotEmpty && payload['pairingId'] != pairingId) return false;
 
     final auth = payload['auth'];
-    if (auth is! Map) {
-      return false;
-    }
+    if (auth is! Map) return false;
 
     final authMap = Map<String, dynamic>.from(auth);
     final alg = (authMap['alg'] as String?)?.trim() ?? '';
@@ -3832,9 +3732,7 @@ class DeviceSyncService {
   }
 
   Future<void> _sendAnnounce(String deviceId) async {
-    if (kIsWeb) {
-      return;
-    }
+    if (kIsWeb) return;
 
     final socket = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
@@ -3845,15 +3743,13 @@ class DeviceSyncService {
     socket.broadcastEnabled = true;
 
     try {
-      final packet = utf8.encode(
-        jsonEncode({
-          'type': _announceType,
-          'protocol': _protocolVersion,
-          'from': _localIdentityMap(deviceId),
-          'port': discoveryPort,
-          'transferPort': transferPort,
-        }),
-      );
+      final packet = _jsonBytes({
+        'type': _announceType,
+        'protocol': _protocolVersion,
+        'from': _localIdentityMap(deviceId),
+        'port': discoveryPort,
+        'transferPort': transferPort,
+      });
       socket.send(packet, InternetAddress('255.255.255.255'), defaultLanPort);
     } finally {
       socket.close();
@@ -3866,19 +3762,15 @@ class DeviceSyncService {
     try {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       socket.broadcastEnabled = true;
-      final packet = utf8.encode(
-        jsonEncode({
-          'type': _offlineType,
-          'protocol': _protocolVersion,
-          'from': _localIdentityMap(deviceId),
-        }),
-      );
+      final packet = _jsonBytes({
+        'type': _offlineType,
+        'protocol': _protocolVersion,
+        'from': _localIdentityMap(deviceId),
+      });
       socket.send(packet, InternetAddress('255.255.255.255'), defaultLanPort);
       for (final peer in _trustedPeers) {
         final address = InternetAddress.tryParse(peer.host);
-        if (address != null) {
-          socket.send(packet, address, peer.port);
-        }
+        if (address != null) socket.send(packet, address, peer.port);
       }
     } catch (_) {
       // Going offline must still succeed if the network is unavailable.
@@ -3936,9 +3828,7 @@ class DeviceSyncService {
       return _cachedDeviceName!.trim();
     }
 
-    if (kIsWeb) {
-      return _defaultDeviceName(SyncDeviceType.web);
-    }
+    if (kIsWeb) return _defaultDeviceName(SyncDeviceType.web);
 
     try {
       return _firstRealName([
@@ -3955,17 +3845,14 @@ class DeviceSyncService {
 
   /// Refreshes the cached device name using device_info_plus.
   /// Call this during service initialization or when device sync is enabled.
-  Future<void> refreshDeviceName() async {
-    _cachedDeviceName = await _getDetailedDeviceName();
-  }
+  Future<void> refreshDeviceName() async =>
+      _cachedDeviceName = await _getDetailedDeviceName();
 
   /// Asynchronously gets the full device name using device_info_plus.
   /// This method provides more detailed device names including mobile devices.
   Future<String> _getDetailedDeviceName() async {
     final fallbackType = _currentDeviceType();
-    if (kIsWeb) {
-      return _defaultDeviceName(SyncDeviceType.web);
-    }
+    if (kIsWeb) return _defaultDeviceName(SyncDeviceType.web);
 
     try {
       final deviceInfo = DeviceInfoPlugin();

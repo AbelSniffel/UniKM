@@ -241,14 +241,12 @@ SyncDeviceType syncDeviceTypeFromWire(String? value) {
   };
 }
 
-String syncDeviceTypeToWire(SyncDeviceType value) {
-  return switch (value) {
-    SyncDeviceType.desktop => 'desktop',
-    SyncDeviceType.mobile => 'mobile',
-    SyncDeviceType.web => 'web',
-    SyncDeviceType.unknown => 'unknown',
-  };
-}
+String syncDeviceTypeToWire(SyncDeviceType value) => switch (value) {
+  SyncDeviceType.desktop => 'desktop',
+  SyncDeviceType.mobile => 'mobile',
+  SyncDeviceType.web => 'web',
+  SyncDeviceType.unknown => 'unknown',
+};
 
 class TrustedSyncPeer {
   const TrustedSyncPeer({
@@ -292,21 +290,20 @@ class TrustedSyncPeer {
     return payload;
   }
 
-  factory TrustedSyncPeer.fromJson(Map<String, dynamic> json) {
-    return TrustedSyncPeer(
-      id: (json['id'] as String?) ?? '',
-      name: (json['name'] as String?) ?? 'Unknown Device',
-      host: (json['host'] as String?) ?? '',
-      port: (json['port'] as num?)?.toInt() ?? 0,
-      deviceType: syncDeviceTypeFromWire(
-        json['device_type'] as String? ?? json['deviceType'] as String?,
-      ),
-      fingerprint: json['fingerprint'] as String?,
-      pairingId: json['pairing_id'] as String? ?? '',
-      transferPort: (json['transfer_port'] as num?)?.toInt(),
-      lastSeenAtIso: json['last_seen_at_iso'] as String?,
-    );
-  }
+  factory TrustedSyncPeer.fromJson(Map<String, dynamic> json) =>
+      TrustedSyncPeer(
+        id: (json['id'] as String?) ?? '',
+        name: (json['name'] as String?) ?? 'Unknown Device',
+        host: (json['host'] as String?) ?? '',
+        port: (json['port'] as num?)?.toInt() ?? 0,
+        deviceType: syncDeviceTypeFromWire(
+          json['device_type'] as String? ?? json['deviceType'] as String?,
+        ),
+        fingerprint: json['fingerprint'] as String?,
+        pairingId: json['pairing_id'] as String? ?? '',
+        transferPort: (json['transfer_port'] as num?)?.toInt(),
+        lastSeenAtIso: json['last_seen_at_iso'] as String?,
+      );
 
   TrustedSyncPeer copyWith({
     String? id,
@@ -354,17 +351,15 @@ class DiscoveredSyncPeer {
   bool get isSyncCompatible => syncProtocol == supportedDeviceSyncProtocol;
   final SyncDeviceType deviceType;
 
-  TrustedSyncPeer toTrustedPeer() {
-    return TrustedSyncPeer(
-      id: id,
-      name: name,
-      host: host,
-      port: port,
-      transferPort: transferPort,
-      deviceType: deviceType,
-      lastSeenAtIso: DateTime.now().toIso8601String(),
-    );
-  }
+  TrustedSyncPeer toTrustedPeer() => TrustedSyncPeer(
+    id: id,
+    name: name,
+    host: host,
+    port: port,
+    transferPort: transferPort,
+    deviceType: deviceType,
+    lastSeenAtIso: DateTime.now().toIso8601String(),
+  );
 }
 
 class PendingPairRequest {
@@ -380,15 +375,11 @@ class PendingPairRequest {
 }
 
 List<TrustedSyncPeer> decodeTrustedPeers(String raw) {
-  if (raw.trim().isEmpty) {
-    return const [];
-  }
+  if (raw.trim().isEmpty) return const [];
 
   try {
     final parsed = jsonDecode(raw);
-    if (parsed is! List) {
-      return const [];
-    }
+    if (parsed is! List) return const [];
     return parsed
         .whereType<Map>()
         .map((e) => TrustedSyncPeer.fromJson(Map<String, dynamic>.from(e)))

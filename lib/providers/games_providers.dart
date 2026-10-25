@@ -202,9 +202,7 @@ class GamesNotifier extends Notifier<GamesState> {
       final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
       games.add(Game.fromEntry(entry, tags: tags));
 
-      if (i != 0 && i % _loadChunkSize == 0) {
-        await _yieldToUi();
-      }
+      if (i != 0 && i % _loadChunkSize == 0) await _yieldToUi();
     }
 
     return games;
@@ -413,49 +411,46 @@ class GamesNotifier extends Notifier<GamesState> {
   }
 
   /// Update a game
-  Future<bool> updateGame(Game game, {List<int>? tagIds}) async {
-    return _mutate((db) async {
-      final updatedAt = DateTime.now();
+  Future<bool> updateGame(Game game, {List<int>? tagIds}) async =>
+      _mutate((db) async {
+        final updatedAt = DateTime.now();
 
-      await LibraryRepository(db).updateGame(
-        GameEntry(
-          id: game.id,
-          title: game.title,
-          gameKey: game.gameKey,
-          platform: game.platform,
-          dateAdded: game.dateAdded,
-          updatedAt: updatedAt,
-          notes: game.notes,
-          isUsed: game.isUsed,
-          coverImage: game.coverImage,
-          hasDeadline: game.hasDeadline,
-          deadlineDate: game.deadlineDate,
-          isDlc: game.isDlc,
-          steamAppId: game.steamAppId,
-          developer: game.developer,
-          reviewScore: game.reviewScore,
-          reviewCount: game.reviewCount,
-        ),
-        tagIds: tagIds,
-      );
+        await LibraryRepository(db).updateGame(
+          GameEntry(
+            id: game.id,
+            title: game.title,
+            gameKey: game.gameKey,
+            platform: game.platform,
+            dateAdded: game.dateAdded,
+            updatedAt: updatedAt,
+            notes: game.notes,
+            isUsed: game.isUsed,
+            coverImage: game.coverImage,
+            hasDeadline: game.hasDeadline,
+            deadlineDate: game.deadlineDate,
+            isDlc: game.isDlc,
+            steamAppId: game.steamAppId,
+            developer: game.developer,
+            reviewScore: game.reviewScore,
+            reviewCount: game.reviewCount,
+          ),
+          tagIds: tagIds,
+        );
 
-      return true;
-    }, failure: false);
-  }
+        return true;
+      }, failure: false);
 
   /// Delete a single game
   Future<bool> deleteGame(int id) => deleteGames([id]);
 
   /// Delete games
-  Future<bool> deleteGames(List<int> ids) async {
-    return _mutate((db) async {
-      await db.transaction(() async {
-        await db.deleteGames(ids);
-        await db.deleteUnusedNonUserTags();
-      });
-      return true;
-    }, failure: false);
-  }
+  Future<bool> deleteGames(List<int> ids) async => _mutate((db) async {
+    await db.transaction(() async {
+      await db.deleteGames(ids);
+      await db.deleteUnusedNonUserTags();
+    });
+    return true;
+  }, failure: false);
 
   /// Mark games as used/unused. Completion acknowledges persistence even for
   /// callers using the legacy background-save option.
@@ -589,9 +584,8 @@ class GamesNotifier extends Notifier<GamesState> {
     state = state.copyWith(platformFilter: normalized);
   }
 
-  void setTagFilters(List<int> tagIds) {
-    state = state.copyWith(tagFilters: tagIds);
-  }
+  void setTagFilters(List<int> tagIds) =>
+      state = state.copyWith(tagFilters: tagIds);
 
   void toggleTagFilter(int tagId) {
     final current = List<int>.from(state.tagFilters);
@@ -603,25 +597,19 @@ class GamesNotifier extends Notifier<GamesState> {
     state = state.copyWith(tagFilters: current);
   }
 
-  void setShowDeadlineOnly(bool value) {
-    state = state.copyWith(showDeadlineOnly: value);
-  }
+  void setShowDeadlineOnly(bool value) =>
+      state = state.copyWith(showDeadlineOnly: value);
 
-  void setShowDlcOnly(bool value) {
-    state = state.copyWith(showDlcOnly: value);
-  }
+  void setShowDlcOnly(bool value) => state = state.copyWith(showDlcOnly: value);
 
-  void setShowUsedOnly(bool value) {
-    state = state.copyWith(showUsedOnly: value);
-  }
+  void setShowUsedOnly(bool value) =>
+      state = state.copyWith(showUsedOnly: value);
 
-  void setShowNoPicturesOnly(bool value) {
-    state = state.copyWith(showNoPicturesOnly: value);
-  }
+  void setShowNoPicturesOnly(bool value) =>
+      state = state.copyWith(showNoPicturesOnly: value);
 
-  void setShowNoTagsOnly(bool value) {
-    state = state.copyWith(showNoTagsOnly: value);
-  }
+  void setShowNoTagsOnly(bool value) =>
+      state = state.copyWith(showNoTagsOnly: value);
 
   void clearAllFilters() {
     _searchDebounce?.cancel();

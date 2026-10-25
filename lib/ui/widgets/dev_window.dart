@@ -23,21 +23,17 @@ class DevWindowOverlay extends ConsumerStatefulWidget {
 
   static OverlayEntry? _overlayEntry;
 
+  static void _close() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
   static void toggle(BuildContext context) {
-    if (_overlayEntry != null) {
-      _overlayEntry?.remove();
-      _overlayEntry = null;
-    } else {
-      _overlayEntry = OverlayEntry(
-        builder: (context) => DevWindowOverlay(
-          onClose: () {
-            _overlayEntry?.remove();
-            _overlayEntry = null;
-          },
-        ),
-      );
-      Overlay.of(context).insert(_overlayEntry!);
-    }
+    if (_overlayEntry != null) return _close();
+    _overlayEntry = OverlayEntry(
+      builder: (context) => const DevWindowOverlay(onClose: _close),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
   }
 
   @override
@@ -52,24 +48,11 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   Offset? _dragOffset;
   int _tab = 0;
 
-  static const List<({String title, String message, double progress})>
-  _fetchPreviewStates = [
-    (title: 'Portal 2', message: 'Fetching Steam data (1/4)', progress: 0.18),
-    (
-      title: 'Half-Life 2',
-      message: 'Fetching Steam data (2/4)',
-      progress: 0.42,
-    ),
-    (
-      title: 'Left 4 Dead 2',
-      message: 'Fetching Steam data (3/4)',
-      progress: 0.71,
-    ),
-    (
-      title: 'Team Fortress 2',
-      message: 'Fetching Steam data (4/4)',
-      progress: 0.94,
-    ),
+  static const _fetchPreviewStates = [
+    ('Portal 2', 0.18),
+    ('Half-Life 2', 0.42),
+    ('Left 4 Dead 2', 0.71),
+    ('Team Fortress 2', 0.94),
   ];
 
   bool get _hasActiveFetchPreview {
@@ -81,23 +64,24 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   }
 
   void _showOrAdvanceFetchPreview() {
-    final nextState =
-        _fetchPreviewStates[_fetchPreviewStep % _fetchPreviewStates.length];
-
+    final count = _fetchPreviewStates.length;
+    final step = _fetchPreviewStep % count;
+    final (title, progress) = _fetchPreviewStates[step];
+    final message = 'Fetching Steam data (${step + 1}/$count)';
     if (!_hasActiveFetchPreview) {
       _fetchPreviewHandle = NotificationManager.instance.beginTask(
-        nextState.message,
+        message,
         type: NotificationType.steam,
-        title: nextState.title,
-        progress: nextState.progress,
+        title: title,
+        progress: progress,
         actionLabel: 'Cancel',
         onAction: _clearFetchPreview,
       );
     } else {
       _fetchPreviewHandle!.update(
-        message: nextState.message,
-        title: nextState.title,
-        progress: nextState.progress,
+        message: message,
+        title: title,
+        progress: progress,
         actionLabel: 'Cancel',
         onAction: _clearFetchPreview,
       );
@@ -139,55 +123,16 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     );
   }
 
-  Future<void> _openWindowsFirewallAllowedApps() async {
-    final launched = await ref
-        .read(deviceSyncProvider.notifier)
-        .openWindowsFirewallAllowedApps();
-    if (!launched && mounted) {
-      NotificationManager.instance.error(
-        'Could not open Windows Firewall Allowed Apps.',
-      );
-    }
-  }
-
-  Future<void> _openWindowsFirewallAdvancedRules() async {
-    final launched = await ref
-        .read(deviceSyncProvider.notifier)
-        .openWindowsFirewallAdvancedSettings();
-    if (!launched && mounted) {
-      NotificationManager.instance.error(
-        'Could not open Windows Firewall Advanced Settings.',
-      );
-    }
-  }
-
-  Future<void> _grantLinuxFirewallAccess() async {
-    final granted = await ref
-        .read(deviceSyncProvider.notifier)
-        .grantLinuxFirewallAccess();
-    if (granted) {
-      NotificationManager.instance.success(
-        'Firewall rules added for UniKM (ufw/firewalld/iptables).',
-      );
+  /// Runs a firewall action and reports its outcome.
+  Future<void> _firewallAction(
+    Future<bool> Function(DeviceSyncNotifier sync) run,
+    String failure, {
+    String? success,
+  }) async {
+    if (await run(ref.read(deviceSyncProvider.notifier))) {
+      if (success != null) NotificationManager.instance.success(success);
     } else if (mounted) {
-      NotificationManager.instance.error(
-        'Could not add firewall rules. You may need to run this command manually:\n'
-        'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
-      );
-    }
-  }
-
-  Future<void> _clearLinuxFirewallAccess() async {
-    final cleared = await ref
-        .read(deviceSyncProvider.notifier)
-        .clearLinuxFirewallAccess();
-    if (cleared) {
-      NotificationManager.instance.success('Firewall rules removed for UniKM.');
-    } else if (mounted) {
-      NotificationManager.instance.error(
-        'Could not remove firewall rules. You may need to run this command manually:\n'
-        'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
-      );
+      NotificationManager.instance.error(failure);
     }
   }
 
@@ -235,6 +180,13 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     );
     Widget section(String title, List<Widget> actions) =>
         _DevSection(title: title, theme: theme, children: actions);
+    Widget settingToggle(String label, IconData icon, String key, bool value) =>
+        action(
+          label,
+          icon,
+          () => ref.read(settingsProvider.notifier).setSetting(key, !value),
+          selected: value,
+        );
 
     final content = switch (_tab) {
       0 => [
@@ -345,29 +297,23 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       ],
       _ => [
         section('Display', [
-          action(
+          settingToggle(
             'Device ID',
             Icons.fingerprint,
-            () => ref
-                .read(settingsProvider.notifier)
-                .setSetting(SettingsKeys.showSyncDeviceId, !showSyncDeviceId),
-            selected: showSyncDeviceId,
+            SettingsKeys.showSyncDeviceId,
+            showSyncDeviceId,
           ),
-          action(
+          settingToggle(
             'FPS counter',
             Icons.speed,
-            () => ref
-                .read(settingsProvider.notifier)
-                .setSetting(SettingsKeys.showFpsCounter, !showFps),
-            selected: showFps,
+            SettingsKeys.showFpsCounter,
+            showFps,
           ),
-          action(
+          settingToggle(
             'SKM-ID',
             Icons.tag,
-            () => ref
-                .read(settingsProvider.notifier)
-                .setSetting(SettingsKeys.showGameDetailsSkmId, !showId),
-            selected: showId,
+            SettingsKeys.showGameDetailsSkmId,
+            showId,
           ),
         ]),
         section('Library · ${selectedGames.length} selected', [
@@ -384,12 +330,18 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             action(
               'Allowed apps',
               Icons.shield_outlined,
-              _openWindowsFirewallAllowedApps,
+              () => _firewallAction(
+                (sync) => sync.openWindowsFirewallAllowedApps(),
+                'Could not open Windows Firewall Allowed Apps.',
+              ),
             ),
             action(
               'Advanced rules',
               Icons.admin_panel_settings_outlined,
-              _openWindowsFirewallAdvancedRules,
+              () => _firewallAction(
+                (sync) => sync.openWindowsFirewallAdvancedSettings(),
+                'Could not open Windows Firewall Advanced Settings.',
+              ),
             ),
           ]),
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux)
@@ -397,12 +349,23 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             action(
               'Grant access',
               Icons.shield_outlined,
-              _grantLinuxFirewallAccess,
+              () => _firewallAction(
+                (sync) => sync.grantLinuxFirewallAccess(),
+                'Could not add firewall rules. You may need to run this command manually:\n'
+                'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
+                success:
+                    'Firewall rules added for UniKM (ufw/firewalld/iptables).',
+              ),
             ),
             action(
               'Clear access',
               Icons.shield_outlined,
-              _clearLinuxFirewallAccess,
+              () => _firewallAction(
+                (sync) => sync.clearLinuxFirewallAccess(),
+                'Could not remove firewall rules. You may need to run this command manually:\n'
+                'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
+                success: 'Firewall rules removed for UniKM.',
+              ),
             ),
           ]),
       ],

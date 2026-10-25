@@ -136,9 +136,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
             encryptionManager.encryptedPath,
           );
 
-          if (unlockResult.cancelled) {
-            exit(0);
-          }
+          if (unlockResult.cancelled) exit(0);
 
           final selectedDatabasePath = unlockResult.selectedDatabasePath;
           if (selectedDatabasePath != null && selectedDatabasePath.isNotEmpty) {
@@ -160,9 +158,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           }
 
           final password = unlockResult.password;
-          if (password == null) {
-            continue;
-          }
+          if (password == null) continue;
 
           try {
             final opened = await _sessionLoader.openEncrypted(
@@ -228,9 +224,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
     recents.removeWhere((p) => p == baseDbPath);
     recents.insert(0, baseDbPath);
-    if (recents.length > 10) {
-      recents.removeRange(10, recents.length);
-    }
+    if (recents.length > 10) recents.removeRange(10, recents.length);
 
     await settingsNotifier.setSetting(
       SettingsKeys.recentDatabasePaths,
@@ -263,9 +257,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       ref.read(encryptedDbSessionProvider.notifier).set(null);
       _encryptedSession = null;
 
-      if (oldDb != null) {
-        await _sessionLoader.close(oldDb, oldSession);
-      }
+      if (oldDb != null) await _sessionLoader.close(oldDb, oldSession);
 
       AppDatabase newDb;
       EncryptedDbSession? newSession;

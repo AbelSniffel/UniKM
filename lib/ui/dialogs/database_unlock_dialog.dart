@@ -88,9 +88,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
       return StartupDatabaseUnlockResult.changeDatabase(result.path);
     }
 
-    if (result is String) {
-      return StartupDatabaseUnlockResult.unlock(result);
-    }
+    if (result is String) return StartupDatabaseUnlockResult.unlock(result);
 
     return const StartupDatabaseUnlockResult.cancelled();
   }
@@ -121,9 +119,7 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
     );
 
     final selectedPath = result?.path;
-    if (!mounted || selectedPath == null || selectedPath.isEmpty) {
-      return;
-    }
+    if (!mounted || selectedPath == null || selectedPath.isEmpty) return;
 
     final lower = selectedPath.toLowerCase();
     final hasValidExt = lower.endsWith('.db') || lower.endsWith('.enc');
@@ -140,65 +136,63 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ThemedAlertDialog(
+  Widget build(BuildContext context) => ThemedAlertDialog(
+    theme: widget.theme,
+    maxWidth: kCompactDialogWidth,
+    title: DialogHeader(
+      icon: Icons.lock,
+      title: widget.title,
       theme: widget.theme,
-      maxWidth: kCompactDialogWidth,
-      title: DialogHeader(
-        icon: Icons.lock,
-        title: widget.title,
-        theme: widget.theme,
-      ),
-      titleActions:
-          widget.allowChangeDatabase &&
-              widget.currentDatabasePath != null &&
-              widget.currentDatabasePath!.isNotEmpty
-          ? [
-              Tooltip(
-                message: 'Change database\n${widget.currentDatabasePath!}',
-                child: IconButton(
-                  onPressed: _changeDatabase,
-                  icon: const Icon(Icons.storage),
-                  tooltip: 'Change database',
-                ),
+    ),
+    titleActions:
+        widget.allowChangeDatabase &&
+            widget.currentDatabasePath != null &&
+            widget.currentDatabasePath!.isNotEmpty
+        ? [
+            Tooltip(
+              message: 'Change database\n${widget.currentDatabasePath!}',
+              child: IconButton(
+                onPressed: _changeDatabase,
+                icon: const Icon(Icons.storage),
+                tooltip: 'Change database',
               ),
-            ]
-          : null,
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.message,
-              style: TextStyle(color: widget.theme.textSecondary),
             ),
-            const SizedBox(height: kDialogSpacing),
-            PasswordField(
-              controller: _passwordController,
-              labelText: 'Password',
-              autofocus: true,
-              onFieldSubmitted: (_) => _submit(),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Enter your password';
-                }
-                return null;
-              },
-            ),
-          ],
-        ),
+          ]
+        : null,
+    content: Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.message,
+            style: TextStyle(color: widget.theme.textSecondary),
+          ),
+          const SizedBox(height: kDialogSpacing),
+          PasswordField(
+            controller: _passwordController,
+            labelText: 'Password',
+            autofocus: true,
+            onFieldSubmitted: (_) => _submit(),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Enter your password';
+              }
+              return null;
+            },
+          ),
+        ],
       ),
-      actions: [
-        DialogActionBar(
-          theme: widget.theme,
-          onCancel: () => Navigator.of(context).pop(null),
-          onConfirm: _submit,
-          confirmIcon: Icons.lock_open,
-          confirmLabel: 'Unlock',
-        ),
-      ],
-    );
-  }
+    ),
+    actions: [
+      DialogActionBar(
+        theme: widget.theme,
+        onCancel: () => Navigator.of(context).pop(null),
+        onConfirm: _submit,
+        confirmIcon: Icons.lock_open,
+        confirmLabel: 'Unlock',
+      ),
+    ],
+  );
 }

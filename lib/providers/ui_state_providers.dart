@@ -89,9 +89,7 @@ class NavigationThemeMenuTabNotifier extends Notifier<int> {
     return _tabFor(ref.read(themeProvider));
   }
 
-  void setIndex(int index) {
-    state = index.clamp(0, 1);
-  }
+  void setIndex(int index) => state = index.clamp(0, 1);
 }
 
 /// Appearance remembers its own theme collection for this app session.
@@ -111,9 +109,7 @@ class AddGamesSelectedTabNotifier extends Notifier<int> {
   @override
   int build() => 0;
 
-  void setIndex(int index) {
-    state = index.clamp(0, 1);
-  }
+  void setIndex(int index) => state = index.clamp(0, 1);
 }
 
 class AddGamesSingleEntryDraft {
@@ -183,9 +179,7 @@ final addGamesBatchDraftProvider = sessionValueProvider(
 /// View mode provider (grid/list)
 class ViewModeNotifier extends Notifier<GameListViewMode> {
   @override
-  GameListViewMode build() {
-    return ref.watch(gameListViewModeSettingProvider);
-  }
+  GameListViewMode build() => ref.watch(gameListViewModeSettingProvider);
 
   Future<void> setViewMode(GameListViewMode mode) async {
     state = mode;
@@ -213,13 +207,9 @@ class SelectionMultiSelectModeNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void setEnabled(bool enabled) {
-    state = enabled;
-  }
+  void setEnabled(bool enabled) => state = enabled;
 
-  void toggle() {
-    state = !state;
-  }
+  void toggle() => state = !state;
 }
 
 // =============================================================================
@@ -277,13 +267,9 @@ class DragSelectionNotifier extends Notifier<DragSelectionState> {
   @override
   DragSelectionState build() => const DragSelectionState();
 
-  void start() {
-    state = const DragSelectionState(isActive: true);
-  }
+  void start() => state = const DragSelectionState(isActive: true);
 
-  void stop() {
-    state = const DragSelectionState();
-  }
+  void stop() => state = const DragSelectionState();
 
   void setMode(DragSelectionMode mode) {
     if (state.mode == mode) return;

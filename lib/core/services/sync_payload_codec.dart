@@ -469,6 +469,10 @@ class SyncPayloadCodec {
         : (a['changeOrigin'] as String).compareTo(b['changeOrigin'] as String);
   }
 
+  /// Breaks version ties between tag specs deterministically.
+  static String _tagSignature(Map<String, dynamic> spec) =>
+      jsonEncode([spec['name'], spec['colorHex'], spec['isSteamTag']]);
+
   Future<Map<String, TagEntry>> _mergeIncomingTags(
     AppDatabase db,
     List<Map<String, dynamic>> games,
@@ -488,21 +492,12 @@ class SyncPayloadCodec {
               raw['changeOrigin'] ?? game['changeOrigin'] ?? 'legacy',
         };
         final previous = candidates[name.toLowerCase()];
-        if (previous == null ||
-            _compareVersions(spec, previous) > 0 ||
-            _compareVersions(spec, previous) == 0 &&
-                jsonEncode([
-                      spec['name'],
-                      spec['colorHex'],
-                      spec['isSteamTag'],
-                    ]).compareTo(
-                      jsonEncode([
-                        previous['name'],
-                        previous['colorHex'],
-                        previous['isSteamTag'],
-                      ]),
-                    ) >
-                    0) {
+        final compared = previous == null
+            ? 1
+            : _compareVersions(spec, previous);
+        if (compared > 0 ||
+            compared == 0 &&
+                _tagSignature(spec).compareTo(_tagSignature(previous!)) > 0) {
           candidates[name.toLowerCase()] = spec;
         }
       }
@@ -538,11 +533,7 @@ class SyncPayloadCodec {
         final compared = _compareVersions(candidate, version);
         if (compared < 0) continue;
         if (compared == 0 &&
-            jsonEncode([
-                  candidate['name'],
-                  candidate['colorHex'],
-                  candidate['isSteamTag'],
-                ]).compareTo(
+            _tagSignature(candidate).compareTo(
                   jsonEncode([local!.name, local.color, local.isSteamTag]),
                 ) <=
                 0) {
@@ -738,20 +729,22 @@ class SyncPayloadCodec {
         // A tag is shared by several games. Use its independently resolved
         // metadata when comparing records, so an older colour cannot force
         // repeated repair of an otherwise identical game.
+        final resolvedTags = <TagEntry>[
+          for (final tag
+              in (rawData['tags'] as List<dynamic>? ?? []).whereType<Map>())
+            if (tagEntries[(tag['name'] as String? ?? '').trim().toLowerCase()]
+                case final TagEntry localTag)
+              localTag,
+        ];
         final data = {
           ...rawData,
           'tags': [
-            for (final tag
-                in (rawData['tags'] as List<dynamic>? ?? []).whereType<Map>())
-              if (tagEntries[(tag['name'] as String? ?? '')
-                      .trim()
-                      .toLowerCase()]
-                  case final TagEntry localTag)
-                {
-                  'name': localTag.name,
-                  'colorHex': localTag.color,
-                  'isSteamTag': localTag.isSteamTag,
-                },
+            for (final tag in resolvedTags)
+              {
+                'name': tag.name,
+                'colorHex': tag.color,
+                'isSteamTag': tag.isSteamTag,
+              },
           ],
         };
         final incomingId = (data['id'] as num?)?.toInt();
@@ -890,17 +883,6 @@ class SyncPayloadCodec {
             updates.add(_entryFromCompanion(companion));
             updated++;
           }
-          final rawTags = (data['tags'] as List<dynamic>? ?? [])
-              .whereType<Map>()
-              .toList();
-          final resolvedTags = <TagEntry>[
-            for (final tag in rawTags)
-              if (tagEntries[(tag['name'] as String? ?? '')
-                      .trim()
-                      .toLowerCase()]
-                  case final TagEntry entry)
-                entry,
-          ];
           tagsToSet[localId] = resolvedTags
               .map((tag) => tag.id)
               .toSet()
@@ -989,41 +971,27 @@ class SyncPayloadCodec {
     required String existingCoverImagePath,
   }) async {
     if (!hasCoverImage) return '';
-
-    if (syncedCoverImagePath != null &&
-        syncedCoverImagePath.trim().isNotEmpty) {
-      return syncedCoverImagePath.trim();
-    }
-
+    final synced = syncedCoverImagePath?.trim() ?? '';
+    if (synced.isNotEmpty) return synced;
     final fromIncoming = await _translateCoverImagePathForCurrentDevice(
-      rawPath: incomingLegacyCoverPath,
+      incomingLegacyCoverPath,
     );
     if (fromIncoming.isNotEmpty) return fromIncoming;
-
-    final fromExisting = await _translateCoverImagePathForCurrentDevice(
-      rawPath: existingCoverImagePath,
-    );
-    if (fromExisting.isNotEmpty) return fromExisting;
-
-    return '';
+    return _translateCoverImagePathForCurrentDevice(existingCoverImagePath);
   }
 
-  Future<String> _translateCoverImagePathForCurrentDevice({
-    required String rawPath,
-  }) async {
+  /// Returns '' when the cover cannot be found on this device.
+  Future<String> _translateCoverImagePathForCurrentDevice(
+    String rawPath,
+  ) async {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
     if (SyncEntryFingerprint.isAddressedCover(raw)) return raw;
-
     final sourceFile = _fileFromRawPath(raw);
     if (sourceFile != null && await sourceFile.exists()) {
       return _copyCoverImageToManagedPath(sourceFile);
     }
-
-    final maybeByName = await _findManagedImageByName(raw);
-    if (maybeByName != null) return maybeByName.path;
-
-    return '';
+    return (await _findManagedImageByName(raw))?.path ?? '';
   }
 
   File? _fileFromRawPath(String raw) {
@@ -1031,20 +999,13 @@ class SyncPayloadCodec {
     if (uri != null && uri.scheme.toLowerCase() == 'file') {
       return File.fromUri(uri);
     }
-    if (_looksLikePathForCurrentPlatform(raw)) return File(raw);
     // Legacy support for cross-platform paths (basename extraction only).
-    if (_windowsPathPattern.hasMatch(raw) || raw.startsWith('/')) {
+    if (_windowsPathPattern.hasMatch(raw) ||
+        raw.startsWith('/') ||
+        !kIsWeb && Platform.isWindows && raw.startsWith('\\\\')) {
       return File(raw);
     }
     return null;
-  }
-
-  bool _looksLikePathForCurrentPlatform(String raw) {
-    if (kIsWeb) return false;
-    if (Platform.isWindows) {
-      return _windowsPathPattern.hasMatch(raw) || raw.startsWith('\\\\');
-    }
-    return raw.startsWith('/');
   }
 
   Future<File?> _findManagedImageByName(String rawPath) async {
@@ -1058,14 +1019,12 @@ class SyncPayloadCodec {
         : p.basename(sourcePath);
     if (fileName.trim().isEmpty) return null;
 
-    final syncDir = await _resolveManagedImagesDirectory();
-    final directSync = File(p.join(syncDir.path, fileName));
-    if (await directSync.exists()) return directSync;
-
-    final steamDir = await _resolveSteamImagesDirectory();
-    final directSteam = File(p.join(steamDir.path, fileName));
-    if (await directSteam.exists()) return directSteam;
-
+    for (final folder in const ['sync', 'steam']) {
+      final file = File(
+        p.join((await _imagesDirectory(folder)).path, fileName),
+      );
+      if (await file.exists()) return file;
+    }
     return null;
   }
 
@@ -1086,9 +1045,7 @@ class SyncPayloadCodec {
     final fileName = '$digest${ext.isEmpty ? '.img' : ext}';
 
     final target = File(p.join(syncDir.path, fileName));
-    if (!await target.exists()) {
-      await sourceFile.copy(target.path);
-    }
+    if (!await target.exists()) await sourceFile.copy(target.path);
     return target.path;
   }
 

@@ -39,9 +39,7 @@ class PlatformFileActions {
         allowedExtensions: allowedExtensions,
       );
 
-      if (outputPath == null || outputPath.isEmpty) {
-        return null;
-      }
+      if (outputPath == null || outputPath.isEmpty) return null;
 
       return PlatformSaveTarget(
         file: File(outputPath),
@@ -54,9 +52,7 @@ class PlatformFileActions {
         dialogTitle: dialogTitle,
       );
 
-      if (selectedDirectory == null || selectedDirectory.isEmpty) {
-        return null;
-      }
+      if (selectedDirectory == null || selectedDirectory.isEmpty) return null;
 
       final outputPath = await createUniquePathInDirectory(
         directoryPath: selectedDirectory,
@@ -162,20 +158,14 @@ class PlatformFileActions {
     PlatformSaveTarget target, {
     required String subject,
   }) async {
-    if (!target.shouldShareAfterWrite) {
-      return true;
-    }
+    if (!target.shouldShareAfterWrite) return true;
 
     final shared = await shareFile(target.file, subject: subject);
 
-    if (shared) {
-      return true;
-    }
+    if (shared) return true;
 
     try {
-      if (await target.file.exists()) {
-        await target.file.delete();
-      }
+      if (await target.file.exists()) await target.file.delete();
     } catch (_) {
       // Best effort cleanup only.
     }
@@ -195,9 +185,8 @@ class PlatformFileActions {
     return result.status == ShareResultStatus.success;
   }
 
-  static Future<void> shareText(String text, {String? subject}) async {
-    await SharePlus.instance.share(ShareParams(text: text, subject: subject));
-  }
+  static Future<void> shareText(String text, {String? subject}) async =>
+      await SharePlus.instance.share(ShareParams(text: text, subject: subject));
 
   static Future<bool> openDirectory(String directoryPath) async {
     if (Platform.isWindows) {
@@ -218,9 +207,7 @@ class PlatformFileActions {
     }
 
     final uri = Uri.directory(directoryPath);
-    if (!await canLaunchUrl(uri)) {
-      return false;
-    }
+    if (!await canLaunchUrl(uri)) return false;
 
     return launchUrl(uri, mode: LaunchMode.externalApplication);
   }

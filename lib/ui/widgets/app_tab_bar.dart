@@ -189,14 +189,13 @@ class AppTabBar extends StatelessWidget {
     onChanged?.call(index);
   }
 
-  BorderRadius _radiusFor(int index, Radius radius, BuildContext context) {
-    return buttonGroupBorderRadius(
-      index: index,
-      count: tabs.length,
-      radius: radius.x,
-      textDirection: Directionality.of(context),
-    );
-  }
+  BorderRadius _radiusFor(int index, Radius radius, BuildContext context) =>
+      buttonGroupBorderRadius(
+        index: index,
+        count: tabs.length,
+        radius: radius.x,
+        textDirection: Directionality.of(context),
+      );
 }
 
 /// Slides index-driven tab content like [TabBarView]: the previous tab slides

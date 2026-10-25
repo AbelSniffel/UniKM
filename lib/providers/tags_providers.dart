@@ -34,9 +34,7 @@ class TagsNotifier extends Notifier<List<Tag>> {
     }
 
     // If database isn't ready yet, return empty list
-    if (dbState.database == null) {
-      return _cachedTags;
-    }
+    if (dbState.database == null) return _cachedTags;
 
     final db = dbState.database!;
     _subscription = db.watchAllTags().listen(

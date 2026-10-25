@@ -30,85 +30,80 @@ class GroupBoxFamilyTitle extends StatelessWidget {
   final bool isSearchMatch;
 
   @override
-  Widget build(BuildContext context) {
-    return SearchHighlight(
-      query: searchQuery,
-      isMatch: isSearchMatch,
-      builder: (context, highlightValue) {
-        final backgroundColor = Color.lerp(
-          theme.accent,
-          theme.secondary,
-          0.15 * highlightValue,
-        )!;
-        final iconAndTextColor =
-            ThemeData.estimateBrightnessForColor(backgroundColor) ==
-                Brightness.dark
-            ? Colors.white
-            : Colors.black87;
+  Widget build(BuildContext context) => SearchHighlight(
+    query: searchQuery,
+    isMatch: isSearchMatch,
+    builder: (context, highlightValue) {
+      final backgroundColor = Color.lerp(
+        theme.accent,
+        theme.secondary,
+        0.15 * highlightValue,
+      )!;
+      final iconAndTextColor =
+          ThemeData.estimateBrightnessForColor(backgroundColor) ==
+              Brightness.dark
+          ? Colors.white
+          : Colors.black87;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-          decoration: BoxDecoration(
-            gradient: SurfaceDepth.gradient(backgroundColor),
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            border: Border.all(
-              color: Color.lerp(backgroundColor, Colors.black, 0.22)!,
-            ),
-            boxShadow: [
-              SurfaceDepth.shadow(isDark: theme.isDark),
-              if (highlightValue > 0)
-                BoxShadow(
-                  color: theme.accent.withValues(alpha: 0.18 * highlightValue),
-                  blurRadius: 14,
-                  spreadRadius: 1.5,
-                ),
-            ],
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          gradient: SurfaceDepth.gradient(backgroundColor),
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+          border: Border.all(
+            color: Color.lerp(backgroundColor, Colors.black, 0.22)!,
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Measured like the inset body width below the header.
-              final contentWidth = constraints.maxWidth + 2;
-              final stacked =
-                  trailingBuilder != null &&
-                  contentWidth <= kFamilyTitleStackWidth;
-              final titleRow = Row(
-                children: [
-                  Icon(icon, size: 20, color: iconAndTextColor),
-                  const SizedBox(width: kElementHSpacing),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: iconAndTextColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+          boxShadow: [
+            SurfaceDepth.shadow(isDark: theme.isDark),
+            if (highlightValue > 0)
+              BoxShadow(
+                color: theme.accent.withValues(alpha: 0.18 * highlightValue),
+                blurRadius: 14,
+                spreadRadius: 1.5,
+              ),
+          ],
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Measured like the inset body width below the header.
+            final contentWidth = constraints.maxWidth + 2;
+            final stacked =
+                trailingBuilder != null &&
+                contentWidth <= kFamilyTitleStackWidth;
+            final titleRow = Row(
+              children: [
+                Icon(icon, size: 20, color: iconAndTextColor),
+                const SizedBox(width: kElementHSpacing),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: iconAndTextColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
                     ),
                   ),
-                  if (!stacked && trailingBuilder != null) ...[
-                    const SizedBox(width: 12),
-                    trailingBuilder!(false),
-                  ],
+                ),
+                if (!stacked && trailingBuilder != null) ...[
+                  const SizedBox(width: 12),
+                  trailingBuilder!(false),
                 ],
-              );
-              if (!stacked) return titleRow;
-              return Column(
-                children: [
-                  titleRow,
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: trailingBuilder!(true),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
+              ],
+            );
+            if (!stacked) return titleRow;
+            return Column(
+              children: [
+                titleRow,
+                const SizedBox(height: 4),
+                SizedBox(width: double.infinity, child: trailingBuilder!(true)),
+              ],
+            );
+          },
+        ),
+      );
+    },
+  );
 }

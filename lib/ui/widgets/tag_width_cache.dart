@@ -34,9 +34,7 @@ class TagWidthCache {
     }
 
     // Evict the LRU entry (first key in LinkedHashMap = oldest) in O(1).
-    if (_cache.length >= _maxCacheSize) {
-      _cache.remove(_cache.keys.first);
-    }
+    if (_cache.length >= _maxCacheSize) _cache.remove(_cache.keys.first);
 
     // Measure and insert at the MRU end.
     final painter = TextPainter(

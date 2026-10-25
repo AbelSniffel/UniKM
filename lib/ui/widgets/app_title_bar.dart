@@ -298,29 +298,25 @@ class _WindowButtonState extends State<_WindowButton> {
   bool _isHovered = false;
 
   @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          width: 46,
-          height: 32,
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _isHovered = true),
+    onExit: (_) => setState(() => _isHovered = false),
+    child: GestureDetector(
+      onTap: widget.onPressed,
+      child: Container(
+        width: 46,
+        height: 32,
+        color: _isHovered
+            ? (widget.hoverColor ?? widget.theme.accent).withValues(alpha: 0.2)
+            : Colors.transparent,
+        child: Icon(
+          widget.icon,
+          size: 16,
           color: _isHovered
-              ? (widget.hoverColor ?? widget.theme.accent).withValues(
-                  alpha: 0.2,
-                )
-              : Colors.transparent,
-          child: Icon(
-            widget.icon,
-            size: 16,
-            color: _isHovered
-                ? (widget.hoverColor ?? widget.theme.accent)
-                : widget.theme.textSecondary,
-          ),
+              ? (widget.hoverColor ?? widget.theme.accent)
+              : widget.theme.textSecondary,
         ),
       ),
-    );
-  }
+    ),
+  );
 }

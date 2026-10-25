@@ -158,10 +158,7 @@ class NavigationSection extends ConsumerWidget {
                   for (final position in NavBarPosition.values)
                     SettingsChoice(position, position.displayName),
                 ],
-                onChanged: (value) => settingsNotifier.setSetting(
-                  SettingsKeys.navBarPosition,
-                  value,
-                ),
+                onChanged: settingsNotifier.setter(SettingsKeys.navBarPosition),
               ),
               _buildNavArrangementRow(
                 theme: theme,
@@ -213,9 +210,7 @@ class NavigationSection extends ConsumerWidget {
     final effectiveOverlayStyle = ref.read(
       effectiveNavPanelOverlayStyleProvider,
     );
-    if (effectiveOverlayStyle == style) {
-      return;
-    }
+    if (effectiveOverlayStyle == style) return;
 
     final currentTheme = ref.read(themeProvider);
     final themeNotifier = ref.read(themeProvider.notifier);

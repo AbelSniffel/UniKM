@@ -18,12 +18,16 @@ class AppLog {
   }
 
   /// Informational messages (emitted in all builds).
-  static void i(String message, {String? name}) {
-    developer.log(message, name: name ?? _defaultName, level: 800);
-  }
+  static void i(String message, {String? name}) =>
+      developer.log(message, name: name ?? _defaultName, level: 800);
 
   /// Warning-level messages (emitted in all builds).
-  static void w(String message, {Object? error, StackTrace? stackTrace, String? name}) {
+  static void w(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+    String? name,
+  }) {
     developer.log(
       message,
       name: name ?? _defaultName,
@@ -34,7 +38,12 @@ class AppLog {
   }
 
   /// Error-level messages (emitted in all builds).
-  static void e(String message, {Object? error, StackTrace? stackTrace, String? name}) {
+  static void e(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+    String? name,
+  }) {
     developer.log(
       message,
       name: name ?? _defaultName,

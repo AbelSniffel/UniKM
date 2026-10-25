@@ -230,14 +230,10 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
     db.execute('PRAGMA foreign_keys = OFF');
     db.execute('BEGIN IMMEDIATE');
     try {
-      if (_ensureTableBackups(db)) {
-        actions.add('Created missing backups table');
-      }
-      if (_ensureTableTags(db)) {
-        actions.add('Created missing tags table');
-      }
-      if (_ensureTableGameTags(db)) {
-        actions.add('Created missing game_tags table');
+      for (final (table, columns) in _requiredTables) {
+        if (_tableExists(db, table)) continue;
+        db.execute('CREATE TABLE IF NOT EXISTS $table ($columns)');
+        actions.add('Created missing $table table');
       }
 
       for (final table in _layoutColumns.entries) {
@@ -280,22 +276,18 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
 
       copyLegacyColumns(_gameCopiesBeforeDates);
 
-      if (_normalizeTextDateColumnToEpoch(
-        db,
-        'games',
-        'date_added',
-        fallbackSql: '0',
-      )) {
-        actions.add('Normalized games.date_added text timestamps');
-      }
-
-      if (_normalizeTextDateColumnToEpoch(
-        db,
-        'games',
-        'deadline_date',
-        fallbackSql: 'NULL',
-      )) {
-        actions.add('Normalized games.deadline_date text timestamps');
+      for (final (column, fallbackSql) in const [
+        ('date_added', '0'),
+        ('deadline_date', 'NULL'),
+      ]) {
+        if (_normalizeTextDateColumnToEpoch(
+          db,
+          'games',
+          column,
+          fallbackSql: fallbackSql,
+        )) {
+          actions.add('Normalized games.$column text timestamps');
+        }
       }
 
       copyLegacyColumns(_gameCopiesAfterDates);
@@ -467,43 +459,29 @@ bool _ensureColumn(
   return true;
 }
 
-bool _ensureTableTags(sqlite3.Database db) {
-  final existed = _tableExists(db, 'tags');
-  db.execute(
-    'CREATE TABLE IF NOT EXISTS tags ('
+/// Tables created when missing, in creation order, with their column SQL.
+const _requiredTables = [
+  (
+    'backups',
     'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-    'name TEXT NOT NULL UNIQUE, '
-    "color TEXT NOT NULL DEFAULT '#0078d4', "
-    'is_steam_tag INTEGER NOT NULL DEFAULT 0'
-    ')',
-  );
-  return !existed;
-}
-
-bool _ensureTableGameTags(sqlite3.Database db) {
-  final existed = _tableExists(db, 'game_tags');
-  db.execute(
-    'CREATE TABLE IF NOT EXISTS game_tags ('
+        'filename TEXT NOT NULL, '
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        "label TEXT NOT NULL DEFAULT 'auto', "
+        'size_bytes INTEGER NOT NULL DEFAULT 0',
+  ),
+  (
+    'tags',
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+        'name TEXT NOT NULL UNIQUE, '
+        "color TEXT NOT NULL DEFAULT '#0078d4', "
+        'is_steam_tag INTEGER NOT NULL DEFAULT 0',
+  ),
+  (
+    'game_tags',
     'game_id INTEGER NOT NULL, '
-    'tag_id INTEGER NOT NULL, '
-    'PRIMARY KEY(game_id, tag_id), '
-    'FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE, '
-    'FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE'
-    ')',
-  );
-  return !existed;
-}
-
-bool _ensureTableBackups(sqlite3.Database db) {
-  final existed = _tableExists(db, 'backups');
-  db.execute(
-    'CREATE TABLE IF NOT EXISTS backups ('
-    'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-    'filename TEXT NOT NULL, '
-    'created_at INTEGER NOT NULL DEFAULT 0, '
-    "label TEXT NOT NULL DEFAULT 'auto', "
-    'size_bytes INTEGER NOT NULL DEFAULT 0'
-    ')',
-  );
-  return !existed;
-}
+        'tag_id INTEGER NOT NULL, '
+        'PRIMARY KEY(game_id, tag_id), '
+        'FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE, '
+        'FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE',
+  ),
+];

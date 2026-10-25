@@ -2,6 +2,7 @@
 library;
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/settings/settings_model.dart';
@@ -68,6 +69,10 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
 
   /// Alias for set() - used by settings page
   Future<void> setSetting<T>(String key, T value) => set(key, value);
+
+  /// A change callback that stores each new value under [key].
+  ValueChanged<T> setter<T>(String key) =>
+      (value) => set(key, value);
 
   /// Reset preferences while retaining the active database, recents, and custom themes.
   Future<void> resetToDefaults() {
@@ -182,18 +187,15 @@ final viewedNewGameIdsProvider = Provider<Set<int>>((ref) {
   return rawIds.map(int.tryParse).whereType<int>().toSet();
 });
 
-Future<void> markGameAsViewed(WidgetRef ref, int gameId) {
-  return markGamesAsViewed(ref, <int>[gameId]);
-}
+Future<void> markGameAsViewed(WidgetRef ref, int gameId) =>
+    markGamesAsViewed(ref, <int>[gameId]);
 
 Future<void> markGamesAsViewed(WidgetRef ref, Iterable<int> gameIds) async {
   final requestedIds = gameIds
       .where((id) => id > 0)
       .map((id) => id.toString())
       .toSet();
-  if (requestedIds.isEmpty) {
-    return;
-  }
+  if (requestedIds.isEmpty) return;
 
   final currentIds = ref.read(
     settingsProvider.select(
@@ -201,9 +203,7 @@ Future<void> markGamesAsViewed(WidgetRef ref, Iterable<int> gameIds) async {
     ),
   );
   final mergedSet = {...currentIds, ...requestedIds};
-  if (mergedSet.length == currentIds.length) {
-    return;
-  }
+  if (mergedSet.length == currentIds.length) return;
 
   final merged = mergedSet.toList()..sort();
   await ref

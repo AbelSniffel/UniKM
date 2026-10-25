@@ -19,32 +19,30 @@ class UsedOverlay extends StatelessWidget {
   final bool gridView;
 
   @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(
-            color: tileToCanvas
-                ? theme.slimUsedOverlay
-                : gridView
-                ? theme.gridUsedOverlay
-                : theme.usedOverlay,
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(
+          color: tileToCanvas
+              ? theme.slimUsedOverlay
+              : gridView
+              ? theme.gridUsedOverlay
+              : theme.usedOverlay,
+        ),
+        CustomPaint(
+          painter: UsedPatternPainter(
+            textColor: (tileToCanvas ? theme.textPrimary : Colors.white)
+                .withValues(alpha: tileToCanvas ? 0.18 : 0.24),
+            angleDegrees: -35,
+            patternSize: patternSize,
+            tileToCanvas: tileToCanvas,
           ),
-          CustomPaint(
-            painter: UsedPatternPainter(
-              textColor: (tileToCanvas ? theme.textPrimary : Colors.white)
-                  .withValues(alpha: tileToCanvas ? 0.18 : 0.24),
-              angleDegrees: -35,
-              patternSize: patternSize,
-              tileToCanvas: tileToCanvas,
-            ),
-            isComplex: true,
-            willChange: false,
-            child: const SizedBox.expand(),
-          ),
-        ],
-      ),
-    );
-  }
+          isComplex: true,
+          willChange: false,
+          child: const SizedBox.expand(),
+        ),
+      ],
+    ),
+  );
 }

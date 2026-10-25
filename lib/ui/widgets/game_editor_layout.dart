@@ -589,21 +589,19 @@ class GameMetadataRow extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: labelWidth,
-            child: Text(label, style: TextStyle(color: theme.textSecondary)),
-          ),
-          Expanded(
-            child: Text(value, style: TextStyle(color: theme.textPrimary)),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        SizedBox(
+          width: labelWidth,
+          child: Text(label, style: TextStyle(color: theme.textSecondary)),
+        ),
+        Expanded(
+          child: Text(value, style: TextStyle(color: theme.textPrimary)),
+        ),
+        ?trailing,
+      ],
+    ),
+  );
 }

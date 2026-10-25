@@ -209,9 +209,7 @@ class DeadlineNotificationService {
   }
 
   /// Clears the per-day dedup set (e.g. after a database switch).
-  void resetSession() {
-    _notifiedGameIds.clear();
-  }
+  void resetSession() => _notifiedGameIds.clear();
 
   // ---------------------------------------------------------------------------
   // Dev-tools helpers
@@ -451,9 +449,7 @@ class DeadlineNotificationService {
         .join(', ');
 
     final remainingCount = games.length - _maxNotificationNames;
-    if (remainingCount <= 0) {
-      return visibleNames;
-    }
+    if (remainingCount <= 0) return visibleNames;
 
     return '$visibleNames +$remainingCount more';
   }

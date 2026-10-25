@@ -15,14 +15,10 @@ class SteamTagUtils {
 
     for (final tagName in tagNames) {
       final normalized = tagName.trim();
-      if (normalized.isEmpty) {
-        continue;
-      }
+      if (normalized.isEmpty) continue;
 
       final key = normalized.toLowerCase();
-      if (!seen.add(key)) {
-        continue;
-      }
+      if (!seen.add(key)) continue;
 
       final entry = await db.getOrCreateTag(normalized, isSteamTag: true);
       created.add(Tag.fromEntry(entry));

@@ -322,9 +322,7 @@ class _VisibilityRevealState extends State<VisibilityReveal>
     super.didUpdateWidget(oldWidget);
     if (widget.isVisible) {
       _displayChild = widget.child;
-      if (oldWidget.isVisible != widget.isVisible) {
-        _controller.forward();
-      }
+      if (oldWidget.isVisible != widget.isVisible) _controller.forward();
     } else if (oldWidget.isVisible != widget.isVisible) {
       _controller.reverse().whenCompleteOrCancel(() {
         if (mounted) setState(() => _displayChild = widget.child);
@@ -339,20 +337,18 @@ class _VisibilityRevealState extends State<VisibilityReveal>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: SizeTransition(
-        sizeFactor: _curve,
-        alignment: Alignment(0, widget.axisAlignment),
-        child: Align(
-          alignment: widget.alignment,
-          heightFactor: 1.0,
-          child: IgnorePointer(
-            ignoring: !widget.isVisible,
-            child: FadeTransition(opacity: _opacity, child: _displayChild),
-          ),
+  Widget build(BuildContext context) => ClipRect(
+    child: SizeTransition(
+      sizeFactor: _curve,
+      alignment: Alignment(0, widget.axisAlignment),
+      child: Align(
+        alignment: widget.alignment,
+        heightFactor: 1.0,
+        child: IgnorePointer(
+          ignoring: !widget.isVisible,
+          child: FadeTransition(opacity: _opacity, child: _displayChild),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

@@ -132,9 +132,7 @@ class NavigationPanel extends ConsumerWidget {
     NavButtonArrangement arrangement,
     NavExpansionMode expansionMode,
   ) {
-    final isSplit =
-        arrangement == NavButtonArrangement.split &&
-        _trailingGroupIndices.isNotEmpty;
+    final isSplit = _isSplit(arrangement);
     return SizedBox(
       height: kNavigationPanelHorizontalExtent,
       child: Padding(
@@ -166,33 +164,46 @@ class NavigationPanel extends ConsumerWidget {
             );
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (arrangement != NavButtonArrangement.end) ...[
-                  buildGroup(isSplit ? _leadingGroupIndices : _allGroupIndices),
-                  const SizedBox(width: kElementHSpacing),
-                ],
-                Expanded(
-                  child: _ThemeSelector(
-                    theme: theme,
-                    position: position,
-                    gradientAnimation: gradientAnimation,
-                    showExpansionControl: !forceCollapsed,
-                  ),
-                ),
-                if (isSplit) ...[
-                  const SizedBox(width: kElementHSpacing),
-                  buildGroup(_trailingGroupIndices),
-                ],
-                if (arrangement == NavButtonArrangement.end) ...[
-                  const SizedBox(width: kElementHSpacing),
-                  buildGroup(_allGroupIndices),
-                ],
-              ],
+              children: _arrangedChildren(
+                arrangement,
+                buildGroup,
+                const SizedBox(width: kElementHSpacing),
+              ),
             );
           },
         ),
       ),
     );
+  }
+
+  bool _isSplit(NavButtonArrangement arrangement) =>
+      arrangement == NavButtonArrangement.split &&
+      _trailingGroupIndices.isNotEmpty;
+
+  /// Page button groups around the theme selector, in the chosen arrangement.
+  List<Widget> _arrangedChildren(
+    NavButtonArrangement arrangement,
+    Widget Function(List<int> indices) buildGroup,
+    Widget gap,
+  ) {
+    final isSplit = _isSplit(arrangement);
+    final atEnd = arrangement == NavButtonArrangement.end;
+    return [
+      if (!atEnd) ...[
+        buildGroup(isSplit ? _leadingGroupIndices : _allGroupIndices),
+        gap,
+      ],
+      Expanded(
+        child: _ThemeSelector(
+          theme: theme,
+          position: position,
+          gradientAnimation: gradientAnimation,
+          showExpansionControl: !forceCollapsed,
+        ),
+      ),
+      if (isSplit) ...[gap, buildGroup(_trailingGroupIndices)],
+      if (atEnd) ...[gap, buildGroup(_allGroupIndices)],
+    ];
   }
 
   List<int> get _leadingGroupIndices {
@@ -203,9 +214,7 @@ class NavigationPanel extends ConsumerWidget {
   List<int> get _allGroupIndices => [for (var i = 0; i < items.length; i++) i];
 
   List<int> get _trailingGroupIndices {
-    if (items.length <= 2) {
-      return const [];
-    }
+    if (items.length <= 2) return const [];
     return [for (var i = 2; i < items.length; i++) i];
   }
 
@@ -253,9 +262,7 @@ class NavigationPanel extends ConsumerWidget {
             ),
     );
 
-    if (isHorizontal) {
-      return content;
-    }
+    if (isHorizontal) return content;
 
     return SizedBox(width: double.infinity, child: content);
   }
@@ -287,9 +294,6 @@ class NavigationPanel extends ConsumerWidget {
     NavButtonArrangement arrangement,
     NavExpansionMode expansionMode,
   ) {
-    final isSplit =
-        arrangement == NavButtonArrangement.split &&
-        _trailingGroupIndices.isNotEmpty;
     Widget buildGroup(List<int> indices) => _buildPageButtonContainer(
       indices: indices,
       isHorizontal: false,
@@ -300,28 +304,11 @@ class NavigationPanel extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
-          children: [
-            if (arrangement != NavButtonArrangement.end) ...[
-              buildGroup(isSplit ? _leadingGroupIndices : _allGroupIndices),
-              const SizedBox(height: kElementVSpacing),
-            ],
-            Expanded(
-              child: _ThemeSelector(
-                theme: theme,
-                position: position,
-                gradientAnimation: gradientAnimation,
-                showExpansionControl: !forceCollapsed,
-              ),
-            ),
-            if (isSplit) ...[
-              const SizedBox(height: kElementVSpacing),
-              buildGroup(_trailingGroupIndices),
-            ],
-            if (arrangement == NavButtonArrangement.end) ...[
-              const SizedBox(height: kElementVSpacing),
-              buildGroup(_allGroupIndices),
-            ],
-          ],
+          children: _arrangedChildren(
+            arrangement,
+            buildGroup,
+            const SizedBox(height: kElementVSpacing),
+          ),
         ),
       ),
     );

@@ -21,12 +21,11 @@ enum GamePlatform {
 
   final String displayName;
 
-  static GamePlatform fromDisplayName(String name) {
-    return GamePlatform.values.firstWhere(
-      (p) => p.displayName.toLowerCase() == name.toLowerCase(),
-      orElse: () => GamePlatform.other,
-    );
-  }
+  static GamePlatform fromDisplayName(String name) =>
+      GamePlatform.values.firstWhere(
+        (p) => p.displayName.toLowerCase() == name.toLowerCase(),
+        orElse: () => GamePlatform.other,
+      );
 }
 
 /// Utility class for detecting platform from key format

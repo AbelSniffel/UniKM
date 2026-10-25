@@ -80,30 +80,25 @@ Future<void> _markImportSyncDirty(WidgetRef ref, AppDatabase db) async {
       );
 }
 
-Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) {
-  return AppRadioListTile<String>(
-    theme: theme,
-    value: option.value,
-    title: option.title,
-    subtitle: option.subtitle,
-  );
-}
+Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) =>
+    AppRadioListTile<String>(
+      theme: theme,
+      value: option.value,
+      title: option.title,
+      subtitle: option.subtitle,
+    );
 
 /// Show export dialog
-Future<void> showExportDialog(BuildContext context) {
-  return showAppDialog<void>(
-    context: context,
-    builder: (ctx) => const ExportDialog(),
-  );
-}
+Future<void> showExportDialog(BuildContext context) => showAppDialog<void>(
+  context: context,
+  builder: (ctx) => const ExportDialog(),
+);
 
 /// Show import dialog
-Future<void> showImportDialog(BuildContext context) {
-  return showAppDialog<void>(
-    context: context,
-    builder: (ctx) => const ImportDialog(),
-  );
-}
+Future<void> showImportDialog(BuildContext context) => showAppDialog<void>(
+  context: context,
+  builder: (ctx) => const ImportDialog(),
+);
 
 /// Export dialog
 class ExportDialog extends ConsumerStatefulWidget {
@@ -213,9 +208,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     } catch (e) {
       NotificationManager.instance.error('Export failed: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -424,9 +417,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
     if (result != null) {
       final path = result.path;
-      if (path != null) {
-        await _handleSelectedFilePath(path);
-      }
+      if (path != null) await _handleSelectedFilePath(path);
     }
   }
 
@@ -484,9 +475,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       if (!await file.exists()) return _ImportFileKind.unsupported;
 
       final firstBytes = await file.openRead(0, 16).first;
-      if (hasSqliteHeader(firstBytes)) {
-        return _ImportFileKind.sqlite;
-      }
+      if (hasSqliteHeader(firstBytes)) return _ImportFileKind.sqlite;
 
       // Legacy JSON backups may use only the .bak suffix.
       final header = await file
@@ -687,9 +676,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       message: message,
       action: decrypt,
     );
-    if (prepared == null) {
-      return false;
-    }
+    if (prepared == null) return false;
 
     try {
       await _importSqliteDatabase(File(prepared.databasePath));
@@ -706,9 +693,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           'This SteamKM1 backup is encrypted. Enter the password to import it.',
       action: (password) => decryptSteamKm1JsonExport(file, password),
     );
-    if (decryptedJson == null) {
-      return false;
-    }
+    if (decryptedJson == null) return false;
 
     final decoded = jsonDecode(decryptedJson);
     final records = parseSteamKm1JsonExportData(decoded);
@@ -731,9 +716,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         title: title,
         message: message,
       );
-      if (password == null) {
-        return null;
-      }
+      if (password == null) return null;
 
       try {
         _checkImport();
@@ -908,9 +891,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     return File(p.normalize(p.join(dbDir.path, normalizedRaw)));
   }
 
-  String _normalizeForCompare(String path) {
-    return p.normalize(path).replaceAll('\\', '/').toLowerCase();
-  }
+  String _normalizeForCompare(String path) =>
+      p.normalize(path).replaceAll('\\', '/').toLowerCase();
 
   Future<void> _importJson(File file) async {
     final content = await file.readAsString();
@@ -961,9 +943,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   Future<void> _importTxt(File file) async {
     final content = await file.readAsString();
     final records = parseSteamKm1TextExport(content);
-    if (records.isEmpty) {
-      throw Exception('No valid games found in text import');
-    }
+    if (records.isEmpty) throw Exception('No valid games found in text import');
 
     await _importSteamKm1Records(
       records,

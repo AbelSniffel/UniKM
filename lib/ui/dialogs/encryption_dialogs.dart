@@ -109,78 +109,76 @@ class _EnableEncryptionDialogState
   }
 
   @override
-  Widget build(BuildContext context) {
-    return DialogInteractionScope(
-      onPrimaryAction: _isLoading ? null : _confirm,
-      onDismiss: () => Navigator.of(context).pop(null),
-      child: ThemedAlertDialog(
+  Widget build(BuildContext context) => DialogInteractionScope(
+    onPrimaryAction: _isLoading ? null : _confirm,
+    onDismiss: () => Navigator.of(context).pop(null),
+    child: ThemedAlertDialog(
+      theme: widget.theme,
+      title: DialogHeader(
+        icon: Icons.lock,
+        title: widget.title,
         theme: widget.theme,
-        title: DialogHeader(
-          icon: Icons.lock,
-          title: widget.title,
-          theme: widget.theme,
-          iconColor: widget.theme.baseAccent,
-        ),
-        titleActions: [
-          Tooltip(
-            key: _encryptionInfoTooltipKey,
-            message: 'Uses AES-256-GCM with PBKDF2 key derivation',
-            child: IconButton(
-              icon: Icon(Icons.info_outline, color: widget.theme.accent),
-              onPressed: () => _encryptionInfoTooltipKey.currentState
-                  ?.ensureTooltipVisible(),
-            ),
+        iconColor: widget.theme.baseAccent,
+      ),
+      titleActions: [
+        Tooltip(
+          key: _encryptionInfoTooltipKey,
+          message: 'Uses AES-256-GCM with PBKDF2 key derivation',
+          child: IconButton(
+            icon: Icon(Icons.info_outline, color: widget.theme.accent),
+            onPressed: () =>
+                _encryptionInfoTooltipKey.currentState?.ensureTooltipVisible(),
           ),
-        ],
-        content: SizedBox(
-          width: 400,
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.message != null) ...[
-                  Text(
-                    widget.message!,
-                    style: TextStyle(color: widget.theme.textSecondary),
-                  ),
-                  const SizedBox(height: kDialogSpacing),
-                ],
-                PasswordField(
-                  controller: _passwordController,
-                  labelText: 'Password',
-                  validator: requiredPasswordWithLength(),
-                ),
-                const SizedBox(height: 12),
-                PasswordField(
-                  controller: _confirmController,
-                  labelText: 'Confirm Password',
-                  validator: confirmPassword(_passwordController),
+        ),
+      ],
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.message != null) ...[
+                Text(
+                  widget.message!,
+                  style: TextStyle(color: widget.theme.textSecondary),
                 ),
                 const SizedBox(height: kDialogSpacing),
-                DialogBanner.warning(
-                  theme: widget.theme,
-                  message:
-                      'WARNING: If you forget your password, your data cannot be recovered!',
-                ),
               ],
-            ),
+              PasswordField(
+                controller: _passwordController,
+                labelText: 'Password',
+                validator: requiredPasswordWithLength(),
+              ),
+              const SizedBox(height: 12),
+              PasswordField(
+                controller: _confirmController,
+                labelText: 'Confirm Password',
+                validator: confirmPassword(_passwordController),
+              ),
+              const SizedBox(height: kDialogSpacing),
+              DialogBanner.warning(
+                theme: widget.theme,
+                message:
+                    'WARNING: If you forget your password, your data cannot be recovered!',
+              ),
+            ],
           ),
         ),
-        actions: [
-          DialogActionBar(
-            theme: widget.theme,
-            onCancel: () => Navigator.of(context).pop(null),
-            onConfirm: _isLoading ? null : _confirm,
-            confirmIcon: Icons.lock,
-            confirmLabel: widget.confirmLabel,
-            isLoading: _isLoading,
-          ),
-        ],
       ),
-    );
-  }
+      actions: [
+        DialogActionBar(
+          theme: widget.theme,
+          onCancel: () => Navigator.of(context).pop(null),
+          onConfirm: _isLoading ? null : _confirm,
+          confirmIcon: Icons.lock,
+          confirmLabel: widget.confirmLabel,
+          isLoading: _isLoading,
+        ),
+      ],
+    ),
+  );
 }
 
 /// One window for managing an encrypted database, with tab-specific actions.

@@ -323,14 +323,12 @@ class SpecSettingRow extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return SettingRow(
-      theme: theme,
-      label: spec.label,
-      description: spec.description,
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) => SettingRow(
+    theme: theme,
+    label: spec.label,
+    description: spec.description,
+    child: child,
+  );
 }
 
 typedef SpecToggleSettingEntry = ({
@@ -343,9 +341,7 @@ Widget buildSpecToggleSettingList({
   required AppThemeData theme,
   required List<SpecToggleSettingEntry> entries,
 }) {
-  if (entries.isEmpty) {
-    return const SizedBox.shrink();
-  }
+  if (entries.isEmpty) return const SizedBox.shrink();
 
   return SettingsControlWrap(
     children: [

@@ -46,25 +46,21 @@ class _PasswordFieldState extends State<PasswordField> {
   bool _obscure = true;
 
   @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: widget.controller,
-      obscureText: _obscure,
-      autofocus: widget.autofocus,
-      textInputAction: widget.textInputAction,
-      onFieldSubmitted: widget.onFieldSubmitted,
-      decoration: InputDecoration(
-        labelText: widget.labelText,
-        suffixIcon: IconButton(
-          icon: Icon(
-            _obscure ? Icons.visibility_off : Icons.visibility,
-          ),
-          onPressed: () => setState(() => _obscure = !_obscure),
-        ),
+  Widget build(BuildContext context) => TextFormField(
+    controller: widget.controller,
+    obscureText: _obscure,
+    autofocus: widget.autofocus,
+    textInputAction: widget.textInputAction,
+    onFieldSubmitted: widget.onFieldSubmitted,
+    decoration: InputDecoration(
+      labelText: widget.labelText,
+      suffixIcon: IconButton(
+        icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+        onPressed: () => setState(() => _obscure = !_obscure),
       ),
-      validator: widget.validator,
-    );
-  }
+    ),
+    validator: widget.validator,
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -68,31 +68,28 @@ class GameCoverImage extends StatelessWidget {
     return _localImage(FileImage(file), raw, cacheWidth);
   }
 
-  Widget _localImage(ImageProvider provider, String raw, int cacheWidth) {
-    return Image(
-      image: ResizeImage.resizeIfNeeded(cacheWidth, null, provider),
-      key: ValueKey(raw),
-      gaplessPlayback: true,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => _imageError(),
-    );
-  }
+  Widget _localImage(ImageProvider provider, String raw, int cacheWidth) =>
+      Image(
+        image: ResizeImage.resizeIfNeeded(cacheWidth, null, provider),
+        key: ValueKey(raw),
+        gaplessPlayback: true,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _imageError(),
+      );
 
   Widget _imageError() {
     WidgetsBinding.instance.addPostFrameCallback((_) => onError?.call());
     return _buildPlaceholder();
   }
 
-  Widget _buildPlaceholder() {
-    return Container(
-      color: theme.cardCoverPlaceholder,
-      child: Center(
-        child: Icon(
-          Icons.videogame_asset_outlined,
-          size: 52,
-          color: theme.textHint,
-        ),
+  Widget _buildPlaceholder() => Container(
+    color: theme.cardCoverPlaceholder,
+    child: Center(
+      child: Icon(
+        Icons.videogame_asset_outlined,
+        size: 52,
+        color: theme.textHint,
       ),
-    );
-  }
+    ),
+  );
 }

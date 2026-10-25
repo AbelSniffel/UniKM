@@ -58,28 +58,25 @@ class ThemeNotifier extends Notifier<AppThemeData> {
   /// Call cancelPreview() to restore the original theme
   /// Call savePreviewTheme() to persist the preview theme
   void startPreview(AppThemeData previewTheme) {
-    if (_themeEquals(state, previewTheme)) {
-      return;
-    }
+    if (_themeEquals(state, previewTheme)) return;
     _previewOriginalTheme ??= state;
     state = previewTheme;
   }
 
-  bool _themeEquals(AppThemeData a, AppThemeData b) {
-    return a.id == b.id &&
-        a.name == b.name &&
-        a.baseBackground == b.baseBackground &&
-        a.baseSecondary == b.baseSecondary &&
-        a.baseAccent == b.baseAccent &&
-        a.navPanelOverlayStyle == b.navPanelOverlayStyle &&
-        a.iconData?.codePoint == b.iconData?.codePoint &&
-        a.cornerRadius == b.cornerRadius &&
-        a.useThemeToggleRadius == b.useThemeToggleRadius &&
-        a.scrollbarRadius == b.scrollbarRadius &&
-        a.inputPaddingHorizontal == b.inputPaddingHorizontal &&
-        a.inputPaddingVertical == b.inputPaddingVertical &&
-        a.progressIndicatorStrokeWidth == b.progressIndicatorStrokeWidth;
-  }
+  bool _themeEquals(AppThemeData a, AppThemeData b) =>
+      a.id == b.id &&
+      a.name == b.name &&
+      a.baseBackground == b.baseBackground &&
+      a.baseSecondary == b.baseSecondary &&
+      a.baseAccent == b.baseAccent &&
+      a.navPanelOverlayStyle == b.navPanelOverlayStyle &&
+      a.iconData?.codePoint == b.iconData?.codePoint &&
+      a.cornerRadius == b.cornerRadius &&
+      a.useThemeToggleRadius == b.useThemeToggleRadius &&
+      a.scrollbarRadius == b.scrollbarRadius &&
+      a.inputPaddingHorizontal == b.inputPaddingHorizontal &&
+      a.inputPaddingVertical == b.inputPaddingVertical &&
+      a.progressIndicatorStrokeWidth == b.progressIndicatorStrokeWidth;
 
   /// Cancel preview and restore the original theme
   void cancelPreview() {
@@ -94,9 +91,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
   /// Set the active theme
   Future<void> setTheme(AppThemeData theme) async {
-    if (_themeEquals(state, theme)) {
-      return;
-    }
+    if (_themeEquals(state, theme)) return;
 
     _previewOriginalTheme = null; // Clear preview state
     state = theme;
@@ -193,9 +188,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
       final activatedTheme = getAllThemes()
           .where((t) => t.id == lastImportedId)
           .firstOrNull;
-      if (activatedTheme != null) {
-        state = activatedTheme;
-      }
+      if (activatedTheme != null) state = activatedTheme;
     }
 
     return ThemeImportResult(
@@ -282,18 +275,14 @@ final effectiveNavPanelOverlayStyleProvider = Provider<NavPanelOverlayStyle>((
 ) {
   final theme = ref.watch(themeProvider);
   final isBuiltIn = ref.watch(currentThemeIsBuiltInProvider);
-  if (isBuiltIn) {
-    return ref.watch(navPanelOverlayStyleSettingProvider);
-  }
+  if (isBuiltIn) return ref.watch(navPanelOverlayStyleSettingProvider);
   return theme.navPanelOverlayStyle;
 });
 
 final effectiveThemeProvider = Provider<AppThemeData>((ref) {
   final theme = ref.watch(themeProvider);
   final overlayStyle = ref.watch(effectiveNavPanelOverlayStyleProvider);
-  if (overlayStyle == theme.navPanelOverlayStyle) {
-    return theme;
-  }
+  if (overlayStyle == theme.navPanelOverlayStyle) return theme;
   return theme.copyWith(navPanelOverlayStyle: overlayStyle);
 });
 

@@ -104,20 +104,18 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   }
 
   /// Convert theme to JSON map
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'base_background': colorToHex(baseBackground),
-      'base_primary': colorToHex(baseSecondary),
-      'base_accent': colorToHex(baseAccent),
-      if (iconData != null) 'icon_code_point': iconData!.codePoint,
-      'corner_radius': cornerRadius,
-      'use_theme_toggle_radius': useThemeToggleRadius,
-      'scrollbar_radius': scrollbarRadius,
-      'nav_panel_overlay_style': navPanelOverlayStyle.name,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'base_background': colorToHex(baseBackground),
+    'base_primary': colorToHex(baseSecondary),
+    'base_accent': colorToHex(baseAccent),
+    if (iconData != null) 'icon_code_point': iconData!.codePoint,
+    'corner_radius': cornerRadius,
+    'use_theme_toggle_radius': useThemeToggleRadius,
+    'scrollbar_radius': scrollbarRadius,
+    'nav_panel_overlay_style': navPanelOverlayStyle.name,
+  };
 
   /// Copy with new values
   @override
@@ -354,22 +352,20 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       _gradientCache[this] ??= _buildGradientCache();
 
   /// Compute all expensive HSL/blend operations once per theme instance.
-  _AppThemeCache _buildGradientCache() {
-    return _AppThemeCache(
-      listCardDefaultGradient: [
-        baseAccent.withValues(alpha: 0.40),
-        baseSecondary.withValues(alpha: 0.50),
-      ],
-      listCardHoverGradient: [
-        baseAccent.withValues(alpha: 0.80),
-        baseSecondary.withValues(alpha: 0.90),
-      ],
-      listCardSelectedGradient: [
-        baseAccent.withValues(alpha: 1),
-        baseSecondary.withValues(alpha: 1),
-      ],
-    );
-  }
+  _AppThemeCache _buildGradientCache() => _AppThemeCache(
+    listCardDefaultGradient: [
+      baseAccent.withValues(alpha: 0.40),
+      baseSecondary.withValues(alpha: 0.50),
+    ],
+    listCardHoverGradient: [
+      baseAccent.withValues(alpha: 0.80),
+      baseSecondary.withValues(alpha: 0.90),
+    ],
+    listCardSelectedGradient: [
+      baseAccent.withValues(alpha: 1),
+      baseSecondary.withValues(alpha: 1),
+    ],
+  );
 
   /// Gradient colors for list card hover state — memoized, allocated once per theme.
   List<Color> get listCardHoverGradient =>
@@ -768,18 +764,16 @@ class BottomGlowInputBorder extends OutlineInputBorder {
   }
 
   @override
-  BottomGlowInputBorder scale(double t) {
-    return BottomGlowInputBorder(
-      borderSide: borderSide.scale(t),
-      borderRadius: borderRadius * t,
-      gapPadding: gapPadding * t,
-      glowColor: glowColor.withValues(alpha: glowColor.a * t),
-      glowExtent: glowExtent * t,
-      wrapExtent: wrapExtent * t,
-      showTopBorder: showTopBorder,
-      connection: connection * t,
-    );
-  }
+  BottomGlowInputBorder scale(double t) => BottomGlowInputBorder(
+    borderSide: borderSide.scale(t),
+    borderRadius: borderRadius * t,
+    gapPadding: gapPadding * t,
+    glowColor: glowColor.withValues(alpha: glowColor.a * t),
+    glowExtent: glowExtent * t,
+    wrapExtent: wrapExtent * t,
+    showTopBorder: showTopBorder,
+    connection: connection * t,
+  );
 
   /// A plain outline border as a glow border with no glow, so both lerp
   /// directions share one interpolation.
@@ -1066,9 +1060,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         _selectionController.reverse();
       }
     }
-    if (oldWidget.isEnabled && !widget.isEnabled) {
-      _hoverController.reverse();
-    }
+    if (oldWidget.isEnabled && !widget.isEnabled) _hoverController.reverse();
     if (oldWidget.labelFadeDuration != widget.labelFadeDuration) {
       _labelVisibilityController.duration = widget.labelFadeDuration;
     }
@@ -1116,9 +1108,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   }
 
   double _labelVisibilityT() {
-    if (widget.labelText == null) {
-      return widget.labelVisible ? 1.0 : 0.0;
-    }
+    if (widget.labelText == null) return widget.labelVisible ? 1.0 : 0.0;
     if (widget.labelFadeDuration == Duration.zero) {
       return widget.labelVisible ? 1.0 : 0.0;
     }
@@ -1140,9 +1130,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       icon = widget.iconBuilder!(context, iconColor, widget.iconSize);
     } else {
       final iconData = widget.iconData;
-      if (iconData == null) {
-        return null;
-      }
+      if (iconData == null) return null;
       icon = Icon(iconData, color: iconColor, size: widget.iconSize);
     }
     final scaled = Transform.scale(scale: iconScale, child: icon);
@@ -1158,9 +1146,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
 
   Widget? _buildLabel({required TextStyle labelStyle}) {
     final labelText = widget.labelText;
-    if (labelText == null) {
-      return null;
-    }
+    if (labelText == null) return null;
 
     final label = Text(
       labelText,
@@ -1341,9 +1327,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     );
 
     final tooltipMessage = widget.tooltipMessage;
-    if (tooltipMessage == null || tooltipMessage.isEmpty) {
-      return button;
-    }
+    if (tooltipMessage == null || tooltipMessage.isEmpty) return button;
 
     return Tooltip(message: tooltipMessage, child: button);
   }
@@ -1362,38 +1346,36 @@ class AppLinearProgressBar extends StatelessWidget {
   final String? label;
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          LinearProgressIndicator(
-            value: value,
-            minHeight: 26,
-            backgroundColor: theme.accent.withValues(alpha: 0.35),
-            valueColor: AlwaysStoppedAnimation(theme.accent),
-          ),
-          if (label != null)
-            IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  label!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(theme.cornerRadius),
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        LinearProgressIndicator(
+          value: value,
+          minHeight: 26,
+          backgroundColor: theme.accent.withValues(alpha: 0.35),
+          valueColor: AlwaysStoppedAnimation(theme.accent),
+        ),
+        if (label != null)
+          IgnorePointer(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                label!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: theme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
+          ),
+      ],
+    ),
+  );
 }
 
 /// Cache for expensive, immutable computed values of an [AppThemeData] instance.

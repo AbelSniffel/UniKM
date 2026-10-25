@@ -48,12 +48,8 @@ Future<DateTime?> showDeadlinePickerDialog({
 }
 
 DateTime _clampDate(DateTime value, DateTime firstDate, DateTime lastDate) {
-  if (value.isBefore(firstDate)) {
-    return firstDate;
-  }
-  if (value.isAfter(lastDate)) {
-    return lastDate;
-  }
+  if (value.isBefore(firstDate)) return firstDate;
+  if (value.isAfter(lastDate)) return lastDate;
   return value;
 }
 
@@ -176,9 +172,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       }
     }
 
-    if (digits.length >= 8) {
-      year = int.parse(digits.substring(4, 8));
-    }
+    if (digits.length >= 8) year = int.parse(digits.substring(4, 8));
 
     final candidate = DateTime(year, month, day);
     if (candidate.year != year ||
@@ -216,9 +210,9 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 
     if (computedDate.isBefore(widget.firstDate) ||
         computedDate.isAfter(widget.lastDate)) {
-      setState(() {
-        _dayAmountError = 'Day amount falls outside the allowed range';
-      });
+      setState(
+        () => _dayAmountError = 'Day amount falls outside the allowed range',
+      );
       return;
     }
 
@@ -418,17 +412,13 @@ class _DeadlineDateInputFormatter extends TextInputFormatter {
   }
 
   static int _selectionIndexForDigits(String formatted, int digitCount) {
-    if (digitCount <= 0) {
-      return 0;
-    }
+    if (digitCount <= 0) return 0;
 
     var seenDigits = 0;
     for (var index = 0; index < formatted.length; index++) {
       if (_digitPattern.hasMatch(formatted[index])) {
         seenDigits++;
-        if (seenDigits == digitCount) {
-          return index + 1;
-        }
+        if (seenDigits == digitCount) return index + 1;
       }
     }
     return formatted.length;

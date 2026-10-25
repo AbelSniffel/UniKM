@@ -364,21 +364,19 @@ abstract final class GameCardBadges {
     );
   }
 
-  static Widget titleChip(AppThemeData theme, String title) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.background.withValues(alpha: 0.75),
-        borderRadius: chipBorderRadius(theme, kBadgeHeight),
-      ),
-      child: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
+  static Widget titleChip(AppThemeData theme, String title) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: theme.background.withValues(alpha: 0.75),
+      borderRadius: chipBorderRadius(theme, kBadgeHeight),
+    ),
+    child: Text(
+      title,
+      style: const TextStyle(fontWeight: FontWeight.w600),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
 
   static Widget slimFetchStatusBadge(
     AppThemeData theme,

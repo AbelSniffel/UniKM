@@ -83,13 +83,9 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     _repoController.text = updates.updateRepo;
     _tokenController.text = updates.githubApiToken;
     _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      setState(() {
-        _now = DateTime.now();
-      });
+      setState(() => _now = DateTime.now());
     });
   }
 
@@ -104,27 +100,17 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
   String _formatNextUpdateTime(DateTime nextTime) {
     final diff = nextTime.difference(_now);
 
-    if (diff.isNegative) {
-      return 'Running now...';
-    }
+    if (diff.isNegative) return 'Running now...';
 
-    if (diff.inMinutes < 1) {
-      return 'In less than a minute';
-    }
+    if (diff.inMinutes < 1) return 'In less than a minute';
 
-    if (diff.inMinutes == 1) {
-      return 'In 1 minute';
-    }
+    if (diff.inMinutes == 1) return 'In 1 minute';
 
-    if (diff.inMinutes < 60) {
-      return 'In ${diff.inMinutes} minutes';
-    }
+    if (diff.inMinutes < 60) return 'In ${diff.inMinutes} minutes';
 
     final hours = diff.inHours;
     final minutes = diff.inMinutes % 60;
-    if (minutes == 0) {
-      return 'In $hours hour${hours > 1 ? 's' : ''}';
-    }
+    if (minutes == 0) return 'In $hours hour${hours > 1 ? 's' : ''}';
 
     return 'In $hours hour${hours > 1 ? 's' : ''} $minutes min';
   }
@@ -133,17 +119,11 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     required bool autoCheckEnabled,
     required DateTime? nextUpdateCheck,
   }) {
-    if (!autoCheckEnabled) {
-      return 'Automatic update check is disabled';
-    }
-    if (nextUpdateCheck == null) {
-      return 'Next check is being scheduled';
-    }
+    if (!autoCheckEnabled) return 'Automatic update check is disabled';
+    if (nextUpdateCheck == null) return 'Next check is being scheduled';
 
     final relativeLabel = _formatNextUpdateTime(nextUpdateCheck);
-    if (relativeLabel == 'Running now...') {
-      return 'Next check is running now';
-    }
+    if (relativeLabel == 'Running now...') return 'Next check is running now';
 
     return 'Next check ${relativeLabel[0].toLowerCase()}${relativeLabel.substring(1)}';
   }
@@ -172,9 +152,8 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                   nextUpdateCheck: nextUpdateCheck,
                 ),
                 value: updates.autoCheckEnabled,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.autoUpdateCheck,
-                  value,
                 ),
               ),
               SettingsToggleCard(
@@ -182,9 +161,8 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                 label: UpdatesSection.includePrereleaseSpec.label,
                 description: UpdatesSection.includePrereleaseSpec.description,
                 value: updates.includePrerelease,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.includePreReleases,
-                  value,
                 ),
               ),
             ],
@@ -212,9 +190,8 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                 theme: widget.theme,
                 controller: _repoController,
                 hintText: UpdatesSection.repositorySpec.description,
-                onChanged: (value) {
-                  settingsNotifier.setSetting(SettingsKeys.updateRepo, value);
-                },
+                onChanged: (value) =>
+                    settingsNotifier.setSetting(SettingsKeys.updateRepo, value),
               ),
               const SizedBox(height: 16),
               Row(

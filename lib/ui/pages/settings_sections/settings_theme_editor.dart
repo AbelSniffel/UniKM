@@ -89,9 +89,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         : source.icon.codePoint;
 
     _hexFocusNode.addListener(() {
-      if (!_hexFocusNode.hasFocus) {
-        _syncHexController();
-      }
+      if (!_hexFocusNode.hasFocus) _syncHexController();
     });
 
     _syncHsvFromActiveSlot();
@@ -158,9 +156,8 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _syncHexController();
   }
 
-  void _syncHexController() {
-    _hexController.text = _activeHex.replaceFirst('#', '').toUpperCase();
-  }
+  void _syncHexController() =>
+      _hexController.text = _activeHex.replaceFirst('#', '').toUpperCase();
 
   Color _hsvToColor() =>
       HSVColor.fromAHSV(1.0, _hue, _saturation, _value).toColor();
@@ -232,9 +229,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_saved) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _themeNotifier.cancelPreview();
-          });
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _themeNotifier.cancelPreview(),
+          );
         }
       },
       child: ThemedAlertDialog(
@@ -316,29 +313,27 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Color circles row
   // ---------------------------------------------------------------------------
 
-  Widget _buildColorCirclesRow(AppThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          'Theme Colors  \u2022  Click to edit  \u2022  Drag to swap',
-          style: TextStyle(color: theme.textSecondary, fontSize: 11),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 28,
-          runSpacing: 12,
-          children: [
-            _buildColorCircle(theme, 'background'),
-            _buildColorCircle(theme, 'accent'),
-            _buildColorCircle(theme, 'secondary'),
-          ],
-        ),
-      ],
-    );
-  }
+  Widget _buildColorCirclesRow(AppThemeData theme) => Column(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Text(
+        'Theme Colors  \u2022  Click to edit  \u2022  Drag to swap',
+        style: TextStyle(color: theme.textSecondary, fontSize: 11),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 28,
+        runSpacing: 12,
+        children: [
+          _buildColorCircle(theme, 'background'),
+          _buildColorCircle(theme, 'accent'),
+          _buildColorCircle(theme, 'secondary'),
+        ],
+      ),
+    ],
+  );
 
   Widget _buildColorCircle(AppThemeData theme, _ColorSlot slot) {
     final isActive = _activeSlot == slot;
@@ -683,40 +678,38 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Overlay style picker
   // ---------------------------------------------------------------------------
 
-  Widget _buildOverlayStylePicker(AppThemeData theme) {
-    return Row(
-      children: [
-        Text(
-          'Nav Overlay',
-          style: TextStyle(color: theme.textSecondary, fontSize: 12),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: AppComboBox<NavPanelOverlayStyle>(
-            initialValue: _navPanelOverlayStyle,
-            theme: theme,
-            style: TextStyle(color: theme.textPrimary, fontSize: 13),
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            items: NavPanelOverlayStyle.values
-                .map(
-                  (style) => DropdownMenuItem(
-                    value: style,
-                    child: Text(style.displayName),
-                  ),
-                )
-                .toList(),
-            onChanged: (style) {
-              if (style == null) return;
-              setState(() => _navPanelOverlayStyle = style);
-              _updatePreview();
-            },
+  Widget _buildOverlayStylePicker(AppThemeData theme) => Row(
+    children: [
+      Text(
+        'Nav Overlay',
+        style: TextStyle(color: theme.textSecondary, fontSize: 12),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: AppComboBox<NavPanelOverlayStyle>(
+          initialValue: _navPanelOverlayStyle,
+          theme: theme,
+          style: TextStyle(color: theme.textPrimary, fontSize: 13),
+          decoration: const InputDecoration(
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
+          items: NavPanelOverlayStyle.values
+              .map(
+                (style) => DropdownMenuItem(
+                  value: style,
+                  child: Text(style.displayName),
+                ),
+              )
+              .toList(),
+          onChanged: (style) {
+            if (style == null) return;
+            setState(() => _navPanelOverlayStyle = style);
+            _updatePreview();
+          },
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 
   Widget _buildCornerRadiusSlider(AppThemeData theme) {
     final roundedRadius = _cornerRadius.roundToDouble();

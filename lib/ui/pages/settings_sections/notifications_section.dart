@@ -57,17 +57,15 @@ class NotificationsSection extends ConsumerWidget {
               (
                 spec: deadlineRemindersSpec,
                 value: notifications.deadlineReminders,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.deadlineReminders,
-                  value,
                 ),
               ),
               (
                 spec: updateNotificationsSpec,
                 value: notifications.updateNotifications,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.updateNotifications,
-                  value,
                 ),
               ),
             ],

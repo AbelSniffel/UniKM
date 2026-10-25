@@ -1363,30 +1363,28 @@ class GradientEffectPreview extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return PreviewCard(
-      name: effect.displayName,
-      theme: theme,
-      isSelected: isSelected,
-      onTap: onTap,
-      backgroundBuilder: (context, _) {
-        return Stack(
-          children: [
-            // base surface and animated gradient
-            Container(color: theme.surface),
-            Positioned.fill(
-              child: AnimatedGradientBar(
-                theme: theme,
-                animationStyle: effect,
-                isPlaying: isPlaying,
-                autoPauseWhenNotVisible: true,
-                optimizeForPreview: true,
-                maxFps: 60,
-              ),
+  Widget build(BuildContext context) => PreviewCard(
+    name: effect.displayName,
+    theme: theme,
+    isSelected: isSelected,
+    onTap: onTap,
+    backgroundBuilder: (context, _) {
+      return Stack(
+        children: [
+          // base surface and animated gradient
+          Container(color: theme.surface),
+          Positioned.fill(
+            child: AnimatedGradientBar(
+              theme: theme,
+              animationStyle: effect,
+              isPlaying: isPlaying,
+              autoPauseWhenNotVisible: true,
+              optimizeForPreview: true,
+              maxFps: 60,
             ),
-          ],
-        );
-      },
-    );
-  }
+          ),
+        ],
+      );
+    },
+  );
 }

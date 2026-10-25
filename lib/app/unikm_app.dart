@@ -10,7 +10,5 @@ class UniKMApp extends StatelessWidget {
   const UniKMApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const AppScaffold();
-  }
+  Widget build(BuildContext context) => const AppScaffold();
 }

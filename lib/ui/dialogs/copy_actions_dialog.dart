@@ -11,12 +11,11 @@ import '../../providers/app_providers.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/section_groupbox.dart';
 
-Future<void> showCopyActionsDialog(BuildContext context, List<Game> targets) {
-  return showAppDialog<void>(
-    context: context,
-    builder: (_) => CopyActionsDialog(targets: targets),
-  );
-}
+Future<void> showCopyActionsDialog(BuildContext context, List<Game> targets) =>
+    showAppDialog<void>(
+      context: context,
+      builder: (_) => CopyActionsDialog(targets: targets),
+    );
 
 class CopyActionsDialog extends ConsumerWidget {
   const CopyActionsDialog({super.key, required this.targets});
@@ -30,10 +29,7 @@ class CopyActionsDialog extends ConsumerWidget {
       (g) => g.platform == 'Steam' && g.gameKey.isNotEmpty,
     );
 
-    Widget buildTile({
-      required String title,
-      required VoidCallback onTap,
-    }) {
+    Widget buildTile({required String title, required VoidCallback onTap}) {
       return ListTile(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(theme.cornerRadius),

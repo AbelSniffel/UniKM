@@ -21,9 +21,7 @@ class DuplicateKeyChecker {
   ) {
     final normalized = normalize(key);
     for (final game in existingGames) {
-      if (normalize(game.gameKey) == normalized) {
-        return game;
-      }
+      if (normalize(game.gameKey) == normalized) return game;
     }
     return null;
   }
@@ -37,9 +35,7 @@ class DuplicateKeyChecker {
 
     for (final inputKey in inputKeys) {
       final existing = existingByNormalizedKey[normalize(inputKey)];
-      if (existing != null) {
-        duplicates[inputKey] = existing;
-      }
+      if (existing != null) duplicates[inputKey] = existing;
     }
 
     return duplicates;

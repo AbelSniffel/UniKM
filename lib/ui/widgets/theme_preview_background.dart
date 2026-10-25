@@ -11,29 +11,27 @@ class ThemePreviewBackground extends StatelessWidget {
   final AppThemeData theme;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [theme.background, theme.accent, theme.secondary],
-              stops: const [0.0, 0.5, 1.0],
-            ),
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [theme.background, theme.accent, theme.secondary],
+            stops: const [0.0, 0.5, 1.0],
           ),
         ),
-        if (theme.navPanelOverlayStyle != NavPanelOverlayStyle.none)
-          IgnorePointer(
-            child: NavigationPanelOverlayPaint(
-              theme: theme,
-              preview: true,
-              child: const SizedBox.expand(),
-            ),
+      ),
+      if (theme.navPanelOverlayStyle != NavPanelOverlayStyle.none)
+        IgnorePointer(
+          child: NavigationPanelOverlayPaint(
+            theme: theme,
+            preview: true,
+            child: const SizedBox.expand(),
           ),
-      ],
-    );
-  }
+        ),
+    ],
+  );
 }

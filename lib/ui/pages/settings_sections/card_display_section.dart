@@ -161,25 +161,22 @@ class CardDisplaySection extends ConsumerWidget {
               (
                 spec: showTagsOnHoverOnlySpec,
                 value: cardSettings.showTagsOnHoverOnly,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.showTagsOnHoverOnly,
-                  value,
                 ),
               ),
               (
                 spec: showPlatformOnHoverOnlySpec,
                 value: cardSettings.showPlatformOnHoverOnly,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.showPlatformOnHoverOnly,
-                  value,
                 ),
               ),
               (
                 spec: showTitleOnNoPictureSpec,
                 value: cardSettings.showTitleOnNoPicture,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.showTitleOnNoPicture,
-                  value,
                 ),
               ),
             ],
@@ -197,42 +194,31 @@ class CardDisplaySection extends ConsumerWidget {
               (
                 spec: showTitleSpec,
                 value: cardSettings.showTitle,
-                onChanged: (value) => settingsNotifier.setSetting(
-                  SettingsKeys.showTitleChip,
-                  value,
-                ),
+                onChanged: settingsNotifier.setter(SettingsKeys.showTitleChip),
               ),
               (
                 spec: showPlatformSpec,
                 value: cardSettings.showPlatform,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.showPlatformChip,
-                  value,
                 ),
               ),
               (
                 spec: showTagsSpec,
                 value: cardSettings.showTags,
-                onChanged: (value) => settingsNotifier.setSetting(
-                  SettingsKeys.showTagsChip,
-                  value,
-                ),
+                onChanged: settingsNotifier.setter(SettingsKeys.showTagsChip),
               ),
               (
                 spec: showDeadlineSpec,
                 value: cardSettings.showDeadline,
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: settingsNotifier.setter(
                   SettingsKeys.showDeadlineChip,
-                  value,
                 ),
               ),
               (
                 spec: showRatingsSpec,
                 value: cardSettings.showRatings,
-                onChanged: (value) => settingsNotifier.setSetting(
-                  SettingsKeys.showRatings,
-                  value,
-                ),
+                onChanged: settingsNotifier.setter(SettingsKeys.showRatings),
               ),
             ],
           ),

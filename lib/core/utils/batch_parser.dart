@@ -79,9 +79,7 @@ List<ParsedBatchEntry> parseBatchText(
 BatchLineParts? _parseBatchLine(String line) {
   final explicit =
       _trySplitFixedSeparator(line) ?? _trySplitValidatedSeparator(line);
-  if (explicit != null) {
-    return explicit;
-  }
+  if (explicit != null) return explicit;
 
   final trailing = _extractTrailingKey(line);
   if (trailing != null) {
@@ -116,9 +114,7 @@ BatchLineParts? _trySplitFixedSeparator(String line) {
         titleEnd: title.length,
         keyStart: line.length - key.length,
       );
-      if (_looksLikeRecognizedKey(key)) {
-        return candidate;
-      }
+      if (_looksLikeRecognizedKey(key)) return candidate;
       fallback ??= candidate;
       index = line.lastIndexOf(separator, index - 1);
     }
@@ -172,12 +168,10 @@ bool _looksLikeRecognizedKey(String value) {
   return _extractTrailingKey(value)?.start == 0;
 }
 
-String _cleanTitle(String value) {
-  return value.trim().replaceAll(_titleTrailing, '').trim();
-}
+String _cleanTitle(String value) =>
+    value.trim().replaceAll(_titleTrailing, '').trim();
 
-bool _isWordCharacter(int codeUnit) {
-  return (codeUnit >= 48 && codeUnit <= 57) ||
-      (codeUnit >= 65 && codeUnit <= 90) ||
-      (codeUnit >= 97 && codeUnit <= 122);
-}
+bool _isWordCharacter(int codeUnit) =>
+    (codeUnit >= 48 && codeUnit <= 57) ||
+    (codeUnit >= 65 && codeUnit <= 90) ||
+    (codeUnit >= 97 && codeUnit <= 122);

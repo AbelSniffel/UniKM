@@ -16,9 +16,7 @@ double _resolveToggleRadius({
   required double extent,
   required bool useThemeToggleRadius,
 }) {
-  if (!useThemeToggleRadius) {
-    return extent / 2;
-  }
+  if (!useThemeToggleRadius) return extent / 2;
   return theme.cornerRadius.clamp(0.0, extent / 2);
 }
 

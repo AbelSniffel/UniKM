@@ -76,9 +76,7 @@ class EncryptionManager {
     String password, {
     bool deletePlaintextFile = true,
   }) async {
-    if (isEncrypted) {
-      throw StateError('Database is already encrypted');
-    }
+    if (isEncrypted) throw StateError('Database is already encrypted');
 
     final plainFile = File(dbPath);
     if (!plainFile.existsSync()) {
@@ -124,9 +122,7 @@ class EncryptionManager {
 
   /// Disable encryption with the given password
   Future<void> disable(String password) async {
-    if (!isEncrypted) {
-      throw StateError('Database is not encrypted');
-    }
+    if (!isEncrypted) throw StateError('Database is not encrypted');
 
     // Decrypt
     final plaintext = await decrypt(password);
@@ -144,9 +140,7 @@ class EncryptionManager {
 
   /// Decrypt database and return plaintext bytes
   Future<Uint8List> decrypt(String password) async {
-    if (!isEncrypted) {
-      throw StateError('Database is not encrypted');
-    }
+    if (!isEncrypted) throw StateError('Database is not encrypted');
 
     final encFile = File(encryptedPath);
     final data = await encFile.readAsBytes();
@@ -254,9 +248,7 @@ class EncryptionManager {
 
   /// Change the encryption password
   Future<void> changePassword(String oldPassword, String newPassword) async {
-    if (!isEncrypted) {
-      throw StateError('Database is not encrypted');
-    }
+    if (!isEncrypted) throw StateError('Database is not encrypted');
 
     // Decrypt with old password
     final plaintext = await decrypt(oldPassword);
@@ -327,17 +319,13 @@ class EncryptionManager {
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        if (await file.exists()) {
-          await file.delete();
-        }
+        if (await file.exists()) await file.delete();
         return true;
       } on FileSystemException catch (e) {
         final isLocked = _isFileInUse(e);
         final isLastAttempt = attempt == maxAttempts;
         if (!isLocked || isLastAttempt) {
-          if (throwOnFailure) {
-            rethrow;
-          }
+          if (throwOnFailure) rethrow;
           AppLog.w(
             '[Encryption] Failed to delete $label after $attempt attempts: $e',
           );

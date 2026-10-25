@@ -109,16 +109,12 @@ class SectionGroupBox extends ConsumerWidget {
     return SearchHighlight(
       query: searchQuery,
       isMatch: isSearchMatch,
-      builder: (context, highlightValue) {
-        final built = _buildFrame(
-          context,
-          highlightValue,
-          effectiveTitleLocation,
-          spaced: spaced,
-        );
-
-        return built;
-      },
+      builder: (context, highlightValue) => _buildFrame(
+        context,
+        highlightValue,
+        effectiveTitleLocation,
+        spaced: spaced,
+      ),
     );
   }
 
@@ -201,18 +197,12 @@ class SectionGroupBox extends ConsumerWidget {
         pos == SectionGroupPosition.last ||
         pos == SectionGroupPosition.onlyAttached;
 
-    // Whether corner radius is applied to top / bottom.  We keep the original
-    // rounding rules so attached boxes still have flat top corners unless the
-    // position is truly "first"/"only".
-    final roundTopCorners = showTop;
-    final roundBottomCorners = showBottom;
-
+    // Visible top / bottom edges are rounded; attached boxes keep flat top
+    // corners unless the position is truly "first"/"only".
     final cr = theme.cornerRadius;
-    final outerRadius = BorderRadius.only(
-      topLeft: roundTopCorners ? Radius.circular(cr) : Radius.zero,
-      topRight: roundTopCorners ? Radius.circular(cr) : Radius.zero,
-      bottomLeft: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
-      bottomRight: roundBottomCorners ? Radius.circular(cr) : Radius.zero,
+    final outerRadius = BorderRadius.vertical(
+      top: showTop ? Radius.circular(cr) : Radius.zero,
+      bottom: showBottom ? Radius.circular(cr) : Radius.zero,
     );
 
     final content = location == SectionTitleLocation.left
@@ -220,7 +210,7 @@ class SectionGroupBox extends ConsumerWidget {
         : _buildTopTitle(outerRadius);
 
     // Paint the background on Material so child controls' ink stays visible.
-    final hasCorners = roundTopCorners || roundBottomCorners;
+    final hasCorners = showTop || showBottom;
     final surface = Material(
       color: bgColor,
       textStyle: DefaultTextStyle.of(context).style,
@@ -243,12 +233,9 @@ class SectionGroupBox extends ConsumerWidget {
     final body = CustomPaint(
       foregroundPainter: _SelectiveBorderPainter(
         color: effectiveBorderColor,
-        strokeWidth: 1.0,
         cornerRadius: cr,
         showTop: showTop,
         showBottom: showBottom,
-        roundTopCorners: roundTopCorners,
-        roundBottomCorners: roundBottomCorners,
       ),
       child: bgLayer,
     );
@@ -278,7 +265,7 @@ class SectionGroupBox extends ConsumerWidget {
       bottomRight: outerRadius.bottomRight,
     );
 
-    final content = Row(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.max,
       children: [
@@ -336,8 +323,6 @@ class SectionGroupBox extends ConsumerWidget {
         ),
       ],
     );
-
-    return content;
   }
 
   Widget _buildTopTitle(BorderRadius outerRadius) {
@@ -398,7 +383,7 @@ class SectionGroupBox extends ConsumerWidget {
     // Bounded sections give their content the space remaining below the title.
     // The selected fit either fills that space or shrinks around short content.
     // Unbounded sections size naturally inside their surrounding scroll view.
-    final content = LayoutBuilder(
+    return LayoutBuilder(
       builder: (context, constraints) {
         final fitToHeight = constraints.hasBoundedHeight;
         final contentWidget = Padding(
@@ -425,8 +410,6 @@ class SectionGroupBox extends ConsumerWidget {
         );
       },
     );
-
-    return content;
   }
 }
 
@@ -442,21 +425,19 @@ class SectionGroupBox extends ConsumerWidget {
 class _SelectiveBorderPainter extends CustomPainter {
   const _SelectiveBorderPainter({
     required this.color,
-    required this.strokeWidth,
     required this.cornerRadius,
     required this.showTop,
     required this.showBottom,
-    required this.roundTopCorners,
-    required this.roundBottomCorners,
   });
 
+  static const strokeWidth = 1.0;
+
   final Color color;
-  final double strokeWidth;
   final double cornerRadius;
+
+  /// A visible top or bottom edge always has rounded corners.
   final bool showTop;
   final bool showBottom;
-  final bool roundTopCorners;
-  final bool roundBottomCorners;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -470,108 +451,52 @@ class _SelectiveBorderPainter extends CustomPainter {
     final h = size.height;
     final maxR = (w < h ? w : h) / 2;
     final r = cornerRadius < maxR ? cornerRadius : maxR;
-    final e = strokeWidth / 2; // inset so stroke stays within bounds
+    final radius = Radius.circular(r);
+    const e = strokeWidth / 2; // inset so stroke stays within bounds
 
     // Fast path: full rounded-rect outline.
-    if (showTop && showBottom && roundTopCorners && roundBottomCorners) {
-      canvas.drawRRect(
-        RRect.fromLTRBR(e, e, w - e, h - e, Radius.circular(r)),
-        paint,
-      );
+    if (showTop && showBottom) {
+      canvas.drawRRect(RRect.fromLTRBR(e, e, w - e, h - e, radius), paint);
       return;
     }
 
     final path = Path();
-
     if (showTop) {
-      // Trace: left side (bottom→top) → TL arc → top → TR arc → right side (top→bottom)
-      // then optionally continue with bottom if showBottom.
-      final leftStartY = (showBottom && roundBottomCorners) ? h - e - r : h - e;
-      final leftEndY = roundTopCorners ? e + r : e;
-
-      path.moveTo(e, leftStartY);
-      path.lineTo(e, leftEndY);
-      if (roundTopCorners) {
-        path.arcToPoint(
-          Offset(e + r, e),
-          radius: Radius.circular(r),
-          clockwise: true,
-        );
-      }
-      path.lineTo(w - e - (roundTopCorners ? r : 0), e);
-      if (roundTopCorners) {
-        path.arcToPoint(
-          Offset(w - e, e + r),
-          radius: Radius.circular(r),
-          clockwise: true,
-        );
-      }
-      path.lineTo(
-        w - e,
-        (showBottom && roundBottomCorners) ? h - e - r : h - e,
-      );
-
-      if (showBottom) {
-        if (roundBottomCorners) {
-          path.arcToPoint(
-            Offset(w - e - r, h - e),
-            radius: Radius.circular(r),
-            clockwise: true,
-          );
-        }
-        path.lineTo(e + (roundBottomCorners ? r : 0), h - e);
-        if (roundBottomCorners) {
-          path.arcToPoint(
-            Offset(e, h - e - r),
-            radius: Radius.circular(r),
-            clockwise: true,
-          );
-        }
-        path.close();
-      }
+      // Left side (bottom→top) → TL arc → top → TR arc → right side.
+      path
+        ..moveTo(e, h - e)
+        ..lineTo(e, e + r)
+        ..arcToPoint(Offset(e + r, e), radius: radius)
+        ..lineTo(w - e - r, e)
+        ..arcToPoint(Offset(w - e, e + r), radius: radius)
+        ..lineTo(w - e, h - e);
     } else if (showBottom) {
-      // No top: left side (top→bottom) → BL arc → bottom → BR arc → right side (bottom→top).
+      // Left side (top→bottom) → BL arc → bottom → BR arc → right side.
       // The corner arcs must sweep *counter‑clockwise* so they bulge outward instead
       // of inverting toward the interior. (The y‑axis points down, so the natural
       // direction for a convex bottom corner is opposite the top corner case.)
-      final leftEndY = roundBottomCorners ? h - e - r : h - e;
-
-      path.moveTo(e, e);
-      path.lineTo(e, leftEndY);
-      if (roundBottomCorners) {
-        path.arcToPoint(
-          Offset(e + r, h - e),
-          radius: Radius.circular(r),
-          clockwise: false,
-        );
-      }
-      path.lineTo(w - e - (roundBottomCorners ? r : 0), h - e);
-      if (roundBottomCorners) {
-        path.arcToPoint(
-          Offset(w - e, h - e - r),
-          radius: Radius.circular(r),
-          clockwise: false,
-        );
-      }
-      path.lineTo(w - e, e);
+      path
+        ..moveTo(e, e)
+        ..lineTo(e, h - e - r)
+        ..arcToPoint(Offset(e + r, h - e), radius: radius, clockwise: false)
+        ..lineTo(w - e - r, h - e)
+        ..arcToPoint(Offset(w - e, h - e - r), radius: radius, clockwise: false)
+        ..lineTo(w - e, e);
     } else {
       // No top, no bottom: just two vertical lines.
-      path.moveTo(e, e);
-      path.lineTo(e, h - e);
-      path.moveTo(w - e, e);
-      path.lineTo(w - e, h - e);
+      path
+        ..moveTo(e, e)
+        ..lineTo(e, h - e)
+        ..moveTo(w - e, e)
+        ..lineTo(w - e, h - e);
     }
-
     canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(_SelectiveBorderPainter old) =>
       old.color != color ||
-      old.strokeWidth != strokeWidth ||
       old.cornerRadius != cornerRadius ||
       old.showTop != showTop ||
-      old.showBottom != showBottom ||
-      old.roundTopCorners != roundTopCorners ||
-      old.roundBottomCorners != roundBottomCorners;
+      old.showBottom != showBottom;
 }

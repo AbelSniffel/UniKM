@@ -60,9 +60,7 @@ class _SettingsSectionDefinition {
     required bool Function(String) matchesSearch,
     required bool showOnlyMatches,
   }) {
-    if (!showOnlyMatches) {
-      return true;
-    }
+    if (!showOnlyMatches) return true;
 
     return matchesAnySettingsSearchGroup(
           matchesSearch: matchesSearch,
@@ -204,9 +202,7 @@ double _measureSettingsRailMaxLabelWidth() {
       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
     );
     painter.layout();
-    if (painter.width > maxWidth) {
-      maxWidth = painter.width;
-    }
+    if (painter.width > maxWidth) maxWidth = painter.width;
   }
 
   return maxWidth;
@@ -244,9 +240,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   void _scrollToTop() {
-    if (_contentScrollController.hasClients) {
-      _contentScrollController.jumpTo(0);
-    }
+    if (_contentScrollController.hasClients) _contentScrollController.jumpTo(0);
   }
 
   @override
@@ -314,9 +308,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   _SettingsSectionDefinition? _selectedSectionDefinitionFor(String sectionId) {
     for (final section in _settingsSections) {
-      if (section.id == sectionId) {
-        return section;
-      }
+      if (section.id == sectionId) return section;
     }
 
     return null;
@@ -648,27 +640,19 @@ class _SettingsSectionButtonState extends State<_SettingsSectionButton> {
   @override
   void didUpdateWidget(covariant _SettingsSectionButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCollapsed == widget.isCollapsed) {
-      return;
-    }
+    if (oldWidget.isCollapsed == widget.isCollapsed) return;
 
     _hideLabelTimer?.cancel();
 
     if (widget.isCollapsed) {
       _hideLabelTimer = Timer(kFastAnimation, () {
-        if (!mounted || !widget.isCollapsed) {
-          return;
-        }
-        setState(() {
-          _showLabel = false;
-        });
+        if (!mounted || !widget.isCollapsed) return;
+        setState(() => _showLabel = false);
       });
       return;
     }
 
-    setState(() {
-      _showLabel = true;
-    });
+    setState(() => _showLabel = true);
   }
 
   @override

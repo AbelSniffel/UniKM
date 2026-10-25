@@ -125,9 +125,7 @@ class PeerSyncQueue {
     switch (outcome) {
       case PeerSyncOutcome.settled:
         pending.failures = 0;
-        if (pending.generation == work.generation) {
-          _pending.remove(work.peerId);
-        }
+        if (pending.generation == work.generation) _pending.remove(work.peerId);
       case PeerSyncOutcome.deferred:
         pending.readyAt = now.add(deferDelay);
       case PeerSyncOutcome.failed:

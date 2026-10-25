@@ -66,9 +66,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final notifier = ref.read(gameLibraryScrollOffsetProvider.notifier);
     final savedOffset = ref.read(gameLibraryScrollOffsetProvider);
-    if ((savedOffset - offset).abs() >= 1.0) {
-      notifier.set(offset);
-    }
+    if ((savedOffset - offset).abs() >= 1.0) notifier.set(offset);
   }
 
   void _syncSearchController(String searchQuery) {

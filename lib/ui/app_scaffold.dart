@@ -37,7 +37,6 @@ import 'widgets/sync_progress_notifications.dart';
 
 const int _kLargeLibraryNavAnimationThreshold = 250;
 
-/// Navigation items5
 /// Main app scaffold
 class AppScaffold extends ConsumerStatefulWidget {
   const AppScaffold({super.key});
@@ -88,33 +87,14 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   }
 
   void _cancelAllTimers() {
-    _windowSaveDebounce = _cancelTimer(_windowSaveDebounce);
-    _autoBackupTimer = _cancelTimer(_autoBackupTimer);
-    _autoUpdateTimer = _cancelTimer(_autoUpdateTimer);
-    _navSelectionAnimTimer = _cancelTimer(_navSelectionAnimTimer);
-  }
-
-  Timer? _cancelTimer(Timer? timer) {
-    timer?.cancel();
-    return null;
-  }
-
-  Timer _replaceTimer(
-    Timer? timer,
-    Duration duration,
-    void Function() callback,
-  ) {
-    timer?.cancel();
-    return Timer(duration, callback);
-  }
-
-  Timer _replacePeriodicTimer(
-    Timer? timer,
-    Duration duration,
-    void Function(Timer) callback,
-  ) {
-    timer?.cancel();
-    return Timer.periodic(duration, callback);
+    for (final timer in [
+      _windowSaveDebounce,
+      _autoBackupTimer,
+      _autoUpdateTimer,
+      _navSelectionAnimTimer,
+    ]) {
+      timer?.cancel();
+    }
   }
 
   @override
@@ -130,10 +110,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   }
 
   void _applyMobileSystemUiMode() {
-    if (!Platform.isAndroid) {
-      return;
-    }
-
+    if (!Platform.isAndroid) return;
     unawaited(
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
     );
@@ -156,55 +133,40 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
   void _updateAutoBackup() {
     final shellSettings = ref.read(appShellSettingsProvider);
-    final autoBackupEnabled = shellSettings.autoBackupEnabled;
     final intervalMinutes = shellSettings.autoBackupIntervalMinutes;
+    void setNextBackup(DateTime? time) =>
+        ref.read(nextAutoBackupTimeProvider.notifier).set(time);
+    _autoBackupTimer?.cancel();
+    _autoBackupTimer = null;
 
-    if (autoBackupEnabled && intervalMinutes > 0) {
-      final interval = Duration(minutes: intervalMinutes);
-
-      // Update the next backup time provider
-      ref
-          .read(nextAutoBackupTimeProvider.notifier)
-          .set(DateTime.now().add(interval));
-
-      _autoBackupTimer = _replacePeriodicTimer(_autoBackupTimer, interval, (
-        _,
-      ) async {
-        if (!mounted) return;
-
-        // Update next backup time
-        ref
-            .read(nextAutoBackupTimeProvider.notifier)
-            .set(DateTime.now().add(interval));
-
-        try {
-          final backupService = ref.read(backupServiceProvider);
-          final result = await backupService.createBackup();
-          if (result.success) {
-            // Silent success - don't spam notifications for auto backups
-            // Only log in debug mode
-            if (ref.read(appShellSettingsProvider).developerMode) {
-              NotificationManager.instance.info(
-                'Auto backup created: ${result.backupInfo?.displayName}',
-              );
-            }
-          }
-        } catch (e) {
-          // Silent failure for auto backups - log but don't disrupt user
-          AppLog.w('Auto backup failed', error: e);
-        }
-      });
-    } else {
-      _autoBackupTimer = _cancelTimer(_autoBackupTimer);
-      // Clear next backup time if disabled
-      ref.read(nextAutoBackupTimeProvider.notifier).set(null);
+    if (!shellSettings.autoBackupEnabled || intervalMinutes <= 0) {
+      setNextBackup(null);
+      return;
     }
+    final interval = Duration(minutes: intervalMinutes);
+    setNextBackup(DateTime.now().add(interval));
+    _autoBackupTimer = Timer.periodic(interval, (_) async {
+      if (!mounted) return;
+      setNextBackup(DateTime.now().add(interval));
+      // Auto backups stay silent; developer mode reports successes.
+      try {
+        final result = await ref.read(backupServiceProvider).createBackup();
+        if (result.success &&
+            ref.read(appShellSettingsProvider).developerMode) {
+          NotificationManager.instance.info(
+            'Auto backup created: ${result.backupInfo?.displayName}',
+          );
+        }
+      } catch (e) {
+        AppLog.w('Auto backup failed', error: e);
+      }
+    });
   }
 
   void _scheduleNextAutoUpdateCheck({bool useStartupDelay = false}) {
-    final updatesSettings = ref.read(updatesSettingsProvider);
-    if (!updatesSettings.autoCheckEnabled) {
-      _autoUpdateTimer = _cancelTimer(_autoUpdateTimer);
+    _autoUpdateTimer?.cancel();
+    _autoUpdateTimer = null;
+    if (!ref.read(updatesSettingsProvider).autoCheckEnabled) {
       ref.read(nextAutoUpdateTimeProvider.notifier).set(null);
       return;
     }
@@ -217,7 +179,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         .read(nextAutoUpdateTimeProvider.notifier)
         .set(DateTime.now().add(delay));
 
-    _autoUpdateTimer = _replaceTimer(_autoUpdateTimer, delay, () async {
+    _autoUpdateTimer = Timer(delay, () async {
       if (!mounted) return;
 
       try {
@@ -255,9 +217,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
     // Always use the primary display to avoid off-screen launches.
     final hasSaved = settings.windowX != null && settings.windowY != null;
-    final primary = await screenRetriever.getPrimaryDisplay();
-    final targetDisplay = primary;
-
+    final targetDisplay = await screenRetriever.getPrimaryDisplay();
     final targetVisible = targetDisplay.visibleSize ?? targetDisplay.size;
     final targetOrigin = targetDisplay.visiblePosition ?? Offset.zero;
 
@@ -301,72 +261,51 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     await windowManager.show();
     await windowManager.focus();
 
-    if (Platform.isWindows) {
+    // Best effort only: Windows briefly pins the window on top to take focus.
+    Future<void> refocus({bool? alwaysOnTop}) async {
       try {
-        await windowManager.setAlwaysOnTop(true);
+        if (alwaysOnTop != null) {
+          await windowManager.setAlwaysOnTop(alwaysOnTop);
+        }
         await windowManager.focus();
-      } catch (_) {
-        // Best effort only.
-      }
-
-      unawaited(
-        Future<void>.delayed(const Duration(milliseconds: 160), () async {
-          if (!mounted) return;
-          try {
-            await windowManager.setAlwaysOnTop(false);
-            await windowManager.focus();
-          } catch (_) {
-            // Best effort only.
-          }
-        }),
-      );
-      return;
+      } catch (_) {}
     }
 
+    final isWindows = Platform.isWindows;
+    if (isWindows) await refocus(alwaysOnTop: true);
     unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 80), () async {
-        if (!mounted) return;
-        try {
-          await windowManager.focus();
-        } catch (_) {
-          // Best effort only.
-        }
-      }),
+      Future<void>.delayed(
+        Duration(milliseconds: isWindows ? 160 : 80),
+        () async {
+          if (mounted) await refocus(alwaysOnTop: isWindows ? false : null);
+        },
+      ),
     );
   }
 
   void _scheduleSaveWindowState() {
     if (_applyingSavedWindowState) return;
 
-    _windowSaveDebounce = _replaceTimer(
-      _windowSaveDebounce,
-      const Duration(milliseconds: 250),
-      () async {
-        try {
-          final size = await windowManager.getSize();
-          final pos = await windowManager.getPosition();
-          final maximized = await windowManager.isMaximized();
-
-          final settingsNotifier = ref.read(settingsProvider.notifier);
-          await settingsNotifier.setSetting(
-            SettingsKeys.windowWidth,
-            size.width,
-          );
-          await settingsNotifier.setSetting(
-            SettingsKeys.windowHeight,
-            size.height,
-          );
-          await settingsNotifier.setSetting(SettingsKeys.windowX, pos.dx);
-          await settingsNotifier.setSetting(SettingsKeys.windowY, pos.dy);
-          await settingsNotifier.setSetting(
-            SettingsKeys.windowMaximized,
-            maximized,
-          );
-        } catch (_) {
-          // Best effort only
+    _windowSaveDebounce?.cancel();
+    _windowSaveDebounce = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        final size = await windowManager.getSize();
+        final pos = await windowManager.getPosition();
+        final maximized = await windowManager.isMaximized();
+        final settingsNotifier = ref.read(settingsProvider.notifier);
+        for (final (key, value) in <(String, Object)>[
+          (SettingsKeys.windowWidth, size.width),
+          (SettingsKeys.windowHeight, size.height),
+          (SettingsKeys.windowX, pos.dx),
+          (SettingsKeys.windowY, pos.dy),
+          (SettingsKeys.windowMaximized, maximized),
+        ]) {
+          await settingsNotifier.setSetting(key, value);
         }
-      },
-    );
+      } catch (_) {
+        // Best effort only
+      }
+    });
   }
 
   @override
@@ -376,48 +315,43 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   void onWindowMoved() => _scheduleSaveWindowState();
 
   @override
-  void onWindowMaximize() {
-    _scheduleSaveWindowState();
-    if (mounted && Platform.isLinux) setState(() => _windowMaximized = true);
-  }
+  void onWindowMaximize() => _onMaximizedChanged(true);
 
   @override
-  void onWindowUnmaximize() {
+  void onWindowUnmaximize() => _onMaximizedChanged(false);
+
+  void _onMaximizedChanged(bool maximized) {
     _scheduleSaveWindowState();
-    if (mounted && Platform.isLinux) setState(() => _windowMaximized = false);
+    if (mounted && Platform.isLinux) {
+      setState(() => _windowMaximized = maximized);
+    }
   }
 
   Future<void> _cleanupOnClose() async {
     final session = ref.read(encryptedDbSessionProvider);
-    if (session != null) {
-      try {
-        NotificationManager.instance.info('Saving encrypted database…');
-        await session.closeAndPersist(ref.read(requireDatabaseProvider));
-      } catch (e) {
-        // Avoid trapping the user in a close loop.
-        NotificationManager.instance.error(
-          'Failed to save encrypted database: $e',
-        );
-      }
-    } else {
+    if (session == null) {
       try {
         await ref.read(requireDatabaseProvider).close();
       } catch (e) {
         // Ignore close errors on shutdown, but log for debugging
         AppLog.d('Database close on shutdown failed: $e');
       }
+      return;
+    }
+    try {
+      NotificationManager.instance.info('Saving encrypted database…');
+      await session.closeAndPersist(ref.read(requireDatabaseProvider));
+    } catch (e) {
+      // Avoid trapping the user in a close loop.
+      NotificationManager.instance.error(
+        'Failed to save encrypted database: $e',
+      );
     }
   }
 
   @override
   void onWindowClose() async {
-    if (_isClosingWindow) {
-      return;
-    }
-
-    final isPreventClose = await windowManager.isPreventClose();
-    if (!isPreventClose) return;
-
+    if (_isClosingWindow || !await windowManager.isPreventClose()) return;
     _isClosingWindow = true;
 
     try {
@@ -449,9 +383,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
                   .read(notificationsSettingsProvider)
                   .deadlineReminders,
             )
-            .catchError((Object error) {
-              AppLog.w('Could not schedule deadline reminders: $error');
-            }),
+            .catchError(
+              (Object error) =>
+                  AppLog.w('Could not schedule deadline reminders: $error'),
+            ),
       );
     }
 
@@ -480,11 +415,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     final viewportWidth = viewportSize.width;
 
     ref.listen<UpdatesSettings>(updatesSettingsProvider, (previous, next) {
-      if (previous == null) {
-        return;
-      }
-
-      if (previous.autoCheckEnabled != next.autoCheckEnabled) {
+      if (previous != null &&
+          previous.autoCheckEnabled != next.autoCheckEnabled) {
         _scheduleNextAutoUpdateCheck();
       }
     });
@@ -497,52 +429,40 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
         }
         setState(() => _navSelectionTransitionActive = true);
-        _navSelectionAnimTimer = _replaceTimer(
-          _navSelectionAnimTimer,
-          kNavPanelMotionAnimation,
-          () {
-            if (mounted) setState(() => _navSelectionTransitionActive = false);
-          },
-        );
+        _navSelectionAnimTimer?.cancel();
+        _navSelectionAnimTimer = Timer(kNavPanelMotionAnimation, () {
+          if (mounted) setState(() => _navSelectionTransitionActive = false);
+        });
       },
     );
 
+    // Prompt for one new incoming pair request at a time.
     ref.listen(deviceSyncProvider, (previous, next) {
-      final snapshot = next.asData?.value;
-      if (snapshot == null) {
-        return;
-      }
-
-      final activeIds = snapshot.pendingPairRequests
-          .map((r) => r.requestId)
-          .toSet();
-      _handledPairRequestPrompts.removeWhere((id) => !activeIds.contains(id));
-
-      if (snapshot.pendingPairRequests.isEmpty) {
-        return;
-      }
-
-      for (final request in snapshot.pendingPairRequests) {
-        if (_handledPairRequestPrompts.contains(request.requestId)) {
-          continue;
-        }
-        _handledPairRequestPrompts.add(request.requestId);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          final latest = ref.read(deviceSyncProvider).asData?.value;
-          final stillPending =
-              latest?.pendingPairRequests.any(
-                (pending) => pending.requestId == request.requestId,
-              ) ??
-              false;
-          if (!stillPending) {
-            _handledPairRequestPrompts.remove(request.requestId);
-            return;
-          }
+      final pending = next.asData?.value.pendingPairRequests;
+      if (pending == null) return;
+      final activeIds = {for (final r in pending) r.requestId};
+      _handledPairRequestPrompts.retainWhere(activeIds.contains);
+      final request = pending
+          .where((r) => !_handledPairRequestPrompts.contains(r.requestId))
+          .firstOrNull;
+      if (request == null) return;
+      _handledPairRequestPrompts.add(request.requestId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final stillPending =
+            ref
+                .read(deviceSyncProvider)
+                .asData
+                ?.value
+                .pendingPairRequests
+                .any((r) => r.requestId == request.requestId) ??
+            false;
+        if (stillPending) {
           _showIncomingPairRequestPrompt(context, request);
-        });
-        break;
-      }
+        } else {
+          _handledPairRequestPrompts.remove(request.requestId);
+        }
+      });
     });
 
     final navPosition = shellSettings.navBarPosition;
@@ -686,49 +606,27 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       final isVertical =
           position == NavBarPosition.left || position == NavBarPosition.right;
       final panel = buildNavPanel(position);
-      final slot = _NavPositionSlot(
-        key: ValueKey('nav-slot-${position.name}'),
-        position: position,
-        isActive: navPosition == position && !hideNavForSelection,
-        child: isVertical
-            ? AnimatedContainer(
-                duration: navMotionAnimationDuration,
-                curve: kNavPanelMotionCurve,
-                width: navWidth,
-                child: panel,
-              )
-            : panel,
-      );
-
       // Each slot spans the edge it is docked to.
-      return switch (position) {
-        NavBarPosition.left => Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          child: slot,
+      return Positioned(
+        left: position == NavBarPosition.right ? null : 0,
+        right: position == NavBarPosition.left ? null : 0,
+        top: position == NavBarPosition.bottom ? null : 0,
+        bottom: position == NavBarPosition.top ? null : 0,
+        height: isVertical ? null : navPanelHorizontalExtent,
+        child: _NavPositionSlot(
+          key: ValueKey('nav-slot-${position.name}'),
+          position: position,
+          isActive: navPosition == position && !hideNavForSelection,
+          child: isVertical
+              ? AnimatedContainer(
+                  duration: navMotionAnimationDuration,
+                  curve: kNavPanelMotionCurve,
+                  width: navWidth,
+                  child: panel,
+                )
+              : panel,
         ),
-        NavBarPosition.right => Positioned(
-          right: 0,
-          top: 0,
-          bottom: 0,
-          child: slot,
-        ),
-        NavBarPosition.top => Positioned(
-          left: 0,
-          top: 0,
-          right: 0,
-          height: navPanelHorizontalExtent,
-          child: slot,
-        ),
-        NavBarPosition.bottom => Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: navPanelHorizontalExtent,
-          child: slot,
-        ),
-      };
+      );
     }
 
     final navLayoutAnimationDuration = viewportChanged
@@ -844,9 +742,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       barrierDismissible: false,
       builder: (_) => IncomingPairDialog(request: request),
     );
-    if (!context.mounted || result != null) {
-      return;
-    }
+    if (!context.mounted || result != null) return;
 
     // Manual dismiss (Esc / window close button) returns null.
     // Treat that as an explicit decline so the initiator isn't left waiting
@@ -879,40 +775,38 @@ class _UpdateNavIcon extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: size,
-      child: Center(
-        child: AnimatedSwitcher(
-          duration: kFastAnimation,
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeOut,
-          layoutBuilder: (currentChild, previousChildren) => Stack(
-            alignment: Alignment.center,
-            children: [
-              ...previousChildren,
-              ...?currentChild == null ? null : [currentChild],
-            ],
-          ),
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: isActive
-              ? SizedBox(
-                  key: const ValueKey('upd-active'),
-                  width: size,
-                  height: size,
-                  child: AppCircularProgressIndicator(color: color),
-                )
-              : Icon(
-                  iconData,
-                  key: ValueKey('upd-${iconData.codePoint}-$useAccentColor'),
-                  color: useAccentColor ? accentColor : color,
-                  size: size,
-                ),
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: Center(
+      child: AnimatedSwitcher(
+        duration: kFastAnimation,
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeOut,
+        layoutBuilder: (currentChild, previousChildren) => Stack(
+          alignment: Alignment.center,
+          children: [
+            ...previousChildren,
+            ...?currentChild == null ? null : [currentChild],
+          ],
         ),
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
+        child: isActive
+            ? SizedBox(
+                key: const ValueKey('upd-active'),
+                width: size,
+                height: size,
+                child: AppCircularProgressIndicator(color: color),
+              )
+            : Icon(
+                iconData,
+                key: ValueKey('upd-${iconData.codePoint}-$useAccentColor'),
+                color: useAccentColor ? accentColor : color,
+                size: size,
+              ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Persistent slot that slide-animates in/out when [isActive] toggles.
@@ -1013,28 +907,21 @@ class _EdgeSlideTransition extends StatelessWidget {
   final Animation<double> animation;
   final Widget child;
 
-  Offset _startOffsetFor(NavBarPosition position) {
-    return switch (position) {
+  @override
+  Widget build(BuildContext context) {
+    final startOffset = switch (position) {
       NavBarPosition.left => const Offset(-1, 0),
       NavBarPosition.right => const Offset(1, 0),
       NavBarPosition.top => const Offset(0, -1),
       NavBarPosition.bottom => const Offset(0, 1),
     };
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: animation,
       child: child,
       builder: (context, child) {
-        final startOffset = _startOffsetFor(position);
         final t = animation.value;
         return FractionalTranslation(
-          translation: Offset(
-            startOffset.dx * (1 - t),
-            startOffset.dy * (1 - t),
-          ),
+          translation: startOffset * (1 - t),
           child: Opacity(opacity: 0.68 + (0.32 * t), child: child!),
         );
       },
@@ -1043,9 +930,8 @@ class _EdgeSlideTransition extends StatelessWidget {
 }
 
 /// Test harness for the shared title bar without constructing the full shell.
-Widget buildTitleBarForTest(AppThemeData theme) {
-  return Material(child: AppTitleBar(theme: theme));
-}
+Widget buildTitleBarForTest(AppThemeData theme) =>
+    Material(child: AppTitleBar(theme: theme));
 
 /// Transparent overlay that adds resize handles at window edges on Linux.
 ///
@@ -1059,97 +945,48 @@ class _LinuxResizeFrame extends StatelessWidget {
   static const double _edge = 6.0;
   static const double _corner = 12.0;
 
-  Widget _handle(ResizeEdge edge, MouseCursor cursor) => MouseRegion(
-    cursor: cursor,
-    child: GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onPanStart: (_) => windowManager.startResizing(edge),
-    ),
-  );
+  // Edges first, then corners. Edges stop short of the corner squares.
+  static const _edges = [
+    ResizeEdge.left,
+    ResizeEdge.right,
+    ResizeEdge.top,
+    ResizeEdge.bottom,
+    ResizeEdge.topLeft,
+    ResizeEdge.topRight,
+    ResizeEdge.bottomLeft,
+    ResizeEdge.bottomRight,
+  ];
 
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // ── Edges ──────────────────────────────────────────────────────────
-        // Left
-        Positioned(
-          left: 0,
-          top: _corner,
-          bottom: _corner,
-          width: _edge,
-          child: _handle(ResizeEdge.left, SystemMouseCursors.resizeLeftRight),
+  Widget _handle(ResizeEdge edge) {
+    final name = edge.name.toLowerCase();
+    final left = name.contains('left'), right = name.contains('right');
+    final top = name.startsWith('top'), bottom = name.startsWith('bottom');
+    final horizontal = left || right, vertical = top || bottom;
+    final corner = horizontal && vertical;
+    return Positioned(
+      left: right ? null : (left ? 0 : _corner),
+      right: left ? null : (right ? 0 : _corner),
+      top: bottom ? null : (top ? 0 : _corner),
+      bottom: top ? null : (bottom ? 0 : _corner),
+      width: corner ? _corner : (horizontal ? _edge : null),
+      height: corner ? _corner : (vertical ? _edge : null),
+      child: MouseRegion(
+        cursor: !corner
+            ? (horizontal
+                  ? SystemMouseCursors.resizeLeftRight
+                  : SystemMouseCursors.resizeUpDown)
+            : left == top
+            ? SystemMouseCursors.resizeUpLeftDownRight
+            : SystemMouseCursors.resizeUpRightDownLeft,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onPanStart: (_) => windowManager.startResizing(edge),
         ),
-        // Right
-        Positioned(
-          right: 0,
-          top: _corner,
-          bottom: _corner,
-          width: _edge,
-          child: _handle(ResizeEdge.right, SystemMouseCursors.resizeLeftRight),
-        ),
-        // Top
-        Positioned(
-          top: 0,
-          left: _corner,
-          right: _corner,
-          height: _edge,
-          child: _handle(ResizeEdge.top, SystemMouseCursors.resizeUpDown),
-        ),
-        // Bottom
-        Positioned(
-          bottom: 0,
-          left: _corner,
-          right: _corner,
-          height: _edge,
-          child: _handle(ResizeEdge.bottom, SystemMouseCursors.resizeUpDown),
-        ),
-        // ── Corners ────────────────────────────────────────────────────────
-        // Top-left
-        Positioned(
-          top: 0,
-          left: 0,
-          width: _corner,
-          height: _corner,
-          child: _handle(
-            ResizeEdge.topLeft,
-            SystemMouseCursors.resizeUpLeftDownRight,
-          ),
-        ),
-        // Top-right
-        Positioned(
-          top: 0,
-          right: 0,
-          width: _corner,
-          height: _corner,
-          child: _handle(
-            ResizeEdge.topRight,
-            SystemMouseCursors.resizeUpRightDownLeft,
-          ),
-        ),
-        // Bottom-left
-        Positioned(
-          bottom: 0,
-          left: 0,
-          width: _corner,
-          height: _corner,
-          child: _handle(
-            ResizeEdge.bottomLeft,
-            SystemMouseCursors.resizeUpRightDownLeft,
-          ),
-        ),
-        // Bottom-right
-        Positioned(
-          bottom: 0,
-          right: 0,
-          width: _corner,
-          height: _corner,
-          child: _handle(
-            ResizeEdge.bottomRight,
-            SystemMouseCursors.resizeUpLeftDownRight,
-          ),
-        ),
-      ],
+      ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) =>
+      Stack(children: [for (final edge in _edges) _handle(edge)]);
 }

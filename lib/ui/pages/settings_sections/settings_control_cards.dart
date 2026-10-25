@@ -146,52 +146,50 @@ class SettingsActionCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    enabled: onTap != null,
+    label: '$label, $actionLabel',
+    child: _SettingsControlCard(
+      theme: theme,
+      label: label,
+      description: description,
+      active: false,
       enabled: onTap != null,
-      label: '$label, $actionLabel',
-      child: _SettingsControlCard(
-        theme: theme,
-        label: label,
-        description: description,
-        active: false,
-        enabled: onTap != null,
-        onTap: onTap,
-        trailing: LayoutBuilder(
-          builder: (context, constraints) {
-            final showIcons = constraints.maxWidth >= 120;
-            return Row(
-              children: [
-                if (showIcons && actionIcon != null) ...[
-                  Icon(actionIcon, color: theme.accent, size: 18),
-                  const SizedBox(width: 6),
-                ],
-                Expanded(
-                  child: Text(
-                    actionLabel,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.accent,
-                      fontWeight: FontWeight.w600,
-                    ),
+      onTap: onTap,
+      trailing: LayoutBuilder(
+        builder: (context, constraints) {
+          final showIcons = constraints.maxWidth >= 120;
+          return Row(
+            children: [
+              if (showIcons && actionIcon != null) ...[
+                Icon(actionIcon, color: theme.accent, size: 18),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  actionLabel,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.accent,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (showIcons) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    color: theme.textPrimary,
-                    size: 18,
-                  ),
-                ],
+              ),
+              if (showIcons) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: theme.textPrimary,
+                  size: 18,
+                ),
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
 }
 
 class SettingsChoiceCard<T> extends StatelessWidget {

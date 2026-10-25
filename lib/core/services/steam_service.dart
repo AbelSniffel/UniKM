@@ -42,9 +42,8 @@ class SteamApi {
 /// Disk cache helpers
 final _cacheKeyStripPattern = RegExp(r'[^a-z0-9]');
 
-String _normalizeCacheKey(String title) {
-  return title.toLowerCase().replaceAll(_cacheKeyStripPattern, '');
-}
+String _normalizeCacheKey(String title) =>
+    title.toLowerCase().replaceAll(_cacheKeyStripPattern, '');
 
 Future<String> _getCacheFilePath() async {
   // place cache file alongside the database instead of the platform
@@ -53,9 +52,7 @@ Future<String> _getCacheFilePath() async {
   try {
     final dbPath = await AppDatabase.getDatabasePath();
     final dbDir = Directory(p.dirname(dbPath));
-    if (!await dbDir.exists()) {
-      await dbDir.create(recursive: true);
-    }
+    if (!await dbDir.exists()) await dbDir.create(recursive: true);
     return p.join(dbDir.path, 'steam_cache.json');
   } catch (_) {
     // fall back to previous behaviour if something goes wrong
@@ -193,9 +190,7 @@ class _DiskCache {
     final out = <String, dynamic>{};
     for (final entry in source.entries) {
       final value = entry.value;
-      if (value is Map) {
-        out[entry.key] = Map<String, dynamic>.from(value);
-      }
+      if (value is Map) out[entry.key] = Map<String, dynamic>.from(value);
     }
     return out;
   }
@@ -495,9 +490,7 @@ class SteamService {
     if (last != null) {
       final elapsed = now.difference(last);
       final wait = _minRequestInterval - elapsed;
-      if (wait > Duration.zero) {
-        await Future.delayed(wait);
-      }
+      if (wait > Duration.zero) await Future.delayed(wait);
     }
     _lastRequestAt = DateTime.now();
   }
@@ -541,9 +534,7 @@ class SteamService {
         }
         return response;
       } on DioException catch (error) {
-        if (!_shouldRetryError(error) || attempt >= retries) {
-          rethrow;
-        }
+        if (!_shouldRetryError(error) || attempt >= retries) rethrow;
         await _backoff(attempt);
         attempt++;
       }
@@ -632,22 +623,16 @@ class SteamService {
       searchSource: searchSource,
       searchSourcesTried: searchSourcesTried,
     );
-    if (primaryResult == null || !primaryResult.isDlc) {
-      return primaryResult;
-    }
+    if (primaryResult == null || !primaryResult.isDlc) return primaryResult;
 
     // If the query itself doesn't look like DLC content, attempt a non-DLC
     // fallback from the remaining candidates before accepting the DLC result.
-    if (_looksLikeAddonTitle(title.toLowerCase())) {
-      return primaryResult;
-    }
+    if (_looksLikeAddonTitle(title.toLowerCase())) return primaryResult;
 
     final alternatives = items
         .where((item) => item['id'].toString() != primaryResult.appId)
         .toList();
-    if (alternatives.isEmpty) {
-      return primaryResult;
-    }
+    if (alternatives.isEmpty) return primaryResult;
 
     final cleanSearch = cleanTitleForSearch(title).toLowerCase();
     // Similarity includes edit-distance scoring: compute it once per candidate
@@ -666,9 +651,7 @@ class SteamService {
         searchSource: searchSource,
         searchSourcesTried: searchSourcesTried,
       );
-      if (altResult != null && !altResult.isDlc) {
-        return altResult;
-      }
+      if (altResult != null && !altResult.isDlc) return altResult;
     }
 
     return primaryResult;
@@ -683,12 +666,8 @@ class SteamService {
     final itemClean = cleanTitleForSearch(name).toLowerCase();
 
     var score = weightedSimilarity(cleanSearch, itemClean);
-    if (itemLower == cleanSearch || itemClean == cleanSearch) {
-      score += 0.4;
-    }
-    if (_looksLikeAddonTitle(itemLower)) {
-      score -= 0.2;
-    }
+    if (itemLower == cleanSearch || itemClean == cleanSearch) score += 0.4;
+    if (_looksLikeAddonTitle(itemLower)) score -= 0.2;
     return score;
   }
 
@@ -713,9 +692,7 @@ class SteamService {
     final localPath = p.join(_imagesDir!.path, '$appId.jpg');
 
     // Check if already downloaded
-    if (File(localPath).existsSync()) {
-      return localPath;
-    }
+    if (File(localPath).existsSync()) return localPath;
 
     // Resolve current artwork even for old cached results: newer apps use
     // hashed store_item_assets paths rather than the legacy CDN layout.
@@ -851,9 +828,7 @@ class SteamService {
         return items.map((item) {
           final map = item as Map<String, dynamic>;
           // Normalize appid to id
-          if (map.containsKey('appid')) {
-            map['id'] = map['appid'];
-          }
+          if (map.containsKey('appid')) map['id'] = map['appid'];
           return map;
         }).toList();
       }
@@ -1138,9 +1113,7 @@ class SteamService {
       for (final item in rawTags) {
         if (item is String) {
           final tag = item.trim();
-          if (tag.isNotEmpty) {
-            entries.add((tag: tag, score: 0));
-          }
+          if (tag.isNotEmpty) entries.add((tag: tag, score: 0));
           continue;
         }
 

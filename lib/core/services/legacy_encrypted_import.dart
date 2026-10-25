@@ -57,17 +57,13 @@ Future<EncryptedImportKind> detectEncryptedImportKind(File file) async {
     header.add(chunk);
   }
   final kind = _detectBinaryEncryptedImportKind(header.takeBytes());
-  if (kind != EncryptedImportKind.unknown) {
-    return kind;
-  }
+  if (kind != EncryptedImportKind.unknown) return kind;
   return detectEncryptedImportKindFromBytes(await file.readAsBytes());
 }
 
 EncryptedImportKind detectEncryptedImportKindFromBytes(Uint8List bytes) {
   final kind = _detectBinaryEncryptedImportKind(bytes);
-  if (kind != EncryptedImportKind.unknown) {
-    return kind;
-  }
+  if (kind != EncryptedImportKind.unknown) return kind;
   return _looksLikeSteamKm1EncryptedExport(bytes)
       ? EncryptedImportKind.steamKm1Json
       : EncryptedImportKind.unknown;
@@ -221,9 +217,7 @@ Future<PreparedEncryptedDatabaseImport> decryptUniKmDatabaseToTemp(
 }
 
 bool _looksLikeSteamKm2EncryptedDatabase(Uint8List bytes) {
-  if (bytes.length < 4) {
-    return false;
-  }
+  if (bytes.length < 4) return false;
   return ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == _steamKm2Magic;
 }
 
@@ -233,14 +227,10 @@ bool _looksLikeUniKmEncryptedDatabase(Uint8List bytes) {
 }
 
 bool _looksLikeSteamKm1EncryptedExport(Uint8List bytes) {
-  if (bytes.isEmpty) {
-    return false;
-  }
+  if (bytes.isEmpty) return false;
 
   final text = utf8.decode(bytes, allowMalformed: true).trim();
-  if (text.isEmpty || !_base64Pattern.hasMatch(text)) {
-    return false;
-  }
+  if (text.isEmpty || !_base64Pattern.hasMatch(text)) return false;
 
   try {
     final raw = base64.decode(text);
