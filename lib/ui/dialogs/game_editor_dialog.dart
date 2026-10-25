@@ -35,18 +35,16 @@ Future<bool?> showGameEditorDialog(
   Game game, {
   List<int>? gameIds,
   Future<void> Function(int gameId)? onViewedGame,
-}) {
-  return showAppDialog<bool>(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) => GameEditorDialog(
-      game: game,
-      gameIds: gameIds,
-      initialGameId: game.id,
-      onViewedGame: onViewedGame,
-    ),
-  );
-}
+}) => showAppDialog<bool>(
+  context: context,
+  barrierDismissible: true,
+  builder: (ctx) => GameEditorDialog(
+    game: game,
+    gameIds: gameIds,
+    initialGameId: game.id,
+    onViewedGame: onViewedGame,
+  ),
+);
 
 /// Game Editor dialog
 class GameEditorDialog extends ConsumerStatefulWidget {
@@ -157,19 +155,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     _platform = _currentGame.platform;
     _hasDeadline = _currentGame.hasDeadline;
     _deadlineDate = _currentGame.deadlineDate;
-    _isDlc = _currentGame.isDlc;
     _isUsed = _currentGame.isUsed;
-    _selectedTagIds = _currentGame.tagIds.toSet();
-    _steamAppId = _currentGame.steamAppId; // initialize local AppID state
     _steamDeveloper = _currentGame.developer;
-    _fetchedReviewScore = _currentGame.reviewCount == 0
-        ? null
-        : _currentGame.reviewScore;
-    _fetchedReviewCount = _currentGame.reviewCount == 0
-        ? null
-        : _currentGame.reviewCount;
-    _lastUpdatedAt = _currentGame.updatedAt;
-
+    _loadSteamState(_currentGame);
     _hasChanges = false;
 
     // Load cache timestamp if present
@@ -182,7 +170,24 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     super.dispose();
   }
 
+  /// The fields a Steam fetch can change, as stored on [game].
+  void _loadSteamState(Game game) {
+    final hasReviews = game.reviewCount != 0;
+    _steamAppId = game.steamAppId;
+    _isDlc = game.isDlc;
+    _selectedTagIds = game.tagIds.toSet();
+    _fetchedReviewScore = hasReviews ? game.reviewScore : null;
+    _fetchedReviewCount = hasReviews ? game.reviewCount : null;
+    _lastUpdatedAt = game.updatedAt;
+  }
+
   void _markChanged() => setState(() => _hasChanges = true);
+
+  /// Applies [change] as an unsaved edit.
+  void _edit(VoidCallback change) => setState(() {
+    change();
+    _hasChanges = true;
+  });
 
   Future<void> _save({bool close = true}) async {
     if (!_hasChanges) {
@@ -328,18 +333,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
       _currentGame = updated;
 
       setState(() {
-        _steamAppId = updated.steamAppId;
+        _loadSteamState(updated);
         _steamDeveloper = result.developer;
-        _isDlc = updated.isDlc;
-        _selectedTagIds = updated.tagIds.toSet();
         _fields.coverImage.text = updated.coverImage;
-        _fetchedReviewScore = updated.reviewCount == 0
-            ? null
-            : updated.reviewScore;
-        _fetchedReviewCount = updated.reviewCount == 0
-            ? null
-            : updated.reviewCount;
-        _lastUpdatedAt = updated.updatedAt;
       });
 
       // reload cache timestamp
@@ -462,16 +458,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
                   (tag) => tag.isSteamTag && _selectedTagIds.contains(tag.id),
                 )
                 .toList(),
-            onTagToggled: (tagId) {
-              setState(() {
-                if (_selectedTagIds.contains(tagId)) {
-                  _selectedTagIds.remove(tagId);
-                } else {
-                  _selectedTagIds.add(tagId);
-                }
-                _markChanged();
-              });
-            },
+            onTagToggled: (tagId) => _edit(() {
+              if (!_selectedTagIds.remove(tagId)) _selectedTagIds.add(tagId);
+            }),
           ),
         ),
         actions: [_buildFooter(theme)],
@@ -490,7 +479,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     onChanged: _markChanged,
   );
 
-  void _changePlatform(String platform) => setState(() {
+  void _changePlatform(String platform) => _edit(() {
     final wasSteam = _platform == 'Steam';
     _platform = platform;
     if (wasSteam && platform != 'Steam') {
@@ -501,35 +490,22 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
           .toSet();
       _selectedTagIds.removeWhere(steamTagIds.contains);
     }
-    _markChanged();
   });
 
   Widget _buildChips(AppThemeData theme) => GameOptionsRow(
     theme: theme,
     isDlc: _isDlc,
-    onDlcChanged: (value) => setState(() {
-      _isDlc = value;
-      _hasChanges = true;
-    }),
+    onDlcChanged: (value) => _edit(() => _isDlc = value),
     deadline: DeadlineChip(
       theme: theme,
       hasDeadline: _hasDeadline,
       date: _deadlineDate,
       firstDate: DateTime(2020),
-      onEnabledChanged: (value) => setState(() {
-        _hasDeadline = value;
-        _hasChanges = true;
-      }),
-      onDateChanged: (value) => setState(() {
-        _deadlineDate = value;
-        _hasChanges = true;
-      }),
+      onEnabledChanged: (value) => _edit(() => _hasDeadline = value),
+      onDateChanged: (value) => _edit(() => _deadlineDate = value),
     ),
     isUsed: _isUsed,
-    onUsedChanged: (value) => setState(() {
-      _isUsed = value;
-      _hasChanges = true;
-    }),
+    onUsedChanged: (value) => _edit(() => _isUsed = value),
   );
 
   Future<void> _openSteamPage() async {
@@ -662,6 +638,8 @@ class _DetailsTab extends StatelessWidget {
   final int? steamReviewScore;
   final int? steamReviewCount;
 
+  static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     padding: const EdgeInsets.only(top: 16),
@@ -696,21 +674,19 @@ class _DetailsTab extends StatelessWidget {
               GameMetadataRow(
                 theme: theme,
                 label: 'Added',
-                value: DateFormat('dd/MM/yyyy HH:mm').format(game.createdAt),
+                value: _dateFormat.format(game.createdAt),
               ),
               GameMetadataRow(
                 theme: theme,
                 label: 'Updated',
-                value: DateFormat(
-                  'dd/MM/yyyy HH:mm',
-                ).format(lastUpdatedAt ?? game.updatedAt),
+                value: _dateFormat.format(lastUpdatedAt ?? game.updatedAt),
               ),
               if (platform == 'Steam')
                 GameMetadataRow(
                   theme: theme,
                   label: 'Cache',
                   value: steamCacheAt != null
-                      ? DateFormat('dd/MM/yyyy HH:mm').format(steamCacheAt!)
+                      ? _dateFormat.format(steamCacheAt!)
                       : 'No cached data',
                 ),
               if (steamDeveloper != null && steamDeveloper!.isNotEmpty)

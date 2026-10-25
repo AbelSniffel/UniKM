@@ -85,19 +85,18 @@ class GitHubRelease {
   }
 
   /// Reconstruct from a cached JSON map (written by [toJson]).
-  factory GitHubRelease.fromCacheJson(Map<String, dynamic> json) {
-    return GitHubRelease(
-      tagName: json['tagName'] as String? ?? '',
-      version: json['version'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      body: json['body'] as String? ?? '',
-      htmlUrl: json['htmlUrl'] as String? ?? '',
-      publishedAt: DateTime.tryParse(json['publishedAt'] as String? ?? '') ?? DateTime.now(),
-      isPrerelease: json['isPrerelease'] as bool? ?? false,
-      downloadUrl: json['downloadUrl'] as String?,
-      downloadSize: json['downloadSize'] as int?,
-    );
-  }
+  factory GitHubRelease.fromCacheJson(Map<String, dynamic> json) =>
+      GitHubRelease(
+        tagName: json['tagName'] as String? ?? '',
+        version: json['version'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        htmlUrl: json['htmlUrl'] as String? ?? '',
+        publishedAt: DateTime.tryParse(json['publishedAt'] as String? ?? '') ?? DateTime.now(),
+        isPrerelease: json['isPrerelease'] as bool? ?? false,
+        downloadUrl: json['downloadUrl'] as String?,
+        downloadSize: json['downloadSize'] as int?,
+      );
 
   Map<String, dynamic> toJson() => {
     'tagName': tagName,
@@ -181,17 +180,12 @@ class UpdateService {
   String get _allReleasesUrl => 'https://api.github.com/repos/$_repo/releases';
 
   /// Build HTTP headers for GitHub API
-  Map<String, String> get _headers {
-    final headers = <String, String>{
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'UniKM-Flutter/$kAppVersion',
-    };
-    final token = _githubToken;
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-    return headers;
-  }
+  Map<String, String> get _headers => {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'UniKM-Flutter/$kAppVersion',
+    if (_githubToken case final token? when token.isNotEmpty)
+      'Authorization': 'Bearer $token',
+  };
 
   String _formatCheckError(Object error) {
     final message = error.toString();
@@ -221,16 +215,11 @@ class UpdateService {
   // Cache helpers
   // ---------------------------------------------------------------------------
 
-  /// Returns the app data directory used for caches (same folder as keys.db).
-  Future<Directory> _getDataDir() async {
+  /// The release cache, in the app data folder (same folder as keys.db).
+  Future<File> _getCacheFile() async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(appDir.path, 'UniKM'));
     if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
-  }
-
-  Future<File> _getCacheFile() async {
-    final dir = await _getDataDir();
     return File(p.join(dir.path, 'releases_cache.json'));
   }
 
@@ -426,34 +415,30 @@ class UpdateService {
       sink = file.openWrite();
       final totalBytes = response.contentLength ?? 0;
       var receivedBytes = 0;
+      final partial = file;
+      Future<Never> cancelled() async {
+        await sink!.flush();
+        await sink!.close();
+        sink = null;
+        try { await partial.delete(); } catch (_) {}
+        throw const DownloadCancelledException();
+      }
 
       try {
         await for (final chunk in response.stream) {
           receivedBytes += chunk.length;
-          sink.add(chunk);
+          sink!.add(chunk);
           onProgress?.call(receivedBytes, totalBytes);
         }
       } catch (_) {
         // Stream broke — could be normal cancellation or a network error.
-        if (_downloadCancelled) {
-          await sink.flush();
-          await sink.close();
-          sink = null;
-          try { await file.delete(); } catch (_) {}
-          throw const DownloadCancelledException();
-        }
+        if (_downloadCancelled) await cancelled();
         rethrow;
       }
 
-      if (_downloadCancelled) {
-        await sink.flush();
-        await sink.close();
-        sink = null;
-        try { await file.delete(); } catch (_) {}
-        throw const DownloadCancelledException();
-      }
+      if (_downloadCancelled) await cancelled();
 
-      await sink.close();
+      await sink!.close();
       sink = null;
       return UpdateDownloadResult.local(filePath);
     } catch (e) {
@@ -580,17 +565,10 @@ class UpdateService {
       return false;
     }
 
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isLinux) {
+      final opener = Platform.isMacOS ? 'open' : 'xdg-open';
       final args = [filePath];
-      final result = await Process.run('open', args);
-      _throwIfProcessResultFailed('open', args, result);
-      return false;
-    }
-
-    if (Platform.isLinux) {
-      final args = [filePath];
-      final result = await Process.run('xdg-open', args);
-      _throwIfProcessResultFailed('xdg-open', args, result);
+      _throwIfProcessResultFailed(opener, args, await Process.run(opener, args));
       return false;
     }
 

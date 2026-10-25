@@ -116,10 +116,7 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final tags = ref
-        .watch(tagsProvider)
-        .where((tag) => !tag.isSteamTag)
-        .toList();
+    final tags = ref.watch(customTagsProvider);
     return PopScope(
       canPop: !_saving,
       child: DialogInteractionScope(

@@ -73,10 +73,8 @@ final List<_FilterOption> _filterOptions = [
 
 IconData _sortIconFor(GameSortMode mode) => switch (mode) {
   GameSortMode.deadlineFirst => Icons.schedule,
-  GameSortMode.titleAZ => Icons.sort_by_alpha,
-  GameSortMode.titleZA => Icons.sort_by_alpha,
-  GameSortMode.platformAZ => Icons.videogame_asset,
-  GameSortMode.platformZA => Icons.videogame_asset,
+  GameSortMode.titleAZ || GameSortMode.titleZA => Icons.sort_by_alpha,
+  GameSortMode.platformAZ || GameSortMode.platformZA => Icons.videogame_asset,
   GameSortMode.dateNewest => Icons.calendar_month,
   GameSortMode.dateOldest => Icons.history,
   GameSortMode.ratingHigh => Icons.trending_up,
@@ -863,50 +861,34 @@ class _LibrarySyncButton extends ConsumerWidget {
 
   final AppThemeData theme;
 
-  (IconData, Color) _iconForStatus(DeviceSyncStatus status) {
-    switch (status) {
-      case DeviceSyncStatus.discovering:
-        return (Icons.radar, theme.accent);
-      case DeviceSyncStatus.connecting:
-        return (Icons.link, theme.accent);
-      case DeviceSyncStatus.connected:
-        return (Icons.link, theme.secondary);
-      case DeviceSyncStatus.syncing:
-        return (Icons.sync, theme.accent);
-      case DeviceSyncStatus.error:
-        return (Icons.link_off, theme.error);
-      case DeviceSyncStatus.idle:
-        return (Icons.sync_disabled, theme.textSecondary);
-    }
-  }
+  (IconData, Color) _iconForStatus(DeviceSyncStatus status) => switch (status) {
+    DeviceSyncStatus.discovering => (Icons.radar, theme.accent),
+    DeviceSyncStatus.connecting => (Icons.link, theme.accent),
+    DeviceSyncStatus.connected => (Icons.link, theme.secondary),
+    DeviceSyncStatus.syncing => (Icons.sync, theme.accent),
+    DeviceSyncStatus.error => (Icons.link_off, theme.error),
+    DeviceSyncStatus.idle => (Icons.sync_disabled, theme.textSecondary),
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sync = ref.watch(deviceSyncProvider).asData?.value;
     final enabled = sync?.enabled ?? false;
     final status = sync?.status ?? DeviceSyncStatus.idle;
-    var (icon, color) = _iconForStatus(status);
     final statusText = sync?.statusMessage?.toLowerCase() ?? '';
-    final isUnpairNotice =
-        statusText.contains('removed its pairing') ||
-        statusText.contains('device removed');
     final busy =
         status == DeviceSyncStatus.syncing ||
         status == DeviceSyncStatus.discovering ||
         status == DeviceSyncStatus.connecting;
-
-    // Surface unpair events as a broken link icon to match sync dialog state.
-    if (isUnpairNotice) {
-      icon = Icons.link_off;
-      color = theme.textSecondary;
-    }
-
-    // When connected but DB files differ, show a broken link to signal out-of-sync.
-    final hasMismatch = sync?.dbMismatchPeerIds.isNotEmpty ?? false;
-    if (!isUnpairNotice && hasMismatch) {
-      icon = Icons.link_off;
-      color = Colors.orange;
-    }
+    // Unpair events show a broken link, matching the sync dialog; so do
+    // peers whose database files differ, to signal out-of-sync.
+    final (icon, color) =
+        statusText.contains('removed its pairing') ||
+            statusText.contains('device removed')
+        ? (Icons.link_off, theme.textSecondary)
+        : sync?.dbMismatchPeerIds.isNotEmpty ?? false
+        ? (Icons.link_off, Colors.orange)
+        : _iconForStatus(status);
 
     // Same button style as the view toggle at the label's other end.
     return AppNavigationButton(

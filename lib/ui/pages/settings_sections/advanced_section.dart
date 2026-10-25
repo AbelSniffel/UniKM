@@ -171,18 +171,16 @@ class AdvancedSection extends ConsumerWidget {
                       confirmLabel: 'Reset',
                       destructive: true,
                     );
-                    if (confirmed) {
-                      if (!context.mounted) return;
-                      final gamesNotifier = ref.read(gamesProvider.notifier);
-                      await settingsNotifier.resetToDefaults();
-                      gamesNotifier.clearAllFilters();
-                      await gamesNotifier.setSortMode(
-                        DefaultSettings.gameSortMode,
-                      );
-                      NotificationManager.instance.success(
-                        'Settings reset to defaults',
-                      );
-                    }
+                    if (!confirmed || !context.mounted) return;
+                    final gamesNotifier = ref.read(gamesProvider.notifier);
+                    await settingsNotifier.resetToDefaults();
+                    gamesNotifier.clearAllFilters();
+                    await gamesNotifier.setSortMode(
+                      DefaultSettings.gameSortMode,
+                    );
+                    NotificationManager.instance.success(
+                      'Settings reset to defaults',
+                    );
                   },
                   child: const Text('Reset'),
                 ),

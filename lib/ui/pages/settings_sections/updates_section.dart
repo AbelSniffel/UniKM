@@ -83,9 +83,7 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     _repoController.text = updates.updateRepo;
     _tokenController.text = updates.githubApiToken;
     _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!mounted) return;
-
-      setState(() => _now = DateTime.now());
+      if (mounted) setState(() => _now = DateTime.now());
     });
   }
 
@@ -133,6 +131,11 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     final updates = ref.watch(updatesSettingsProvider);
     final nextUpdateCheck = ref.watch(nextAutoUpdateTimeProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
+    final labelStyle = TextStyle(
+      color: widget.theme.textSecondary,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+    );
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
@@ -177,21 +180,13 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           childBuilder: () => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                UpdatesSection.repositorySpec.label,
-                style: TextStyle(
-                  color: widget.theme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(UpdatesSection.repositorySpec.label, style: labelStyle),
               const SizedBox(height: kElementVSpacing),
               ThemedTextField(
                 theme: widget.theme,
                 controller: _repoController,
                 hintText: UpdatesSection.repositorySpec.description,
-                onChanged: (value) =>
-                    settingsNotifier.setSetting(SettingsKeys.updateRepo, value),
+                onChanged: settingsNotifier.setter(SettingsKeys.updateRepo),
               ),
               const SizedBox(height: 16),
               Row(
@@ -199,11 +194,7 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                   Expanded(
                     child: Text(
                       UpdatesSection.githubTokenSpec.label,
-                      style: TextStyle(
-                        color: widget.theme.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: labelStyle,
                     ),
                   ),
                   Tooltip(
@@ -225,12 +216,7 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                 controller: _tokenController,
                 obscureText: true,
                 hintText: UpdatesSection.githubTokenSpec.description,
-                onChanged: (value) {
-                  settingsNotifier.setSetting(
-                    SettingsKeys.githubApiToken,
-                    value,
-                  );
-                },
+                onChanged: settingsNotifier.setter(SettingsKeys.githubApiToken),
               ),
             ],
           ),

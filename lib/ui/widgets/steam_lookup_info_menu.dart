@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/services/steam_service.dart';
@@ -35,10 +33,8 @@ class _SteamLookupInfoMenuState extends State<SteamLookupInfoMenu> {
     super.dispose();
   }
 
-  double _menuWidth(MediaQueryData media) => math.min(
-    320,
-    math.max(0, media.size.width - media.padding.horizontal - 16),
-  );
+  Size _menuSize(BuildContext context) =>
+      anchoredMenuSize(MediaQuery.of(context), const Size(320, 420));
 
   Widget _section({
     required IconData icon,
@@ -79,8 +75,8 @@ class _SteamLookupInfoMenuState extends State<SteamLookupInfoMenu> {
   );
 
   Widget _details(BuildContext context) {
-    final media = MediaQuery.of(context);
     final theme = widget.theme;
+    final size = _menuSize(context);
     final result = widget.result;
     final matchService = result.searchSource;
     final otherSearches = result.searchSourcesTried
@@ -92,20 +88,9 @@ class _SteamLookupInfoMenuState extends State<SteamLookupInfoMenu> {
     );
 
     return SizedBox(
-      width: _menuWidth(media),
+      width: size.width,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: math.min(
-            420,
-            math.max(
-              0,
-              media.size.height -
-                  media.padding.vertical -
-                  media.viewInsets.vertical -
-                  16,
-            ),
-          ),
-        ),
+        constraints: BoxConstraints(maxHeight: size.height),
         child: SingleChildScrollView(
           controller: _scrollController,
           primary: false,
@@ -199,7 +184,7 @@ class _SteamLookupInfoMenuState extends State<SteamLookupInfoMenu> {
       reservedPadding: const EdgeInsets.all(8),
       alignmentOffset: Offset(
         Directionality.of(context) == TextDirection.ltr
-            ? -_menuWidth(MediaQuery.of(context))
+            ? -_menuSize(context).width
             : 0,
         8,
       ),

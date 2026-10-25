@@ -125,6 +125,9 @@ class _CoverImageCardState extends State<CoverImageCard> {
         valueListenable: widget.controller,
         builder: (context, value, _) {
           final path = value.text.trim();
+          final label = path.isEmpty
+              ? 'Choose an image or drop JPG / PNG'
+              : path;
           final image = RepaintBoundary(
             child: GameCoverImage(theme: theme, coverImage: path),
           );
@@ -159,9 +162,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
                           child: _buildPreview(theme, image, hovered),
                         ),
                       Tooltip(
-                        message: path.isEmpty
-                            ? 'Choose an image or drop JPG / PNG'
-                            : path,
+                        message: label,
                         child: InkWell(
                           onTap: _editPath,
                           child: Row(
@@ -170,9 +171,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(
-                                    path.isEmpty
-                                        ? 'Choose an image or drop JPG / PNG'
-                                        : path,
+                                    label,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -265,13 +264,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
           key: const ValueKey('cover-deadline-badge'),
           left: 8,
           bottom: 8,
-          child: GameCardBadges.deadlineBadge(
-            theme,
-            widget.deadlineDate,
-            showIcon: true,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            minHeight: kBadgeHeight,
-          ),
+          child: GameCardBadges.deadlineBadge(theme, widget.deadlineDate),
         ),
       if (widget.platformSelector != null)
         Positioned(

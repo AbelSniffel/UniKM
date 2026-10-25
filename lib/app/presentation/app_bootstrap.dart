@@ -12,6 +12,7 @@ import '../../core/services/encrypted_db_session.dart';
 import '../../core/services/database_switching.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/settings/settings_model.dart';
+import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../../ui/dialogs/database_unlock_dialog.dart';
 import '../../ui/dialogs/encryption_dialogs.dart';
@@ -63,20 +64,24 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
     ref.read(encryptedDbSessionProvider.notifier).set(_encryptedSession);
   }
 
-  Future<String?> _promptForDatabasePassword() async {
+  /// Shows a password dialog once the app's MaterialApp exists; null when
+  /// this widget or that context is gone.
+  Future<String?> _promptForPassword(
+    Future<String?> Function(BuildContext context, AppThemeData theme) show,
+  ) async {
     final dialogContext = await _materialContextCompleter.future;
-    if (!mounted) return null;
-    if (!dialogContext.mounted) return null;
-    final theme = ref.read(themeProvider);
-    return DatabaseUnlockDialog.show(dialogContext, theme);
+    if (!mounted || !dialogContext.mounted) return null;
+    return show(dialogContext, ref.read(themeProvider));
   }
 
-  Future<String?> _promptForNewDatabasePassword() async {
-    final dialogContext = await _materialContextCompleter.future;
-    if (!mounted) return null;
-    if (!dialogContext.mounted) return null;
-    final theme = ref.read(themeProvider);
-    return EnableEncryptionDialog.showForNewDatabase(dialogContext, theme);
+  /// Opens the configured database again from the start.
+  Future<void> _restartBootstrap() {
+    setState(() {
+      _booting = true;
+      _error = null;
+      _bootstrapStarted = false;
+    });
+    return _bootstrap();
   }
 
   Future<StartupDatabaseUnlockResult> _promptForStartupDatabasePassword(
@@ -148,12 +153,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
                 .setSetting(SettingsKeys.databasePath, selectedBasePath);
 
             if (!mounted) return;
-            setState(() {
-              _booting = true;
-              _error = null;
-              _bootstrapStarted = false;
-            });
-            await _bootstrap();
+            await _restartBootstrap();
             return;
           }
 
@@ -272,27 +272,19 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           final plainDb = await _sessionLoader.createPlain(baseDbPath);
           await plainDb.close();
 
-          final password = await _promptForNewDatabasePassword();
+          final password = await _promptForPassword(
+            EnableEncryptionDialog.showForNewDatabase,
+          );
           if (password == null) {
             // User declined; clean up the newly created files and reopen
             // the previous db by re-running bootstrap.
-            final plainFile = File(baseDbPath);
-            if (plainFile.existsSync()) {
+            for (final file in [File(baseDbPath), File('$baseDbPath.enc')]) {
+              if (!file.existsSync()) continue;
               try {
-                await plainFile.delete();
+                await file.delete();
               } catch (_) {}
             }
-            final encFile = File('$baseDbPath.enc');
-            if (encFile.existsSync()) {
-              try {
-                await encFile.delete();
-              } catch (_) {}
-            }
-            setState(() {
-              _booting = true;
-              _bootstrapStarted = false;
-            });
-            await _bootstrap();
+            await _restartBootstrap();
             return;
           }
 
@@ -316,14 +308,11 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
           while (true) {
             final password =
-                providedPassword ?? await _promptForDatabasePassword();
+                providedPassword ??
+                await _promptForPassword(DatabaseUnlockDialog.show);
             if (password == null) {
               // User cancelled; reopen the previous db by re-running bootstrap.
-              setState(() {
-                _booting = true;
-                _bootstrapStarted = false;
-              });
-              await _bootstrap();
+              await _restartBootstrap();
               return;
             }
 
@@ -457,14 +446,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _booting = true;
-                            _error = null;
-                            _bootstrapStarted = false;
-                          });
-                          _bootstrap();
-                        },
+                        onPressed: _restartBootstrap,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retry'),
                       ),

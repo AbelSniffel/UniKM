@@ -70,16 +70,6 @@ const _importModeOptions = <_DialogRadioOption>[
   (value: 'update', title: 'Update', subtitle: 'Add new and update existing'),
 ];
 
-Future<void> _markImportSyncDirty(WidgetRef ref, AppDatabase db) async {
-  await db.bumpLocalSyncRevision();
-  await ref
-      .read(settingsProvider.notifier)
-      .setSetting(
-        SettingsKeys.syncDbRevisionId,
-        DateTime.now().millisecondsSinceEpoch.toString(),
-      );
-}
-
 Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) =>
     AppRadioListTile<String>(
       theme: theme,
@@ -115,15 +105,13 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   bool _includeNotes = true;
   bool _isExporting = false;
 
-  Future<String> _resolveBaseDbPath() async {
-    final configured = ref.read(currentDatabasePathProvider);
-    if (configured.isNotEmpty) return configured;
-    return AppDatabase.getDatabasePath();
-  }
-
   Future<void> _exportSqliteBackup(String destinationPath) async {
-    final session = ref.read(encryptedDbSessionProvider);
-    final sourcePath = session?.tempDbPath ?? await _resolveBaseDbPath();
+    final configured = ref.read(currentDatabasePathProvider);
+    final sourcePath =
+        ref.read(encryptedDbSessionProvider)?.tempDbPath ??
+        (configured.isNotEmpty
+            ? configured
+            : await AppDatabase.getDatabasePath());
 
     // Use VACUUM INTO for a consistent, compact snapshot.
     final sourceDb = sqlite3.sqlite3.open(
@@ -220,7 +208,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
     return ThemedAlertDialog(
       theme: theme,
-
       maxWidth: 550,
       title: DialogHeader(
         icon: Icons.upload,
@@ -414,11 +401,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       dialogTitle: 'Select Database File',
       type: FileType.any,
     );
-
-    if (result != null) {
-      final path = result.path;
-      if (path != null) await _handleSelectedFilePath(path);
-    }
+    final path = result?.path;
+    if (path != null) await _handleSelectedFilePath(path);
   }
 
   Future<void> _handleSelectedFilePath(String path) async {
@@ -642,21 +626,16 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   Future<bool> _importEncryptedFile(File file) async {
-    final encryptedKind = await detectEncryptedImportKind(file);
-    switch (encryptedKind) {
+    switch (await detectEncryptedImportKind(file)) {
       case EncryptedImportKind.uniKmDatabase:
         return _importEncryptedDatabase(
-          title: 'Unlock UniKM Backup',
-          message:
-              'This UniKM backup is encrypted. Enter the password to import it.',
-          decrypt: (password) => decryptUniKmDatabaseToTemp(file, password),
+          'UniKM',
+          (password) => decryptUniKmDatabaseToTemp(file, password),
         );
       case EncryptedImportKind.steamKm2Database:
         return _importEncryptedDatabase(
-          title: 'Unlock SteamKM2 Backup',
-          message:
-              'This SteamKM2 backup is encrypted. Enter the password to import it.',
-          decrypt: (password) => decryptSteamKm2DatabaseToTemp(file, password),
+          'SteamKM2',
+          (password) => decryptSteamKm2DatabaseToTemp(file, password),
         );
       case EncryptedImportKind.steamKm1Json:
         return _importSteamKm1EncryptedBackup(file);
@@ -665,17 +644,11 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     }
   }
 
-  Future<bool> _importEncryptedDatabase({
-    required String title,
-    required String message,
-    required Future<PreparedEncryptedDatabaseImport> Function(String password)
-    decrypt,
-  }) async {
-    final prepared = await _promptForEncryptedImport(
-      title: title,
-      message: message,
-      action: decrypt,
-    );
+  Future<bool> _importEncryptedDatabase(
+    String appName,
+    Future<PreparedEncryptedDatabaseImport> Function(String password) decrypt,
+  ) async {
+    final prepared = await _promptForEncryptedImport(appName, decrypt);
     if (prepared == null) return false;
 
     try {
@@ -688,10 +661,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
   Future<bool> _importSteamKm1EncryptedBackup(File file) async {
     final decryptedJson = await _promptForEncryptedImport<String>(
-      title: 'Unlock SteamKM1 Backup',
-      message:
-          'This SteamKM1 backup is encrypted. Enter the password to import it.',
-      action: (password) => decryptSteamKm1JsonExport(file, password),
+      'SteamKM1',
+      (password) => decryptSteamKm1JsonExport(file, password),
     );
     if (decryptedJson == null) return false;
 
@@ -705,16 +676,20 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     return true;
   }
 
-  Future<T?> _promptForEncryptedImport<T>({
-    required String title,
-    required String message,
-    required Future<T> Function(String password) action,
-  }) async {
+  /// Asks for the password of an encrypted [appName] backup until [action]
+  /// accepts it; null when the user cancels.
+  Future<T?> _promptForEncryptedImport<T>(
+    String appName,
+    Future<T> Function(String password) action,
+  ) async {
     while (true) {
       _checkImport();
-      final password = await _promptForImportPassword(
-        title: title,
-        message: message,
+      final password = await DatabaseUnlockDialog.show(
+        context,
+        ref.read(themeProvider),
+        title: 'Unlock $appName Backup',
+        message:
+            'This $appName backup is encrypted. Enter the password to import it.',
       );
       if (password == null) return null;
 
@@ -725,19 +700,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         _importTask?.update(message: 'Incorrect password, try again...');
       }
     }
-  }
-
-  Future<String?> _promptForImportPassword({
-    required String title,
-    required String message,
-  }) {
-    final theme = ref.read(themeProvider);
-    return DatabaseUnlockDialog.show(
-      context,
-      theme,
-      title: title,
-      message: message,
-    );
   }
 
   Future<void> _importSqliteDatabase(File file) async {
@@ -928,7 +890,13 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     _importMessage = 'Saving imported library...';
     _showImportProgress();
     if (!mounted || !identical(ref.read(databaseProvider), db)) return;
-    await _markImportSyncDirty(ref, db);
+    await db.bumpLocalSyncRevision();
+    await ref
+        .read(settingsProvider.notifier)
+        .setSetting(
+          SettingsKeys.syncDbRevisionId,
+          DateTime.now().millisecondsSinceEpoch.toString(),
+        );
     await persistEncryptedDbIfNeeded(ref);
     if (!mounted || !identical(ref.read(databaseProvider), db)) return;
     await ref.read(gamesProvider.notifier).refresh();
@@ -941,8 +909,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   }
 
   Future<void> _importTxt(File file) async {
-    final content = await file.readAsString();
-    final records = parseSteamKm1TextExport(content);
+    final records = parseSteamKm1TextExport(await file.readAsString());
     if (records.isEmpty) throw Exception('No valid games found in text import');
 
     await _importSteamKm1Records(
@@ -994,10 +961,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     await _commitLibraryImport(imported, sourceLabel);
   }
 
-  Future<void> _importCsv(File file) async {
-    final records = parseLibraryCsv(await file.readAsString());
-    await _commitLibraryImport(records, 'CSV');
-  }
+  Future<void> _importCsv(File file) async =>
+      _commitLibraryImport(parseLibraryCsv(await file.readAsString()), 'CSV');
 
   @override
   Widget build(BuildContext context) {
@@ -1005,7 +970,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
     return ThemedAlertDialog(
       theme: theme,
-
       maxWidth: 550,
       title: DialogHeader(
         icon: Icons.download,

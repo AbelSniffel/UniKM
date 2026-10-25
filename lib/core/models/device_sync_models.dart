@@ -66,31 +66,29 @@ class DeviceSyncSnapshot {
     Set<String>? dbMismatchPeerIds,
     String? activeSyncPeerId,
     bool clearActiveSyncPeerId = false,
-  }) {
-    return DeviceSyncSnapshot(
-      enabled: enabled ?? this.enabled,
-      autoOnStartup: autoOnStartup ?? this.autoOnStartup,
-      deviceId: deviceId ?? this.deviceId,
-      status: status ?? this.status,
-      trustedPeers: trustedPeers ?? this.trustedPeers,
-      discoveredPeers: discoveredPeers ?? this.discoveredPeers,
-      pendingPairRequests: pendingPairRequests ?? this.pendingPairRequests,
-      lastSyncAt: clearLastSyncAt ? null : (lastSyncAt ?? this.lastSyncAt),
-      lastTrustedPeerId: clearLastTrustedPeerId
-          ? null
-          : (lastTrustedPeerId ?? this.lastTrustedPeerId),
-      statusMessage: clearStatusMessage
-          ? null
-          : (statusMessage ?? this.statusMessage),
-      firewallStatusMessage: clearFirewallStatusMessage
-          ? null
-          : (firewallStatusMessage ?? this.firewallStatusMessage),
-      dbMismatchPeerIds: dbMismatchPeerIds ?? this.dbMismatchPeerIds,
-      activeSyncPeerId: clearActiveSyncPeerId
-          ? null
-          : (activeSyncPeerId ?? this.activeSyncPeerId),
-    );
-  }
+  }) => DeviceSyncSnapshot(
+    enabled: enabled ?? this.enabled,
+    autoOnStartup: autoOnStartup ?? this.autoOnStartup,
+    deviceId: deviceId ?? this.deviceId,
+    status: status ?? this.status,
+    trustedPeers: trustedPeers ?? this.trustedPeers,
+    discoveredPeers: discoveredPeers ?? this.discoveredPeers,
+    pendingPairRequests: pendingPairRequests ?? this.pendingPairRequests,
+    lastSyncAt: clearLastSyncAt ? null : (lastSyncAt ?? this.lastSyncAt),
+    lastTrustedPeerId: clearLastTrustedPeerId
+        ? null
+        : (lastTrustedPeerId ?? this.lastTrustedPeerId),
+    statusMessage: clearStatusMessage
+        ? null
+        : (statusMessage ?? this.statusMessage),
+    firewallStatusMessage: clearFirewallStatusMessage
+        ? null
+        : (firewallStatusMessage ?? this.firewallStatusMessage),
+    dbMismatchPeerIds: dbMismatchPeerIds ?? this.dbMismatchPeerIds,
+    activeSyncPeerId: clearActiveSyncPeerId
+        ? null
+        : (activeSyncPeerId ?? this.activeSyncPeerId),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,22 +229,12 @@ enum DeviceSyncStatus {
 
 enum SyncDeviceType { desktop, mobile, web, unknown }
 
-SyncDeviceType syncDeviceTypeFromWire(String? value) {
-  final normalized = value?.trim().toLowerCase() ?? '';
-  return switch (normalized) {
-    'desktop' => SyncDeviceType.desktop,
-    'mobile' => SyncDeviceType.mobile,
-    'web' => SyncDeviceType.web,
-    _ => SyncDeviceType.unknown,
-  };
-}
+// The wire names are the enum names.
+SyncDeviceType syncDeviceTypeFromWire(String? value) =>
+    SyncDeviceType.values.asNameMap()[value?.trim().toLowerCase()] ??
+    SyncDeviceType.unknown;
 
-String syncDeviceTypeToWire(SyncDeviceType value) => switch (value) {
-  SyncDeviceType.desktop => 'desktop',
-  SyncDeviceType.mobile => 'mobile',
-  SyncDeviceType.web => 'web',
-  SyncDeviceType.unknown => 'unknown',
-};
+String syncDeviceTypeToWire(SyncDeviceType value) => value.name;
 
 class TrustedSyncPeer {
   const TrustedSyncPeer({
@@ -273,22 +261,18 @@ class TrustedSyncPeer {
   final int? transferPort;
   final String? lastSeenAtIso;
 
-  Map<String, dynamic> toJson() {
-    final payload = <String, dynamic>{
-      'id': id,
-      'name': name,
-      'host': host,
-      'port': port,
-      'fingerprint': fingerprint,
-      'pairing_id': pairingId,
-      if (transferPort != null) 'transfer_port': transferPort,
-      'last_seen_at_iso': lastSeenAtIso,
-    };
-    if (deviceType != SyncDeviceType.unknown) {
-      payload['device_type'] = syncDeviceTypeToWire(deviceType);
-    }
-    return payload;
-  }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'host': host,
+    'port': port,
+    'fingerprint': fingerprint,
+    'pairing_id': pairingId,
+    if (transferPort != null) 'transfer_port': transferPort,
+    'last_seen_at_iso': lastSeenAtIso,
+    if (deviceType != SyncDeviceType.unknown)
+      'device_type': syncDeviceTypeToWire(deviceType),
+  };
 
   factory TrustedSyncPeer.fromJson(Map<String, dynamic> json) =>
       TrustedSyncPeer(
@@ -315,19 +299,17 @@ class TrustedSyncPeer {
     String? pairingId,
     int? transferPort,
     String? lastSeenAtIso,
-  }) {
-    return TrustedSyncPeer(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      host: host ?? this.host,
-      port: port ?? this.port,
-      deviceType: deviceType ?? this.deviceType,
-      fingerprint: fingerprint ?? this.fingerprint,
-      pairingId: pairingId ?? this.pairingId,
-      transferPort: transferPort ?? this.transferPort,
-      lastSeenAtIso: lastSeenAtIso ?? this.lastSeenAtIso,
-    );
-  }
+  }) => TrustedSyncPeer(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    host: host ?? this.host,
+    port: port ?? this.port,
+    deviceType: deviceType ?? this.deviceType,
+    fingerprint: fingerprint ?? this.fingerprint,
+    pairingId: pairingId ?? this.pairingId,
+    transferPort: transferPort ?? this.transferPort,
+    lastSeenAtIso: lastSeenAtIso ?? this.lastSeenAtIso,
+  );
 }
 
 class DiscoveredSyncPeer {
@@ -390,7 +372,5 @@ List<TrustedSyncPeer> decodeTrustedPeers(String raw) {
   }
 }
 
-String encodeTrustedPeers(List<TrustedSyncPeer> peers) {
-  final payload = peers.map((p) => p.toJson()).toList(growable: false);
-  return jsonEncode(payload);
-}
+String encodeTrustedPeers(List<TrustedSyncPeer> peers) =>
+    jsonEncode([for (final peer in peers) peer.toJson()]);

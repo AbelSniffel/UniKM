@@ -134,25 +134,23 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     double? inputPaddingVertical,
     double? progressIndicatorStrokeWidth,
     NavPanelOverlayStyle? navPanelOverlayStyle,
-  }) {
-    return AppThemeData(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      baseBackground: baseBackground ?? this.baseBackground,
-      baseSecondary: baseSecondary ?? this.baseSecondary,
-      baseAccent: baseAccent ?? this.baseAccent,
-      iconData: clearIcon ? null : (iconData ?? this.iconData),
-      cornerRadius: cornerRadius ?? this.cornerRadius,
-      useThemeToggleRadius: useThemeToggleRadius ?? this.useThemeToggleRadius,
-      scrollbarRadius: scrollbarRadius ?? this.scrollbarRadius,
-      inputPaddingHorizontal:
-          inputPaddingHorizontal ?? this.inputPaddingHorizontal,
-      inputPaddingVertical: inputPaddingVertical ?? this.inputPaddingVertical,
-      progressIndicatorStrokeWidth:
-          progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
-      navPanelOverlayStyle: navPanelOverlayStyle ?? this.navPanelOverlayStyle,
-    );
-  }
+  }) => AppThemeData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    baseBackground: baseBackground ?? this.baseBackground,
+    baseSecondary: baseSecondary ?? this.baseSecondary,
+    baseAccent: baseAccent ?? this.baseAccent,
+    iconData: clearIcon ? null : (iconData ?? this.iconData),
+    cornerRadius: cornerRadius ?? this.cornerRadius,
+    useThemeToggleRadius: useThemeToggleRadius ?? this.useThemeToggleRadius,
+    scrollbarRadius: scrollbarRadius ?? this.scrollbarRadius,
+    inputPaddingHorizontal:
+        inputPaddingHorizontal ?? this.inputPaddingHorizontal,
+    inputPaddingVertical: inputPaddingVertical ?? this.inputPaddingVertical,
+    progressIndicatorStrokeWidth:
+        progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
+    navPanelOverlayStyle: navPanelOverlayStyle ?? this.navPanelOverlayStyle,
+  );
 
   @override
   AppThemeData lerp(covariant AppThemeData? other, double t) {
@@ -208,28 +206,19 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   Color get textPrimary => isDark ? Colors.white : Colors.black;
 
   /// Secondary text color (slightly muted)
-  Color get textSecondary => isDark
-      ? Colors.white.withValues(alpha: 0.7)
-      : Colors.black.withValues(alpha: 0.7);
+  Color get textSecondary => textPrimary.withValues(alpha: 0.7);
 
   /// Hint/disabled text color
-  Color get textHint => isDark
-      ? Colors.white.withValues(alpha: 0.5)
-      : Colors.black.withValues(alpha: 0.5);
+  Color get textHint => textPrimary.withValues(alpha: 0.5);
 
   /// Surface color (cards, dialogs)
-  Color get surface =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.08);
+  Color get surface => blendColors(baseBackground, textPrimary, 0.08);
 
   /// Border color
-  Color get border => isDark
-      ? Colors.white.withValues(alpha: 0.15)
-      : Colors.black.withValues(alpha: 0.15);
+  Color get border => textPrimary.withValues(alpha: 0.15);
 
   /// Divider color
-  Color get divider => isDark
-      ? Colors.white.withValues(alpha: 0.1)
-      : Colors.black.withValues(alpha: 0.1);
+  Color get divider => textPrimary.withValues(alpha: 0.1);
 
   // Convenience aliases
   /// Background color (alias for baseBackground)
@@ -336,7 +325,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
 
   /// Game card cover placeholder background (no image / loading error)
   Color get cardCoverPlaceholder =>
-      blendColors(baseBackground, isDark ? Colors.white : Colors.black, 0.10);
+      blendColors(baseBackground, textPrimary, 0.10);
 
   // ===========================================================================
   // PRE-COMPUTED LIST CARD GRADIENT COLORS (for performance)
@@ -345,39 +334,34 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   // Expando-based memoization cache. Each AppThemeData instance computes its
   // gradient/overlay values exactly once; the results stay alive as long as
   // the theme object is in use and are GC'd together with it.
-  static final _gradientCache = Expando<_AppThemeCache>();
+  static final _gradientCache =
+      Expando<({List<Color> idle, List<Color> hover, List<Color> selected})>();
 
   /// Returns (and lazily computes) the cached gradient values for this theme.
-  _AppThemeCache get _cachedGradients =>
-      _gradientCache[this] ??= _buildGradientCache();
-
-  /// Compute all expensive HSL/blend operations once per theme instance.
-  _AppThemeCache _buildGradientCache() => _AppThemeCache(
-    listCardDefaultGradient: [
+  ({List<Color> idle, List<Color> hover, List<Color> selected})
+  get _cachedGradients => _gradientCache[this] ??= (
+    idle: [
       baseAccent.withValues(alpha: 0.40),
       baseSecondary.withValues(alpha: 0.50),
     ],
-    listCardHoverGradient: [
+    hover: [
       baseAccent.withValues(alpha: 0.80),
       baseSecondary.withValues(alpha: 0.90),
     ],
-    listCardSelectedGradient: [
+    selected: [
       baseAccent.withValues(alpha: 1),
       baseSecondary.withValues(alpha: 1),
     ],
   );
 
   /// Gradient colors for list card hover state — memoized, allocated once per theme.
-  List<Color> get listCardHoverGradient =>
-      _cachedGradients.listCardHoverGradient;
+  List<Color> get listCardHoverGradient => _cachedGradients.hover;
 
   /// Gradient colors for list card selected state — memoized, allocated once per theme.
-  List<Color> get listCardSelectedGradient =>
-      _cachedGradients.listCardSelectedGradient;
+  List<Color> get listCardSelectedGradient => _cachedGradients.selected;
 
   /// Gradient colors for list card default state — memoized, allocated once per theme.
-  List<Color> get listCardDefaultGradient =>
-      _cachedGradients.listCardDefaultGradient;
+  List<Color> get listCardDefaultGradient => _cachedGradients.idle;
 
   /// Status colors
   Color get success => const Color(0xFF28A745);
@@ -418,6 +402,12 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         ? MaterialTapTargetSize.padded
         : MaterialTapTargetSize.shrinkWrap;
     final controlHeight = touch ? 48.0 : kElementHeight;
+    final rounded = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(cornerRadius),
+    );
+    bool active(Set<WidgetState> states) =>
+        states.contains(WidgetState.dragged) ||
+        states.contains(WidgetState.hovered);
 
     return ThemeData(
       useMaterial3: true,
@@ -457,9 +447,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       cardTheme: CardThemeData(
         color: cardBackground,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-        ),
+        shape: rounded,
       ),
 
       // Buttons
@@ -471,13 +459,10 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
                 primaryButtonText, // add shadow for the text to improve contrast
             disabledBackgroundColor: primaryButtonDisabled,
             disabledForegroundColor: primaryButtonDisabledText,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(cornerRadius),
-            ),
+            shape: rounded,
             elevation: 0,
-            padding: EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: kButtonPaddingHorizontal,
-              vertical: 0,
             ),
             minimumSize: Size(0, controlHeight),
             visualDensity: density,
@@ -492,12 +477,9 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
           OutlinedButton.styleFrom(
             foregroundColor: textPrimary,
             side: BorderSide(color: border),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(cornerRadius),
-            ),
-            padding: EdgeInsets.symmetric(
+            shape: rounded,
+            padding: const EdgeInsets.symmetric(
               horizontal: kButtonPaddingHorizontal,
-              vertical: 0,
             ),
             minimumSize: Size(0, controlHeight),
             visualDensity: density,
@@ -510,12 +492,9 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: accent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(cornerRadius),
-          ),
-          padding: EdgeInsets.symmetric(
+          shape: rounded,
+          padding: const EdgeInsets.symmetric(
             horizontal: kTextButtonPaddingHorizontal,
-            vertical: 0,
           ),
           minimumSize: Size(0, controlHeight),
           visualDensity: density,
@@ -563,20 +542,12 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
 
       // Scrollbar
       scrollbarTheme: ScrollbarThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.dragged) ||
-              states.contains(WidgetState.hovered)) {
-            return scrollbarHover;
-          }
-          return scrollbar;
-        }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.dragged) ||
-              states.contains(WidgetState.hovered)) {
-            return scrollbarTrackHover;
-          }
-          return scrollbarTrack;
-        }),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => active(states) ? scrollbarHover : scrollbar,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => active(states) ? scrollbarTrackHover : scrollbarTrack,
+        ),
         trackBorderColor: WidgetStateProperty.all(Colors.transparent),
         radius: Radius.circular(cornerRadius),
         thickness: WidgetStateProperty.all(10),
@@ -586,11 +557,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         thumbVisibility: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.dragged),
         ),
-        trackVisibility: WidgetStateProperty.resolveWith(
-          (states) =>
-              states.contains(WidgetState.dragged) ||
-              states.contains(WidgetState.hovered),
-        ),
+        trackVisibility: WidgetStateProperty.resolveWith(active),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(
@@ -642,48 +609,28 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     );
   }
 
-  WidgetStateInputBorder resolveInputBorder({bool showTopBorder = false}) {
-    return WidgetStateInputBorder.resolveWith(
-      (states) => buildInputBorder(states, showTopBorder: showTopBorder),
-    );
-  }
+  WidgetStateInputBorder resolveInputBorder({bool showTopBorder = false}) =>
+      WidgetStateInputBorder.resolveWith(
+        (states) => buildInputBorder(states, showTopBorder: showTopBorder),
+      );
 
   InputBorder buildInputBorder(
     Set<WidgetState> states, {
     bool showTopBorder = false,
   }) {
     final isFocused = states.contains(WidgetState.focused);
-    final isHovered = states.contains(WidgetState.hovered);
+    final (color, width, glowColor, glowExtent, wrapExtent) = isFocused
+        ? (inputFocusedBorder, 2.5, inputFocusGlow, 18.0, inputBorderWrapFocus)
+        : states.contains(WidgetState.hovered)
+        ? (inputHoverBorder, 1.5, inputHoverGlow, 12.0, inputBorderWrapHover)
+        : (border, 1.0, Colors.transparent, 0.0, inputBorderWrapDefault);
 
     return BottomGlowInputBorder(
       borderRadius: BorderRadius.circular(cornerRadius),
-      borderSide: BorderSide(
-        color: isFocused
-            ? inputFocusedBorder
-            : isHovered
-            ? inputHoverBorder
-            : border,
-        width: isFocused
-            ? 2.5
-            : isHovered
-            ? 1.5
-            : 1.0,
-      ),
-      glowColor: isFocused
-          ? inputFocusGlow
-          : isHovered
-          ? inputHoverGlow
-          : Colors.transparent,
-      glowExtent: isFocused
-          ? 18.0
-          : isHovered
-          ? 12.0
-          : 0.0,
-      wrapExtent: isFocused
-          ? inputBorderWrapFocus
-          : isHovered
-          ? inputBorderWrapHover
-          : inputBorderWrapDefault,
+      borderSide: BorderSide(color: color, width: width),
+      glowColor: glowColor,
+      glowExtent: glowExtent,
+      wrapExtent: wrapExtent,
       showTopBorder: showTopBorder,
       connection: showTopBorder && isFocused ? 1.0 : 0.0,
     );
@@ -750,18 +697,16 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     double? wrapExtent,
     bool? showTopBorder,
     double? connection,
-  }) {
-    return BottomGlowInputBorder(
-      borderSide: borderSide ?? this.borderSide,
-      borderRadius: borderRadius ?? this.borderRadius,
-      gapPadding: gapPadding ?? this.gapPadding,
-      glowColor: glowColor ?? this.glowColor,
-      glowExtent: glowExtent ?? this.glowExtent,
-      wrapExtent: wrapExtent ?? this.wrapExtent,
-      showTopBorder: showTopBorder ?? this.showTopBorder,
-      connection: connection ?? this.connection,
-    );
-  }
+  }) => BottomGlowInputBorder(
+    borderSide: borderSide ?? this.borderSide,
+    borderRadius: borderRadius ?? this.borderRadius,
+    gapPadding: gapPadding ?? this.gapPadding,
+    glowColor: glowColor ?? this.glowColor,
+    glowExtent: glowExtent ?? this.glowExtent,
+    wrapExtent: wrapExtent ?? this.wrapExtent,
+    showTopBorder: showTopBorder ?? this.showTopBorder,
+    connection: connection ?? this.connection,
+  );
 
   @override
   BottomGlowInputBorder scale(double t) => BottomGlowInputBorder(
@@ -864,23 +809,27 @@ class BottomGlowInputBorder extends OutlineInputBorder {
         rect.right,
         rect.bottom,
       );
-      final glowPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            glowColor.withValues(alpha: 0.0),
-            glowColor.withValues(alpha: 0.15 * (1 - connection)),
-            glowColor.withValues(alpha: 0.25 * (1 - connection)),
-          ],
-          stops: const [0.0, 0.6, 1.0],
-        ).createShader(glowRect)
-        ..style = PaintingStyle.fill;
+      // A vertical glow over [rect]; [alphas] are scaled by 1 - connection.
+      Paint glowPaint(Rect rect, List<double> alphas, List<double> stops) =>
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                for (final alpha in alphas)
+                  glowColor.withValues(alpha: alpha * (1 - connection)),
+              ],
+              stops: stops,
+            ).createShader(rect)
+            ..style = PaintingStyle.fill;
 
       canvas.save();
       final innerRRect = outerRRect.deflate(borderSide.width);
       canvas.clipRRect(innerRRect);
-      canvas.drawRect(glowRect, glowPaint);
+      canvas.drawRect(
+        glowRect,
+        glowPaint(glowRect, const [0.0, 0.15, 0.25], const [0.0, 0.6, 1.0]),
+      );
 
       if (showTopBorder) {
         final topGlowRect = Rect.fromLTRB(
@@ -889,19 +838,14 @@ class BottomGlowInputBorder extends OutlineInputBorder {
           rect.right,
           rect.top + clampedGlowExtent,
         );
-        final topGlowPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              glowColor.withValues(alpha: 0.25 * (1 - connection)),
-              glowColor.withValues(alpha: 0.15 * (1 - connection)),
-              glowColor.withValues(alpha: 0.0),
-            ],
-            stops: const [0.0, 0.45, 1.0],
-          ).createShader(topGlowRect)
-          ..style = PaintingStyle.fill;
-        canvas.drawRect(topGlowRect, topGlowPaint);
+        canvas.drawRect(
+          topGlowRect,
+          glowPaint(
+            topGlowRect,
+            const [0.25, 0.15, 0.0],
+            const [0.0, 0.45, 1.0],
+          ),
+        );
 
         // Inset rounded contours keep the connected glow rounded as well.
         if (connection > 0) {
@@ -909,36 +853,19 @@ class BottomGlowInputBorder extends OutlineInputBorder {
             clampedGlowExtent,
             math.min(innerRRect.width, innerRRect.height) / 2,
           );
-          Radius contourRadius(double x, double y, double inset) =>
-              Radius.elliptical(
-                math.max(x - inset * 0.35, x * 0.5),
-                math.max(y - inset * 0.35, y * 0.5),
-              );
           for (var inset = 0.5; inset < depth; inset += 1) {
             final alpha = 0.25 * connection * math.pow(1 - inset / depth, 2);
+            Radius contour(Radius r) => Radius.elliptical(
+              math.max(r.x - inset * 0.35, r.x * 0.5),
+              math.max(r.y - inset * 0.35, r.y * 0.5),
+            );
             canvas.drawRRect(
               RRect.fromRectAndCorners(
                 innerRRect.outerRect.deflate(inset),
-                topLeft: contourRadius(
-                  innerRRect.tlRadiusX,
-                  innerRRect.tlRadiusY,
-                  inset,
-                ),
-                topRight: contourRadius(
-                  innerRRect.trRadiusX,
-                  innerRRect.trRadiusY,
-                  inset,
-                ),
-                bottomLeft: contourRadius(
-                  innerRRect.blRadiusX,
-                  innerRRect.blRadiusY,
-                  inset,
-                ),
-                bottomRight: contourRadius(
-                  innerRRect.brRadiusX,
-                  innerRRect.brRadiusY,
-                  inset,
-                ),
+                topLeft: contour(innerRRect.tlRadius),
+                topRight: contour(innerRRect.trRadius),
+                bottomLeft: contour(innerRRect.blRadius),
+                bottomRight: contour(innerRRect.brRadius),
               ),
               Paint()
                 ..color = glowColor.withValues(alpha: alpha)
@@ -1054,11 +981,9 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   void didUpdateWidget(covariant AppNavigationButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isSelected != widget.isSelected) {
-      if (widget.isSelected) {
-        _selectionController.forward();
-      } else {
-        _selectionController.reverse();
-      }
+      widget.isSelected
+          ? _selectionController.forward()
+          : _selectionController.reverse();
     }
     if (oldWidget.isEnabled && !widget.isEnabled) _hoverController.reverse();
     if (oldWidget.labelFadeDuration != widget.labelFadeDuration) {
@@ -1084,32 +1009,14 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     super.dispose();
   }
 
-  Color _iconColor(double selectionT) {
-    if (!widget.isEnabled) {
-      return widget.theme.textSecondary.withValues(alpha: 0.5);
-    }
-    return Color.lerp(
-          widget.theme.textSecondary,
-          widget.theme.accent,
-          selectionT,
-        ) ??
-        widget.theme.textSecondary;
-  }
-
-  TextStyle _labelStyle(double selectionT) {
-    final color = !widget.isEnabled
-        ? widget.theme.textSecondary.withValues(alpha: 0.5)
-        : Color.lerp(
-            widget.theme.textSecondary,
-            widget.theme.textPrimary,
-            selectionT,
-          );
-    return const TextStyle(fontSize: 14).copyWith(color: color);
-  }
+  /// Secondary text blended toward [selected] by [selectionT], or muted
+  /// while disabled.
+  Color _foreground(Color selected, double selectionT) => widget.isEnabled
+      ? Color.lerp(widget.theme.textSecondary, selected, selectionT)!
+      : widget.theme.textSecondary.withValues(alpha: 0.5);
 
   double _labelVisibilityT() {
-    if (widget.labelText == null) return widget.labelVisible ? 1.0 : 0.0;
-    if (widget.labelFadeDuration == Duration.zero) {
+    if (widget.labelText == null || widget.labelFadeDuration == Duration.zero) {
       return widget.labelVisible ? 1.0 : 0.0;
     }
     return widget.labelFadeCurve
@@ -1273,8 +1180,11 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
                     selectionT,
                   ) ??
                   Colors.transparent;
-        final iconColor = _iconColor(selectionT);
-        final labelStyle = _labelStyle(selectionT);
+        final iconColor = _foreground(widget.theme.accent, selectionT);
+        final labelStyle = TextStyle(
+          fontSize: 14,
+          color: _foreground(widget.theme.textPrimary, selectionT),
+        );
         final iconScale = widget.isEnabled
             ? (1 + (math.max(selectionT, hoverT) * _hoverIconBoost)).clamp(
                 1.0,
@@ -1376,21 +1286,6 @@ class AppLinearProgressBar extends StatelessWidget {
       ],
     ),
   );
-}
-
-/// Cache for expensive, immutable computed values of an [AppThemeData] instance.
-/// Created lazily the first time a gradient getter is accessed and retained for
-/// the lifetime of the theme object (via an [Expando] keyed on it).
-class _AppThemeCache {
-  const _AppThemeCache({
-    required this.listCardHoverGradient,
-    required this.listCardSelectedGradient,
-    required this.listCardDefaultGradient,
-  });
-
-  final List<Color> listCardHoverGradient;
-  final List<Color> listCardSelectedGradient;
-  final List<Color> listCardDefaultGradient;
 }
 
 // =============================================================================

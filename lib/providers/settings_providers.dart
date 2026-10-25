@@ -91,9 +91,9 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
 
 /// Settings provider
 final settingsProvider =
-    NotifierProvider<SettingsNotifier, Map<String, dynamic>>(() {
-      return SettingsNotifier();
-    });
+    NotifierProvider<SettingsNotifier, Map<String, dynamic>>(
+      SettingsNotifier.new,
+    );
 
 // =============================================================================
 // SETTINGS SLICE PROVIDERS

@@ -29,22 +29,36 @@ class CopyActionsDialog extends ConsumerWidget {
       (g) => g.platform == 'Steam' && g.gameKey.isNotEmpty,
     );
 
-    Widget buildTile({required String title, required VoidCallback onTap}) {
-      return ListTile(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-        ),
-        title: Text(title, style: TextStyle(color: theme.textPrimary)),
-        onTap: () {
-          Navigator.pop(context);
-          onTap();
-        },
-      );
-    }
+    // A groupbox of copy actions; each closes the dialog, then copies.
+    Widget group(
+      String title,
+      IconData icon,
+      List<(String, VoidCallback)> actions,
+    ) => SectionGroupBox(
+      title: title,
+      titleIcon: icon,
+      titleLocation: SectionTitleLocation.top,
+      theme: theme,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (label, copy) in actions)
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(theme.cornerRadius),
+              ),
+              title: Text(label, style: TextStyle(color: theme.textPrimary)),
+              onTap: () {
+                Navigator.pop(context);
+                copy();
+              },
+            ),
+        ],
+      ),
+    );
 
     return ThemedAlertDialog(
       theme: theme,
-
       title: DialogHeader(
         icon: Icons.copy,
         title: 'Copy Options',
@@ -54,56 +68,28 @@ class CopyActionsDialog extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SectionGroupBox(
-              title: 'Keys',
-              titleIcon: Icons.key,
-              titleLocation: SectionTitleLocation.top,
-              theme: theme,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  buildTile(
-                    title: 'Key Only',
-                    onTap: () => GameClipboard.copyKeysOnly(targets),
-                  ),
-                  buildTile(
-                    title: 'Title + Key',
-                    onTap: () => GameClipboard.copyTitleWithKey(targets),
-                  ),
-                  buildTile(
-                    title: 'Discord Spoiler',
-                    onTap: () => GameClipboard.copyDiscordSpoiler(targets),
-                  ),
-                ],
+            group('Keys', Icons.key, [
+              ('Key Only', () => GameClipboard.copyKeysOnly(targets)),
+              ('Title + Key', () => GameClipboard.copyTitleWithKey(targets)),
+              (
+                'Discord Spoiler',
+                () => GameClipboard.copyDiscordSpoiler(targets),
               ),
-            ),
+            ]),
             if (hasSteam) ...[
               const SizedBox(height: kDialogSpacing),
-              SectionGroupBox(
-                title: 'Redeem Links',
-                titleIcon: Icons.link,
-                titleLocation: SectionTitleLocation.top,
-                theme: theme,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    buildTile(
-                      title: 'Redeem Link Only',
-                      onTap: () => GameClipboard.copySteamLink(
-                        targets,
-                        includeTitle: false,
-                      ),
-                    ),
-                    buildTile(
-                      title: 'Title + Redeem Link',
-                      onTap: () => GameClipboard.copySteamLink(
-                        targets,
-                        includeTitle: true,
-                      ),
-                    ),
-                  ],
+              group('Redeem Links', Icons.link, [
+                (
+                  'Redeem Link Only',
+                  () =>
+                      GameClipboard.copySteamLink(targets, includeTitle: false),
                 ),
-              ),
+                (
+                  'Title + Redeem Link',
+                  () =>
+                      GameClipboard.copySteamLink(targets, includeTitle: true),
+                ),
+              ]),
             ],
           ],
         ),

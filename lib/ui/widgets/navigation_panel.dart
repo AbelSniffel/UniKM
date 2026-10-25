@@ -272,22 +272,19 @@ class NavigationPanel extends ConsumerWidget {
     bool isHorizontal,
     bool isCollapsed,
     NavExpansionMode expansionMode,
-  ) {
-    return _NavButton(
-      key: ValueKey<String>('nav-button-${items[index].label}'),
-      item: items[index],
-      isSelected: index == selectedIndex,
-      onTap: () => onItemSelected(index),
-      theme: theme,
-      appearance: appearance,
-      isHorizontal: isHorizontal,
-      isCollapsed:
-          isCollapsed ||
-          (expansionMode == NavExpansionMode.automatic &&
-              index != selectedIndex),
-      isLocked: lockedIndices.contains(index),
-    );
-  }
+  ) => _NavButton(
+    key: ValueKey<String>('nav-button-${items[index].label}'),
+    item: items[index],
+    isSelected: index == selectedIndex,
+    onTap: () => onItemSelected(index),
+    theme: theme,
+    appearance: appearance,
+    isHorizontal: isHorizontal,
+    isCollapsed:
+        isCollapsed ||
+        (expansionMode == NavExpansionMode.automatic && index != selectedIndex),
+    isLocked: lockedIndices.contains(index),
+  );
 
   Widget _buildVertical(
     bool isCollapsed,

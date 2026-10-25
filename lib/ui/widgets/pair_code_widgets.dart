@@ -209,28 +209,21 @@ class _PairCodeRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        cell(0),
-        const SizedBox(width: 5),
-        cell(1),
-        const SizedBox(width: 5),
-        cell(2),
-        const SizedBox(width: 10),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            '-',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
+        for (var i = 0; i < 6; i++) ...[
+          if (i == 3) ...[
+            const SizedBox(width: 10),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 6),
+              child: Text(
+                '-',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        cell(3),
-        const SizedBox(width: 5),
-        cell(4),
-        const SizedBox(width: 5),
-        cell(5),
+            const SizedBox(width: 10),
+          ] else if (i > 0)
+            const SizedBox(width: 5),
+          cell(i),
+        ],
       ],
     );
   }

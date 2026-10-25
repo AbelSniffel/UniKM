@@ -69,21 +69,16 @@ class DeadlineNotificationService {
     try {
       // Windows uses native WinRT toasts via PowerShell — no plugin init needed.
       if (!Platform.isWindows) {
-        final settings = InitializationSettings(
-          android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
-          linux: const LinuxInitializationSettings(
-            defaultActionName: 'Open UniKM',
-          ),
-          macOS: const DarwinInitializationSettings(
-            requestAlertPermission: true,
-            requestBadgePermission: false,
-            requestSoundPermission: false,
-          ),
-          iOS: const DarwinInitializationSettings(
-            requestAlertPermission: true,
-            requestBadgePermission: false,
-            requestSoundPermission: false,
-          ),
+        const darwin = DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        );
+        const settings = InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          linux: LinuxInitializationSettings(defaultActionName: 'Open UniKM'),
+          macOS: darwin,
+          iOS: darwin,
         );
         await _plugin.initialize(settings: settings);
 
@@ -216,52 +211,47 @@ class DeadlineNotificationService {
   // ---------------------------------------------------------------------------
 
   /// Send a test OS notification to verify the integration is working.
-  Future<void> sendTestOsNotification() async {
-    await _showOsNotification(
-      id: _osIdTest,
-      title: 'UniKM Test Notification',
-      body: 'OS-level notifications are working correctly.',
-      bypassFocusCheck: true,
-    );
-  }
+  Future<void> sendTestOsNotification() => _showOsNotification(
+    id: _osIdTest,
+    title: 'UniKM Test Notification',
+    body: 'OS-level notifications are working correctly.',
+    bypassFocusCheck: true,
+  );
 
   /// Simulates deadline notifications for expired, due today, and expiring soon games.
   Future<void> simulateDeadlineNotifications(WidgetRef ref) async {
     final now = DateTime.now();
-    final sampleGames = <Game>[
-      Game(
-        id: -1001,
-        title: 'Expired Simulation',
-        gameKey: 'SIM-EXPIRED',
-        platform: 'Steam',
-        dateAdded: now.subtract(const Duration(days: 30)),
-        updatedAt: now.subtract(const Duration(days: 30)),
-        hasDeadline: true,
-        deadlineDate: now.subtract(const Duration(days: 1)),
-      ),
-      Game(
-        id: -1002,
-        title: 'Due Today Simulation',
-        gameKey: 'SIM-TODAY',
-        platform: 'Steam',
-        dateAdded: now.subtract(const Duration(days: 5)),
-        updatedAt: now.subtract(const Duration(days: 2)),
-        hasDeadline: true,
-        deadlineDate: DateTime(now.year, now.month, now.day, 23, 59),
-      ),
-      Game(
-        id: -1003,
-        title: 'Expiring Soon Simulation',
-        gameKey: 'SIM-SOON',
-        platform: 'Steam',
-        dateAdded: now.subtract(const Duration(days: 2)),
-        updatedAt: now.subtract(const Duration(days: 1)),
-        hasDeadline: true,
-        deadlineDate: now.add(const Duration(days: 3)),
-      ),
-    ];
+    DateTime daysAgo(int days) => now.subtract(Duration(days: days));
+    Game sample(
+      int id,
+      String title,
+      String key,
+      int added,
+      int updated,
+      DateTime deadline,
+    ) => Game(
+      id: id,
+      title: title,
+      gameKey: key,
+      platform: 'Steam',
+      dateAdded: daysAgo(added),
+      updatedAt: daysAgo(updated),
+      hasDeadline: true,
+      deadlineDate: deadline,
+    );
 
-    await checkDeadlines(sampleGames, enabled: true);
+    await checkDeadlines([
+      sample(-1001, 'Expired Simulation', 'SIM-EXPIRED', 30, 30, daysAgo(1)),
+      sample(
+        -1002,
+        'Due Today Simulation',
+        'SIM-TODAY',
+        5,
+        2,
+        DateTime(now.year, now.month, now.day, 23, 59),
+      ),
+      sample(-1003, 'Expiring Soon Simulation', 'SIM-SOON', 2, 1, daysAgo(-3)),
+    ], enabled: true);
   }
 
   // ---------------------------------------------------------------------------
@@ -280,27 +270,7 @@ class DeadlineNotificationService {
     try {
       if (await windowManager.isFocused()) return;
     } catch (_) {}
-    await _showFetchProgressPluginNotification(
-      completed: completed,
-      total: total,
-      currentTitle: currentTitle ?? '',
-    );
-  }
-
-  /// Dismiss the fetch-progress OS notification (mobile only).
-  Future<void> clearFetchProgressNotification() async {
-    if (!_initialized) return;
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    try {
-      await _plugin.cancel(id: _osIdFetchProgress);
-    } catch (_) {}
-  }
-
-  Future<void> _showFetchProgressPluginNotification({
-    required int completed,
-    required int total,
-    required String currentTitle,
-  }) async {
+    final title = currentTitle ?? '';
     try {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
@@ -325,15 +295,23 @@ class DeadlineNotificationService {
           presentSound: false,
         ),
       );
-      final body = total > 0
-          ? '$completed / $total${currentTitle.isNotEmpty ? ' — $currentTitle' : ''}'
-          : 'Starting...';
       await _plugin.show(
         id: _osIdFetchProgress,
         title: 'Fetching Steam Data',
-        body: body,
+        body: total > 0
+            ? '$completed / $total${title.isNotEmpty ? ' — $title' : ''}'
+            : 'Starting...',
         notificationDetails: details,
       );
+    } catch (_) {}
+  }
+
+  /// Dismiss the fetch-progress OS notification (mobile only).
+  Future<void> clearFetchProgressNotification() async {
+    if (!_initialized) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    try {
+      await _plugin.cancel(id: _osIdFetchProgress);
     } catch (_) {}
   }
 
@@ -378,8 +356,9 @@ class DeadlineNotificationService {
     required String title,
     required String body,
   }) async {
-    final safeTitle = title.replaceAll("'", ' ').replaceAll('\n', ' ');
-    final safeBody = body.replaceAll("'", ' ').replaceAll('\n', ' ');
+    String safe(String text) => text.replaceAll("'", ' ').replaceAll('\n', ' ');
+    final safeTitle = safe(title);
+    final safeBody = safe(body);
 
     final script =
         "[Windows.UI.Notifications.ToastNotificationManager,"
@@ -435,22 +414,17 @@ class DeadlineNotificationService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  bool _isDueSoon(Game game) {
-    final daysUntilDeadline = game.daysUntilDeadline;
-    return daysUntilDeadline != null &&
-        daysUntilDeadline > 0 &&
-        daysUntilDeadline <= 7;
-  }
+  bool _isDueSoon(Game game) => switch (game.daysUntilDeadline) {
+    final days? => days > 0 && days <= 7,
+    null => false,
+  };
 
+  /// Up to [_maxNotificationNames] titles, then a count of the rest.
   String _notificationNameList(List<Game> games) {
-    final visibleNames = games
-        .take(_maxNotificationNames)
-        .map((game) => game.title)
-        .join(', ');
-
-    final remainingCount = games.length - _maxNotificationNames;
-    if (remainingCount <= 0) return visibleNames;
-
-    return '$visibleNames +$remainingCount more';
+    final names = games.take(_maxNotificationNames).map((game) => game.title);
+    final remaining = games.length - _maxNotificationNames;
+    return remaining <= 0
+        ? names.join(', ')
+        : '${names.join(', ')} +$remaining more';
   }
 }

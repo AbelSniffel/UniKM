@@ -155,8 +155,7 @@ bool shouldInitiatePeerSync({
   required String peerDeviceId,
   required bool localHasChanges,
   required bool remoteHasChanges,
-}) {
-  return !localHasChanges ||
-      !remoteHasChanges ||
-      localDeviceId.compareTo(peerDeviceId) <= 0;
-}
+}) =>
+    !localHasChanges ||
+    !remoteHasChanges ||
+    localDeviceId.compareTo(peerDeviceId) <= 0;

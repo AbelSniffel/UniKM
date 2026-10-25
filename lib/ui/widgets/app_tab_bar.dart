@@ -91,6 +91,11 @@ class AppTabBar extends StatelessWidget {
                             duration: duration,
                             curve: kTabTransitionCurve,
                             builder: (context, amount, _) {
+                              final tabRadius = _radiusFor(
+                                index,
+                                radius,
+                                context,
+                              );
                               final background = Color.lerp(
                                 restColor,
                                 theme.tabSelected,
@@ -99,22 +104,14 @@ class AppTabBar extends StatelessWidget {
                               return Material(
                                 color: background,
                                 animationDuration: Duration.zero,
-                                borderRadius: _radiusFor(
-                                  index,
-                                  radius,
-                                  context,
-                                ),
+                                borderRadius: tabRadius,
                                 clipBehavior: Clip.antiAlias,
                                 child: Ink(
                                   decoration: BoxDecoration(
                                     gradient: SurfaceDepth.gradient(background),
                                   ),
                                   child: InkWell(
-                                    borderRadius: _radiusFor(
-                                      index,
-                                      radius,
-                                      context,
-                                    ),
+                                    borderRadius: tabRadius,
                                     hoverColor: theme.navItemHover,
                                     splashColor: theme.navItemHover,
                                     highlightColor: theme.tabSelected,

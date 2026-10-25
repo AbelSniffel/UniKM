@@ -186,18 +186,15 @@ class AppActionButton extends StatelessWidget {
             (selected == null
                     ? style
                     : style.copyWith(
-                        overlayColor: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.pressed)) {
-                            return materialTheme.splashColor;
-                          }
-                          if (states.contains(WidgetState.hovered)) {
-                            return materialTheme.hoverColor;
-                          }
-                          if (states.contains(WidgetState.focused)) {
-                            return materialTheme.focusColor;
-                          }
-                          return null;
-                        }),
+                        overlayColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.pressed)
+                              ? materialTheme.splashColor
+                              : states.contains(WidgetState.hovered)
+                              ? materialTheme.hoverColor
+                              : states.contains(WidgetState.focused)
+                              ? materialTheme.focusColor
+                              : null,
+                        ),
                       ))
                 .copyWith(
                   animationDuration: snapTheme ? Duration.zero : null,
@@ -363,23 +360,12 @@ class _ToggleIndicatorPainter extends CustomPainter {
       stroke,
     );
     if (deleteProgress > 0) {
-      final start = scale(
-        Offset.lerp(
-          const Offset(0.5, 0.5),
-          const Offset(0.2, 0.8),
-          deleteProgress,
-        )!,
-      );
-      final end = scale(
-        Offset.lerp(
-          const Offset(0.5, 0.5),
-          const Offset(0.8, 0.2),
-          deleteProgress,
-        )!,
-      );
+      // The cross's second stroke grows out from the centre.
+      Offset grow(Offset to) =>
+          scale(Offset.lerp(const Offset(0.5, 0.5), to, deleteProgress)!);
       canvas.drawLine(
-        start,
-        end,
+        grow(const Offset(0.2, 0.8)),
+        grow(const Offset(0.8, 0.2)),
         stroke..color = color.withValues(alpha: color.a * deleteProgress),
       );
     }

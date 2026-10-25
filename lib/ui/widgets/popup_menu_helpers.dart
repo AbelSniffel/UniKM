@@ -1,5 +1,7 @@
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -21,6 +23,25 @@ MenuStyle appMenuStyle(
     ),
   ),
   side: WidgetStatePropertyAll(BorderSide(color: theme.border)),
+);
+
+/// The size an anchored menu may take: the screen less its insets and an 8px
+/// margin on each side, capped at [max].
+Size anchoredMenuSize(MediaQueryData media, Size max) => Size(
+  math.min(
+    max.width,
+    math.max(0, media.size.width - media.padding.horizontal - 16),
+  ),
+  math.min(
+    max.height,
+    math.max(
+      0,
+      media.size.height -
+          media.padding.vertical -
+          media.viewInsets.vertical -
+          16,
+    ),
+  ),
 );
 
 /// Clips item feedback to the menu shape, which PopupMenuTheme cannot configure.

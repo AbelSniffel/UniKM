@@ -37,16 +37,14 @@ class NavigationSection extends ConsumerWidget {
     label: 'Position',
     description: 'Select the position of the navigation bar in the app',
   );
+  // Horizontal and vertical panels keep separate placements with one label.
   static const SettingTextSpec navButtonArrangementHorizontalSpec =
       SettingTextSpec(
         label: 'Navigation Button Placement',
         description: 'Position the page buttons relative to the gradient bar',
       );
-  static const SettingTextSpec navButtonArrangementVerticalSpec =
-      SettingTextSpec(
-        label: 'Navigation Button Placement',
-        description: 'Position the page buttons relative to the gradient bar',
-      );
+  static const navButtonArrangementVerticalSpec =
+      navButtonArrangementHorizontalSpec;
   static const SettingTextSpec navPanelOverlayStyleSpec = SettingTextSpec(
     label: 'Navigation panel overlay style',
     description: 'Add decorative overlays for the navigation panel',
@@ -160,13 +158,18 @@ class NavigationSection extends ConsumerWidget {
                 ],
                 onChanged: settingsNotifier.setter(SettingsKeys.navBarPosition),
               ),
-              _buildNavArrangementRow(
+              SettingsChoiceCard<NavButtonArrangement>(
                 theme: theme,
-                spec: isHorizontalPanel
-                    ? navButtonArrangementHorizontalSpec
-                    : navButtonArrangementVerticalSpec,
+                label: navButtonArrangementHorizontalSpec.label,
+                description: navButtonArrangementHorizontalSpec.description,
                 value: navButtonArrangement,
-                isHorizontal: isHorizontalPanel,
+                choices: [
+                  for (final arrangement in NavButtonArrangement.values)
+                    SettingsChoice(
+                      arrangement,
+                      arrangement.displayName(isHorizontal: isHorizontalPanel),
+                    ),
+                ],
                 onChanged: (value) => settingsNotifier.setSetting(
                   isHorizontalPanel
                       ? SettingsKeys.navButtonArrangementH
@@ -203,52 +206,23 @@ class NavigationSection extends ConsumerWidget {
     );
   }
 
+  /// Built-in themes keep the overlay as a setting; custom themes save it.
   Future<void> _applyNavPanelOverlayStyle(
     WidgetRef ref,
     NavPanelOverlayStyle style,
   ) async {
-    final effectiveOverlayStyle = ref.read(
-      effectiveNavPanelOverlayStyleProvider,
-    );
-    if (effectiveOverlayStyle == style) return;
-
-    final currentTheme = ref.read(themeProvider);
-    final themeNotifier = ref.read(themeProvider.notifier);
-    final isBuiltInTheme = ref.read(currentThemeIsBuiltInProvider);
-
-    if (isBuiltInTheme) {
+    if (ref.read(effectiveNavPanelOverlayStyleProvider) == style) return;
+    if (ref.read(currentThemeIsBuiltInProvider)) {
       await ref
           .read(settingsProvider.notifier)
           .setSetting(SettingsKeys.navPanelOverlayStyle, style);
       return;
     }
-
-    await themeNotifier.saveCustomTheme(
-      currentTheme.copyWith(navPanelOverlayStyle: style),
-    );
-  }
-
-  Widget _buildNavArrangementRow({
-    required AppThemeData theme,
-    required SettingTextSpec spec,
-    required NavButtonArrangement value,
-    required bool isHorizontal,
-    required ValueChanged<NavButtonArrangement> onChanged,
-  }) {
-    return SettingsChoiceCard<NavButtonArrangement>(
-      theme: theme,
-      label: spec.label,
-      description: spec.description,
-      value: value,
-      choices: [
-        for (final arrangement in NavButtonArrangement.values)
-          SettingsChoice(
-            arrangement,
-            arrangement.displayName(isHorizontal: isHorizontal),
-          ),
-      ],
-      onChanged: onChanged,
-    );
+    await ref
+        .read(themeProvider.notifier)
+        .saveCustomTheme(
+          ref.read(themeProvider).copyWith(navPanelOverlayStyle: style),
+        );
   }
 }
 
@@ -286,37 +260,38 @@ class _NavigationPanelOverlaySection extends ConsumerWidget {
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
       child: PreviewCardWrap(
-        children: NavPanelOverlayStyle.values.map((style) {
-          return PreviewCard(
-            key: ValueKey(style),
-            name: style.displayName,
-            theme: theme,
-            isSelected: effectiveOverlayStyle == style,
-            onTap: () => onOverlaySelected(style),
-            backgroundBuilder: (context, _) => Stack(
-              fit: StackFit.expand,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: effectiveTheme.navBackground,
-                  ),
-                ),
-                if (style != NavPanelOverlayStyle.none)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: NavigationPanelOverlayPaint(
-                        theme: currentTheme.copyWith(
-                          navPanelOverlayStyle: style,
-                        ),
-                        preview: true,
-                        child: const SizedBox.expand(),
-                      ),
+        children: [
+          for (final style in NavPanelOverlayStyle.values)
+            PreviewCard(
+              key: ValueKey(style),
+              name: style.displayName,
+              theme: theme,
+              isSelected: effectiveOverlayStyle == style,
+              onTap: () => onOverlaySelected(style),
+              backgroundBuilder: (context, _) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: effectiveTheme.navBackground,
                     ),
                   ),
-              ],
+                  if (style != NavPanelOverlayStyle.none)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: NavigationPanelOverlayPaint(
+                          theme: currentTheme.copyWith(
+                            navPanelOverlayStyle: style,
+                          ),
+                          preview: true,
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          );
-        }).toList(),
+        ],
       ),
     );
   }
@@ -383,22 +358,20 @@ class _GradientAnimationSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PreviewCardWrap(
-            children: GradientAnimation.values.map((effect) {
-              final isSelected = effect == currentAnimation;
-              return GradientEffectPreview(
-                key: ValueKey(effect),
-                effect: effect,
-                theme: theme,
-                isSelected: isSelected,
-                isPlaying: previewAnimationsPlaying,
-                onTap: () {
-                  settingsNotifier.setSetting(
+            children: [
+              for (final effect in GradientAnimation.values)
+                GradientEffectPreview(
+                  key: ValueKey(effect),
+                  effect: effect,
+                  theme: theme,
+                  isSelected: effect == currentAnimation,
+                  isPlaying: previewAnimationsPlaying,
+                  onTap: () => settingsNotifier.setSetting(
                     SettingsKeys.gradientAnimation,
                     effect,
-                  );
-                },
-              );
-            }).toList(),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

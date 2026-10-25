@@ -250,9 +250,10 @@ class GamesNotifier extends Notifier<GamesState> {
 
     // If database isn't ready yet, return loading state
     if (dbState.database == null) {
-      final next = _cachedState.copyWith(sortMode: sortMode, isLoading: true);
-      _cachedState = next;
-      return next;
+      return _cachedState = _cachedState.copyWith(
+        sortMode: sortMode,
+        isLoading: true,
+      );
     }
 
     _snapshots = LibraryRepository(dbState.database!).watchSnapshot().listen(
@@ -272,15 +273,12 @@ class GamesNotifier extends Notifier<GamesState> {
     );
 
     // Preserve existing loaded data across rebuilds to avoid loading flicker.
-    if (_cachedState.games.isEmpty && !_isLoadingInProgress) {
-      final next = _cachedState.copyWith(sortMode: sortMode, isLoading: true);
-      _cachedState = next;
-      return next;
-    }
-
-    final next = _cachedState.copyWith(sortMode: sortMode);
-    _cachedState = next;
-    return next;
+    return _cachedState = _cachedState.copyWith(
+      sortMode: sortMode,
+      isLoading: _cachedState.games.isEmpty && !_isLoadingInProgress
+          ? true
+          : null,
+    );
   }
 
   /// Load all games from database
@@ -458,12 +456,10 @@ class GamesNotifier extends Notifier<GamesState> {
     List<int> ids,
     bool isUsed, {
     bool persistInBackground = false,
-  }) async {
-    return _mutate((db) async {
-      await db.setGamesUsed(ids, isUsed);
-      return true;
-    }, failure: false);
-  }
+  }) async => _mutate((db) async {
+    await db.setGamesUsed(ids, isUsed);
+    return true;
+  }, failure: false);
 
   /// Clear Steam-derived metadata and Steam tags for the given games.
   ///
@@ -577,23 +573,18 @@ class GamesNotifier extends Notifier<GamesState> {
     });
   }
 
-  void setPlatformFilter(String? platform) {
-    // Normalize empty strings to null so the filter is never stored as '' and
-    // "All Platforms" reliably clears the filter.
-    final normalized = (platform != null && platform.isEmpty) ? null : platform;
-    state = state.copyWith(platformFilter: normalized);
-  }
+  // Empty strings become null so the filter is never stored as '' and
+  // "All Platforms" reliably clears the filter.
+  void setPlatformFilter(String? platform) => state = state.copyWith(
+    platformFilter: platform?.isEmpty == true ? null : platform,
+  );
 
   void setTagFilters(List<int> tagIds) =>
       state = state.copyWith(tagFilters: tagIds);
 
   void toggleTagFilter(int tagId) {
     final current = List<int>.from(state.tagFilters);
-    if (current.contains(tagId)) {
-      current.remove(tagId);
-    } else {
-      current.add(tagId);
-    }
+    if (!current.remove(tagId)) current.add(tagId);
     state = state.copyWith(tagFilters: current);
   }
 
@@ -651,19 +642,12 @@ class GamesNotifier extends Notifier<GamesState> {
     state = state.copyWith(selectedGameIds: newSelection);
   }
 
-  void toggleGameSelection(int id) {
-    if (state.selectedGameIds.contains(id)) {
-      deselectGame(id);
-    } else {
-      selectGame(id);
-    }
-  }
+  void toggleGameSelection(int id) =>
+      state.selectedGameIds.contains(id) ? deselectGame(id) : selectGame(id);
 
-  void selectAll() {
-    state = state.copyWith(
-      selectedGameIds: state.filteredGames.map((g) => g.id).toSet(),
-    );
-  }
+  void selectAll() => state = state.copyWith(
+    selectedGameIds: state.filteredGames.map((g) => g.id).toSet(),
+  );
 
   void clearSelection() {
     if (state.selectedGameIds.isEmpty) return;
@@ -683,24 +667,22 @@ class GamesNotifier extends Notifier<GamesState> {
 
     if (startIndex == -1 || endIndex == -1) return;
 
-    final minIndex = startIndex < endIndex ? startIndex : endIndex;
-    final maxIndex = startIndex > endIndex ? startIndex : endIndex;
-
-    final newSelection = <int>{};
-    for (var i = minIndex; i <= maxIndex; i++) {
-      newSelection.add(filtered[i].id);
-    }
-
+    final (first, last) = startIndex < endIndex
+        ? (startIndex, endIndex)
+        : (endIndex, startIndex);
     state = state.copyWith(
-      selectedGameIds: {...state.selectedGameIds, ...newSelection},
+      selectedGameIds: {
+        ...state.selectedGameIds,
+        for (var i = first; i <= last; i++) filtered[i].id,
+      },
     );
   }
 }
 
 /// Games provider
-final gamesProvider = NotifierProvider<GamesNotifier, GamesState>(() {
-  return GamesNotifier();
-});
+final gamesProvider = NotifierProvider<GamesNotifier, GamesState>(
+  GamesNotifier.new,
+);
 
 typedef ActiveFiltersState = ({
   String searchQuery,
@@ -712,8 +694,8 @@ typedef ActiveFiltersState = ({
   bool showNoTagsOnly,
 });
 
-final activeFiltersProvider = Provider<ActiveFiltersState>((ref) {
-  return ref.watch(
+final activeFiltersProvider = Provider<ActiveFiltersState>(
+  (ref) => ref.watch(
     gamesProvider.select(
       (s) => (
         searchQuery: s.searchQuery,
@@ -725,8 +707,8 @@ final activeFiltersProvider = Provider<ActiveFiltersState>((ref) {
         showNoTagsOnly: s.showNoTagsOnly,
       ),
     ),
-  );
-});
+  ),
+);
 
 final selectedGamesProvider = Provider<List<Game>>((ref) {
   final (games, selectedIds) = ref.watch(
@@ -763,25 +745,27 @@ class _FilteredGameIdsNotifier extends Notifier<List<int>> {
   }
 }
 
-final selectedSteamGamesProvider = Provider<List<Game>>((ref) {
-  final selectedGames = ref.watch(selectedGamesProvider);
-  return selectedGames.where((g) => g.platform == 'Steam').toList();
-});
+final selectedSteamGamesProvider = Provider<List<Game>>(
+  (ref) => ref
+      .watch(selectedGamesProvider)
+      .where((g) => g.platform == 'Steam')
+      .toList(),
+);
 
 final selectedGamesAllUsedProvider = Provider<bool>((ref) {
   final selectedGames = ref.watch(selectedGamesProvider);
   return selectedGames.isNotEmpty && selectedGames.every((g) => g.isUsed);
 });
 
-final allGamesProvider = Provider<List<Game>>((ref) {
-  return ref.watch(gamesProvider.select((s) => s.games));
-});
+final allGamesProvider = Provider<List<Game>>(
+  (ref) => ref.watch(gamesProvider.select((s) => s.games)),
+);
 
-final gamesByIdProvider = Provider<Map<int, Game>>((ref) {
-  final games = ref.watch(allGamesProvider);
-  return {for (final game in games) game.id: game};
-});
+final gamesByIdProvider = Provider<Map<int, Game>>(
+  (ref) => {for (final game in ref.watch(allGamesProvider)) game.id: game},
+);
 
-final gameByIdProvider = Provider.autoDispose.family<Game?, int>((ref, gameId) {
-  return ref.watch(gamesByIdProvider.select((games) => games[gameId]));
-});
+final gameByIdProvider = Provider.autoDispose.family<Game?, int>(
+  (ref, gameId) =>
+      ref.watch(gamesByIdProvider.select((games) => games[gameId])),
+);

@@ -70,10 +70,8 @@ class _NavigationThemeMenuButtonState
       useRootOverlay: true,
       reservedPadding: const EdgeInsets.all(8),
       alignmentOffset: switch (widget.position) {
-        NavBarPosition.left => const Offset(8, 0),
-        NavBarPosition.right => const Offset(8, 0),
-        NavBarPosition.top => const Offset(0, 8),
-        NavBarPosition.bottom => const Offset(0, 8),
+        NavBarPosition.left || NavBarPosition.right => const Offset(8, 0),
+        NavBarPosition.top || NavBarPosition.bottom => const Offset(0, 8),
       },
       style: appMenuStyle(
         theme,
@@ -83,10 +81,8 @@ class _NavigationThemeMenuButtonState
       ),
       menuChildren: [
         _ThemePicker(
-          onSelected: (selected) {
-            final notifier = ref.read(themeProvider.notifier);
-            notifier.setTheme(selected);
-          },
+          onSelected: (selected) =>
+              ref.read(themeProvider.notifier).setTheme(selected),
           onCreate: () => _openEditor(),
           onEdit: (selected) => _openEditor(existing: selected),
           onDelete: _deleteTheme,
@@ -168,9 +164,8 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     final columns = width >= 260 && media.textScaler.scale(13) <= 20 ? 2 : 1;
     final tileHeight = math.max(16.0, media.textScaler.scale(13) * 1.4) + 30;
     final rows = (themes.length / columns).ceil();
-    final gridHeight = themes.isEmpty
-        ? 104.0
-        : math.min(224.0, rows * tileHeight + math.max(0, rows - 1) * 6 + 6);
+    final contentHeight = rows * tileHeight + math.max(0, rows - 1) * 6 + 6;
+    final gridHeight = themes.isEmpty ? 104.0 : math.min(224.0, contentHeight);
     final tabLabelStyle = Theme.of(
       context,
     ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.bold);
@@ -202,7 +197,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     final viewportHeight = height - tabHeight - footerHeight - verticalSpacing;
     // Tabs and grid at the destination height, above the footer row.
     final panelHeight = height - footerHeight - 20 - 8;
-    final contentHeight = rows * tileHeight + math.max(0, rows - 1) * 6 + 6;
     final activeIndex = themes.indexWhere((data) => data.id == current.id);
     final scrollController = _scrollControllers.putIfAbsent(
       selectedTab,
@@ -287,42 +281,32 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                                                   crossAxisSpacing: 6,
                                                 ),
                                             itemCount: themes.length,
-                                            itemBuilder: (context, index) =>
-                                                ThemePreviewCard(
-                                                  key: ValueKey(
-                                                    themes[index].id,
-                                                  ),
-                                                  tapKey: ValueKey(
-                                                    'navigation-theme-${themes[index].id}',
-                                                  ),
-                                                  height: null,
-                                                  data: themes[index],
-                                                  preview:
-                                                      builtInIds.contains(
-                                                        themes[index].id,
-                                                      )
-                                                      ? themes[index].copyWith(
-                                                          navPanelOverlayStyle:
-                                                              builtInOverlay,
-                                                        )
-                                                      : themes[index],
-                                                  selected:
-                                                      themes[index].id ==
-                                                      current.id,
-                                                  theme: theme,
-                                                  onTap: () =>
-                                                      widget.onSelected(
-                                                        themes[index],
-                                                      ),
-                                                  onDoubleTap:
-                                                      builtInIds.contains(
-                                                        themes[index].id,
-                                                      )
-                                                      ? null
-                                                      : () => widget.onEdit(
-                                                          themes[index],
-                                                        ),
+                                            itemBuilder: (context, index) {
+                                              final data = themes[index];
+                                              final builtIn = builtInIds
+                                                  .contains(data.id);
+                                              return ThemePreviewCard(
+                                                key: ValueKey(data.id),
+                                                tapKey: ValueKey(
+                                                  'navigation-theme-${data.id}',
                                                 ),
+                                                height: null,
+                                                data: data,
+                                                preview: builtIn
+                                                    ? data.copyWith(
+                                                        navPanelOverlayStyle:
+                                                            builtInOverlay,
+                                                      )
+                                                    : data,
+                                                selected: data.id == current.id,
+                                                theme: theme,
+                                                onTap: () =>
+                                                    widget.onSelected(data),
+                                                onDoubleTap: builtIn
+                                                    ? null
+                                                    : () => widget.onEdit(data),
+                                              );
+                                            },
                                           ),
                                         ),
                                       ),

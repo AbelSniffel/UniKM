@@ -251,21 +251,18 @@ class _IncomingPairRequestState {
     String? initiatorStaticPubB64,
     String? receiverStaticPubB64,
     bool? initiatorCommitAccepted,
-  }) {
-    return _IncomingPairRequestState(
-      requestId: requestId,
-      peer: peer,
-      sourceAddress: sourceAddress,
-      replyPort: replyPort,
-      createdAt: createdAt,
-      receiverAccepted: receiverAccepted ?? this.receiverAccepted,
-      initiatorStaticPubB64:
-          initiatorStaticPubB64 ?? this.initiatorStaticPubB64,
-      receiverStaticPubB64: receiverStaticPubB64 ?? this.receiverStaticPubB64,
-      initiatorCommitAccepted:
-          initiatorCommitAccepted ?? this.initiatorCommitAccepted,
-    );
-  }
+  }) => _IncomingPairRequestState(
+    requestId: requestId,
+    peer: peer,
+    sourceAddress: sourceAddress,
+    replyPort: replyPort,
+    createdAt: createdAt,
+    receiverAccepted: receiverAccepted ?? this.receiverAccepted,
+    initiatorStaticPubB64: initiatorStaticPubB64 ?? this.initiatorStaticPubB64,
+    receiverStaticPubB64: receiverStaticPubB64 ?? this.receiverStaticPubB64,
+    initiatorCommitAccepted:
+        initiatorCommitAccepted ?? this.initiatorCommitAccepted,
+  );
 }
 
 /// Which side of a session sends records: the initiator, the receiver, or

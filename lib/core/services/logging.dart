@@ -27,15 +27,13 @@ class AppLog {
     Object? error,
     StackTrace? stackTrace,
     String? name,
-  }) {
-    developer.log(
-      message,
-      name: name ?? _defaultName,
-      level: 900,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+  }) => developer.log(
+    message,
+    name: name ?? _defaultName,
+    level: 900,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
   /// Error-level messages (emitted in all builds).
   static void e(
@@ -43,13 +41,11 @@ class AppLog {
     Object? error,
     StackTrace? stackTrace,
     String? name,
-  }) {
-    developer.log(
-      message,
-      name: name ?? _defaultName,
-      level: 1000,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+  }) => developer.log(
+    message,
+    name: name ?? _defaultName,
+    level: 1000,
+    error: error,
+    stackTrace: stackTrace,
+  );
 }

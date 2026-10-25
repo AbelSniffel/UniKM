@@ -74,7 +74,7 @@ class BackupInfo {
 
   /// Readable name for lists; the encryption state is shown by an icon.
   String get displayName {
-    final date = _formatDate(createdAt);
+    final date = formatDateTimeMinutes(createdAt);
     return switch (kind) {
       BackupKind.preSync =>
         peerName == null
@@ -84,10 +84,6 @@ class BackupInfo {
       BackupKind.regular => 'Backup from $date',
     };
   }
-
-  String _formatDate(DateTime dt) =>
-      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 }
 
 /// Result of a backup operation
@@ -141,8 +137,6 @@ class BackupService {
   static final _trailingDotsOrSpaces = RegExp(r'[. ]+$');
   static const _maxPeerNameLength = 40;
 
-  static String _two(int value) => value.toString().padLeft(2, '0');
-
   static String? _decodeBase64Url(String encoded) {
     try {
       return utf8.decode(base64Url.decode(base64Url.normalize(encoded)));
@@ -168,8 +162,8 @@ class BackupService {
         .replaceAll(_trailingDotsOrSpaces, '');
     if (database.isEmpty) database = 'UniKM';
     final date =
-        '${createdAt.year}-${_two(createdAt.month)}-${_two(createdAt.day)} '
-        '${_two(createdAt.hour)}-${_two(createdAt.minute)}-${_two(createdAt.second)}';
+        '${createdAt.year}-${twoDigits(createdAt.month)}-${twoDigits(createdAt.day)} '
+        '${twoDigits(createdAt.hour)}-${twoDigits(createdAt.minute)}-${twoDigits(createdAt.second)}';
     if (kind == BackupKind.regular) return '$database $date';
     final peer = String.fromCharCodes(
       (peerName?.trim() ?? '').runes.take(_maxPeerNameLength),
@@ -277,13 +271,8 @@ class BackupService {
 
       // The file name records the second; the extension shows encryption.
       final now = DateTime.now();
-      final timestamp = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        now.hour,
-        now.minute,
-        now.second,
+      final timestamp = now.subtract(
+        Duration(milliseconds: now.millisecond, microseconds: now.microsecond),
       );
       final stem = _backupFileStem(
         databasePath: basePath,

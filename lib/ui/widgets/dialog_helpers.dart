@@ -48,17 +48,18 @@ ButtonStyle themedFilledButtonStyle(
   final disabledForeground = foregroundColor.withValues(alpha: 0.7);
 
   return ButtonStyle(
-    backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return disabledBackground;
-      if (states.contains(WidgetState.pressed)) {
-        return backgroundColor.withValues(alpha: 0.9);
-      }
-      return backgroundColor;
-    }),
-    foregroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return disabledForeground;
-      return foregroundColor;
-    }),
+    backgroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.disabled)
+          ? disabledBackground
+          : states.contains(WidgetState.pressed)
+          ? backgroundColor.withValues(alpha: 0.9)
+          : backgroundColor,
+    ),
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.disabled)
+          ? disabledForeground
+          : foregroundColor,
+    ),
   );
 }
 
@@ -78,17 +79,10 @@ class DialogInteractionScope extends StatelessWidget {
   final bool enableEscapeDismiss;
   final bool enableEnterToPrimary;
 
+  /// Enter belongs to a focused multiline text field.
   bool _shouldHandlePrimaryAction() {
-    final focusedContext = FocusManager.instance.primaryFocus?.context;
-    if (focusedContext == null) return true;
-
-    final focusedWidget = focusedContext.widget;
-    if (focusedWidget is EditableText) {
-      final maxLines = focusedWidget.maxLines;
-      if (maxLines == null || maxLines > 1) return false;
-    }
-
-    return true;
+    final focused = FocusManager.instance.primaryFocus?.context?.widget;
+    return focused is! EditableText || (focused.maxLines ?? 2) <= 1;
   }
 
   @override
@@ -167,25 +161,23 @@ class DialogHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveSize = iconSize ?? (showCloseButton ? 28.0 : null);
-    final effectiveColor = iconColor ?? theme.accent;
-
-    final textWidget = Text(
-      title,
-      style: TextStyle(
-        color: theme.textPrimary,
-        fontSize: 18,
-        fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
-      ),
-      overflow: TextOverflow.ellipsis,
-    );
-
     return Row(
       children: [
         if (icon != null) ...[
-          Icon(icon!, color: effectiveColor, size: effectiveSize),
+          Icon(icon!, color: iconColor ?? theme.accent, size: effectiveSize),
           const SizedBox(width: 8),
         ],
-        Expanded(child: textWidget),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 18,
+              fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         if (showCloseButton)
           IconButton(
             icon: Icon(Icons.close, color: theme.textSecondary),
@@ -431,70 +423,49 @@ class ThemedAlertDialog extends StatelessWidget {
         ? screenHeight
         : maxHeight ?? (screenHeight * 0.85);
 
-    final rows = <Widget>[];
-
-    if (title != null) {
-      rows.add(
-        Container(
-          padding: EdgeInsets.only(left: 6, right: 0),
-          decoration: BoxDecoration(),
+    final actions = this.actions ?? const <Widget>[];
+    final rows = <Widget>[
+      if (title != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 6),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             spacing: kElementHSpacing,
             children: [
               Expanded(child: title!),
               ...?titleActions,
-              if (showCloseButton) ...[
+              if (showCloseButton)
                 IconButton(
-                  icon: Icon(Icons.close),
+                  icon: const Icon(Icons.close),
                   tooltip: 'Close',
                   onPressed: () => Navigator.pop(context),
                 ),
-              ],
             ],
           ),
         ),
-      );
-    }
-
-    if (content != null) {
-      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
-      rows.add(Flexible(child: SingleChildScrollView(child: content!)));
-    }
-
-    if (body != null) {
-      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
-      rows.add(Expanded(child: body!));
-    }
-
-    if (actions != null && actions!.isNotEmpty) {
-      if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
-      if (actions!.length == 1) {
-        rows.add(SizedBox(width: double.infinity, child: actions!.first));
-      } else if (actions!.length == 2) {
-        rows.add(
-          Row(
-            children: [
-              Expanded(child: actions![0]),
-              const SizedBox(width: kElementHSpacing),
-              Expanded(child: actions![1]),
-            ],
+      if (content != null)
+        Flexible(child: SingleChildScrollView(child: content!)),
+      if (body != null) Expanded(child: body!),
+      if (actions.length == 1)
+        SizedBox(width: double.infinity, child: actions.first)
+      else if (actions.length == 2)
+        Row(
+          children: [
+            Expanded(child: actions[0]),
+            const SizedBox(width: kElementHSpacing),
+            Expanded(child: actions[1]),
+          ],
+        )
+      else if (actions.isNotEmpty)
+        Align(
+          alignment: Alignment.centerRight,
+          child: Wrap(
+            spacing: kElementHSpacing,
+            runSpacing: kElementVSpacing,
+            alignment: WrapAlignment.end,
+            children: actions,
           ),
-        );
-      } else {
-        rows.add(
-          Align(
-            alignment: Alignment.centerRight,
-            child: Wrap(
-              spacing: kElementHSpacing,
-              runSpacing: kElementVSpacing,
-              alignment: WrapAlignment.end,
-              children: actions!,
-            ),
-          ),
-        );
-      }
-    }
+        ),
+    ];
 
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(theme.cornerRadius),
@@ -510,6 +481,7 @@ class ThemedAlertDialog extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: body != null ? MainAxisSize.max : MainAxisSize.min,
+          spacing: spacing,
           children: rows,
         ),
       ),

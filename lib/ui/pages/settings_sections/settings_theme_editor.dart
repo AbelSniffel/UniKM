@@ -43,11 +43,8 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   static const double _minCornerRadius = 1.0;
   static const double _maxCornerRadius = kElementHeight / 2;
 
-  // Available theme icons (grouped by category)
-  // Theme color slots
-  late String _backgroundHex;
-  late String _secondaryHex;
-  late String _accentHex;
+  // Hex color of each slot.
+  final _hex = <_ColorSlot, String>{};
   late String _workingThemeId;
   late NavPanelOverlayStyle _navPanelOverlayStyle;
   late double _cornerRadius;
@@ -76,9 +73,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     final existing = widget.existingTheme;
     final source = existing ?? widget.theme;
     if (existing != null) _nameController.text = existing.name;
-    _backgroundHex = colorToHex(source.baseBackground);
-    _secondaryHex = colorToHex(source.baseSecondary);
-    _accentHex = colorToHex(source.baseAccent);
+    _hex['background'] = colorToHex(source.baseBackground);
+    _hex['secondary'] = colorToHex(source.baseSecondary);
+    _hex['accent'] = colorToHex(source.baseAccent);
     _navPanelOverlayStyle = source.navPanelOverlayStyle;
     _cornerRadius = source.cornerRadius.clamp(
       _minCornerRadius,
@@ -107,37 +104,13 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Color slot helpers
   // ---------------------------------------------------------------------------
 
-  String get _activeHex => _hexForSlot(_activeSlot);
-
-  String _hexForSlot(_ColorSlot slot) => switch (slot) {
-    'secondary' => _secondaryHex,
-    'accent' => _accentHex,
-    _ => _backgroundHex,
-  };
-
-  void _setHexForSlot(_ColorSlot slot, String hex) {
-    switch (slot) {
-      case 'secondary':
-        _secondaryHex = hex;
-      case 'accent':
-        _accentHex = hex;
-      default:
-        _backgroundHex = hex;
-    }
-  }
-
-  String _labelForSlot(_ColorSlot slot) => switch (slot) {
-    'secondary' => 'Secondary',
-    'accent' => 'Accent',
-    _ => 'Background',
-  };
+  String get _activeHex => _hex[_activeSlot]!;
 
   void _swapSlots(_ColorSlot a, _ColorSlot b) {
-    final hexA = _hexForSlot(a);
-    final hexB = _hexForSlot(b);
+    final hexA = _hex[a]!;
     setState(() {
-      _setHexForSlot(a, hexB);
-      _setHexForSlot(b, hexA);
+      _hex[a] = _hex[b]!;
+      _hex[b] = hexA;
     });
     _syncHsvFromActiveSlot();
     _updatePreview();
@@ -148,12 +121,14 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // ---------------------------------------------------------------------------
 
   void _syncHsvFromActiveSlot() {
-    final color = parseHexColor(_activeHex);
-    final hsv = HSVColor.fromColor(color);
+    _setHsv(HSVColor.fromColor(parseHexColor(_activeHex)));
+    _syncHexController();
+  }
+
+  void _setHsv(HSVColor hsv) {
     _hue = hsv.hue;
     _saturation = hsv.saturation;
     _value = hsv.value;
-    _syncHexController();
   }
 
   void _syncHexController() =>
@@ -162,32 +137,27 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   Color _hsvToColor() =>
       HSVColor.fromAHSV(1.0, _hue, _saturation, _value).toColor();
 
-  void _applyHsvChange() {
-    final color = _hsvToColor();
-    final hex = colorToHex(color);
-    setState(() => _setHexForSlot(_activeSlot, hex));
-    if (!_hexFocusNode.hasFocus) {
-      _hexController.text = hex.replaceFirst('#', '').toUpperCase();
-    }
+  /// Applies a slider [change] to the HSV values and the active slot.
+  void _applyHsvChange(VoidCallback change) {
+    setState(() {
+      change();
+      _hex[_activeSlot] = colorToHex(_hsvToColor());
+    });
+    if (!_hexFocusNode.hasFocus) _syncHexController();
     _updatePreview();
   }
 
   void _applyHexInput(String raw) {
     final sanitized = raw.replaceFirst('#', '');
-    if (sanitized.length == 6) {
-      final parsed = int.tryParse(sanitized, radix: 16);
-      if (parsed != null) {
-        final hex = '#${sanitized.toLowerCase()}';
-        setState(() {
-          _setHexForSlot(_activeSlot, hex);
-          final hsv = HSVColor.fromColor(parseHexColor(hex));
-          _hue = hsv.hue;
-          _saturation = hsv.saturation;
-          _value = hsv.value;
-        });
-        _updatePreview();
-      }
+    if (sanitized.length != 6 || int.tryParse(sanitized, radix: 16) == null) {
+      return;
     }
+    final hex = '#${sanitized.toLowerCase()}';
+    setState(() {
+      _hex[_activeSlot] = hex;
+      _setHsv(HSVColor.fromColor(parseHexColor(hex)));
+    });
+    _updatePreview();
   }
 
   // ---------------------------------------------------------------------------
@@ -198,9 +168,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   AppThemeData _buildWorkingTheme(String name) => AppThemeData(
     id: _workingThemeId,
     name: name,
-    baseBackground: parseHexColor(_backgroundHex),
-    baseSecondary: parseHexColor(_secondaryHex),
-    baseAccent: parseHexColor(_accentHex),
+    baseBackground: parseHexColor(_hex['background']!),
+    baseSecondary: parseHexColor(_hex['secondary']!),
+    baseAccent: parseHexColor(_hex['accent']!),
     cornerRadius: _cornerRadius,
     navPanelOverlayStyle: _navPanelOverlayStyle,
     iconData: _selectedIconCodePoint != null
@@ -337,15 +307,14 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 
   Widget _buildColorCircle(AppThemeData theme, _ColorSlot slot) {
     final isActive = _activeSlot == slot;
-    final color = parseHexColor(_hexForSlot(slot));
-    final label = _labelForSlot(slot);
+    final color = parseHexColor(_hex[slot]!);
+    final label = '${slot[0].toUpperCase()}${slot.substring(1)}';
     final isHovered = _circleHovered[slot] ?? false;
 
     // Border shown when circle is active/drop-target
-    final highlightBorderColor = switch (slot) {
-      'accent' => parseHexColor(_secondaryHex),
-      _ => theme.accent,
-    };
+    final highlightBorderColor = slot == 'accent'
+        ? parseHexColor(_hex['secondary']!)
+        : theme.accent;
     // Glow color on hover (background circle's own color is invisible against dialog)
     final glowColor = slot == 'background' ? theme.accent : color;
 
@@ -369,31 +338,29 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     return DragTarget<_ColorSlot>(
       onWillAcceptWithDetails: (details) => details.data != slot,
       onAcceptWithDetails: (details) => _swapSlots(slot, details.data),
-      builder: (context, candidateData, _) {
-        return Draggable<_ColorSlot>(
-          data: slot,
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.85, child: circle(size: 72)),
-          ),
-          childWhenDragging: Opacity(opacity: 0.3, child: circle()),
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _circleHovered[slot] = true),
-            onExit: (_) => setState(() => _circleHovered[slot] = false),
-            child: GestureDetector(
-              onTap: () => setState(() {
-                _activeSlot = slot;
-                _syncHsvFromActiveSlot();
-              }),
-              child: circle(
-                isActive: isActive,
-                isDropTarget: candidateData.isNotEmpty,
-                isHovered: isHovered,
-              ),
+      builder: (context, candidateData, _) => Draggable<_ColorSlot>(
+        data: slot,
+        feedback: Material(
+          color: Colors.transparent,
+          child: Opacity(opacity: 0.85, child: circle(size: 72)),
+        ),
+        childWhenDragging: Opacity(opacity: 0.3, child: circle()),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _circleHovered[slot] = true),
+          onExit: (_) => setState(() => _circleHovered[slot] = false),
+          child: GestureDetector(
+            onTap: () => setState(() {
+              _activeSlot = slot;
+              _syncHsvFromActiveSlot();
+            }),
+            child: circle(
+              isActive: isActive,
+              isDropTarget: candidateData.isNotEmpty,
+              isHovered: isHovered,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -538,10 +505,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
               Color(0xffff0000),
             ],
           ),
-          onChanged: (v) {
-            setState(() => _hue = v);
-            _applyHsvChange();
-          },
+          onChanged: (v) => _applyHsvChange(() => _hue = v),
         ),
         const SizedBox(height: 10),
 
@@ -562,10 +526,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
             ],
             cornerRadius: theme.cornerRadius,
           ),
-          onChanged: (v) {
-            setState(() => _saturation = v);
-            _applyHsvChange();
-          },
+          onChanged: (v) => _applyHsvChange(() => _saturation = v),
         ),
         const SizedBox(height: 10),
 
@@ -586,10 +547,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
             ],
             cornerRadius: theme.cornerRadius,
           ),
-          onChanged: (v) {
-            setState(() => _value = v);
-            _applyHsvChange();
-          },
+          onChanged: (v) => _applyHsvChange(() => _value = v),
         ),
       ],
     );
@@ -606,42 +564,42 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     required SliderTrackShape trackShape,
     required ValueChanged<double> onChanged,
     bool ensureHandleContrast = false,
-  }) {
-    return _sliderRow(
-      theme,
-      label,
-      displayText,
-      SliderTheme(
-        data:
-            buildAppSliderTheme(
-              accent: theme.accent,
-              disabledColor: theme.textSecondary,
-              indicatorTextColor: contrastColor(theme.accent),
-              cornerRadius: theme.cornerRadius,
-            ).copyWith(
-              showValueIndicator: ShowValueIndicator.onDrag,
-              trackShape: trackShape,
-              thumbShape: AppSliderThumbShape(
-                cornerRadius: theme.cornerRadius,
-                outlineColor: ensureHandleContrast
-                    ? contrastColor(theme.surface).withValues(alpha: 0.5)
-                    : null,
-              ),
-              thumbColor: thumbColor,
-              overlayColor: ensureHandleContrast
-                  ? contrastColor(theme.surface).withValues(alpha: 0.18)
-                  : thumbColor.withValues(alpha: 0.14),
-            ),
-        child: Slider(
-          value: value,
-          min: min,
-          max: max,
-          label: displayText,
-          onChanged: onChanged,
+  }) => _sliderRow(
+    theme,
+    label,
+    displayText,
+    SliderTheme(
+      data: _sliderTheme(theme).copyWith(
+        showValueIndicator: ShowValueIndicator.onDrag,
+        trackShape: trackShape,
+        thumbShape: AppSliderThumbShape(
+          cornerRadius: theme.cornerRadius,
+          outlineColor: ensureHandleContrast
+              ? contrastColor(theme.surface).withValues(alpha: 0.5)
+              : null,
         ),
+        thumbColor: thumbColor,
+        overlayColor: ensureHandleContrast
+            ? contrastColor(theme.surface).withValues(alpha: 0.18)
+            : thumbColor.withValues(alpha: 0.14),
       ),
-    );
-  }
+      child: Slider(
+        value: value,
+        min: min,
+        max: max,
+        label: displayText,
+        onChanged: onChanged,
+      ),
+    ),
+  );
+
+  static SliderThemeData _sliderTheme(AppThemeData theme) =>
+      buildAppSliderTheme(
+        accent: theme.accent,
+        disabledColor: theme.textSecondary,
+        indicatorTextColor: contrastColor(theme.accent),
+        cornerRadius: theme.cornerRadius,
+      );
 
   /// Label, slider and value readout, aligned across the editor's sliders.
   Widget _sliderRow(
@@ -718,12 +676,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       'Roundness',
       roundedRadius.toStringAsFixed(0),
       SliderTheme(
-        data: buildAppSliderTheme(
-          accent: theme.accent,
-          disabledColor: theme.textSecondary,
-          indicatorTextColor: contrastColor(theme.accent),
-          cornerRadius: theme.cornerRadius,
-        ),
+        data: _sliderTheme(theme),
         child: Slider(
           value: roundedRadius,
           min: _minCornerRadius,
@@ -752,12 +705,12 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
     );
     setState(() {
-      _setHexForSlot(_activeSlot, hex);
+      _hex[_activeSlot] = hex;
       _hue = hue;
       _saturation = saturation;
       _value = value;
     });
-    _hexController.text = hex.replaceFirst('#', '').toUpperCase();
+    _syncHexController();
     _updatePreview();
   }
 

@@ -10,3 +10,11 @@ String formatFileSize(int? bytes) {
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
+
+/// [value] as at least two digits.
+String twoDigits(int value) => value.toString().padLeft(2, '0');
+
+/// [dt] as 'yyyy-MM-dd HH:mm', with ASCII digits in every locale.
+String formatDateTimeMinutes(DateTime dt) =>
+    '${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} '
+    '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}';

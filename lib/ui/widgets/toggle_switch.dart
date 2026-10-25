@@ -53,13 +53,7 @@ class AppToggleSwitch extends ConsumerWidget {
         width: _regularSwitchWidth,
         height: _regularSwitchHeight,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(
-            _resolveToggleRadius(
-              theme: theme,
-              extent: _regularSwitchHeight,
-              useThemeToggleRadius: false,
-            ),
-          ),
+          borderRadius: BorderRadius.circular(_regularSwitchHeight / 2),
           child: FittedBox(
             fit: BoxFit.contain,
             alignment: Alignment.centerRight,
@@ -79,17 +73,11 @@ class AppToggleSwitch extends ConsumerWidget {
           ),
         ),
       ),
-      ToggleStyle.dot => _DotToggle(
+      ToggleStyle.dot || ToggleStyle.morphDot => _DotToggle(
         value: value,
         onChanged: onChanged,
         theme: theme,
-        useThemeToggleRadius: false,
-      ),
-      ToggleStyle.morphDot => _DotToggle(
-        value: value,
-        onChanged: onChanged,
-        theme: theme,
-        useThemeToggleRadius: true,
+        useThemeToggleRadius: effectiveStyle == ToggleStyle.morphDot,
       ),
     };
 
@@ -103,11 +91,7 @@ class AppToggleSwitch extends ConsumerWidget {
     if (displayLabel.isEmpty) return toggle;
     final labelStyle = TextStyle(
       fontWeight: FontWeight.w500,
-      color: isDisabled
-          ? theme.textSecondary
-          : value
-          ? theme.accent
-          : theme.textSecondary,
+      color: value && !isDisabled ? theme.accent : theme.textSecondary,
     );
     final labelWidget = isDisabled
         ? Text(displayLabel, style: labelStyle)
@@ -152,9 +136,6 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
   static const double _offDotHoverSize = 17.0;
   static const double _onDotSize = 20.0;
   static const double _onDotHoverSize = 22.0;
-
-  // Keep these constants if you need to animate in future; currently simplified to direct on/off.
-  // static const double _backgroundSyncFactor = 0.6;
 
   static const Duration _hoverDuration = Duration(milliseconds: 125);
 
@@ -207,10 +188,7 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _toggle() {
-    if (widget.isDisabled) return;
-    widget.onChanged?.call(!widget.value);
-  }
+  void _toggle() => widget.onChanged?.call(!widget.value);
 
   double _dotRadius({
     required double toggleLinear,
@@ -264,117 +242,109 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
       cursor: SystemMouseCursors.click,
       onEnter: () => _hoverController.forward(),
       onExit: () => _hoverController.reverse(),
-      builder: (context, _) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _toggle,
-          child: SizedBox(
-            width: _containerSize,
-            height: _containerSize,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([
-                _toggleController,
-                _hoverController,
-              ]),
-              builder: (context, _) {
-                final double hoverProgress = widget.isDisabled
-                    ? 0.0
-                    : _hoverAnim.value;
-                final double toggleLinear = _toggleController.value;
-                final double toggleSpring = _toggleScale.value;
-                final double dotRadius = _dotRadius(
-                  toggleLinear: toggleLinear,
-                  toggleSpring: toggleSpring,
-                  hoverProgress: hoverProgress,
-                );
-                final Color dotColor = _dotColor(
-                  offColorBase: offColorBase,
-                  toggleLinear: toggleLinear,
-                  hoverProgress: hoverProgress,
-                  opacity: opacity,
-                );
+      builder: (context, _) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggle,
+        child: SizedBox(
+          width: _containerSize,
+          height: _containerSize,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_toggleController, _hoverController]),
+            builder: (context, _) {
+              final double hoverProgress = widget.isDisabled
+                  ? 0.0
+                  : _hoverAnim.value;
+              final double toggleLinear = _toggleController.value;
+              final double toggleSpring = _toggleScale.value;
+              final double dotRadius = _dotRadius(
+                toggleLinear: toggleLinear,
+                toggleSpring: toggleSpring,
+                hoverProgress: hoverProgress,
+              );
+              final Color dotColor = _dotColor(
+                offColorBase: offColorBase,
+                toggleLinear: toggleLinear,
+                hoverProgress: hoverProgress,
+                opacity: opacity,
+              );
 
-                // Centralized constants for easy tuning
-                const double offBorderAlphaDefault = 0.20;
-                const double onBorderAlphaDefault = 0.0;
-                const double borderAlphaMin = 0.05;
-                const double borderAlphaMax = 0.4;
+              // Centralized constants for easy tuning
+              const double offBorderAlphaDefault = 0.20;
+              const double onBorderAlphaDefault = 0.0;
+              const double borderAlphaMin = 0.05;
+              const double borderAlphaMax = 0.4;
 
-                final double switchProgress = toggleSpring.clamp(0.0, 1.0);
+              // The border reaches onBorderAlphaDefault fully at the ON state.
+              final double onProgress = toggleSpring.clamp(0.0, 1.0);
+              final double offBorderAlpha =
+                  (offBorderAlphaDefault - 0.15 * hoverProgress).clamp(
+                    borderAlphaMin,
+                    borderAlphaMax,
+                  );
+              final double borderAlpha =
+                  ((1.0 - onProgress) * offBorderAlpha +
+                          onProgress * onBorderAlphaDefault)
+                      .clamp(borderAlphaMin, borderAlphaMax);
 
-                // The border should reach 100% ON (fully to onBorderAlphaDefault) at switch ON state.
-                final double onProgress = switchProgress;
-                final double offBorderAlpha =
-                    (offBorderAlphaDefault - 0.15 * hoverProgress).clamp(
-                      borderAlphaMin,
-                      borderAlphaMax,
-                    );
-                final double borderAlpha =
-                    ((1.0 - onProgress) * offBorderAlpha +
-                            onProgress * onBorderAlphaDefault)
-                        .clamp(borderAlphaMin, borderAlphaMax);
+              // Simple background alpha workflow with fixed reference values.
+              const double offBackgroundAlpha = 0.0;
+              const double onBackgroundAlpha = 0.45;
+              const double hoverBackgroundAlpha = 0.25;
 
-                // Simple background alpha workflow with fixed reference values.
-                const double offBackgroundAlpha = 0.0;
-                const double onBackgroundAlpha = 0.45;
-                const double hoverBackgroundAlpha = 0.25;
+              final double backgroundAlphaFinal = widget.value
+                  ? onBackgroundAlpha
+                  : (offBackgroundAlpha + hoverProgress * hoverBackgroundAlpha)
+                        .clamp(0.0, 1.0);
+              final outerRadius = _resolveToggleRadius(
+                theme: widget.theme,
+                extent: _outerSize,
+                useThemeToggleRadius: widget.useThemeToggleRadius,
+              );
+              final dotDiameter = dotRadius * 2;
+              final dotShapeRadius = _resolveToggleRadius(
+                theme: widget.theme,
+                extent: dotDiameter,
+                useThemeToggleRadius: widget.useThemeToggleRadius,
+              );
 
-                final double backgroundAlphaFinal = widget.value
-                    ? onBackgroundAlpha
-                    : (offBackgroundAlpha +
-                              hoverProgress * hoverBackgroundAlpha)
-                          .clamp(0.0, 1.0);
-                final outerRadius = _resolveToggleRadius(
-                  theme: widget.theme,
-                  extent: _outerSize,
-                  useThemeToggleRadius: widget.useThemeToggleRadius,
-                );
-                final dotDiameter = dotRadius * 2;
-                final dotShapeRadius = _resolveToggleRadius(
-                  theme: widget.theme,
-                  extent: dotDiameter,
-                  useThemeToggleRadius: widget.useThemeToggleRadius,
-                );
+              final Color backgroundColor = widget.theme.accent.withValues(
+                alpha: backgroundAlphaFinal,
+              );
 
-                final Color backgroundColor = widget.theme.accent.withValues(
-                  alpha: backgroundAlphaFinal,
-                );
-
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: _outerSize,
-                      height: _outerSize,
-                      decoration: BoxDecoration(
-                        color: backgroundColor,
-                        borderRadius: BorderRadius.circular(outerRadius),
-                        border: Border.all(
-                          color: widget.theme.border.withValues(
-                            alpha: borderAlpha,
-                          ),
-                          width: 1.5,
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: _outerSize,
+                    height: _outerSize,
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(outerRadius),
+                      border: Border.all(
+                        color: widget.theme.border.withValues(
+                          alpha: borderAlpha,
+                        ),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  if (dotRadius > 0)
+                    SizedBox(
+                      width: dotDiameter,
+                      height: dotDiameter,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: dotColor,
+                          borderRadius: BorderRadius.circular(dotShapeRadius),
                         ),
                       ),
                     ),
-                    if (dotRadius > 0)
-                      SizedBox(
-                        width: dotDiameter,
-                        height: dotDiameter,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: dotColor,
-                            borderRadius: BorderRadius.circular(dotShapeRadius),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
+                ],
+              );
+            },
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -390,11 +360,10 @@ class _OffSpringCurve extends Curve {
     if (t >= _peakV) {
       final double p = (t - _peakV) / (1.0 - _peakV);
       return _undershootD + (1.0 - _undershootD) * p * p;
-    } else {
-      final double q = 1.0 - t / _peakV;
-      final double s = q * q * (3.0 - 2.0 * q);
-      return _undershootD * (1.0 - s);
     }
+    final double q = 1.0 - t / _peakV;
+    final double s = q * q * (3.0 - 2.0 * q);
+    return _undershootD * (1.0 - s);
   }
 }
 

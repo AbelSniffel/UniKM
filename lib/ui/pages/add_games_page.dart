@@ -749,16 +749,21 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         );
   }
 
+  /// Applies a change and keeps the session draft in step.
+  void _update(VoidCallback change) {
+    setState(change);
+    _saveDraft();
+  }
+
   void _clearBatchInput() {
     _textController.clear();
-    setState(() {
+    _update(() {
       _parsedGames = [];
       _steamResults = {};
       _steamErrors = {};
       _hasDeadline = false;
       _deadlineDate = null;
     });
-    _saveDraft();
   }
 
   void _parseInput() {
@@ -780,12 +785,11 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                 ),
               )
               .toList();
-    setState(() {
+    _update(() {
       _parsedGames = games;
       _steamResults = {};
       _steamErrors = {};
     });
-    _saveDraft();
   }
 
   /// Fetch Steam data for all Steam-platform games in the parsed list
@@ -796,37 +800,27 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
       final steamService = ref.read(steamServiceProvider);
       for (final game in List<ParsedBatchEntry>.from(_parsedGames)) {
         if (game.platform != GamePlatform.steam.displayName) continue;
+        SteamSearchResult? result;
+        String? error;
         try {
-          final result = await steamService.searchGame(game.title);
-          if (!mounted) return;
-          if (!_parsedGames.any(
-            (entry) =>
-                entry.key == game.key &&
-                entry.platform == GamePlatform.steam.displayName,
-          )) {
-            continue;
-          }
-          setState(() {
-            _steamResults[game.key] = result;
-            if (result == null) {
-              _steamErrors[game.key] =
-                  'No Steam data found for "${game.title}"';
-            }
-          });
+          result = await steamService.searchGame(game.title);
+          if (result == null) error = 'No Steam data found for "${game.title}"';
         } catch (e) {
-          if (!mounted) return;
-          if (!_parsedGames.any(
-            (entry) =>
-                entry.key == game.key &&
-                entry.platform == GamePlatform.steam.displayName,
-          )) {
-            continue;
-          }
-          setState(() {
-            _steamResults[game.key] = null;
-            _steamErrors[game.key] = e.toString();
-          });
+          error = e.toString();
         }
+        if (!mounted) return;
+        // Skip entries edited away while the search ran.
+        if (!_parsedGames.any(
+          (entry) =>
+              entry.key == game.key &&
+              entry.platform == GamePlatform.steam.displayName,
+        )) {
+          continue;
+        }
+        setState(() {
+          _steamResults[game.key] = result;
+          if (error != null) _steamErrors[game.key] = error;
+        });
       }
     } finally {
       if (mounted) {
@@ -834,15 +828,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         _saveDraft();
       }
     }
-  }
-
-  /// Find all duplicate keys in the batch
-  Map<String, Game> _findDuplicateKeys(List<ParsedBatchEntry> games) {
-    final existingGames = ref.read(allGamesProvider);
-    return DuplicateKeyChecker.findDuplicatesByInputKeys(
-      games.map((g) => g.key),
-      existingGames,
-    );
   }
 
   Future<void> _import() async {
@@ -854,8 +839,10 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
     }
     if (_parsedGames.isEmpty) return;
 
-    // Check for duplicates
-    final duplicates = _findDuplicateKeys(_parsedGames);
+    final duplicates = DuplicateKeyChecker.findDuplicatesByInputKeys(
+      _parsedGames.map((g) => g.key),
+      ref.read(allGamesProvider),
+    );
     DuplicateAction? action;
 
     if (duplicates.isNotEmpty) {
@@ -864,9 +851,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         widget.theme,
         duplicates.entries.toList(),
       );
-      if (action == null) {
-        return; // User cancelled
-      }
+      if (action == null) return; // User cancelled
     }
 
     setState(() => _isImporting = true);
@@ -935,13 +920,9 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         await persistEncryptedDbIfNeeded(ref);
       }
 
-      if (skipped > 0) {
-        NotificationManager.instance.success(
-          'Imported $imported games ($skipped skipped)',
-        );
-      } else {
-        NotificationManager.instance.success('Imported $imported games');
-      }
+      NotificationManager.instance.success(
+        'Imported $imported games${skipped > 0 ? ' ($skipped skipped)' : ''}',
+      );
       _clearBatchInput();
     } finally {
       setState(() => _isImporting = false);
@@ -1023,14 +1004,10 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                       hasDeadline: _hasDeadline,
                       date: _deadlineDate,
                       firstDate: DateTime.now(),
-                      onEnabledChanged: (value) {
-                        setState(() => _hasDeadline = value);
-                        _saveDraft();
-                      },
-                      onDateChanged: (value) {
-                        setState(() => _deadlineDate = value);
-                        _saveDraft();
-                      },
+                      onEnabledChanged: (value) =>
+                          _update(() => _hasDeadline = value),
+                      onDateChanged: (value) =>
+                          _update(() => _deadlineDate = value),
                     ),
                   ],
                 ),

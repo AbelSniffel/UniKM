@@ -12,6 +12,10 @@ import '../pages/settings_sections/database_section.dart'
     show showChangeDatabaseDialog;
 import 'popup_menu_helpers.dart';
 
+Future<void> _toggleMaximized() async => await windowManager.isMaximized()
+    ? windowManager.unmaximize()
+    : windowManager.maximize();
+
 /// The program title bar, shared by the main window and full-page tools.
 class AppTitleBar extends ConsumerWidget {
   const AppTitleBar({super.key, required this.theme});
@@ -36,13 +40,7 @@ class AppTitleBar extends ConsumerWidget {
           Expanded(
             child: GestureDetector(
               onPanStart: (_) => windowManager.startDragging(),
-              onDoubleTap: () async {
-                if (await windowManager.isMaximized()) {
-                  await windowManager.unmaximize();
-                } else {
-                  await windowManager.maximize();
-                }
-              },
+              onDoubleTap: _toggleMaximized,
               behavior: HitTestBehavior.translucent,
               child: Row(
                 children: [
@@ -86,13 +84,7 @@ class AppTitleBar extends ConsumerWidget {
           _WindowButton(
             icon: Icons.crop_square,
             theme: theme,
-            onPressed: () async {
-              if (await windowManager.isMaximized()) {
-                await windowManager.unmaximize();
-              } else {
-                await windowManager.maximize();
-              }
-            },
+            onPressed: _toggleMaximized,
           ),
           _WindowButton(
             icon: Icons.close,
@@ -149,13 +141,13 @@ class _MenuButtonState extends State<_MenuButton> {
     );
 
     if (!mounted) return;
-
-    if (selected == 'import') {
-      showImportDialog(context);
-    } else if (selected == 'export') {
-      showExportDialog(context);
-    } else if (selected == 'change_db') {
-      showChangeDatabaseDialog(context, widget.theme);
+    switch (selected) {
+      case 'import':
+        showImportDialog(context);
+      case 'export':
+        showExportDialog(context);
+      case 'change_db':
+        showChangeDatabaseDialog(context, widget.theme);
     }
   }
 

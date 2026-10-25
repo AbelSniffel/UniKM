@@ -221,10 +221,9 @@ bool _looksLikeSteamKm2EncryptedDatabase(Uint8List bytes) {
   return ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == _steamKm2Magic;
 }
 
-bool _looksLikeUniKmEncryptedDatabase(Uint8List bytes) {
-  return bytes.length >= _uniKmMinimumLength &&
-      bytes.first == EncryptionConfig.metaVersion;
-}
+bool _looksLikeUniKmEncryptedDatabase(Uint8List bytes) =>
+    bytes.length >= _uniKmMinimumLength &&
+    bytes.first == EncryptionConfig.metaVersion;
 
 bool _looksLikeSteamKm1EncryptedExport(Uint8List bytes) {
   if (bytes.isEmpty) return false;
@@ -289,13 +288,11 @@ Uint8List _removePkcs7Padding(Uint8List data) {
   return Uint8List.sublistView(data, 0, data.length - padLength);
 }
 
-int _readUint16(Uint8List data, int offset) {
-  return (data[offset] << 8) | data[offset + 1];
-}
+int _readUint16(Uint8List data, int offset) =>
+    (data[offset] << 8) | data[offset + 1];
 
-int _readUint32(Uint8List data, int offset) {
-  return (data[offset] << 24) |
-      (data[offset + 1] << 16) |
-      (data[offset + 2] << 8) |
-      data[offset + 3];
-}
+int _readUint32(Uint8List data, int offset) =>
+    (data[offset] << 24) |
+    (data[offset + 1] << 16) |
+    (data[offset + 2] << 8) |
+    data[offset + 3];

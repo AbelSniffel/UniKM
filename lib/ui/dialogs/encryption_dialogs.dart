@@ -37,46 +37,42 @@ class EnableEncryptionDialog extends ConsumerStatefulWidget {
   /// Label for the confirm button.
   final String confirmLabel;
 
+  static Future<String?> _show(
+    BuildContext context,
+    EnableEncryptionDialog dialog,
+  ) => showAppDialog<String?>(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) => DialogInteractionScope(
+      onDismiss: () => Navigator.of(context).pop(null),
+      child: dialog,
+    ),
+  );
+
   /// Shows the dialog for enabling encryption on an existing database.
   static Future<String?> show(
     BuildContext context,
     AppThemeData theme,
     EncryptionManager encryptionManager,
-  ) async {
-    final result = await showAppDialog<String?>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => DialogInteractionScope(
-        onDismiss: () => Navigator.of(context).pop(null),
-        child: EnableEncryptionDialog(
-          theme: theme,
-          encryptionManager: encryptionManager,
-        ),
-      ),
-    );
-    return result;
-  }
+  ) => _show(
+    context,
+    EnableEncryptionDialog(theme: theme, encryptionManager: encryptionManager),
+  );
 
   /// Shows the dialog for creating a password on a newly created encrypted
   /// database. Returns the password or `null` when the user declines.
   static Future<String?> showForNewDatabase(
     BuildContext context,
     AppThemeData theme,
-  ) async {
-    return showAppDialog<String?>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => DialogInteractionScope(
-        onDismiss: () => Navigator.of(context).pop(null),
-        child: EnableEncryptionDialog(
-          theme: theme,
-          title: 'Create Password',
-          message: 'Set a password for your new encrypted database.',
-          confirmLabel: 'Create',
-        ),
-      ),
-    );
-  }
+  ) => _show(
+    context,
+    EnableEncryptionDialog(
+      theme: theme,
+      title: 'Create Password',
+      message: 'Set a password for your new encrypted database.',
+      confirmLabel: 'Create',
+    ),
+  );
 
   @override
   ConsumerState<EnableEncryptionDialog> createState() =>
@@ -89,7 +85,6 @@ class _EnableEncryptionDialogState
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _encryptionInfoTooltipKey = GlobalKey<TooltipState>();
-  final bool _isLoading = false;
 
   @override
   void dispose() {
@@ -98,19 +93,16 @@ class _EnableEncryptionDialogState
     super.dispose();
   }
 
-  Future<void> _confirm() async {
+  // Return the password to the caller so it can perform the enable and
+  // reopen the DB without prompting the user again.
+  void _confirm() {
     if (!_formKey.currentState!.validate()) return;
-
-    // Return the password to the caller so it can perform the enable and
-    // reopen the DB without prompting the user again.
-    final pwd = _passwordController.text;
-    if (!mounted) return;
-    Navigator.of(context).pop(pwd);
+    Navigator.of(context).pop(_passwordController.text);
   }
 
   @override
   Widget build(BuildContext context) => DialogInteractionScope(
-    onPrimaryAction: _isLoading ? null : _confirm,
+    onPrimaryAction: _confirm,
     onDismiss: () => Navigator.of(context).pop(null),
     child: ThemedAlertDialog(
       theme: widget.theme,
@@ -171,10 +163,9 @@ class _EnableEncryptionDialogState
         DialogActionBar(
           theme: widget.theme,
           onCancel: () => Navigator.of(context).pop(null),
-          onConfirm: _isLoading ? null : _confirm,
+          onConfirm: _confirm,
           confirmIcon: Icons.lock,
           confirmLabel: widget.confirmLabel,
-          isLoading: _isLoading,
         ),
       ],
     ),
@@ -289,22 +280,17 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
       // Re-enable popping after the operation; the busy route blocks dismissals.
       setState(() => _busy = false);
       Navigator.of(context).pop(true);
-    } on InvalidPasswordException {
-      if (mounted) {
-        setState(
-          () => _error = disabling
-              ? 'Incorrect password'
-              : 'Current password is incorrect',
-        );
-      }
     } catch (error) {
-      if (mounted) {
-        setState(
-          () => _error = disabling
-              ? 'Failed to disable encryption: $error'
-              : 'Failed to change password: $error',
-        );
-      }
+      if (!mounted) return;
+      setState(
+        () => _error = switch ((error, disabling)) {
+          (InvalidPasswordException(), true) => 'Incorrect password',
+          (InvalidPasswordException(), false) =>
+            'Current password is incorrect',
+          (_, true) => 'Failed to disable encryption: $error',
+          (_, false) => 'Failed to change password: $error',
+        },
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -11,61 +11,17 @@ import '../../core/constants/app_constants.dart';
 // Data-only helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-class CardViewOptions {
-  const CardViewOptions({
-    required this.showTitle,
-    required this.showTitleOnNoPicture,
-    required this.showPlatform,
-    required this.showTags,
-    required this.showTagsOnHoverOnly,
-    required this.showDeadline,
-    required this.showRatingsNow,
-    required this.slimListView,
-  });
+typedef CardViewOptions = ({
+  bool showTitle,
+  bool showTitleOnNoPicture,
+  bool showPlatform,
+  bool showTags,
+  bool showTagsOnHoverOnly,
+  bool showDeadline,
+  bool showRatingsNow,
+});
 
-  final bool showTitle;
-  final bool showTitleOnNoPicture;
-  final bool showPlatform;
-  final bool showTags;
-  final bool showTagsOnHoverOnly;
-  final bool showDeadline;
-  final bool showRatingsNow;
-  final bool slimListView;
-}
-
-class ListCardLayout {
-  const ListCardLayout({
-    required this.useSlim,
-    required this.cardHeight,
-    required this.cardImageWidth,
-  });
-
-  final bool useSlim;
-  final double cardHeight;
-  final double cardImageWidth;
-
-  static ListCardLayout fromOptions(CardViewOptions options) {
-    final useSlim = options.slimListView;
-
-    return ListCardLayout(
-      useSlim: useSlim,
-      cardHeight: useSlim ? kSlimListCardHeight : kListCardHeight,
-      cardImageWidth: kListCardImageWidth,
-    );
-  }
-}
-
-class FetchStatusVisual {
-  const FetchStatusVisual({
-    required this.color,
-    required this.icon,
-    required this.tooltip,
-  });
-
-  final Color color;
-  final Widget icon;
-  final String tooltip;
-}
+typedef FetchStatusVisual = ({Color color, Widget icon, String tooltip});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Painters

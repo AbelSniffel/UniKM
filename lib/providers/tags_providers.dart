@@ -155,16 +155,14 @@ class TagsNotifier extends Notifier<List<Tag>> {
 }
 
 /// Tags provider
-final tagsProvider = NotifierProvider<TagsNotifier, List<Tag>>(() {
-  return TagsNotifier();
-});
+final tagsProvider = NotifierProvider<TagsNotifier, List<Tag>>(
+  TagsNotifier.new,
+);
 
-final customTagsProvider = Provider<List<Tag>>((ref) {
-  final tags = ref.watch(tagsProvider);
-  return tags.where((tag) => !tag.isSteamTag).toList();
-});
+final customTagsProvider = Provider<List<Tag>>(
+  (ref) => ref.watch(tagsProvider).where((tag) => !tag.isSteamTag).toList(),
+);
 
-final steamTagsProvider = Provider<List<Tag>>((ref) {
-  final tags = ref.watch(tagsProvider);
-  return tags.where((tag) => tag.isSteamTag).toList();
-});
+final steamTagsProvider = Provider<List<Tag>>(
+  (ref) => ref.watch(tagsProvider).where((tag) => tag.isSteamTag).toList(),
+);

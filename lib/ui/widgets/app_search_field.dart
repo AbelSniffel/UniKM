@@ -64,6 +64,7 @@ class AppSearchField extends StatefulWidget {
 }
 
 class _AppSearchFieldState extends State<AppSearchField> {
+  static const _iconBox = BoxConstraints(minWidth: 38, minHeight: 36);
   late final TextEditingController _internalController;
   late bool _showClear;
 
@@ -109,11 +110,6 @@ class _AppSearchFieldState extends State<AppSearchField> {
   @override
   Widget build(BuildContext context) {
     final controller = _effectiveController;
-
-    final effectiveContentPadding =
-        widget.contentPadding ??
-        const EdgeInsets.symmetric(vertical: 8, horizontal: 12);
-
     return TextField(
       controller: controller,
       focusNode: widget.focusNode,
@@ -128,14 +124,8 @@ class _AppSearchFieldState extends State<AppSearchField> {
           widget.prefixIcon ?? Icons.search,
           color: widget.theme.textHint,
         ),
-        prefixIconConstraints: const BoxConstraints(
-          minWidth: 38,
-          minHeight: 36,
-        ),
-        suffixIconConstraints: const BoxConstraints(
-          minWidth: 38,
-          minHeight: 36,
-        ),
+        prefixIconConstraints: _iconBox,
+        suffixIconConstraints: _iconBox,
         suffixIcon: _showClear
             ? Row(
                 mainAxisSize: MainAxisSize.min,
@@ -143,10 +133,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
                   IconButton(
                     tooltip: 'Clear search',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 36,
-                    ),
+                    constraints: _iconBox,
                     visualDensity: VisualDensity.compact,
                     icon: Icon(Icons.clear, color: widget.theme.textHint),
                     onPressed: () {
@@ -161,7 +148,9 @@ class _AppSearchFieldState extends State<AppSearchField> {
         filled: true,
         fillColor: widget.backgroundColor,
         border: widget.theme.resolveInputBorder(),
-        contentPadding: effectiveContentPadding,
+        contentPadding:
+            widget.contentPadding ??
+            const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       ),
     );
   }

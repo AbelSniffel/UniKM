@@ -80,17 +80,13 @@ class PlatformFileActions {
     required String dialogTitle,
     required String fileName,
     required List<String> allowedExtensions,
-  }) async {
-    if (!isMobilePlatform) {
-      return _selectDesktopSavePath(
-        dialogTitle: dialogTitle,
-        fileName: fileName,
-        allowedExtensions: allowedExtensions,
-      );
-    }
-
-    return createManagedFilePath(fileName: fileName, subdirectory: 'databases');
-  }
+  }) => isMobilePlatform
+      ? createManagedFilePath(fileName: fileName, subdirectory: 'databases')
+      : _selectDesktopSavePath(
+          dialogTitle: dialogTitle,
+          fileName: fileName,
+          allowedExtensions: allowedExtensions,
+        );
 
   static Future<String?> _selectDesktopSavePath({
     required String dialogTitle,
@@ -196,14 +192,9 @@ class PlatformFileActions {
       return true;
     }
 
-    if (Platform.isMacOS) {
-      final result = await Process.run('open', [directoryPath]);
-      return result.exitCode == 0;
-    }
-
-    if (Platform.isLinux) {
-      final result = await Process.run('xdg-open', [directoryPath]);
-      return result.exitCode == 0;
+    if (Platform.isMacOS || Platform.isLinux) {
+      final opener = Platform.isMacOS ? 'open' : 'xdg-open';
+      return (await Process.run(opener, [directoryPath])).exitCode == 0;
     }
 
     final uri = Uri.directory(directoryPath);

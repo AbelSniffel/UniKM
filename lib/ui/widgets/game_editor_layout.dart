@@ -475,6 +475,15 @@ class GameEditorTags extends StatelessWidget {
   final ValueChanged<int> onTagToggled;
   final List<Tag> steamTags;
 
+  Widget _placeholder(String text) => Padding(
+    padding: const EdgeInsets.all(12),
+    child: Text(
+      text,
+      style: TextStyle(color: theme.textHint),
+      textAlign: TextAlign.center,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.only(top: 16),
@@ -486,14 +495,7 @@ class GameEditorTags extends StatelessWidget {
         titleIcon: Icons.label,
         groupPosition: SectionGroupPosition.first,
         child: customTags.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'No custom tags created yet',
-                  style: TextStyle(color: theme.textHint),
-                  textAlign: TextAlign.center,
-                ),
-              )
+            ? _placeholder('No custom tags created yet')
             : SizedBox(
                 height: 120,
                 child: TagList(
@@ -513,14 +515,7 @@ class GameEditorTags extends StatelessWidget {
         groupPosition: SectionGroupPosition.last,
         alternateBackground: true,
         child: steamTags.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'No Steam tags imported yet',
-                  style: TextStyle(color: theme.textHint),
-                  textAlign: TextAlign.center,
-                ),
-              )
+            ? _placeholder('No Steam tags imported yet')
             : TagList(tags: steamTags, theme: theme, allSelected: true),
       ),
     ],

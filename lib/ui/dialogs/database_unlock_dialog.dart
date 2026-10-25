@@ -60,14 +60,12 @@ class DatabaseUnlockDialog extends StatefulWidget {
     String message =
         'This database is encrypted. Enter the password to continue.',
     bool barrierDismissible = false,
-  }) {
-    return showAppDialog<String?>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      builder: (_) =>
-          DatabaseUnlockDialog(theme: theme, title: title, message: message),
-    );
-  }
+  }) => showAppDialog<String?>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    builder: (_) =>
+        DatabaseUnlockDialog(theme: theme, title: title, message: message),
+  );
 
   static Future<StartupDatabaseUnlockResult> showForStartup(
     BuildContext context,
@@ -84,13 +82,12 @@ class DatabaseUnlockDialog extends StatefulWidget {
       ),
     );
 
-    if (result is _StartupDatabaseSelection) {
-      return StartupDatabaseUnlockResult.changeDatabase(result.path);
-    }
-
-    if (result is String) return StartupDatabaseUnlockResult.unlock(result);
-
-    return const StartupDatabaseUnlockResult.cancelled();
+    return switch (result) {
+      _StartupDatabaseSelection(:final path) =>
+        StartupDatabaseUnlockResult.changeDatabase(path),
+      final String password => StartupDatabaseUnlockResult.unlock(password),
+      _ => const StartupDatabaseUnlockResult.cancelled(),
+    };
   }
 
   @override
@@ -175,12 +172,7 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
             labelText: 'Password',
             autofocus: true,
             onFieldSubmitted: (_) => _submit(),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Enter your password';
-              }
-              return null;
-            },
+            validator: requiredPassword(message: 'Enter your password'),
           ),
         ],
       ),

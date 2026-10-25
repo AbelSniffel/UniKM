@@ -50,15 +50,13 @@ class BatchFetchState {
     int? totalGames,
     int? completedGames,
     bool clearCurrentGame = false,
-  }) {
-    return BatchFetchState(
-      isActive: isActive ?? this.isActive,
-      gameStatuses: gameStatuses ?? this.gameStatuses,
-      currentGameId: clearCurrentGame ? null : (currentGameId ?? this.currentGameId),
-      totalGames: totalGames ?? this.totalGames,
-      completedGames: completedGames ?? this.completedGames,
-    );
-  }
+  }) => BatchFetchState(
+    isActive: isActive ?? this.isActive,
+    gameStatuses: gameStatuses ?? this.gameStatuses,
+    currentGameId: clearCurrentGame ? null : (currentGameId ?? this.currentGameId),
+    totalGames: totalGames ?? this.totalGames,
+    completedGames: completedGames ?? this.completedGames,
+  );
 }
 
 /// Notifier for managing batch fetch state
@@ -128,6 +126,6 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
 }
 
 /// Provider for batch fetch state
-final batchFetchProvider = NotifierProvider<BatchFetchNotifier, BatchFetchState>(() {
-  return BatchFetchNotifier();
-});
+final batchFetchProvider = NotifierProvider<BatchFetchNotifier, BatchFetchState>(
+  BatchFetchNotifier.new,
+);

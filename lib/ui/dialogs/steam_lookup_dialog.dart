@@ -34,16 +34,14 @@ Future<bool?> showSteamLookupDialog(
   Game game, {
   bool forceRefresh = false,
   SteamSearchResult? initialResult,
-}) {
-  return showAppDialog<bool>(
-    context: context,
-    builder: (ctx) => SteamLookupDialog(
-      game: game,
-      forceRefresh: forceRefresh,
-      initialResult: initialResult,
-    ),
-  );
-}
+}) => showAppDialog<bool>(
+  context: context,
+  builder: (ctx) => SteamLookupDialog(
+    game: game,
+    forceRefresh: forceRefresh,
+    initialResult: initialResult,
+  ),
+);
 
 /// Both fetch choices and result previews edit the same immutable options.
 class _SteamOptionsGrid extends StatelessWidget {
@@ -214,72 +212,65 @@ Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
   final useCache = await showAppDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (ctx2, setState2) {
-          return ThemedAlertDialog(
-            theme: theme,
-
-            title: DialogHeader(
-              icon: Icons.cloud_download,
-              title: cached != null ? 'Steam Data Cache' : 'Steam Data Options',
-              theme: theme,
-            ),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (cached != null) ...[
-                    Text('Cached data found for "$title"'),
-                    const SizedBox(height: kElementVSpacing),
-                    Text(
-                      'Cached at: ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'Unknown'}',
-                      style: TextStyle(color: theme.textSecondary),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Choose whether to use cached data or fetch fresh data from Steam.',
-                    ),
-                  ] else ...[
-                    Text('No cached data found for "$title"'),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Configure options for fetching fresh data from Steam.',
-                    ),
-                  ],
-                  if (showApplyOptions) ...[
-                    const SizedBox(height: kDialogSpacing),
-                    SectionGroupBox(
-                      title: 'Apply Options',
-                      theme: theme,
-                      titleIcon: Icons.tune,
-                      child: _SteamOptionsGrid(
-                        theme: theme,
-                        options: options,
-                        onChanged: (value) => setState2(() => options = value),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              if (cached != null)
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text('Use Cache'),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx2, setState2) => ThemedAlertDialog(
+        theme: theme,
+        title: DialogHeader(
+          icon: Icons.cloud_download,
+          title: cached != null ? 'Steam Data Cache' : 'Steam Data Options',
+          theme: theme,
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (cached != null) ...[
+                Text('Cached data found for "$title"'),
+                const SizedBox(height: kElementVSpacing),
+                Text(
+                  'Cached at: ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'Unknown'}',
+                  style: TextStyle(color: theme.textSecondary),
                 ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(cached != null ? 'Fetch Fresh' : 'Fetch'),
-              ),
+                const SizedBox(height: 12),
+                Text(
+                  'Choose whether to use cached data or fetch fresh data from Steam.',
+                ),
+              ] else ...[
+                Text('No cached data found for "$title"'),
+                const SizedBox(height: 12),
+                Text('Configure options for fetching fresh data from Steam.'),
+              ],
+              if (showApplyOptions) ...[
+                const SizedBox(height: kDialogSpacing),
+                SectionGroupBox(
+                  title: 'Apply Options',
+                  theme: theme,
+                  titleIcon: Icons.tune,
+                  child: _SteamOptionsGrid(
+                    theme: theme,
+                    options: options,
+                    onChanged: (value) => setState2(() => options = value),
+                  ),
+                ),
+              ],
             ],
-          );
-        },
-      );
-    },
+          ),
+        ),
+        actions: [
+          if (cached != null)
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Use Cache'),
+            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(cached != null ? 'Fetch Fresh' : 'Fetch'),
+          ),
+        ],
+      ),
+    ),
   );
 
   if (useCache == null) return null;
@@ -657,7 +648,6 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 
     return ThemedAlertDialog(
       theme: theme,
-
       title: DialogHeader(
         icon: Icons.cloud_download,
         title: 'Steam Lookup',

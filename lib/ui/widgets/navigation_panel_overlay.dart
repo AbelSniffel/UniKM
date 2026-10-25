@@ -108,15 +108,11 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     const gapW = 20.0;
     const period = stripeW + gapW;
 
-    final colors = preview
-        ? <Color>[
-            theme.accent.withValues(alpha: 0.24 * alphaScale),
-            theme.secondary.withValues(alpha: 0.16 * alphaScale),
-          ]
-        : <Color>[
-            theme.accent.withValues(alpha: 0.14 * alphaScale),
-            theme.secondary.withValues(alpha: 0.09 * alphaScale),
-          ];
+    final (accentAlpha, secondaryAlpha) = preview ? (0.24, 0.16) : (0.14, 0.09);
+    final colors = [
+      theme.accent.withValues(alpha: accentAlpha * alphaScale),
+      theme.secondary.withValues(alpha: secondaryAlpha * alphaScale),
+    ];
 
     canvas.save();
     canvas.clipRect(Offset.zero & size);
@@ -126,9 +122,7 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     for (var index = firstStripe; index <= lastStripe; index++) {
       canvas.drawRect(
         Rect.fromLTWH(index * period, minY, stripeW, maxY - minY),
-        Paint()
-          ..color = colors[index % colors.length]
-          ..style = PaintingStyle.fill,
+        Paint()..color = colors[index % colors.length],
       );
     }
 
@@ -163,20 +157,12 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
   /// Draws a pointy-top regular hexagon centred at [center] with circumradius
   /// [r], filling it with [fillPaint].
   void _drawHex(Canvas canvas, Offset center, double r, Paint fillPaint) {
-    final path = Path();
-    for (var i = 0; i < 6; i++) {
-      // Pointy-top: vertex angles start at −90° and step by 60°
-      final angle = -math.pi / 2 + i * (math.pi / 3);
-      final x = center.dx + r * math.cos(angle);
-      final y = center.dy + r * math.sin(angle);
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
-    }
-    path.close();
-    canvas.drawPath(path, fillPaint);
+    // Pointy-top: vertex angles start at −90° and step by 60°
+    final vertices = [
+      for (var i = 0; i < 6; i++)
+        center + Offset.fromDirection(-math.pi / 2 + i * (math.pi / 3), r),
+    ];
+    canvas.drawPath(Path()..addPolygon(vertices, true), fillPaint);
   }
 
   void _paintHexPattern(Canvas canvas, Size size) {
@@ -189,27 +175,15 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
 
     // Three fill colours that cycle diagonally across the grid.
     final fills = [
-      Paint()
-        ..color = theme.accent.withValues(alpha: preview ? 0.24 : 0.14)
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true,
-      Paint()
-        ..color = theme.secondary.withValues(alpha: preview ? 0.18 : 0.10)
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true,
-      Paint()
-        ..color = theme.accent.withValues(alpha: preview ? 0.10 : 0.05)
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true,
+      Paint()..color = theme.accent.withValues(alpha: preview ? 0.24 : 0.14),
+      Paint()..color = theme.secondary.withValues(alpha: preview ? 0.18 : 0.10),
+      Paint()..color = theme.accent.withValues(alpha: preview ? 0.10 : 0.05),
     ];
 
-    final rowStart = -1;
     final rowEnd = (size.height / rowStep).ceil() + 1;
-    final colStart = -1;
     final colEnd = (size.width / w).ceil() + 1;
-
-    for (var row = rowStart; row <= rowEnd; row++) {
-      for (var col = colStart; col <= colEnd; col++) {
+    for (var row = -1; row <= rowEnd; row++) {
+      for (var col = -1; col <= colEnd; col++) {
         final cx = col * w + (row.isOdd ? w / 2 : 0);
         final cy = row * rowStep;
         // Diagonal stripe coloring: (row + col * 2) % 3 gives a clean
@@ -228,17 +202,12 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     final origin = isHorizontal
         ? Offset(size.width / 2, size.height + 360)
         : Offset(-360, size.height / 2);
-    double distance(double x, double y) => math.sqrt(x * x + y * y);
-    final maxR = math.max(
-      math.max(
-        distance(origin.dx, origin.dy),
-        distance(size.width - origin.dx, origin.dy),
-      ),
-      math.max(
-        distance(origin.dx, size.height - origin.dy),
-        distance(size.width - origin.dx, size.height - origin.dy),
-      ),
-    );
+    final maxR = [
+      Offset.zero,
+      size.topRight(Offset.zero),
+      size.bottomLeft(Offset.zero),
+      size.bottomRight(Offset.zero),
+    ].map((corner) => (corner - origin).distance).reduce(math.max);
     final nearest = Offset(
       origin.dx.clamp(0.0, size.width),
       origin.dy.clamp(0.0, size.height),
@@ -249,25 +218,21 @@ class _NavigationPanelOverlayPainter extends CustomPainter {
     final ringStep = ringGap + strokeWidth;
     final firstRing = math.max(1, ((minR - strokeWidth / 2) / ringStep).ceil());
     final lastRing = ((maxR + strokeWidth / 2) / ringStep).ceil();
-    final paints = [
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth,
-    ];
-    final colors = [theme.accent, theme.secondary];
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
     canvas.save();
     canvas.clipRect(Offset.zero & size);
     for (var i = firstRing; i <= lastRing; i++) {
       final radius = i * ringStep;
       // Radius-based fading stays unchanged when the widget's bounds change.
       final alpha = (preview ? 0.58 : 0.42) / (1 + radius / 240);
-      final colorIndex = i.isOdd ? 0 : 1;
-      final paint = paints[colorIndex]
-        ..color = colors[colorIndex].withValues(alpha: alpha);
-      canvas.drawCircle(origin, radius, paint);
+      final color = i.isOdd ? theme.accent : theme.secondary;
+      canvas.drawCircle(
+        origin,
+        radius,
+        paint..color = color.withValues(alpha: alpha),
+      );
     }
     canvas.restore();
   }

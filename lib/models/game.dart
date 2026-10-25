@@ -53,27 +53,25 @@ class Game {
   final List<Tag> tags;
 
   /// Create from database entry
-  factory Game.fromEntry(GameEntry entry, {List<Tag> tags = const []}) {
-    return Game(
-      id: entry.id,
-      title: entry.title,
-      gameKey: entry.gameKey,
-      platform: entry.platform,
-      dateAdded: entry.dateAdded,
-      updatedAt: entry.updatedAt,
-      notes: entry.notes,
-      isUsed: entry.isUsed,
-      coverImage: entry.coverImage,
-      hasDeadline: entry.hasDeadline,
-      deadlineDate: entry.deadlineDate,
-      isDlc: entry.isDlc,
-      steamAppId: entry.steamAppId,
-      reviewScore: entry.reviewScore,
-      reviewCount: entry.reviewCount,
-      developer: entry.developer,
-      tags: tags,
-    );
-  }
+  factory Game.fromEntry(GameEntry entry, {List<Tag> tags = const []}) => Game(
+    id: entry.id,
+    title: entry.title,
+    gameKey: entry.gameKey,
+    platform: entry.platform,
+    dateAdded: entry.dateAdded,
+    updatedAt: entry.updatedAt,
+    notes: entry.notes,
+    isUsed: entry.isUsed,
+    coverImage: entry.coverImage,
+    hasDeadline: entry.hasDeadline,
+    deadlineDate: entry.deadlineDate,
+    isDlc: entry.isDlc,
+    steamAppId: entry.steamAppId,
+    reviewScore: entry.reviewScore,
+    reviewCount: entry.reviewCount,
+    developer: entry.developer,
+    tags: tags,
+  );
 
   /// Get platform enum
   GamePlatform get platformEnum => GamePlatform.fromDisplayName(platform);
@@ -153,29 +151,27 @@ class Game {
     int? reviewScore,
     int? reviewCount,
     List<Tag>? tags,
-  }) {
-    return Game(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      gameKey: gameKey ?? this.gameKey,
-      platform: platform ?? this.platform,
-      dateAdded: dateAdded ?? this.dateAdded,
-      updatedAt: updatedAt ?? this.updatedAt,
-      notes: notes ?? this.notes,
-      isUsed: isUsed ?? this.isUsed,
-      coverImage: coverImage ?? this.coverImage,
-      hasDeadline: hasDeadline ?? this.hasDeadline,
-      deadlineDate: identical(deadlineDate, _unchanged)
-          ? this.deadlineDate
-          : deadlineDate as DateTime?,
-      isDlc: isDlc ?? this.isDlc,
-      steamAppId: steamAppId ?? this.steamAppId,
-      developer: developer ?? this.developer,
-      reviewScore: reviewScore ?? this.reviewScore,
-      reviewCount: reviewCount ?? this.reviewCount,
-      tags: tags ?? this.tags,
-    );
-  }
+  }) => Game(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    gameKey: gameKey ?? this.gameKey,
+    platform: platform ?? this.platform,
+    dateAdded: dateAdded ?? this.dateAdded,
+    updatedAt: updatedAt ?? this.updatedAt,
+    notes: notes ?? this.notes,
+    isUsed: isUsed ?? this.isUsed,
+    coverImage: coverImage ?? this.coverImage,
+    hasDeadline: hasDeadline ?? this.hasDeadline,
+    deadlineDate: identical(deadlineDate, _unchanged)
+        ? this.deadlineDate
+        : deadlineDate as DateTime?,
+    isDlc: isDlc ?? this.isDlc,
+    steamAppId: steamAppId ?? this.steamAppId,
+    developer: developer ?? this.developer,
+    reviewScore: reviewScore ?? this.reviewScore,
+    reviewCount: reviewCount ?? this.reviewCount,
+    tags: tags ?? this.tags,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -251,14 +247,13 @@ class Tag {
   Color get color => _cachedColor ??= parseHexColor(colorHex);
 
   /// Copy with new values
-  Tag copyWith({int? id, String? name, String? colorHex, bool? isSteamTag}) {
-    return Tag(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      colorHex: colorHex ?? this.colorHex,
-      isSteamTag: isSteamTag ?? this.isSteamTag,
-    );
-  }
+  Tag copyWith({int? id, String? name, String? colorHex, bool? isSteamTag}) =>
+      Tag(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        colorHex: colorHex ?? this.colorHex,
+        isSteamTag: isSteamTag ?? this.isSteamTag,
+      );
 
   @override
   bool operator ==(Object other) {

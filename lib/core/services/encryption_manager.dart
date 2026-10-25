@@ -56,17 +56,11 @@ class EncryptionManager {
   String get encryptedPath => '$dbPath.enc';
 
   /// Check if database is encrypted
-  EncryptionState get state {
-    final encFile = File(encryptedPath);
-    final plainFile = File(dbPath);
-
-    if (encFile.existsSync()) {
-      return EncryptionState.encrypted;
-    } else if (plainFile.existsSync()) {
-      return EncryptionState.unencrypted;
-    }
-    return EncryptionState.unknown;
-  }
+  EncryptionState get state => File(encryptedPath).existsSync()
+      ? EncryptionState.encrypted
+      : File(dbPath).existsSync()
+      ? EncryptionState.unencrypted
+      : EncryptionState.unknown;
 
   /// Check if database is encrypted
   bool get isEncrypted => state == EncryptionState.encrypted;
@@ -142,37 +136,21 @@ class EncryptionManager {
   Future<Uint8List> decrypt(String password) async {
     if (!isEncrypted) throw StateError('Database is not encrypted');
 
-    final encFile = File(encryptedPath);
-    final data = await encFile.readAsBytes();
-
-    // Parse encrypted file format
-    if (data.length <
-        1 + EncryptionConfig.saltLength + EncryptionConfig.nonceLength + 16) {
+    // [version:1][salt][nonce][ciphertext][mac:16]
+    final data = await File(encryptedPath).readAsBytes();
+    const saltEnd = 1 + EncryptionConfig.saltLength;
+    const nonceEnd = saltEnd + EncryptionConfig.nonceLength;
+    if (data.length < nonceEnd + 16) {
       throw FormatException('Invalid encrypted file format');
     }
-
-    var offset = 0;
-
-    // Version
-    final version = data[offset];
-    offset += 1;
+    final version = data[0];
     if (version != EncryptionConfig.metaVersion) {
       throw FormatException('Unsupported encryption version: $version');
     }
-
-    // Salt
-    final salt = Uint8List.fromList(
-      data.sublist(offset, offset + EncryptionConfig.saltLength),
-    );
-    offset += EncryptionConfig.saltLength;
-
-    // Nonce
-    final nonce = data.sublist(offset, offset + EncryptionConfig.nonceLength);
-    offset += EncryptionConfig.nonceLength;
-
-    // Ciphertext (everything except last 16 bytes which is MAC)
+    final salt = Uint8List.fromList(data.sublist(1, saltEnd));
+    final nonce = data.sublist(saltEnd, nonceEnd);
     final macStart = data.length - 16;
-    final ciphertext = data.sublist(offset, macStart);
+    final ciphertext = data.sublist(nonceEnd, macStart);
     final mac = Mac(data.sublist(macStart));
 
     // Derive key
@@ -342,12 +320,9 @@ class EncryptionManager {
 }
 
 /// Provider for encryption manager
-final encryptionManagerProvider = Provider.family<EncryptionManager, String>((
-  ref,
-  dbPath,
-) {
-  return EncryptionManager(dbPath);
-});
+final encryptionManagerProvider = Provider.family<EncryptionManager, String>(
+  (ref, dbPath) => EncryptionManager(dbPath),
+);
 
 /// Provider for encryption state
 final encryptionStateProvider = sessionValueProvider(EncryptionState.unknown);

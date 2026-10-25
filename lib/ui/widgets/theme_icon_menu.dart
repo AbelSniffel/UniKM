@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -36,27 +34,14 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
     super.dispose();
   }
 
-  double _pickerWidth(MediaQueryData media) => math.min(
-    280,
-    math.max(0, media.size.width - media.padding.horizontal - 16),
-  );
+  Size _pickerSize(BuildContext context) =>
+      anchoredMenuSize(MediaQuery.of(context), const Size(280, 320));
 
   Widget _picker(BuildContext context) {
-    final media = MediaQuery.of(context);
     final theme = widget.theme;
-    return SizedBox(
+    return SizedBox.fromSize(
       key: const ValueKey('theme-icon-picker'),
-      width: _pickerWidth(media),
-      height: math.min(
-        320,
-        math.max(
-          0,
-          media.size.height -
-              media.padding.vertical -
-              media.viewInsets.vertical -
-              16,
-        ),
-      ),
+      size: _pickerSize(context),
       child: ListView(
         controller: _scrollController,
         primary: false,
@@ -136,7 +121,7 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
       reservedPadding: const EdgeInsets.all(8),
       alignmentOffset: Offset(
         Directionality.of(context) == TextDirection.ltr
-            ? -_pickerWidth(MediaQuery.of(context))
+            ? -_pickerSize(context).width
             : 0,
         8,
       ),

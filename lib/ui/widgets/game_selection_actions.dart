@@ -55,13 +55,10 @@ abstract final class GameSelectionActions {
       return;
     }
 
-    final first = initialGame ?? targets.first;
-    final gameIds = targets.map((g) => g.id).toList();
-
     showGameEditorDialog(
       context,
-      first,
-      gameIds: gameIds,
+      initialGame ?? targets.first,
+      gameIds: [for (final game in targets) game.id],
       onViewedGame: (gameId) => markGameAsViewed(ref, gameId),
     );
   }
@@ -106,15 +103,11 @@ abstract final class GameSelectionActions {
       }
     }
 
-    if (targets.length == 1) {
-      NotificationManager.instance.info(
-        'Opened Steam page for ${targets.first.title}',
-      );
-    } else {
-      NotificationManager.instance.info(
-        'Opened Steam pages for ${targets.length} games',
-      );
-    }
+    NotificationManager.instance.info(
+      targets.length == 1
+          ? 'Opened Steam page for ${targets.first.title}'
+          : 'Opened Steam pages for ${targets.length} games',
+    );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -138,11 +131,9 @@ abstract final class GameSelectionActions {
       return;
     }
 
-    if (steamTargets.length == 1) {
-      await performSingleSteamLookup(context, ref, steamTargets.first);
-    } else {
-      await performSteamBatchLookup(context, steamTargets);
-    }
+    await (steamTargets.length == 1
+        ? performSingleSteamLookup(context, ref, steamTargets.first)
+        : performSteamBatchLookup(context, steamTargets));
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -173,13 +164,11 @@ abstract final class GameSelectionActions {
     }
 
     final status = nextValue ? 'used' : 'unused';
-    if (targets.length == 1) {
-      NotificationManager.instance.info('Marked as $status');
-    } else {
-      NotificationManager.instance.info(
-        'Marked ${targets.length} games as $status',
-      );
-    }
+    NotificationManager.instance.info(
+      targets.length == 1
+          ? 'Marked as $status'
+          : 'Marked ${targets.length} games as $status',
+    );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -218,10 +207,10 @@ abstract final class GameSelectionActions {
       return;
     }
 
-    if (targets.length == 1) {
-      NotificationManager.instance.success('Deleted: ${targets.first.title}');
-    } else {
-      NotificationManager.instance.success('Deleted ${targets.length} games');
-    }
+    NotificationManager.instance.success(
+      targets.length == 1
+          ? 'Deleted: ${targets.first.title}'
+          : 'Deleted ${targets.length} games',
+    );
   }
 }

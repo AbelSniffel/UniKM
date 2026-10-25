@@ -39,6 +39,8 @@ class SteamApi {
 // package:unikm/core/utils/title_similarity.dart
 // and re-exported via the import above.
 
+void _log(String message) => developer.log(message, name: 'SteamService');
+
 /// Disk cache helpers
 final _cacheKeyStripPattern = RegExp(r'[^a-z0-9]');
 
@@ -101,12 +103,19 @@ class _DiskCache {
     }
   }
 
+  Future<Map<String, dynamic>?> _entry(String title) async {
+    await _ensureLoaded();
+    return _cache?[_normalizeCacheKey(title)] as Map<String, dynamic>?;
+  }
+
   /// Get cached result (memory-first)
   Future<SteamSearchResult?> getCachedResult(String title) async {
-    await _ensureLoaded();
-    final key = _normalizeCacheKey(title);
-    final entry = _cache?[key] as Map<String, dynamic>?;
+    final entry = await _entry(title);
     if (entry == null) return null;
+    // Enum values whose names are listed under [key].
+    List<T> named<T extends Enum>(List<T> values, String key) => values
+        .where((value) => (entry[key] as List?)?.contains(value.name) ?? false)
+        .toList();
     return SteamSearchResult(
       appId: entry['app_id']?.toString() ?? '',
       name: entry['name']?.toString() ?? title,
@@ -123,32 +132,17 @@ class _DiskCache {
       searchSource: SteamSearchSource.values
           .where((source) => source.name == entry['search_source'])
           .firstOrNull,
-      searchSourcesTried: SteamSearchSource.values
-          .where(
-            (source) =>
-                (entry['search_sources_tried'] as List?)?.contains(
-                  source.name,
-                ) ??
-                false,
-          )
-          .toList(),
-      dataSources: SteamDataSource.values
-          .where(
-            (source) =>
-                (entry['data_sources'] as List?)?.contains(source.name) ??
-                false,
-          )
-          .toList(),
+      searchSourcesTried: named(
+        SteamSearchSource.values,
+        'search_sources_tried',
+      ),
+      dataSources: named(SteamDataSource.values, 'data_sources'),
     );
   }
 
   /// Get cached timestamp
   Future<DateTime?> getCachedAt(String title) async {
-    await _ensureLoaded();
-    final key = _normalizeCacheKey(title);
-    final entry = _cache?[key] as Map<String, dynamic>?;
-    if (entry == null) return null;
-    final cachedAt = entry['cached_at'];
+    final cachedAt = (await _entry(title))?['cached_at'];
     if (cachedAt == null) return null;
     final ms = (cachedAt is num)
         ? (cachedAt * 1000).toInt()
@@ -204,15 +198,10 @@ class _DiskCache {
       final remote = entry.value;
       if (remote is! Map) continue;
 
-      final remoteMap = Map<String, dynamic>.from(remote);
-      final localExisting = _cache![key];
-      final localMap = localExisting is Map
-          ? Map<String, dynamic>.from(localExisting)
-          : <String, dynamic>{};
-
       // Preserve this device's image_url while overwriting other fields.
-      final localImageUrl = localMap['image_url'];
-      final merged = <String, dynamic>{...remoteMap};
+      final local = _cache![key];
+      final localImageUrl = local is Map ? local['image_url'] : null;
+      final merged = Map<String, dynamic>.from(remote);
       if (localImageUrl != null) {
         merged['image_url'] = localImageUrl;
       } else {
@@ -476,10 +465,7 @@ class SteamService {
     try {
       _imagesDir = await AppDatabase.getSteamImagesDirectory();
     } catch (e) {
-      developer.log(
-        'Failed to init Steam image cache: $e',
-        name: 'SteamService',
-      );
+      _log('Failed to init Steam image cache: $e');
       _imagesDir = null;
     }
   }
@@ -729,10 +715,7 @@ class SteamService {
           return localPath;
         }
       } catch (e) {
-        developer.log(
-          'Image download failed for AppID $appId: $e',
-          name: 'SteamService',
-        );
+        _log('Image download failed for AppID $appId: $e');
       }
     }
 
@@ -809,10 +792,7 @@ class SteamService {
         return items?.cast<Map<String, dynamic>>() ?? [];
       }
     } catch (e) {
-      developer.log(
-        'Store API search failed for "$term": $e',
-        name: 'SteamService',
-      );
+      _log('Store API search failed for "$term": $e');
     }
     return [];
   }
@@ -833,10 +813,7 @@ class SteamService {
         }).toList();
       }
     } catch (e) {
-      developer.log(
-        'Community API search failed for "$term": $e',
-        name: 'SteamService',
-      );
+      _log('Community API search failed for "$term": $e');
     }
     return [];
   }
@@ -895,9 +872,8 @@ class SteamService {
       // the token-weighted scorer gives more accurate results for numbered titles.
       if (ratio > 0.50) return firstItem;
 
-      developer.log(
+      _log(
         "Rejected fallback '$firstName' due to low similarity (${ratio.toStringAsFixed(2)}) with '$cleanSearch'",
-        name: 'SteamService',
       );
     }
 
@@ -926,8 +902,9 @@ class SteamService {
     SteamSearchResult result;
     try {
       // Collect tags (SteamSpy first, then app details genres/categories)
-      final tags = <String>[];
-      final seen = <String>{};
+      // Insertion-ordered; at most 30 SteamSpy tags, then genres/categories
+      // until the 30th tag is reached.
+      final tags = <String>{};
       final dataSources = <SteamDataSource>[];
       String? headerImage;
 
@@ -936,11 +913,7 @@ class SteamService {
         if (steamspyTags.isNotEmpty) {
           dataSources.add(SteamDataSource.steamSpy);
           for (final t in steamspyTags) {
-            if (!seen.contains(t)) {
-              tags.add(t);
-              seen.add(t);
-              if (tags.length >= 30) break;
-            }
+            if (tags.add(t) && tags.length >= 30) break;
           }
         }
       }
@@ -988,10 +961,10 @@ class SteamService {
             for (final item in [...genres, ...categories]) {
               final desc = item['description'] as String? ?? '';
               final normalized = _normalizeTag(desc);
-              if (normalized != null && !seen.contains(normalized)) {
-                tags.add(normalized);
-                seen.add(normalized);
-                if (tags.length >= 30) break;
+              if (normalized != null &&
+                  tags.add(normalized) &&
+                  tags.length >= 30) {
+                break;
               }
             }
           }
@@ -1036,7 +1009,7 @@ class SteamService {
         appId: appId,
         name: gameName,
         imageUrl: headerImage ?? SteamApi.headerImage(appId),
-        tags: tags,
+        tags: tags.toList(),
         reviewScore: reviewScore,
         reviewCount: reviewCount,
         isDlc: isDlc,
@@ -1047,10 +1020,7 @@ class SteamService {
       );
     } catch (e) {
       // Return basic result without details
-      developer.log(
-        'Failed to fetch details for AppID $appId: $e',
-        name: 'SteamService',
-      );
+      _log('Failed to fetch details for AppID $appId: $e');
       result = SteamSearchResult(
         appId: appId,
         name: name ?? 'Unknown',
@@ -1077,22 +1047,20 @@ class SteamService {
         if (tagEntries.isNotEmpty) {
           tagEntries.sort((a, b) => b.score.compareTo(a.score));
 
-          final tags = <String>[];
+          final tags = <String>{};
           for (final entry in tagEntries) {
             final normalized = _normalizeTag(entry.tag);
-            if (normalized != null && !tags.contains(normalized)) {
-              tags.add(normalized);
-              if (tags.length >= 30) break;
+            if (normalized != null &&
+                tags.add(normalized) &&
+                tags.length >= 30) {
+              break;
             }
           }
-          return tags;
+          return tags.toList();
         }
       }
     } catch (e) {
-      developer.log(
-        'SteamSpy tags fetch failed for AppID $appId: $e',
-        name: 'SteamService',
-      );
+      _log('SteamSpy tags fetch failed for AppID $appId: $e');
     }
     return [];
   }

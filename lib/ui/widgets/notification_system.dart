@@ -73,26 +73,24 @@ class AppNotification {
     bool clearSecondaryAction = false,
     bool? isDismissing,
     bool? dismissible,
-  }) {
-    return AppNotification(
-      id: id,
-      message: message ?? this.message,
-      type: type ?? this.type,
-      title: title ?? this.title,
-      progress: clearProgress ? null : (progress ?? this.progress),
-      onTap: clearOnTap ? null : (onTap ?? this.onTap),
-      actionLabel: clearAction ? null : (actionLabel ?? this.actionLabel),
-      onAction: clearAction ? null : (onAction ?? this.onAction),
-      secondaryActionLabel: clearSecondaryAction
-          ? null
-          : (secondaryActionLabel ?? this.secondaryActionLabel),
-      onSecondaryAction: clearSecondaryAction
-          ? null
-          : (onSecondaryAction ?? this.onSecondaryAction),
-      isDismissing: isDismissing ?? this.isDismissing,
-      dismissible: dismissible ?? this.dismissible,
-    );
-  }
+  }) => AppNotification(
+    id: id,
+    message: message ?? this.message,
+    type: type ?? this.type,
+    title: title ?? this.title,
+    progress: clearProgress ? null : (progress ?? this.progress),
+    onTap: clearOnTap ? null : (onTap ?? this.onTap),
+    actionLabel: clearAction ? null : (actionLabel ?? this.actionLabel),
+    onAction: clearAction ? null : (onAction ?? this.onAction),
+    secondaryActionLabel: clearSecondaryAction
+        ? null
+        : (secondaryActionLabel ?? this.secondaryActionLabel),
+    onSecondaryAction: clearSecondaryAction
+        ? null
+        : (onSecondaryAction ?? this.onSecondaryAction),
+    isDismissing: isDismissing ?? this.isDismissing,
+    dismissible: dismissible ?? this.dismissible,
+  );
 }
 
 /// Handle for a notification that can be updated/dismissed.
@@ -263,19 +261,17 @@ class NotificationManager {
     String? actionLabel,
     VoidCallback? onAction,
     bool dismissible = true,
-  }) {
-    return showHandle(
-      message: message,
-      type: type,
-      title: title,
-      progress: progress,
-      actionLabel: actionLabel,
-      onAction: onAction,
-      persistent: true,
-      dedupe: false,
-      dismissible: dismissible,
-    );
-  }
+  }) => showHandle(
+    message: message,
+    type: type,
+    title: title,
+    progress: progress,
+    actionLabel: actionLabel,
+    onAction: onAction,
+    persistent: true,
+    dedupe: false,
+    dismissible: dismissible,
+  );
 
   void update(
     String id, {
@@ -340,13 +336,10 @@ class NotificationManager {
   }
 
   void dismissAll() {
-    for (final t in _dismissTimers.values) {
-      t.cancel();
+    for (final timer in [..._dismissTimers.values, ..._removeTimers.values]) {
+      timer.cancel();
     }
     _dismissTimers.clear();
-    for (final t in _removeTimers.values) {
-      t.cancel();
-    }
     _removeTimers.clear();
     _notifications.clear();
     _controller.add(_notifications.toList());
@@ -361,14 +354,13 @@ class NotificationManager {
   void error(String message, {String? title}) =>
       showHandle(message: message, type: NotificationType.error, title: title);
 
-  void warning(String message, {String? title, Duration? autoDismissAfter}) {
-    showHandle(
-      message: message,
-      type: NotificationType.warning,
-      title: title,
-      autoDismissAfter: autoDismissAfter,
-    );
-  }
+  void warning(String message, {String? title, Duration? autoDismissAfter}) =>
+      showHandle(
+        message: message,
+        type: NotificationType.warning,
+        title: title,
+        autoDismissAfter: autoDismissAfter,
+      );
 
   void info(String message, {String? title}) =>
       showHandle(message: message, type: NotificationType.info, title: title);
@@ -390,48 +382,43 @@ class NotificationOverlay extends StatelessWidget {
   final AppThemeData theme;
   final NotificationPosition position;
 
+  // Without notifications this is an empty box rather than a Positioned.
   @override
-  Widget build(BuildContext context) {
-    // Simplified overlay - just returns empty positioned widget if no notifications
-    return StreamBuilder<List<AppNotification>>(
-      stream: NotificationManager.instance.notifications,
-      initialData: const [],
-      builder: (context, snapshot) {
-        final notifications = snapshot.data ?? [];
+  Widget build(BuildContext context) => StreamBuilder<List<AppNotification>>(
+    stream: NotificationManager.instance.notifications,
+    initialData: const [],
+    builder: (context, snapshot) {
+      final notifications = snapshot.data ?? [];
+      if (notifications.isEmpty) return const SizedBox.shrink();
 
-        if (notifications.isEmpty) return const SizedBox.shrink();
-
-        return Positioned(
-          top: _isTop ? 16 : null,
-          bottom: _isTop ? null : 16,
-          left: _isLeft ? 16 : null,
-          right: _isRight ? 16 : null,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: _getCrossAxisAlignment(),
-            children: notifications.take(5).map((n) {
-              return NotificationToast(
+      final isTop = position.name.startsWith('top');
+      final isLeft = position.name.endsWith('Left');
+      final isRight = position.name.endsWith('Right');
+      return Positioned(
+        top: isTop ? 16 : null,
+        bottom: isTop ? null : 16,
+        left: isLeft ? 16 : null,
+        right: isRight ? 16 : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: isLeft
+              ? CrossAxisAlignment.start
+              : isRight
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.center,
+          children: [
+            for (final n in notifications.take(5))
+              NotificationToast(
                 key: ValueKey(n.id),
                 notification: n,
                 theme: theme,
                 onDismiss: () => NotificationManager.instance.dismiss(n.id),
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  bool get _isTop => position.name.startsWith('top');
-  bool get _isLeft => position.name.endsWith('Left');
-  bool get _isRight => position.name.endsWith('Right');
-
-  CrossAxisAlignment _getCrossAxisAlignment() {
-    if (_isLeft) return CrossAxisAlignment.start;
-    if (_isRight) return CrossAxisAlignment.end;
-    return CrossAxisAlignment.center;
-  }
+              ),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 /// Individual notification toast. Its keyed state retains the entry animation

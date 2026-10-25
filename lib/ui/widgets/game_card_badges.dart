@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../core/constants/app_constants.dart';
-import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../../shared/time/calendar_date.dart';
@@ -43,11 +42,9 @@ abstract final class GameCardBadges {
     AppThemeData theme,
     double extent, {
     double multiplier = 1.0,
-  }) {
-    return BorderRadius.circular(
-      math.min(theme.cornerRadius * multiplier, extent / 2),
-    );
-  }
+  }) => BorderRadius.circular(
+    math.min(theme.cornerRadius * multiplier, extent / 2),
+  );
 
   static Widget squareIconBadge(
     AppThemeData theme, {
@@ -56,7 +53,6 @@ abstract final class GameCardBadges {
     required Widget icon,
     required double size,
     String? semanticsLabel,
-    BorderRadius? borderRadius,
   }) {
     Widget content = Container(
       width: size,
@@ -64,7 +60,7 @@ abstract final class GameCardBadges {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: borderRadius ?? chipBorderRadius(theme, size),
+        borderRadius: chipBorderRadius(theme, size),
       ),
       child: icon,
     );
@@ -76,34 +72,6 @@ abstract final class GameCardBadges {
     return Tooltip(message: tooltip, child: content);
   }
 
-  static Widget pillBadge(
-    AppThemeData theme, {
-    required String tooltip,
-    required Color color,
-    required Widget child,
-    BorderRadius? borderRadius,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    double? minHeight,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        alignment: Alignment.center,
-        padding: padding,
-        constraints: minHeight != null
-            ? BoxConstraints.tightFor(height: minHeight)
-            : null,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius:
-              borderRadius ??
-              chipBorderRadius(theme, minHeight ?? kBadgeHeight),
-        ),
-        child: child,
-      ),
-    );
-  }
-
   // ── Fetch-status helpers ──────────────────────────────────────────────────
 
   static FetchStatusVisual fetchStatusVisual(
@@ -111,106 +79,69 @@ abstract final class GameCardBadges {
     GameFetchStatus status, {
     required double iconSize,
     bool compactProcessingSpinner = false,
-  }) {
-    switch (status) {
-      case GameFetchStatus.waiting:
-        return FetchStatusVisual(
-          color: theme.secondary,
-          tooltip: 'Queued for fetch',
-          icon: Icon(Icons.schedule, color: Colors.white, size: iconSize),
-        );
-      case GameFetchStatus.processing:
-        final spinnerSize = compactProcessingSpinner
+  }) => switch (status) {
+    GameFetchStatus.waiting => (
+      color: theme.secondary,
+      tooltip: 'Queued for fetch',
+      icon: Icon(Icons.schedule, color: Colors.white, size: iconSize),
+    ),
+    GameFetchStatus.processing => (
+      color: theme.background,
+      tooltip: 'Fetching from Steam',
+      icon: AppCircularProgressIndicator(
+        size: compactProcessingSpinner
             ? (iconSize - 3.0).clamp(10.0, iconSize)
-            : iconSize;
-        return FetchStatusVisual(
-          color: theme.background,
-          tooltip: 'Fetching from Steam',
-          icon: AppCircularProgressIndicator(size: spinnerSize),
-        );
-      case GameFetchStatus.done:
-        return FetchStatusVisual(
-          color: Colors.green,
-          tooltip: 'Fetch completed',
-          icon: Icon(Icons.check, color: Colors.white, size: iconSize),
-        );
-      case GameFetchStatus.error:
-        return FetchStatusVisual(
-          color: theme.secondary,
-          tooltip: 'Fetch failed',
-          icon: Icon(
-            Icons.error,
-            color: theme.primaryButtonText,
-            size: iconSize,
-          ),
-        );
-    }
-  }
+            : iconSize,
+      ),
+    ),
+    GameFetchStatus.done => (
+      color: Colors.green,
+      tooltip: 'Fetch completed',
+      icon: Icon(Icons.check, color: Colors.white, size: iconSize),
+    ),
+    GameFetchStatus.error => (
+      color: theme.secondary,
+      tooltip: 'Fetch failed',
+      icon: Icon(Icons.error, color: theme.primaryButtonText, size: iconSize),
+    ),
+  };
+
+  /// The status icon, scaled and faded in when [status] changes.
+  static Widget fetchStatusIcon(
+    FetchStatusVisual visual,
+    GameFetchStatus status,
+    double size,
+  ) => AnimatedSwitcher(
+    duration: kVeryFastAnimation,
+    transitionBuilder: (child, anim) => ScaleTransition(
+      scale: anim,
+      child: FadeTransition(opacity: anim, child: child),
+    ),
+    child: SizedBox(
+      key: ValueKey(status),
+      width: size,
+      height: size,
+      child: Center(child: visual.icon),
+    ),
+  );
 
   // ── Concrete badge builders ───────────────────────────────────────────────
 
-  static Widget platformBadge(
-    AppThemeData theme,
-    Game game, {
-    BorderRadius? borderRadius,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    double? minHeight,
-  }) {
-    return platformBadgeForType(
+  /// Square platform icon badge of [size].
+  static Widget platformBadge(AppThemeData theme, Game game, double size) {
+    final platform = game.platformEnum;
+    return squareIconBadge(
       theme,
-      platform: game.platformEnum,
-      platformLabel: game.platform,
-      borderRadius: borderRadius,
-      padding: padding,
-      minHeight: minHeight,
-    );
-  }
-
-  static Widget platformBadgeForType(
-    AppThemeData theme, {
-    required GamePlatform platform,
-    String? platformLabel,
-    BorderRadius? borderRadius,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    double? minHeight,
-  }) {
-    platformLabel ??= platform.displayName;
-    final double iconSize = platformIconSizeFor(platform, minHeight: minHeight);
-    final chipColor = theme.baseSecondary.withValues(
-      alpha: kGameCardChipBackgroundAlpha,
-    );
-    final bool iconOnly = minHeight != null;
-
-    if (iconOnly) {
-      return squareIconBadge(
-        theme,
-        tooltip: platformLabel,
-        color: chipColor,
-        size: minHeight,
-        semanticsLabel: platformLabel,
-        borderRadius: chipBorderRadius(theme, minHeight),
-        icon: PlatformIcon(
-          platform: platform,
-          size: iconSize,
-          color: theme.primaryButtonText,
-        ),
-      );
-    }
-
-    return pillBadge(
-      theme,
-      tooltip: platformLabel,
-      color: chipColor,
-      borderRadius: borderRadius,
-      padding: padding,
-      minHeight: minHeight,
-      child: Semantics(
-        label: platformLabel,
-        child: PlatformIcon(
-          platform: platform,
-          size: iconSize,
-          color: theme.accent,
-        ),
+      tooltip: game.platform,
+      color: theme.baseSecondary.withValues(
+        alpha: kGameCardChipBackgroundAlpha,
+      ),
+      size: size,
+      semanticsLabel: game.platform,
+      icon: PlatformIcon(
+        platform: platform,
+        size: platformIconSizeFor(platform, minHeight: size),
+        color: theme.primaryButtonText,
       ),
     );
   }
@@ -218,8 +149,8 @@ abstract final class GameCardBadges {
   static Widget ratingBadge(
     AppThemeData theme,
     Game game, {
+    required EdgeInsets padding,
     BorderRadius? borderRadius,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
     double? minHeight,
   }) {
     final reviewCount = game.reviewCount;
@@ -227,30 +158,36 @@ abstract final class GameCardBadges {
         ? 'No Reviews'
         : '${game.reviewScore}% · ${game.reviewRating} · ${_compactNumber.format(reviewCount)}';
 
-    return pillBadge(
-      theme,
-      tooltip: ratingText,
-      color: game
-          .reviewColorFor(negativeColor: theme.secondary)
-          .withValues(alpha: 0.95),
-      borderRadius: borderRadius,
-      padding: padding,
-      minHeight: minHeight,
-      child: Icon(
-        _ratingIconFor(game.reviewScore, game.reviewCount),
-        color: Colors.white,
-        size: 18.0,
+    return Tooltip(
+      message: ratingText,
+      child: Container(
+        alignment: Alignment.center,
+        padding: padding,
+        constraints: minHeight != null
+            ? BoxConstraints.tightFor(height: minHeight)
+            : null,
+        decoration: BoxDecoration(
+          color: game
+              .reviewColorFor(negativeColor: theme.secondary)
+              .withValues(alpha: 0.95),
+          borderRadius:
+              borderRadius ??
+              chipBorderRadius(theme, minHeight ?? kBadgeHeight),
+        ),
+        child: Icon(
+          _ratingIconFor(game.reviewScore, reviewCount),
+          color: Colors.white,
+          size: 18.0,
+        ),
       ),
     );
   }
 
+  /// Deadline badge [kBadgeHeight] tall. Deadlines more than two weeks away
+  /// (or every deadline with [forceIconOnly]) show only the status icon.
   static Widget deadlineBadge(
     AppThemeData theme,
     DateTime? deadlineDate, {
-    BorderRadius? borderRadius,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    bool showIcon = false,
-    double? minHeight,
     bool forceIconOnly = false,
   }) {
     final daysLeft = deadlineDate == null
@@ -260,68 +197,38 @@ abstract final class GameCardBadges {
             DateUtils.dateOnly(DateTime.now()),
           );
     final isExpired = daysLeft < 0;
-    final isUrgent = daysLeft <= 3 && !isExpired;
-    final isSoon = daysLeft <= 7 && !isExpired && !isUrgent;
-    final isDueSoon = daysLeft <= 14 && !isExpired;
     final dueText = daysLeft == 0 ? 'Today' : '$daysLeft days';
-    final iconOnly = forceIconOnly || (!isExpired && !isDueSoon);
-    const iconSize = 18.0;
+    final date = deadlineDate == null
+        ? null
+        : _deadlineFormat.format(deadlineDate);
+    final (color, text) = switch (daysLeft) {
+      < 0 => (theme.secondary, 'Expired'),
+      <= 3 => (theme.deadlineUrgent, dueText),
+      <= 7 => (theme.deadlineSoon, dueText),
+      <= 14 => (theme.deadlineNormal, dueText),
+      _ => (theme.deadlineNormal, date ?? 'Deadline'),
+    };
+    final badgeColor = color.withValues(alpha: kGameCardChipBackgroundAlpha);
+    final tooltipMessage = date == null
+        ? text
+        : isExpired
+        ? 'Expired ${daysLeft == -1 ? '1 day' : '${-daysLeft} days'} ago · $date'
+        : daysLeft == 0
+        ? 'Due today · $date'
+        : 'Due in $daysLeft days · $date';
+    final icon = Icon(
+      isExpired ? Icons.event_busy : Icons.schedule,
+      color: Colors.white,
+      size: 18.0,
+    );
 
-    Color badgeColor;
-    String text;
-
-    if (isExpired) {
-      badgeColor = theme.secondary;
-      text = 'Expired';
-    } else if (isUrgent) {
-      badgeColor = theme.deadlineUrgent;
-      text = dueText;
-    } else if (isSoon) {
-      badgeColor = theme.deadlineSoon;
-      text = dueText;
-    } else {
-      badgeColor = theme.deadlineNormal;
-      final date = deadlineDate;
-      text = isDueSoon
-          ? dueText
-          : date != null
-          ? _deadlineFormat.format(date)
-          : 'Deadline';
-    }
-
-    badgeColor = badgeColor.withValues(alpha: kGameCardChipBackgroundAlpha);
-
-    final String tooltipMessage;
-    if (isExpired) {
-      if (deadlineDate == null) {
-        tooltipMessage = 'Expired';
-      } else {
-        final daysAgo = daysLeft.abs();
-        final agoText = daysAgo == 0
-            ? 'today'
-            : daysAgo == 1
-            ? '1 day ago'
-            : '$daysAgo days ago';
-        tooltipMessage =
-            'Expired $agoText · ${_deadlineFormat.format(deadlineDate)}';
-      }
-    } else if (deadlineDate == null) {
-      tooltipMessage = text;
-    } else if (daysLeft == 0) {
-      tooltipMessage = 'Due today · ${_deadlineFormat.format(deadlineDate)}';
-    } else {
-      tooltipMessage =
-          'Due in $daysLeft days · ${_deadlineFormat.format(deadlineDate)}';
-    }
-
-    if (iconOnly && minHeight != null) {
+    if (forceIconOnly || daysLeft > 14) {
       return squareIconBadge(
         theme,
         tooltip: tooltipMessage,
         color: badgeColor,
-        size: minHeight,
-        borderRadius: chipBorderRadius(theme, minHeight),
-        icon: _deadlineStatusIcon(isExpired, size: iconSize),
+        size: kBadgeHeight,
+        icon: icon,
       );
     }
 
@@ -330,35 +237,27 @@ abstract final class GameCardBadges {
       child: IntrinsicWidth(
         child: Container(
           alignment: Alignment.center,
-          padding: padding,
-          constraints: minHeight != null
-              ? BoxConstraints(minHeight: minHeight)
-              : null,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          constraints: const BoxConstraints(minHeight: kBadgeHeight),
           decoration: BoxDecoration(
             color: badgeColor,
-            borderRadius:
-                borderRadius ??
-                chipBorderRadius(theme, minHeight ?? kBadgeHeight),
+            borderRadius: chipBorderRadius(theme, kBadgeHeight),
           ),
-          child: iconOnly
-              ? _deadlineStatusIcon(isExpired, size: iconSize)
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (showIcon) ...[
-                      _deadlineStatusIcon(isExpired, size: iconSize),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(
-                      text,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(width: 6),
+              Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -378,62 +277,6 @@ abstract final class GameCardBadges {
     ),
   );
 
-  static Widget slimFetchStatusBadge(
-    AppThemeData theme,
-    Game game,
-    GameFetchStatus status, {
-    required double minHeight,
-  }) {
-    final iconSize = platformIconSizeFor(
-      game.platformEnum,
-      minHeight: minHeight,
-    );
-    final visual = fetchStatusVisual(
-      theme,
-      status,
-      iconSize: iconSize,
-      compactProcessingSpinner: true,
-    );
-
-    return squareIconBadge(
-      theme,
-      tooltip: visual.tooltip,
-      color: visual.color,
-      size: minHeight,
-      icon: AnimatedSwitcher(
-        duration: kVeryFastAnimation,
-        transitionBuilder: (child, anim) => ScaleTransition(
-          scale: anim,
-          child: FadeTransition(opacity: anim, child: child),
-        ),
-        child: SizedBox(
-          key: ValueKey(status),
-          width: iconSize,
-          height: iconSize,
-          child: Center(child: visual.icon),
-        ),
-      ),
-    );
-  }
-
-  static Widget slimSelectionBadge(
-    AppThemeData theme,
-    Game game, {
-    required double minHeight,
-  }) {
-    final iconSize = platformIconSizeFor(
-      game.platformEnum,
-      minHeight: minHeight,
-    );
-    return squareIconBadge(
-      theme,
-      tooltip: 'Selected',
-      color: theme.accent,
-      size: minHeight,
-      icon: Icon(Icons.check, color: Colors.white, size: iconSize),
-    );
-  }
-
   // ── Top-right chip cluster ────────────────────────────────────────────────
 
   static Widget topRightChips(
@@ -452,14 +295,8 @@ abstract final class GameCardBadges {
     final Widget content = showPlatform
         ? Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              platformBadge(
-                theme,
-                game,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                minHeight: kPlatformBadgeHeight,
-              ),
+              platformBadge(theme, game, kPlatformBadgeHeight),
               if (showRatingChip)
                 _animatedRatingChip(
                   theme,
@@ -469,12 +306,7 @@ abstract final class GameCardBadges {
                 ),
             ],
           )
-        : _animatedRatingChip(
-            theme,
-            game,
-            borderRadius: chipBorderRadius(theme, kBadgeHeight),
-            minHeight: kBadgeHeight,
-          );
+        : _animatedRatingChip(theme, game, minHeight: kBadgeHeight);
 
     return Padding(padding: padding, child: content);
   }
@@ -492,33 +324,35 @@ abstract final class GameCardBadges {
   }) {
     final baseChips = <Widget>[
       if (showDeadline)
-        deadlineBadge(
-          theme,
-          game.deadlineDate,
-          borderRadius: chipBorderRadius(theme, kBadgeHeight),
-          showIcon: true,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          minHeight: kBadgeHeight,
-          forceIconOnly: true,
-        ),
+        deadlineBadge(theme, game.deadlineDate, forceIconOnly: true),
       if (showRating)
         ratingBadge(
           theme,
           game,
-          borderRadius: chipBorderRadius(theme, kBadgeHeight),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           minHeight: kBadgeHeight,
         ),
-      if (showPlatform) platformBadge(theme, game, minHeight: kBadgeHeight),
+      if (showPlatform) platformBadge(theme, game, kBadgeHeight),
     ];
 
     final hasExtraChips = fetchStatus != null || isSelected;
     if (baseChips.isEmpty && !hasExtraChips) return const SizedBox.shrink();
 
+    final iconSize = platformIconSizeFor(
+      game.platformEnum,
+      minHeight: kBadgeHeight,
+    );
     final extraChips = <Widget>[
       if (fetchStatus != null)
-        slimFetchStatusBadge(theme, game, fetchStatus, minHeight: kBadgeHeight),
-      if (isSelected) slimSelectionBadge(theme, game, minHeight: kBadgeHeight),
+        _slimFetchStatusBadge(theme, fetchStatus, iconSize),
+      if (isSelected)
+        squareIconBadge(
+          theme,
+          tooltip: 'Selected',
+          color: theme.accent,
+          size: kBadgeHeight,
+          icon: Icon(Icons.check, color: Colors.white, size: iconSize),
+        ),
     ];
 
     return Row(
@@ -555,11 +389,23 @@ abstract final class GameCardBadges {
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
-  static Widget _deadlineStatusIcon(bool isExpired, {double size = 18.0}) {
-    return Icon(
-      isExpired ? Icons.event_busy : Icons.schedule,
-      color: Colors.white,
-      size: size,
+  static Widget _slimFetchStatusBadge(
+    AppThemeData theme,
+    GameFetchStatus status,
+    double iconSize,
+  ) {
+    final visual = fetchStatusVisual(
+      theme,
+      status,
+      iconSize: iconSize,
+      compactProcessingSpinner: true,
+    );
+    return squareIconBadge(
+      theme,
+      tooltip: visual.tooltip,
+      color: visual.color,
+      size: kBadgeHeight,
+      icon: fetchStatusIcon(visual, status, iconSize),
     );
   }
 
@@ -576,7 +422,7 @@ abstract final class GameCardBadges {
   static Widget _animatedRatingChip(
     AppThemeData theme,
     Game game, {
-    required BorderRadius borderRadius,
+    BorderRadius? borderRadius,
     double? minHeight,
     double topPadding = 0,
   }) {

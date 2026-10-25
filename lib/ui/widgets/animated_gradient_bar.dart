@@ -1368,23 +1368,21 @@ class GradientEffectPreview extends StatelessWidget {
     theme: theme,
     isSelected: isSelected,
     onTap: onTap,
-    backgroundBuilder: (context, _) {
-      return Stack(
-        children: [
-          // base surface and animated gradient
-          Container(color: theme.surface),
-          Positioned.fill(
-            child: AnimatedGradientBar(
-              theme: theme,
-              animationStyle: effect,
-              isPlaying: isPlaying,
-              autoPauseWhenNotVisible: true,
-              optimizeForPreview: true,
-              maxFps: 60,
-            ),
+    backgroundBuilder: (context, _) => Stack(
+      children: [
+        // base surface and animated gradient
+        Container(color: theme.surface),
+        Positioned.fill(
+          child: AnimatedGradientBar(
+            theme: theme,
+            animationStyle: effect,
+            isPlaying: isPlaying,
+            autoPauseWhenNotVisible: true,
+            optimizeForPreview: true,
+            maxFps: 60,
           ),
-        ],
-      );
-    },
+        ),
+      ],
+    ),
   );
 }

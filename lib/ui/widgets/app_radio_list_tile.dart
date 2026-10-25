@@ -207,11 +207,9 @@ class _TriangleRadioPainter extends CustomPainter {
       );
       final start = corner + before / before.distance * distance;
       final end = corner + after / after.distance * distance;
-      if (i == 0) {
-        path.moveTo(start.dx, start.dy);
-      } else {
-        path.lineTo(start.dx, start.dy);
-      }
+      i == 0
+          ? path.moveTo(start.dx, start.dy)
+          : path.lineTo(start.dx, start.dy);
       path.quadraticBezierTo(corner.dx, corner.dy, end.dx, end.dy);
     }
     return path..close();

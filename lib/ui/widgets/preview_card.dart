@@ -179,157 +179,148 @@ class _PreviewCardState extends State<PreviewCard> {
         height: widget.height,
         child: Stack(
           fit: StackFit.expand,
-          clipBehavior: Clip.none,
           children: [
-            Stack(
-              fit: StackFit.expand,
-              children: [
-                // Compose the whole painted preview before clipping it. A
-                // full-size background also covers the border's inner AA edge.
-                ClipRRect(
-                  borderRadius: outerRadius,
-                  clipBehavior: Clip.antiAliasWithSaveLayer,
-                  child: widget.backgroundBuilder(
-                    context,
-                    widget.theme.cornerRadius,
-                  ),
-                ),
-                // The game card selection look, below the name and badge.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween(end: widget.isSelected ? 1 : 0),
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : kMediumAnimation,
-                      curve: Curves.easeOutCubic,
-                      builder: (context, t, _) => t == 0
-                          ? const SizedBox.shrink()
-                          : DecoratedBox(
-                              key: const ValueKey('preview-selection-overlay'),
-                              decoration: widget.theme
-                                  .selectionOverlayDecoration(
-                                    t,
-                                    fillAlpha: PreviewCard.selectionFillAlpha,
-                                  ),
-                            ),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.all(borderWidth),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(innerRadius),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (widget.icon != null)
-                          Positioned(
-                            right: 2,
-                            bottom: 0,
-                            child: Icon(
-                              widget.icon,
-                              size: widget.height == null ? 32 : 45,
-                              color:
-                                  widget.backgroundIconColor ??
-                                  widget.theme.surface.withValues(alpha: 0.25),
-                            ),
+            // Compose the whole painted preview before clipping it. A
+            // full-size background also covers the border's inner AA edge.
+            ClipRRect(
+              borderRadius: outerRadius,
+              clipBehavior: Clip.antiAliasWithSaveLayer,
+              child: widget.backgroundBuilder(
+                context,
+                widget.theme.cornerRadius,
+              ),
+            ),
+            // The game card selection look, below the name and badge.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(end: widget.isSelected ? 1 : 0),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : kMediumAnimation,
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, _) => t == 0
+                      ? const SizedBox.shrink()
+                      : DecoratedBox(
+                          key: const ValueKey('preview-selection-overlay'),
+                          decoration: widget.theme.selectionOverlayDecoration(
+                            t,
+                            fillAlpha: PreviewCard.selectionFillAlpha,
                           ),
-                        Positioned(
-                          top: inline ? 0 : 4,
-                          bottom: inline ? 0 : null,
-                          // Inline text keeps the settings-card text inset.
-                          left: inline ? 12 - borderWidth : 4,
-                          right: 4,
-                          child: Align(
-                            alignment: inline
-                                ? Alignment.centerLeft
-                                : Alignment.topLeft,
-                            child: Container(
-                              key: const ValueKey('preview-card-label'),
-                              padding: inline
-                                  ? EdgeInsets.zero
-                                  : const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 3,
-                                    ),
-                              decoration: inline
-                                  ? null
-                                  : BoxDecoration(
-                                      color: widget.isSelected
-                                          ? secondary
-                                          : Colors.black.withValues(alpha: 0.5),
-                                      borderRadius: outerRadius,
-                                    ),
-                              child: ExcludeSemantics(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        widget.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: labelText,
-                                          fontSize: inline ? null : 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    if (widget.isSelected) ...[
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.check,
-                                        key: const ValueKey(
-                                          'preview-selection-check',
-                                        ),
-                                        size: inline ? 18 : 15,
-                                        color: labelText,
-                                      ),
-                                    ],
-                                  ],
+                        ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(borderWidth),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(innerRadius),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (widget.icon != null)
+                      Positioned(
+                        right: 2,
+                        bottom: 0,
+                        child: Icon(
+                          widget.icon,
+                          size: widget.height == null ? 32 : 45,
+                          color:
+                              widget.backgroundIconColor ??
+                              widget.theme.surface.withValues(alpha: 0.25),
+                        ),
+                      ),
+                    Positioned(
+                      top: inline ? 0 : 4,
+                      bottom: inline ? 0 : null,
+                      // Inline text keeps the settings-card text inset.
+                      left: inline ? 12 - borderWidth : 4,
+                      right: 4,
+                      child: Align(
+                        alignment: inline
+                            ? Alignment.centerLeft
+                            : Alignment.topLeft,
+                        child: Container(
+                          key: const ValueKey('preview-card-label'),
+                          padding: inline
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
                                 ),
-                              ),
+                          decoration: inline
+                              ? null
+                              : BoxDecoration(
+                                  color: widget.isSelected
+                                      ? secondary
+                                      : Colors.black.withValues(alpha: 0.5),
+                                  borderRadius: outerRadius,
+                                ),
+                          child: ExcludeSemantics(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: labelText,
+                                      fontSize: inline ? null : 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (widget.isSelected) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.check,
+                                    key: const ValueKey(
+                                      'preview-selection-check',
+                                    ),
+                                    size: inline ? 18 : 15,
+                                    color: labelText,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                        ),
-                        // The live clip above controls every splash, including one
-                        // already running when a selected theme changes the corners.
-                        Material(
-                          type: MaterialType.transparency,
-                          child: InkWell(
-                            key: widget.tapKey,
-                            excludeFromSemantics: true,
-                            onTap: widget.onTap == null ? null : _onTap,
-                            onTapUp: widget.onDoubleTap == null
-                                ? null
-                                : _onTapUp,
-                            onTapCancel: widget.onDoubleTap == null
-                                ? null
-                                : _resetTapHistory,
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                        if (widget.foreground != null) widget.foreground!,
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: outerRadius,
-                        border: Border.all(
-                          color: widget.theme.border,
-                          width: borderWidth,
                         ),
                       ),
                     ),
+                    // The live clip above controls every splash, including one
+                    // already running when a selected theme changes the corners.
+                    Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        key: widget.tapKey,
+                        excludeFromSemantics: true,
+                        onTap: widget.onTap == null ? null : _onTap,
+                        onTapUp: widget.onDoubleTap == null ? null : _onTapUp,
+                        onTapCancel: widget.onDoubleTap == null
+                            ? null
+                            : _resetTapHistory,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                    ?widget.foreground,
+                  ],
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: outerRadius,
+                    border: Border.all(
+                      color: widget.theme.border,
+                      width: borderWidth,
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           ],
         ),

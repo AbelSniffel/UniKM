@@ -31,15 +31,13 @@ class SteamApplyOptions {
     bool? applyImage,
     bool? applyReviews,
     bool? applyDeveloper,
-  }) {
-    return SteamApplyOptions(
-      applyAppId: applyAppId ?? this.applyAppId,
-      applyTags: applyTags ?? this.applyTags,
-      applyImage: applyImage ?? this.applyImage,
-      applyReviews: applyReviews ?? this.applyReviews,
-      applyDeveloper: applyDeveloper ?? this.applyDeveloper,
-    );
-  }
+  }) => SteamApplyOptions(
+    applyAppId: applyAppId ?? this.applyAppId,
+    applyTags: applyTags ?? this.applyTags,
+    applyImage: applyImage ?? this.applyImage,
+    applyReviews: applyReviews ?? this.applyReviews,
+    applyDeveloper: applyDeveloper ?? this.applyDeveloper,
+  );
 }
 
 /// Applies only fetched fields to the latest row in the originating session.

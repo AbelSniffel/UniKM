@@ -28,12 +28,11 @@ import 'database_unlock_dialog.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Show the backup management dialog
-Future<void> showBackupDialog(BuildContext context, {int initialTab = 0}) {
-  return showAppDialog(
-    context: context,
-    builder: (context) => _BackupDialog(initialTab: initialTab),
-  );
-}
+Future<void> showBackupDialog(BuildContext context, {int initialTab = 0}) =>
+    showAppDialog(
+      context: context,
+      builder: (context) => _BackupDialog(initialTab: initialTab),
+    );
 
 Future<void> _reloadDatabaseFromSettings(
   ProviderContainer container, {
@@ -513,60 +512,54 @@ Future<bool> showRestoreConfirmDialog(
 
   final confirmed = await showAppDialog<bool>(
     context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return ThemedAlertDialog(
-            theme: theme,
-
-            title: DialogHeader(
-              icon: Icons.restore,
-              title: 'Restore Backup',
-              theme: theme,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => ThemedAlertDialog(
+        theme: theme,
+        title: DialogHeader(
+          icon: Icons.restore,
+          title: 'Restore Backup',
+          theme: theme,
+        ),
+        maxHeight: 450,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Backup to restore:',
+              style: TextStyle(color: theme.textSecondary),
             ),
-            maxHeight: 450,
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Backup to restore:',
-                  style: TextStyle(color: theme.textSecondary),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  backup.displayName,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: kDialogSpacing),
-                SettingsToggleCard(
-                  theme: theme,
-                  label: 'Backup current database',
-                  value: createBackupFirst,
-                  onChanged: (value) =>
-                      setState(() => createBackupFirst = value),
-                ),
-                const SizedBox(height: kDialogSpacing),
-                DialogBanner.warning(
-                  theme: theme,
-                  message:
-                      'This will replace your current database with the backup.',
-                ),
-              ],
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Restore'),
+            const SizedBox(height: 4),
+            Text(
+              backup.displayName,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          );
-        },
-      );
-    },
+            ),
+            const SizedBox(height: kDialogSpacing),
+            SettingsToggleCard(
+              theme: theme,
+              label: 'Backup current database',
+              value: createBackupFirst,
+              onChanged: (value) => setState(() => createBackupFirst = value),
+            ),
+            const SizedBox(height: kDialogSpacing),
+            DialogBanner.warning(
+              theme: theme,
+              message:
+                  'This will replace your current database with the backup.',
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    ),
   );
 
   if (!context.mounted) return false;

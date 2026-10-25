@@ -34,19 +34,15 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
 
   // ── Keyboard modifier helpers ─────────────────────────────────────────────
 
-  bool get isCtrlPressed {
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    return keys.contains(LogicalKeyboardKey.controlLeft) ||
-        keys.contains(LogicalKeyboardKey.controlRight) ||
-        keys.contains(LogicalKeyboardKey.metaLeft) ||
-        keys.contains(LogicalKeyboardKey.metaRight);
-  }
+  bool get isCtrlPressed =>
+      HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isMetaPressed;
 
-  bool get isShiftPressed {
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    return keys.contains(LogicalKeyboardKey.shiftLeft) ||
-        keys.contains(LogicalKeyboardKey.shiftRight);
-  }
+  bool get isShiftPressed => HardwareKeyboard.instance.isShiftPressed;
+
+  /// Makes this card the anchor for the next range selection.
+  void _markLastSelected() =>
+      ref.read(lastSelectedGameIdProvider.notifier).set(cardGame.id);
 
   // ── Tap / double-tap / long-press ─────────────────────────────────────────
 
@@ -65,17 +61,13 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
       notifier.selectRange(lastId, cardGame.id);
     } else if (ctrlDown) {
       notifier.toggleGameSelection(cardGame.id);
-      ref
-          .read(lastSelectedGameIdProvider.notifier)
-          .set(cardGame.id);
+      _markLastSelected();
     } else {
       if (!selectedIds.contains(cardGame.id) || selectedIds.length != 1) {
         notifier.clearSelection();
         notifier.selectGame(cardGame.id);
       }
-      ref
-          .read(lastSelectedGameIdProvider.notifier)
-          .set(cardGame.id);
+      _markLastSelected();
     }
   }
 
@@ -97,15 +89,13 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
       gamesProvider.select((s) => s.selectedGameIds),
     );
 
-    final List<int> idsToPass;
-    if (selectedIds.contains(cardGame.id) && selectedIds.length > 1) {
-      idsToPass = allGames
-          .where((g) => selectedIds.contains(g.id))
-          .map((g) => g.id)
-          .toList();
-    } else {
-      idsToPass = [cardGame.id];
-    }
+    final idsToPass =
+        selectedIds.contains(cardGame.id) && selectedIds.length > 1
+        ? [
+            for (final game in allGames)
+              if (selectedIds.contains(game.id)) game.id,
+          ]
+        : [cardGame.id];
 
     showGameEditorDialog(
       context,
@@ -121,9 +111,7 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
 
     _primaryPointerHandledByLongPress = true;
     ref.read(gamesProvider.notifier).toggleGameSelection(cardGame.id);
-    ref
-        .read(lastSelectedGameIdProvider.notifier)
-        .set(cardGame.id);
+    _markLastSelected();
   }
 
   // ── Drag-selection ────────────────────────────────────────────────────────
@@ -162,9 +150,7 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
     }
 
     ref.read(dragSelectionProvider.notifier).markVisited(cardGame.id);
-    ref
-        .read(lastSelectedGameIdProvider.notifier)
-        .set(cardGame.id);
+    _markLastSelected();
   }
 
   // ── Pointer event handlers ────────────────────────────────────────────────
@@ -195,10 +181,8 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
       if (!dragSelectionHandledByParent &&
           event.kind == PointerDeviceKind.mouse &&
           (isCtrlPressed || ref.read(selectionMultiSelectModeProvider))) {
-        final dragNotifier = ref.read(dragSelectionProvider.notifier);
-        final dragState = ref.read(dragSelectionProvider);
-        if (!dragState.isActive) {
-          dragNotifier.start();
+        if (!ref.read(dragSelectionProvider).isActive) {
+          ref.read(dragSelectionProvider.notifier).start();
           handleDragSelectionEvent(event);
         }
       }

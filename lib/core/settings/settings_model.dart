@@ -167,18 +167,12 @@ enum ListViewDensityMode {
   final String displayName;
 }
 
-ListViewDensityMode resolveListViewDensityMode({required bool slimListView}) {
-  return slimListView ? ListViewDensityMode.slim : ListViewDensityMode.regular;
-}
+ListViewDensityMode resolveListViewDensityMode({required bool slimListView}) =>
+    slimListView ? ListViewDensityMode.slim : ListViewDensityMode.regular;
 
-Map<String, dynamic> listViewDensityModeSettings(ListViewDensityMode mode) {
-  switch (mode) {
-    case ListViewDensityMode.regular:
-      return {SettingsKeys.slimListView: false};
-    case ListViewDensityMode.slim:
-      return {SettingsKeys.slimListView: true};
-  }
-}
+Map<String, dynamic> listViewDensityModeSettings(ListViewDensityMode mode) => {
+  SettingsKeys.slimListView: mode == ListViewDensityMode.slim,
+};
 
 /// Sort mode for game list
 enum GameSortMode {

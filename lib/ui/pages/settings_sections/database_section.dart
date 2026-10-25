@@ -60,104 +60,95 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
   return showAppDialog<CreateDatabaseChoiceResult>(
     context: context,
     barrierDismissible: true,
-    builder: (ctx) {
-      return DialogInteractionScope(
-        onDismiss: () => Navigator.pop(ctx),
-        child: StatefulBuilder(
-          builder: (context, setState) {
-            return ThemedAlertDialog(
-              theme: theme,
-              maxWidth: 520,
-              title: DialogHeader(
-                icon: Icons.note_add,
-                title: 'Create Database',
+    builder: (ctx) => DialogInteractionScope(
+      onDismiss: () => Navigator.pop(ctx),
+      child: StatefulBuilder(
+        builder: (context, setState) => ThemedAlertDialog(
+          theme: theme,
+          maxWidth: 520,
+          title: DialogHeader(
+            icon: Icons.note_add,
+            title: 'Create Database',
+            theme: theme,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionGroupBox(
+                title: 'Database Type',
+                titleIcon: Icons.storage,
                 theme: theme,
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SectionGroupBox(
-                    title: 'Database Type',
-                    titleIcon: Icons.storage,
-                    theme: theme,
-                    child: RadioGroup<String>(
-                      groupValue: selectedType,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => selectedType = value);
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          AppRadioListTile<String>(
-                            theme: theme,
-                            value: 'unencrypted',
-                            title: 'Unencrypted database',
-                            subtitle:
-                                'Creates a standard SQLite database file.',
-                          ),
-                          AppRadioListTile<String>(
-                            theme: theme,
-                            value: 'encrypted',
-                            title: 'Encrypted database',
-                            subtitle:
-                                'Creates an encrypted database that requires a password.',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (useMobileLayout) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: fileNameController,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        labelText: 'Database file name',
-                        hintText: selectedType == 'encrypted'
-                            ? 'UniKM_keys.enc'
-                            : 'UniKM_keys.db',
-                        errorText: fileNameError,
-                      ),
-                      onChanged: (_) {
-                        if (fileNameError != null) {
-                          setState(() => fileNameError = null);
-                        }
-                      },
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    final trimmedFileName = fileNameController.text.trim();
-                    if (useMobileLayout && trimmedFileName.isEmpty) {
-                      setState(
-                        () => fileNameError = 'Please enter a file name',
-                      );
-                      return;
-                    }
-                    Navigator.pop(
-                      ctx,
-                      CreateDatabaseChoiceResult(
-                        encrypted: selectedType == 'encrypted',
-                        fileName: trimmedFileName.isEmpty
-                            ? null
-                            : trimmedFileName,
-                      ),
-                    );
+                child: RadioGroup<String>(
+                  groupValue: selectedType,
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => selectedType = value);
                   },
-                  style: themedFilledButtonStyle(theme),
-                  child: const Text('Create'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AppRadioListTile<String>(
+                        theme: theme,
+                        value: 'unencrypted',
+                        title: 'Unencrypted database',
+                        subtitle: 'Creates a standard SQLite database file.',
+                      ),
+                      AppRadioListTile<String>(
+                        theme: theme,
+                        value: 'encrypted',
+                        title: 'Encrypted database',
+                        subtitle:
+                            'Creates an encrypted database that requires a password.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (useMobileLayout) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: fileNameController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Database file name',
+                    hintText: selectedType == 'encrypted'
+                        ? 'UniKM_keys.enc'
+                        : 'UniKM_keys.db',
+                    errorText: fileNameError,
+                  ),
+                  onChanged: (_) {
+                    if (fileNameError != null) {
+                      setState(() => fileNameError = null);
+                    }
+                  },
                 ),
               ],
-            );
-          },
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                final trimmedFileName = fileNameController.text.trim();
+                if (useMobileLayout && trimmedFileName.isEmpty) {
+                  setState(() => fileNameError = 'Please enter a file name');
+                  return;
+                }
+                Navigator.pop(
+                  ctx,
+                  CreateDatabaseChoiceResult(
+                    encrypted: selectedType == 'encrypted',
+                    fileName: trimmedFileName.isEmpty ? null : trimmedFileName,
+                  ),
+                );
+              },
+              style: themedFilledButtonStyle(theme),
+              child: const Text('Create'),
+            ),
+          ],
         ),
-      );
-    },
+      ),
+    ),
   );
 }
 
@@ -451,55 +442,50 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     required String label,
     String? description,
     required Widget trailing,
-  }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 220;
-        final labelWidget = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: widget.theme.textPrimary,
-                fontWeight: FontWeight.w500,
-              ),
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stacked = constraints.maxWidth < 220;
+      final labelWidget = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: widget.theme.textPrimary,
+              fontWeight: FontWeight.w500,
             ),
-            if (description != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                description,
-                style: TextStyle(
-                  color: widget.theme.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ],
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              description,
+              style: TextStyle(color: widget.theme.textSecondary, fontSize: 12),
+            ),
           ],
-        );
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: stacked
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    labelWidget,
-                    const SizedBox(height: kElementVSpacing),
-                    Align(alignment: Alignment.centerRight, child: trailing),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: labelWidget),
-                    const SizedBox(width: kElementHSpacing),
-                    trailing,
-                  ],
-                ),
-        );
-      },
-    );
-  }
+        ],
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: stacked
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  labelWidget,
+                  const SizedBox(height: kElementVSpacing),
+                  Align(alignment: Alignment.centerRight, child: trailing),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(child: labelWidget),
+                  const SizedBox(width: kElementHSpacing),
+                  trailing,
+                ],
+              ),
+      );
+    },
+  );
 
   String _formatNextBackupTime(DateTime nextTime) {
     final diff = nextTime.difference(DateTime.now());
@@ -648,69 +634,65 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     required bool isSearchMatch,
     SectionGroupPosition groupPosition = SectionGroupPosition.only,
     bool alternateBackground = false,
-  }) {
-    return SectionGroupBox(
-      title: DatabaseSection.dataManagementSearchGroup.title,
-      theme: widget.theme,
-      titleIcon: Icons.backup,
-      headerBottomPadding: 0,
-      searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
-      groupPosition: groupPosition,
-      alternateBackground: alternateBackground,
-      headerCrossAxisAlignment: CrossAxisAlignment.center,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: kElementHSpacing,
-        children: [
-          IconButton(
-            tooltip: 'Backup Manager',
-            style: widget.theme.compactIconButtonStyle,
-            color: widget.theme.accent,
-            icon: const Icon(Icons.backup, size: 26),
-            onPressed: databaseSwitching
-                ? null
-                : () => showBackupDialog(context),
-          ),
-          if (nextBackupTime != null)
-            Tooltip(
-              key: _backupInfoKey,
-              message:
-                  'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
-              child: IconButton(
-                style: widget.theme.compactIconButtonStyle,
-                icon: const Icon(Icons.info_outline, size: 26),
-                color: widget.theme.accent,
-                onPressed: () =>
-                    _backupInfoKey.currentState?.ensureTooltipVisible(),
-              ),
-            ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Divider(
-            key: const ValueKey('data-management-separator'),
-            height: 8,
-            color: widget.theme.border,
-          ),
-          _buildResponsiveSettingRow(
-            label: DatabaseSection.activeDatabaseSpec.label,
-            description: _activeDbPath,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: kElementHSpacing,
-              children: [
-                if (_isLoading) const AppCircularProgressIndicator(size: 20),
-                _DatabaseEncryptionButton(theme: widget.theme),
-              ],
+  }) => SectionGroupBox(
+    title: DatabaseSection.dataManagementSearchGroup.title,
+    theme: widget.theme,
+    titleIcon: Icons.backup,
+    headerBottomPadding: 0,
+    searchQuery: searchQuery,
+    isSearchMatch: isSearchMatch,
+    groupPosition: groupPosition,
+    alternateBackground: alternateBackground,
+    headerCrossAxisAlignment: CrossAxisAlignment.center,
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: kElementHSpacing,
+      children: [
+        IconButton(
+          tooltip: 'Backup Manager',
+          style: widget.theme.compactIconButtonStyle,
+          color: widget.theme.accent,
+          icon: const Icon(Icons.backup, size: 26),
+          onPressed: databaseSwitching ? null : () => showBackupDialog(context),
+        ),
+        if (nextBackupTime != null)
+          Tooltip(
+            key: _backupInfoKey,
+            message:
+                'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
+            child: IconButton(
+              style: widget.theme.compactIconButtonStyle,
+              icon: const Icon(Icons.info_outline, size: 26),
+              color: widget.theme.accent,
+              onPressed: () =>
+                  _backupInfoKey.currentState?.ensureTooltipVisible(),
             ),
           ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(
+          key: const ValueKey('data-management-separator'),
+          height: 8,
+          color: widget.theme.border,
+        ),
+        _buildResponsiveSettingRow(
+          label: DatabaseSection.activeDatabaseSpec.label,
+          description: _activeDbPath,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: kElementHSpacing,
+            children: [
+              if (_isLoading) const AppCircularProgressIndicator(size: 20),
+              _DatabaseEncryptionButton(theme: widget.theme),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ChangeDatabaseDialog extends ConsumerStatefulWidget {

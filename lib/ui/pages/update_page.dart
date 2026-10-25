@@ -81,26 +81,24 @@ class UpdateState {
     Object? downloadedFilePath = _unset,
     List<GitHubRelease>? allReleases,
     Object? switchingToVersion = _unset,
-  }) {
-    return UpdateState(
-      isChecking: isChecking ?? this.isChecking,
-      hasChecked: hasChecked ?? this.hasChecked,
-      isDownloading: isDownloading ?? this.isDownloading,
-      hasUpdate: hasUpdate ?? this.hasUpdate,
-      release: release == _unset ? this.release : release as GitHubRelease?,
-      downloadProgress: downloadProgress ?? this.downloadProgress,
-      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
-      totalBytes: totalBytes ?? this.totalBytes,
-      error: error,
-      downloadedFilePath: downloadedFilePath == _unset
-          ? this.downloadedFilePath
-          : downloadedFilePath as String?,
-      allReleases: allReleases ?? this.allReleases,
-      switchingToVersion: switchingToVersion == _unset
-          ? this.switchingToVersion
-          : switchingToVersion as String?,
-    );
-  }
+  }) => UpdateState(
+    isChecking: isChecking ?? this.isChecking,
+    hasChecked: hasChecked ?? this.hasChecked,
+    isDownloading: isDownloading ?? this.isDownloading,
+    hasUpdate: hasUpdate ?? this.hasUpdate,
+    release: release == _unset ? this.release : release as GitHubRelease?,
+    downloadProgress: downloadProgress ?? this.downloadProgress,
+    downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+    totalBytes: totalBytes ?? this.totalBytes,
+    error: error,
+    downloadedFilePath: downloadedFilePath == _unset
+        ? this.downloadedFilePath
+        : downloadedFilePath as String?,
+    allReleases: allReleases ?? this.allReleases,
+    switchingToVersion: switchingToVersion == _unset
+        ? this.switchingToVersion
+        : switchingToVersion as String?,
+  );
 }
 
 // Sentinel used inside UpdateState.copyWith for nullable fields that need a
@@ -120,15 +118,14 @@ enum UpdatePreviewState {
 String _formatMegabytes(int bytes) =>
     '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-String _downloadNotificationMessage({
-  required int downloadedBytes,
-  required int totalBytes,
-}) {
-  if (totalBytes > 0) {
-    return 'Downloaded ${_formatMegabytes(downloadedBytes)} / ${_formatMegabytes(totalBytes)}';
-  }
-  return 'Downloaded ${_formatMegabytes(downloadedBytes)}';
-}
+String _downloadNotificationMessage(int downloadedBytes, int totalBytes) =>
+    totalBytes > 0
+    ? 'Downloaded ${_formatMegabytes(downloadedBytes)} / ${_formatMegabytes(totalBytes)}'
+    : 'Downloaded ${_formatMegabytes(downloadedBytes)}';
+
+/// Small secondary text in the status panel and changelog.
+Text _caption(String text, Color color) =>
+    Text(text, style: TextStyle(color: color, fontSize: 12));
 
 bool canRunAutomaticUpdateCheck(UpdateState state) =>
     !state.isChecking &&
@@ -176,8 +173,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
         if (state.isDownloading) {
           _showDownloadNotification(
             _downloadNotificationMessage(
-              downloadedBytes: state.downloadedBytes,
-              totalBytes: state.totalBytes,
+              state.downloadedBytes,
+              state.totalBytes,
             ),
             progress: state.downloadProgress,
           );
@@ -253,10 +250,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   void _showDownloadProgressNotification(int received, int total) =>
       _showDownloadNotification(
-        _downloadNotificationMessage(
-          downloadedBytes: received,
-          totalBytes: total,
-        ),
+        _downloadNotificationMessage(received, total),
         progress: total > 0 ? received / total : 0.0,
       );
 
@@ -270,48 +264,43 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
     final cachedReleases = state.allReleases;
 
-    switch (preview) {
-      case UpdatePreviewState.idle:
-        state = UpdateState(allReleases: cachedReleases);
-      case UpdatePreviewState.checking:
-        state = UpdateState(
-          isChecking: true,
-          hasChecked: false,
-          allReleases: cachedReleases,
-        );
-      case UpdatePreviewState.upToDate:
-        state = UpdateState(hasChecked: true, allReleases: cachedReleases);
-      case UpdatePreviewState.updateAvailable:
-        state = UpdateState(
-          hasChecked: true,
-          hasUpdate: true,
-          release: _devPreviewRelease,
-          allReleases: cachedReleases,
-        );
-      case UpdatePreviewState.downloading:
-        state = UpdateState(
-          hasChecked: true,
-          hasUpdate: true,
-          isDownloading: true,
-          release: _devPreviewRelease,
-          downloadProgress: 0.64,
-          downloadedBytes: 30870077,
-          totalBytes: _devPreviewRelease.downloadSize ?? 48234496,
-          allReleases: cachedReleases,
-        );
-      case UpdatePreviewState.downloaded:
-        state = UpdateState(
-          hasChecked: true,
-          downloadedFilePath: r'C:\Temp\UniKM-Preview-9.9.9.exe',
-          allReleases: cachedReleases,
-        );
-      case UpdatePreviewState.error:
-        state = UpdateState(
-          hasChecked: true,
-          error: 'Preview error: unable to reach the update service.',
-          allReleases: cachedReleases,
-        );
-    }
+    state = switch (preview) {
+      UpdatePreviewState.idle => UpdateState(allReleases: cachedReleases),
+      UpdatePreviewState.checking => UpdateState(
+        isChecking: true,
+        allReleases: cachedReleases,
+      ),
+      UpdatePreviewState.upToDate => UpdateState(
+        hasChecked: true,
+        allReleases: cachedReleases,
+      ),
+      UpdatePreviewState.updateAvailable => UpdateState(
+        hasChecked: true,
+        hasUpdate: true,
+        release: _devPreviewRelease,
+        allReleases: cachedReleases,
+      ),
+      UpdatePreviewState.downloading => UpdateState(
+        hasChecked: true,
+        hasUpdate: true,
+        isDownloading: true,
+        release: _devPreviewRelease,
+        downloadProgress: 0.64,
+        downloadedBytes: 30870077,
+        totalBytes: _devPreviewRelease.downloadSize ?? 48234496,
+        allReleases: cachedReleases,
+      ),
+      UpdatePreviewState.downloaded => UpdateState(
+        hasChecked: true,
+        downloadedFilePath: r'C:\Temp\UniKM-Preview-9.9.9.exe',
+        allReleases: cachedReleases,
+      ),
+      UpdatePreviewState.error => UpdateState(
+        hasChecked: true,
+        error: 'Preview error: unable to reach the update service.',
+        allReleases: cachedReleases,
+      ),
+    };
 
     if ((state.hasUpdate || state.downloadedFilePath != null) &&
         ref.read(currentNavProvider) != NavItem.updates) {
@@ -926,21 +915,12 @@ class _UpdateStatusPanel extends ConsumerWidget {
                       ),
                     ),
                     if (state.release != null)
-                      Text(
+                      _caption(
                         state.isPrerelease ? 'Pre-release' : 'Stable release',
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                        ),
+                        theme.textSecondary,
                       ),
                     if (state.downloadSize != null)
-                      Text(
-                        state.downloadSize!,
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
+                      _caption(state.downloadSize!, theme.textSecondary),
                   ],
                 ),
               ],
@@ -1095,32 +1075,22 @@ class _UpdateStatusPanel extends ConsumerWidget {
   }
 }
 
-MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) =>
-    MarkdownStyleSheet(
-      p: TextStyle(color: theme.textPrimary, fontSize: 13),
-      h1: TextStyle(
-        color: theme.textPrimary,
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-      ),
-      h2: TextStyle(
-        color: theme.textPrimary,
-        fontSize: 14,
-        fontWeight: FontWeight.bold,
-      ),
-      h3: TextStyle(
-        color: theme.textPrimary,
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-      ),
-      code: TextStyle(
-        color: theme.accent,
-        fontFamily: 'monospace',
-        fontSize: 12,
-      ),
-      blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
-      listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
-    );
+MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) {
+  TextStyle heading(double fontSize) => TextStyle(
+    color: theme.textPrimary,
+    fontSize: fontSize,
+    fontWeight: FontWeight.bold,
+  );
+  return MarkdownStyleSheet(
+    p: TextStyle(color: theme.textPrimary, fontSize: 13),
+    h1: heading(16),
+    h2: heading(14),
+    h3: heading(13),
+    code: TextStyle(color: theme.accent, fontFamily: 'monospace', fontSize: 12),
+    blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
+    listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
+  );
+}
 
 /// Opens the release archive from the changelog title bar.
 class _ReleasesLinkButton extends ConsumerWidget {
@@ -1451,38 +1421,20 @@ class _ChangelogSectionState extends ConsumerState<_ChangelogSection> {
                               spacing: 12,
                               runSpacing: 4,
                               children: [
-                                Text(
+                                _caption(
                                   DateFormat(
                                     'yyyy-MM-dd',
                                   ).format(release.publishedAt),
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 12,
-                                  ),
+                                  theme.textSecondary,
                                 ),
                                 if (isCurrent)
-                                  Text(
-                                    'Current version',
-                                    style: TextStyle(
-                                      color: theme.accent,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                  _caption('Current version', theme.accent),
                                 if (release.isPrerelease)
-                                  Text(
-                                    'Pre-release',
-                                    style: TextStyle(
-                                      color: theme.secondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                  _caption('Pre-release', theme.secondary),
                                 if (isSkipped)
-                                  Text(
+                                  _caption(
                                     'Skipped version',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 12,
-                                    ),
+                                    theme.textSecondary,
                                   ),
                               ],
                             ),

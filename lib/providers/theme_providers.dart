@@ -35,24 +35,19 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
   @override
   AppThemeData build() {
-    final themeSelectionToken = ref.watch(activeThemeNameProvider);
+    final token = ref.watch(activeThemeNameProvider);
     final allThemes = getAllThemes();
-
-    // Preferred path: settings store theme ID
-    final byId = allThemes
-        .where((t) => t.id == themeSelectionToken)
-        .firstOrNull;
-    if (byId != null) return byId;
-
-    // Backward compatibility path: old settings may still store theme name
-    final byName = allThemes
-        .where((t) => t.name == themeSelectionToken)
-        .firstOrNull;
-    if (byName != null) return byName;
-
-    // Default to dark theme
-    return kDarkTheme;
+    // Settings store the theme ID; older settings may still store its name.
+    return allThemes.where((t) => t.id == token).firstOrNull ??
+        allThemes.where((t) => t.name == token).firstOrNull ??
+        kDarkTheme;
   }
+
+  /// Settings that make [id] the active theme.
+  static Map<String, dynamic> _activeTheme(String id) => {
+    SettingsKeys.activeTheme: id,
+    SettingsKeys.currentTheme: id,
+  };
 
   /// Start previewing a theme without persisting
   /// Call cancelPreview() to restore the original theme
@@ -95,11 +90,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     _previewOriginalTheme = null; // Clear preview state
     state = theme;
-    final settings = ref.read(settingsProvider.notifier);
-    await settings.setMany({
-      SettingsKeys.activeTheme: theme.id,
-      SettingsKeys.currentTheme: theme.id,
-    });
+    await ref.read(settingsProvider.notifier).setMany(_activeTheme(theme.id));
   }
 
   /// Save a custom theme
@@ -115,12 +106,9 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     // Add new theme
     customThemes.add(jsonEncode(theme.toJson()));
-    _cachedCustomThemesJson = null;
-    _cachedAllThemes = null;
     await settings.setMany({
       SettingsKeys.customThemes: customThemes,
-      SettingsKeys.activeTheme: theme.id,
-      SettingsKeys.currentTheme: theme.id,
+      ..._activeTheme(theme.id),
     });
     state = theme;
   }
@@ -172,17 +160,10 @@ class ThemeNotifier extends Notifier<AppThemeData> {
       }
     }
 
-    _cachedCustomThemesJson = null;
-    _cachedAllThemes = null;
-
-    final updates = <String, dynamic>{SettingsKeys.customThemes: customThemes};
-
-    if (lastImportedId != null) {
-      updates[SettingsKeys.activeTheme] = lastImportedId;
-      updates[SettingsKeys.currentTheme] = lastImportedId;
-    }
-
-    await settings.setMany(updates);
+    await settings.setMany({
+      SettingsKeys.customThemes: customThemes,
+      if (lastImportedId != null) ..._activeTheme(lastImportedId),
+    });
 
     if (lastImportedId != null) {
       final activatedTheme = getAllThemes()
@@ -206,18 +187,12 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     final customThemes = List<String>.from(ref.read(customThemesJsonProvider));
 
     customThemes.removeWhere((json) => _decodeCustomTheme(json)?.id == id);
-
-    _cachedCustomThemesJson = null;
-    _cachedAllThemes = null;
     await settings.set(SettingsKeys.customThemes, customThemes);
 
     // If current theme was deleted, switch to Dark theme
     if (isActiveTheme) {
       state = kDarkTheme;
-      await settings.setMany({
-        SettingsKeys.activeTheme: kDarkTheme.id,
-        SettingsKeys.currentTheme: kDarkTheme.id,
-      });
+      await settings.setMany(_activeTheme(kDarkTheme.id));
     }
   }
 
@@ -230,7 +205,8 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     }
   }
 
-  /// Get all available themes (built-in + custom)
+  /// Get all available themes (built-in + custom). The list is rebuilt only
+  /// when the stored custom theme JSON changes.
   List<AppThemeData> getAllThemes() {
     final customThemesJson = ref.read(customThemesJsonProvider);
 
@@ -256,13 +232,13 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 }
 
 /// Theme provider
-final themeProvider = NotifierProvider<ThemeNotifier, AppThemeData>(() {
-  return ThemeNotifier();
-});
+final themeProvider = NotifierProvider<ThemeNotifier, AppThemeData>(
+  ThemeNotifier.new,
+);
 
-final builtInThemeIdsProvider = Provider<Set<String>>((ref) {
-  return AppThemeData.builtInThemes.map((theme) => theme.id).toSet();
-});
+final builtInThemeIdsProvider = Provider<Set<String>>(
+  (ref) => AppThemeData.builtInThemes.map((theme) => theme.id).toSet(),
+);
 
 final currentThemeIsBuiltInProvider = Provider<bool>((ref) {
   final activeThemeId = ref.watch(themeProvider.select((theme) => theme.id));
@@ -274,9 +250,9 @@ final effectiveNavPanelOverlayStyleProvider = Provider<NavPanelOverlayStyle>((
   ref,
 ) {
   final theme = ref.watch(themeProvider);
-  final isBuiltIn = ref.watch(currentThemeIsBuiltInProvider);
-  if (isBuiltIn) return ref.watch(navPanelOverlayStyleSettingProvider);
-  return theme.navPanelOverlayStyle;
+  return ref.watch(currentThemeIsBuiltInProvider)
+      ? ref.watch(navPanelOverlayStyleSettingProvider)
+      : theme.navPanelOverlayStyle;
 });
 
 final effectiveThemeProvider = Provider<AppThemeData>((ref) {

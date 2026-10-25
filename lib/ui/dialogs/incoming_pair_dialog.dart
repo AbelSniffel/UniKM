@@ -53,14 +53,11 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
       }
 
       final shouldClose = switch (event) {
-        final PairRequestCanceledEvent e
-            when e.request.requestId == widget.request.requestId =>
-          true,
-        final PairRequestTimedOutEvent e
-            when e.request.requestId == widget.request.requestId =>
-          true,
-        final PeerTrustedEvent e when e.peer.id == widget.request.peer.id =>
-          true,
+        PairRequestCanceledEvent(:final request) ||
+        PairRequestTimedOutEvent(
+          :final request,
+        ) => request.requestId == widget.request.requestId,
+        PeerTrustedEvent(:final peer) => peer.id == widget.request.peer.id,
         _ => false,
       };
 

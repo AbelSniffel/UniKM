@@ -29,34 +29,32 @@ class SyncEntryFingerprint {
     GameEntry game,
     List<TagEntry> tags, {
     String? coverDigest,
-  }) {
-    return fromPayload({
-      'title': game.title,
-      'gameKey': game.gameKey,
-      'platform': game.platform,
-      'dateAdded': game.dateAdded.toIso8601String(),
-      'updatedAt': game.updatedAt.toIso8601String(),
-      'notes': game.notes,
-      'isUsed': game.isUsed,
-      'coverDigest': coverDigest ?? coverIdentity(game.coverImage),
-      'hasDeadline': game.hasDeadline,
-      'deadlineDate': game.deadlineDate?.toIso8601String(),
-      'isDlc': game.isDlc,
-      'steamAppId': game.steamAppId,
-      'developer': game.developer,
-      'reviewScore': game.reviewScore,
-      'reviewCount': game.reviewCount,
-      'tags': tags
-          .map(
-            (tag) => {
-              'name': tag.name,
-              'colorHex': tag.color,
-              'isSteamTag': tag.isSteamTag,
-            },
-          )
-          .toList(growable: false),
-    });
-  }
+  }) => fromPayload({
+    'title': game.title,
+    'gameKey': game.gameKey,
+    'platform': game.platform,
+    'dateAdded': game.dateAdded.toIso8601String(),
+    'updatedAt': game.updatedAt.toIso8601String(),
+    'notes': game.notes,
+    'isUsed': game.isUsed,
+    'coverDigest': coverDigest ?? coverIdentity(game.coverImage),
+    'hasDeadline': game.hasDeadline,
+    'deadlineDate': game.deadlineDate?.toIso8601String(),
+    'isDlc': game.isDlc,
+    'steamAppId': game.steamAppId,
+    'developer': game.developer,
+    'reviewScore': game.reviewScore,
+    'reviewCount': game.reviewCount,
+    'tags': tags
+        .map(
+          (tag) => {
+            'name': tag.name,
+            'colorHex': tag.color,
+            'isSteamTag': tag.isSteamTag,
+          },
+        )
+        .toList(growable: false),
+  });
 
   /// Remote and bundled covers are identified by their address, not bytes.
   static bool isAddressedCover(String raw) =>

@@ -28,89 +28,9 @@ bool shouldShowSettingsGroup({
   required String query,
   required bool Function(String) matchesSearch,
   required SettingsSearchGroup group,
-}) {
-  return query.trim().isEmpty ||
-      matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group);
-}
-
-/// A convenience wrapper around [SectionGroupBox] that hides itself when
-/// its [group] does not match the search query.
-///
-/// This reduces the boilerplate of computing `isSearching`/`showXXX` in
-/// every section.
-class SearchableSectionGroupBox extends StatelessWidget {
-  const SearchableSectionGroupBox({
-    super.key,
-    required this.theme,
-    required this.group,
-    required this.searchQuery,
-    required this.matchesSearch,
-    required this.child,
-    this.titleIcon,
-    this.extraMatch,
-    this.groupPosition = SectionGroupPosition.only,
-    this.isAlternate = false,
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final SettingsSearchGroup group;
-  final String searchQuery;
-  final bool Function(String) matchesSearch;
-  final Widget child;
-  final IconData? titleIcon;
-
-  /// Additional predicate to decide visibility (example: theme list
-  /// matching).  If provided, the section is shown when either the group
-  /// matches or this returns true.
-  final bool Function()? extraMatch;
-
-  /// Position in a connected group strip (controls borders / corner radius).
-  final SectionGroupPosition groupPosition;
-
-  /// When true, uses the alternate background colour for visual banding.
-  final bool isAlternate;
-
-  /// When true, suppresses the top corner radius so this box visually attaches
-  /// to a header widget placed directly above it.
-  final bool attachesToAbove;
-
-  bool get _isSearching => searchQuery.trim().isNotEmpty;
-
-  bool get _show =>
-      shouldShowSettingsGroup(
-        query: searchQuery,
-        matchesSearch: matchesSearch,
-        group: group,
-      ) ||
-      (extraMatch?.call() ?? false);
-
-  /// Computes the effective [SectionGroupPosition] when [attachesToAbove] is
-  /// set, mapping [only] → [onlyAttached] and [first] → [firstAttached].
-  SectionGroupPosition get _effectivePosition {
-    if (!attachesToAbove) return groupPosition;
-    return switch (groupPosition) {
-      SectionGroupPosition.only => SectionGroupPosition.onlyAttached,
-      SectionGroupPosition.first => SectionGroupPosition.firstAttached,
-      _ => groupPosition,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_show) return const SizedBox.shrink();
-    return SectionGroupBox(
-      title: group.title,
-      theme: theme,
-      titleIcon: titleIcon,
-      searchQuery: searchQuery,
-      isSearchMatch: _isSearching,
-      groupPosition: _effectivePosition,
-      alternateBackground: isAlternate,
-      child: child,
-    );
-  }
-}
+}) =>
+    query.trim().isEmpty ||
+    matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group);
 
 // ---------------------------------------------------------------------------
 // Connected group strip helpers
@@ -147,27 +67,37 @@ SectionGroupEntry buildSearchableSectionEntry({
   bool Function()? extraMatch,
   bool attachesToAbove = false,
 }) {
+  bool matches() =>
+      shouldShowSettingsGroup(
+        query: searchQuery,
+        matchesSearch: matchesSearch,
+        group: group,
+      ) ||
+      (extraMatch?.call() ?? false);
   return SectionGroupEntry(
-    visible:
-        visible ??
-        (shouldShowSettingsGroup(
-              query: searchQuery,
-              matchesSearch: matchesSearch,
-              group: group,
-            ) ||
-            (extraMatch?.call() ?? false)),
-    builder: (position, isAlternate) => SearchableSectionGroupBox(
-      theme: theme,
-      group: group,
-      searchQuery: searchQuery,
-      matchesSearch: matchesSearch,
-      titleIcon: titleIcon,
-      extraMatch: extraMatch,
-      groupPosition: position,
-      isAlternate: isAlternate,
-      attachesToAbove: attachesToAbove,
-      child: childBuilder(),
-    ),
+    visible: visible ?? matches(),
+    // An explicitly visible entry still hides when its group does not match.
+    builder: (position, isAlternate) => !matches()
+        ? const SizedBox.shrink()
+        : SectionGroupBox(
+            title: group.title,
+            theme: theme,
+            titleIcon: titleIcon,
+            searchQuery: searchQuery,
+            isSearchMatch: searchQuery.trim().isNotEmpty,
+            // Attached boxes drop the top corners that meet the header.
+            groupPosition: !attachesToAbove
+                ? position
+                : switch (position) {
+                    SectionGroupPosition.only =>
+                      SectionGroupPosition.onlyAttached,
+                    SectionGroupPosition.first =>
+                      SectionGroupPosition.firstAttached,
+                    _ => position,
+                  },
+            alternateBackground: isAlternate,
+            child: childBuilder(),
+          ),
   );
 }
 
@@ -226,20 +156,18 @@ class SettingsSectionGroups extends StatelessWidget {
     int index,
     int total, {
     bool attachesToAbove = false,
-  }) {
-    if (total == 1) {
-      return attachesToAbove
+  }) => switch (index) {
+    _ when total == 1 =>
+      attachesToAbove
           ? SectionGroupPosition.onlyAttached
-          : SectionGroupPosition.only;
-    }
-    if (index == 0) {
-      return attachesToAbove
+          : SectionGroupPosition.only,
+    0 =>
+      attachesToAbove
           ? SectionGroupPosition.firstAttached
-          : SectionGroupPosition.first;
-    }
-    if (index == total - 1) return SectionGroupPosition.last;
-    return SectionGroupPosition.middle;
-  }
+          : SectionGroupPosition.first,
+    _ when index == total - 1 => SectionGroupPosition.last,
+    _ => SectionGroupPosition.middle,
+  };
 }
 
 /// A text field styled to match the settings UI.  Many sections previously
@@ -295,19 +223,15 @@ class SettingsSearchGroup {
 bool matchesSettingsSearchGroup({
   required bool Function(String) matchesSearch,
   required SettingsSearchGroup group,
-}) {
-  return group.indexTexts.any(matchesSearch);
-}
+}) => group.indexTexts.any(matchesSearch);
 
 bool matchesAnySettingsSearchGroup({
   required bool Function(String) matchesSearch,
   required List<SettingsSearchGroup> groups,
-}) {
-  return groups.any(
-    (group) =>
-        matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group),
-  );
-}
+}) => groups.any(
+  (group) =>
+      matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group),
+);
 
 /// Setting row that takes a canonical [SettingTextSpec].
 class SpecSettingRow extends StatelessWidget {
@@ -323,11 +247,34 @@ class SpecSettingRow extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => SettingRow(
-    theme: theme,
-    label: spec.label,
-    description: spec.description,
-    child: child,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                spec.label,
+                style: TextStyle(
+                  color: theme.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (spec.description case final description?) ...[
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+        child,
+      ],
+    ),
   );
 }
 
@@ -355,68 +302,4 @@ Widget buildSpecToggleSettingList({
         ),
     ],
   );
-}
-
-/// Setting row helper widget with label, optional description, and child content.
-class SettingRow extends StatelessWidget {
-  const SettingRow({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.child,
-    this.description,
-    this.onLabelTap,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
-  final Widget child;
-
-  /// Optional callback invoked when the user taps the label/description area
-  final VoidCallback? onLabelTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final labelColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: theme.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (description != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            description!,
-            style: TextStyle(color: theme.textSecondary, fontSize: 12),
-          ),
-        ],
-      ],
-    );
-
-    final expandedLabel = onLabelTap != null
-        ? MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onLabelTap,
-              child: labelColumn,
-            ),
-          )
-        : labelColumn;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(child: expandedLabel),
-          child,
-        ],
-      ),
-    );
-  }
 }

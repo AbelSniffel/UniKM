@@ -141,7 +141,7 @@ class _GameCardState extends ConsumerState<GameCard>
     );
 
     final showNewBadge = _shouldShowNewBadge(hasBeenViewed);
-    final options = CardViewOptions(
+    final CardViewOptions options = (
       showTitle: cardSettings.showTitle,
       showTitleOnNoPicture: cardSettings.showTitleOnNoPicture,
       showPlatform:
@@ -153,7 +153,6 @@ class _GameCardState extends ConsumerState<GameCard>
       showRatingsNow:
           cardSettings.showRatings &&
           (!cardSettings.showTagsOnHoverOnly || _isHovered),
-      slimListView: cardSettings.slimListView,
     );
 
     // Drive selection animation — forward/reverse are no-ops when already at
@@ -164,9 +163,25 @@ class _GameCardState extends ConsumerState<GameCard>
       _selectionController.reverse();
     }
 
-    return viewMode == GameListViewMode.grid
-        ? _buildGridCard(theme, isSelected, options, fetchStatus, showNewBadge)
-        : _buildListCard(theme, isSelected, options, fetchStatus, showNewBadge);
+    if (viewMode == GameListViewMode.grid) {
+      return _buildGridCard(
+        theme,
+        isSelected,
+        options,
+        fetchStatus,
+        showNewBadge,
+      );
+    }
+    if (cardSettings.slimListView) {
+      return _buildSlimListCard(theme, isSelected, options, fetchStatus);
+    }
+    return _buildListCard(
+      theme,
+      isSelected,
+      options,
+      fetchStatus,
+      showNewBadge,
+    );
   }
 
   // ── Grid card ──────────────────────────────────────────────────────────────
@@ -178,7 +193,6 @@ class _GameCardState extends ConsumerState<GameCard>
     GameFetchStatus? fetchStatus,
     bool showNewBadge,
   ) {
-    final hasDlc = widget.game.isDlc;
     final radius = BorderRadius.circular(theme.cornerRadius);
     final bool titleVisible = options.showTitleOnNoPicture
         ? (!widget.game.hasCoverImage || _imageLoadFailed)
@@ -187,100 +201,73 @@ class _GameCardState extends ConsumerState<GameCard>
     final bool tagsVisible =
         tagsEnabled && (!options.showTagsOnHoverOnly || _isHovered);
 
-    return _buildInteractive(
-      RepaintBoundary(
-        child: AnimatedBuilder(
-          animation: _hoverAnim,
-          builder: (context, child) {
-            final t = _hoverAnim.value;
-            return Transform.scale(
-              scale: 1.0 + t * 0.015,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.medium,
-              child: SizedBox(
-                width: kGridCardWidth,
-                height: kGridCardHeight,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: radius,
-                    boxShadow: t > 0.001
-                        ? [
-                            BoxShadow(
-                              color: theme.accent.withValues(alpha: t * 0.2),
-                              blurRadius: t * 12,
-                              spreadRadius: t * 2,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: child,
-                ),
+    return _buildAnimatedShell(
+      width: kGridCardWidth,
+      height: kGridCardHeight,
+      scaleFactor: 0.015,
+      decorationBuilder: (t) => BoxDecoration(
+        borderRadius: radius,
+        boxShadow: _hoverShadow(theme, t, 0.2),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildCoverImage(theme),
+            _buildGradientOverlay(theme, isSelected),
+            if (widget.game.isUsed)
+              UsedOverlay(
+                theme: theme,
+                patternSize: const Size(kGridCardWidth, kGridCardHeight),
+                gridView: true,
               ),
-            );
-          },
-          child: ClipRRect(
-            borderRadius: radius,
-            child: SizedBox(
-              width: kGridCardWidth,
-              height: kGridCardHeight,
-              child: Stack(
-                fit: StackFit.expand,
+            _buildSelectionOverlay(theme, isSelected),
+            _buildAnimatedFetchOverlay(theme, fetchStatus),
+            ..._buildCornerRibbons(
+              theme,
+              hasDlc: widget.game.isDlc,
+              showNewBadge: showNewBadge,
+            ),
+            Positioned(
+              left: 8,
+              right: 8,
+              bottom: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildCoverImage(theme),
-                  _buildGradientOverlay(theme, isSelected),
-                  if (widget.game.isUsed)
-                    UsedOverlay(
-                      theme: theme,
-                      patternSize: const Size(kGridCardWidth, kGridCardHeight),
-                      gridView: true,
-                    ),
-                  _buildSelectionOverlay(theme, isSelected),
-                  _buildAnimatedFetchOverlay(theme, fetchStatus),
-                  ..._buildCornerRibbons(
-                    theme,
-                    hasDlc: hasDlc,
-                    showNewBadge: showNewBadge,
-                  ),
-                  Positioned(
-                    left: 8,
-                    right: 8,
-                    bottom: 8,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (options.showDeadline &&
-                            widget.game.hasDeadline) ...[
-                          _buildDeadlineBadge(theme),
-                          if (titleVisible) const SizedBox(height: 4),
-                        ],
-                        if (titleVisible)
-                          GameCardBadges.titleChip(theme, widget.game.title),
-                        if (tagsEnabled)
-                          GameCardTagsRow(
-                            game: widget.game,
-                            theme: theme,
-                            isVisible: tagsVisible,
-                            fixedMaxWidth: kGridCardWidth - 16.0,
-                            topSpacing: 4.0,
-                          ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: GameCardBadges.topRightChips(
+                  if (options.showDeadline && widget.game.hasDeadline) ...[
+                    GameCardBadges.deadlineBadge(
                       theme,
-                      widget.game,
-                      showPlatform: options.showPlatform,
-                      showRatings: options.showRatingsNow,
+                      widget.game.deadlineDate,
                     ),
-                  ),
+                    if (titleVisible) const SizedBox(height: 4),
+                  ],
+                  if (titleVisible)
+                    GameCardBadges.titleChip(theme, widget.game.title),
+                  if (tagsEnabled)
+                    GameCardTagsRow(
+                      game: widget.game,
+                      theme: theme,
+                      isVisible: tagsVisible,
+                      fixedMaxWidth: kGridCardWidth - 16.0,
+                      topSpacing: 4.0,
+                    ),
                 ],
               ),
             ),
-          ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: GameCardBadges.topRightChips(
+                theme,
+                widget.game,
+                showPlatform: options.showPlatform,
+                showRatings: options.showRatingsNow,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -295,14 +282,10 @@ class _GameCardState extends ConsumerState<GameCard>
     GameFetchStatus? fetchStatus,
     bool showNewBadge,
   ) {
-    final hasDlc = widget.game.isDlc;
-    final layout = ListCardLayout.fromOptions(options);
-
-    if (layout.useSlim) {
-      return _buildSlimListCard(theme, isSelected, options, fetchStatus);
-    }
-
     final listRadius = BorderRadius.circular(theme.cornerRadius);
+    final leftRadius = BorderRadius.horizontal(
+      left: Radius.circular(theme.cornerRadius),
+    );
     final gradientColors = _computeListGradientColors(theme, isSelected);
     final listGradient = LinearGradient(
       begin: Alignment.centerLeft,
@@ -312,35 +295,29 @@ class _GameCardState extends ConsumerState<GameCard>
       colors: [theme.background, gradientColors[1], gradientColors[0]],
       stops: const [0.10, 0.5, 1.0],
     );
-    final bool tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
-    final bool tagsVisible =
-        tagsEnabled && (!options.showTagsOnHoverOnly || _isHovered);
-    final showListSideChips =
-        options.showPlatform ||
-        (options.showRatingsNow && widget.game.reviewCount > 0);
 
-    return _buildListAnimatedShell(
-      height: layout.cardHeight,
+    return _buildAnimatedShell(
+      height: kListCardHeight,
       scaleFactor: 0.006,
       decorationBuilder: (t) => BoxDecoration(
         gradient: listGradient,
-        boxShadow: t > 0.001
-            ? [
-                BoxShadow(
-                  color: theme.accent.withValues(alpha: t * 0.18),
-                  blurRadius: t * 12,
-                  spreadRadius: t * 2,
-                ),
-              ]
-            : null,
+        boxShadow: _hoverShadow(theme, t, 0.18),
         borderRadius: listRadius,
       ),
       child: Stack(
         children: [
-          _buildListCoverPane(
-            theme,
-            cardImageWidth: layout.cardImageWidth,
-            cardHeight: layout.cardHeight,
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: leftRadius,
+                child: SizedBox(
+                  width: kListCardImageWidth,
+                  height: kListCardHeight,
+                  child: _buildCoverImage(theme),
+                ),
+              ),
+              const Expanded(child: SizedBox.expand()),
+            ],
           ),
           if (widget.game.isUsed)
             Positioned.fill(
@@ -354,34 +331,42 @@ class _GameCardState extends ConsumerState<GameCard>
                 ),
               ),
             ),
-          _buildListRibbonPane(
-            theme,
-            cardImageWidth: layout.cardImageWidth,
-            cardHeight: layout.cardHeight,
-            hasDlc: hasDlc,
-            showNewBadge: showNewBadge,
+          Positioned(
+            left: 0,
+            top: 0,
+            width: kListCardImageWidth,
+            height: kListCardHeight,
+            child: ClipRRect(
+              borderRadius: leftRadius,
+              child: Stack(
+                children: _buildCornerRibbons(
+                  theme,
+                  hasDlc: widget.game.isDlc,
+                  showNewBadge: showNewBadge,
+                ),
+              ),
+            ),
           ),
           _buildSelectionOverlay(
             theme,
             isSelected,
-            imageWidth: layout.cardImageWidth,
+            imageWidth: kListCardImageWidth,
           ),
           _buildAnimatedFetchOverlay(
             theme,
             fetchStatus,
-            imageWidth: layout.cardImageWidth,
+            imageWidth: kListCardImageWidth,
           ),
           if (options.showDeadline && widget.game.hasDeadline)
-            Positioned(left: 8, bottom: 8, child: _buildDeadlineBadge(theme)),
-          _buildListContentPane(
-            context,
-            theme,
-            options: options,
-            tagsEnabled: tagsEnabled,
-            tagsVisible: tagsVisible,
-            showListSideChips: showListSideChips,
-            cardImageWidth: layout.cardImageWidth,
-          ),
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: GameCardBadges.deadlineBadge(
+                theme,
+                widget.game.deadlineDate,
+              ),
+            ),
+          _buildListContentPane(theme, options),
         ],
       ),
     );
@@ -400,7 +385,7 @@ class _GameCardState extends ConsumerState<GameCard>
     final showDlc = widget.game.isDlc;
     final showRating = options.showRatingsNow && widget.game.reviewCount > 0;
 
-    return _buildListAnimatedShell(
+    return _buildAnimatedShell(
       height: kSlimListCardHeight,
       scaleFactor: 0.012,
       decorationBuilder: (_) => BoxDecoration(
@@ -498,35 +483,45 @@ class _GameCardState extends ConsumerState<GameCard>
     );
   }
 
-  // ── Shared animated shell for list modes ───────────────────────────────────
+  // ── Shared animated shell ──────────────────────────────────────────────────
 
-  Widget _buildListAnimatedShell({
+  Widget _buildAnimatedShell({
+    double? width,
     required double height,
     required double scaleFactor,
     required BoxDecoration Function(double t) decorationBuilder,
     required Widget child,
-  }) {
-    return _buildInteractive(
-      RepaintBoundary(
-        child: AnimatedBuilder(
-          animation: _hoverAnim,
-          builder: (context, staticChild) {
-            final t = _hoverAnim.value;
-            return Transform.scale(
-              scale: 1.0 + t * scaleFactor,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.medium,
-              child: DecoratedBox(
-                decoration: decorationBuilder(t),
-                child: staticChild,
-              ),
-            );
-          },
-          child: SizedBox(height: height, child: child),
-        ),
+  }) => _buildInteractive(
+    RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _hoverAnim,
+        builder: (context, staticChild) {
+          final t = _hoverAnim.value;
+          return Transform.scale(
+            scale: 1.0 + t * scaleFactor,
+            alignment: Alignment.center,
+            filterQuality: FilterQuality.medium,
+            child: DecoratedBox(
+              decoration: decorationBuilder(t),
+              child: staticChild,
+            ),
+          );
+        },
+        child: SizedBox(width: width, height: height, child: child),
       ),
-    );
-  }
+    ),
+  );
+
+  List<BoxShadow>? _hoverShadow(AppThemeData theme, double t, double alpha) =>
+      t > 0.001
+      ? [
+          BoxShadow(
+            color: theme.accent.withValues(alpha: t * alpha),
+            blurRadius: t * 12,
+            spreadRadius: t * 2,
+          ),
+        ]
+      : null;
 
   // ── Interactive wrapper ────────────────────────────────────────────────────
 
@@ -574,78 +569,15 @@ class _GameCardState extends ConsumerState<GameCard>
           },
   );
 
-  Widget _buildDeadlineBadge(AppThemeData theme) =>
-      GameCardBadges.deadlineBadge(
-        theme,
-        widget.game.deadlineDate,
-        borderRadius: GameCardBadges.chipBorderRadius(theme, kBadgeHeight),
-        showIcon: true,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        minHeight: kBadgeHeight,
-      );
-
-  Widget _buildListCoverPane(
-    AppThemeData theme, {
-    required double cardImageWidth,
-    required double cardHeight,
-  }) {
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.horizontal(
-            left: Radius.circular(theme.cornerRadius),
-          ),
-          child: SizedBox(
-            width: cardImageWidth,
-            height: cardHeight,
-            child: _buildCoverImage(theme),
-          ),
-        ),
-        const Expanded(child: SizedBox.expand()),
-      ],
-    );
-  }
-
-  Widget _buildListRibbonPane(
-    AppThemeData theme, {
-    required double cardImageWidth,
-    required double cardHeight,
-    required bool hasDlc,
-    required bool showNewBadge,
-  }) {
-    return Positioned(
-      left: 0,
-      top: 0,
-      width: cardImageWidth,
-      height: cardHeight,
-      child: ClipRRect(
-        borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(theme.cornerRadius),
-        ),
-        child: Stack(
-          children: _buildCornerRibbons(
-            theme,
-            hasDlc: hasDlc,
-            showNewBadge: showNewBadge,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListContentPane(
-    BuildContext context,
-    AppThemeData theme, {
-    required CardViewOptions options,
-    required bool tagsEnabled,
-    required bool tagsVisible,
-    required bool showListSideChips,
-    required double cardImageWidth,
-  }) {
+  Widget _buildListContentPane(AppThemeData theme, CardViewOptions options) {
+    final tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
+    final showSideChips =
+        options.showPlatform ||
+        (options.showRatingsNow && widget.game.reviewCount > 0);
     return Positioned.fill(
       child: Row(
         children: [
-          SizedBox(width: cardImageWidth),
+          const SizedBox(width: kListCardImageWidth),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
@@ -671,14 +603,15 @@ class _GameCardState extends ConsumerState<GameCard>
                           GameCardTagsRow(
                             game: widget.game,
                             theme: theme,
-                            isVisible: tagsVisible,
+                            isVisible:
+                                !options.showTagsOnHoverOnly || _isHovered,
                             topSpacing: 6.0,
                           ),
                         ],
                       ],
                     ),
                   ),
-                  if (showListSideChips) ...[
+                  if (showSideChips) ...[
                     const SizedBox(width: kElementHSpacing),
                     GameCardBadges.topRightChips(
                       theme,
@@ -700,17 +633,16 @@ class _GameCardState extends ConsumerState<GameCard>
   // ── Overlay builders ───────────────────────────────────────────────────────
 
   Widget _buildGradientOverlay(AppThemeData theme, bool isSelected) {
-    if (isSelected) {
-      return CustomPaint(
-        painter: CardGlowPainter(
-          accentColor: theme.accent,
-          primaryColor: theme.secondary,
-          selected: true,
-          cornerRadius: theme.cornerRadius,
-        ),
-        child: const SizedBox.expand(),
-      );
-    }
+    final glow = CustomPaint(
+      painter: CardGlowPainter(
+        accentColor: theme.accent,
+        primaryColor: theme.secondary,
+        selected: isSelected,
+        cornerRadius: theme.cornerRadius,
+      ),
+      child: const SizedBox.expand(),
+    );
+    if (isSelected) return glow;
 
     return IgnorePointer(
       child: AnimatedBuilder(
@@ -720,98 +652,88 @@ class _GameCardState extends ConsumerState<GameCard>
           if (t <= 0.0) return const SizedBox.shrink();
           return Opacity(opacity: t, child: child);
         },
-        child: CustomPaint(
-          painter: CardGlowPainter(
-            accentColor: theme.accent,
-            primaryColor: theme.secondary,
-            selected: false,
-            cornerRadius: theme.cornerRadius,
-          ),
-          child: const SizedBox.expand(),
-        ),
+        child: glow,
       ),
     );
   }
+
+  /// Centres [child] over the cover image of list cards ([imageWidth] set),
+  /// or over the whole card.
+  Widget _overImage(Widget child, double? imageWidth) => imageWidth == null
+      ? child
+      : Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(width: imageWidth, child: child),
+        );
 
   /// Animated selection overlay driven by [_selectionController].
   Widget _buildSelectionOverlay(
     AppThemeData theme,
     bool isSelected, {
     double? imageWidth,
-  }) {
-    return IgnorePointer(
-      ignoring: !isSelected,
-      child: AnimatedBuilder(
-        animation: _selectionAnim,
-        builder: (context, child) {
-          final t = _selectionAnim.value.clamp(0.0, 1.0);
-          if (t <= 0.0) return const SizedBox.shrink();
+  }) => IgnorePointer(
+    ignoring: !isSelected,
+    child: AnimatedBuilder(
+      animation: _selectionAnim,
+      builder: (context, child) {
+        final t = _selectionAnim.value.clamp(0.0, 1.0);
+        if (t <= 0.0) return const SizedBox.shrink();
 
-          final shadow = t > 0.01
-              ? [
-                  BoxShadow(
-                    color: theme.accent.withValues(alpha: 0.28 * t),
-                    blurRadius: 12 * t,
-                    spreadRadius: t,
-                  ),
-                ]
-              : null;
+        final shadow = t > 0.01
+            ? [
+                BoxShadow(
+                  color: theme.accent.withValues(alpha: 0.28 * t),
+                  blurRadius: 12 * t,
+                  spreadRadius: t,
+                ),
+              ]
+            : null;
 
-          final iconWidget = Container(
-            padding: EdgeInsets.all(4 + 4 * t),
-            decoration: BoxDecoration(
-              color: theme.accent.withValues(alpha: t),
-              shape: BoxShape.rectangle,
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              boxShadow: shadow,
-            ),
-            child: SizedBox(
-              width: 10 + 10 * t,
-              height: 10 + 10 * t,
-              child: Opacity(opacity: t, child: child),
-            ),
-          );
+        final iconWidget = Container(
+          padding: EdgeInsets.all(4 + 4 * t),
+          decoration: BoxDecoration(
+            color: theme.accent.withValues(alpha: t),
+            shape: BoxShape.rectangle,
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+            boxShadow: shadow,
+          ),
+          child: SizedBox(
+            width: 10 + 10 * t,
+            height: 10 + 10 * t,
+            child: Opacity(opacity: t, child: child),
+          ),
+        );
 
-          final centeredIcon = Center(child: iconWidget);
-
-          return Container(
-            decoration: theme.selectionOverlayDecoration(t),
-            child: imageWidth == null
-                ? centeredIcon
-                : Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(width: imageWidth, child: centeredIcon),
-                  ),
-          );
-        },
-        child: const FittedBox(child: Icon(Icons.check, color: Colors.white)),
-      ),
-    );
-  }
+        return Container(
+          decoration: theme.selectionOverlayDecoration(t),
+          child: _overImage(Center(child: iconWidget), imageWidth),
+        );
+      },
+      child: const FittedBox(child: Icon(Icons.check, color: Colors.white)),
+    ),
+  );
 
   Widget _buildAnimatedFetchOverlay(
     AppThemeData theme,
     GameFetchStatus? fetchStatus, {
     double? imageWidth,
     bool slim = false,
-  }) {
-    return AnimatedSwitcher(
-      duration: kFastAnimation,
-      transitionBuilder: (child, anim) =>
-          FadeTransition(opacity: anim, child: child),
-      child: fetchStatus != null
-          ? KeyedSubtree(
-              key: ValueKey(fetchStatus),
-              child: _buildFetchStatusOverlay(
-                theme,
-                fetchStatus,
-                imageWidth: imageWidth,
-                slim: slim,
-              ),
-            )
-          : const SizedBox.shrink(key: ValueKey<Null>(null)),
-    );
-  }
+  }) => AnimatedSwitcher(
+    duration: kFastAnimation,
+    transitionBuilder: (child, anim) =>
+        FadeTransition(opacity: anim, child: child),
+    child: fetchStatus != null
+        ? KeyedSubtree(
+            key: ValueKey(fetchStatus),
+            child: _buildFetchStatusOverlay(
+              theme,
+              fetchStatus,
+              imageWidth: imageWidth,
+              slim: slim,
+            ),
+          )
+        : const SizedBox.shrink(key: ValueKey<Null>(null)),
+  );
 
   Widget _buildFetchStatusOverlay(
     AppThemeData theme,
@@ -842,22 +764,13 @@ class _GameCardState extends ConsumerState<GameCard>
           ),
         ],
       ),
-      child: AnimatedSwitcher(
-        duration: kVeryFastAnimation,
-        transitionBuilder: (child, anim) => ScaleTransition(
-          scale: anim,
-          child: FadeTransition(opacity: anim, child: child),
-        ),
-        child: SizedBox(
-          key: ValueKey(status),
-          width: kSelectionIndicatorSize,
-          height: kSelectionIndicatorSize,
-          child: Center(child: visual.icon),
-        ),
+      child: GameCardBadges.fetchStatusIcon(
+        visual,
+        status,
+        kSelectionIndicatorSize,
       ),
     );
 
-    final centeredIcon = Center(child: statusIcon);
     final tintAlpha = status == GameFetchStatus.done
         ? (slim ? 0.24 : 0.32)
         : (slim ? 0.44 : 0.28);
@@ -882,12 +795,7 @@ class _GameCardState extends ConsumerState<GameCard>
         ),
         child: slim
             ? const SizedBox.expand()
-            : imageWidth == null
-            ? centeredIcon
-            : Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(width: imageWidth, child: centeredIcon),
-              ),
+            : _overImage(Center(child: statusIcon), imageWidth),
       ),
     );
   }
@@ -939,7 +847,31 @@ class _GameCardState extends ConsumerState<GameCard>
       2 * math.sqrt2 * cx + bandHeight,
     );
 
-    Widget band = Container(
+    Widget withTooltip(Widget child) => addedDate == null
+        ? child
+        : Tooltip(
+            message: 'Added ${_ribbonDateFormat.format(addedDate)}',
+            child: child,
+          );
+
+    if (!compact && bandIndex == 0) {
+      return Positioned(
+        left: 0,
+        top: 0,
+        child: withTooltip(
+          CornerRibbon(
+            label: label,
+            color: color,
+            textColor: textColor,
+            bandHeight: bandHeight,
+            bandWidth: bandWidth,
+            offset: _kRibbonOffset,
+          ),
+        ),
+      );
+    }
+
+    final band = Container(
       width: bandWidth,
       height: bandHeight,
       color: color,
@@ -956,35 +888,10 @@ class _GameCardState extends ConsumerState<GameCard>
       ),
     );
 
-    if (addedDate != null && (compact || bandIndex > 0)) {
-      band = Tooltip(
-        message: 'Added ${_ribbonDateFormat.format(addedDate)}',
-        child: band,
-      );
-    }
-
-    if (!compact && bandIndex == 0) {
-      Widget corner = CornerRibbon(
-        label: label,
-        color: color,
-        textColor: textColor,
-        bandHeight: bandHeight,
-        bandWidth: bandWidth,
-        offset: _kRibbonOffset,
-      );
-      if (addedDate != null) {
-        corner = Tooltip(
-          message: 'Added ${_ribbonDateFormat.format(addedDate)}',
-          child: corner,
-        );
-      }
-      return Positioned(left: 0, top: 0, child: corner);
-    }
-
     return Positioned(
       left: cx - bandWidth / 2,
       top: cx - bandHeight / 2,
-      child: Transform.rotate(angle: -math.pi / 4, child: band),
+      child: Transform.rotate(angle: -math.pi / 4, child: withTooltip(band)),
     );
   }
 
@@ -1007,18 +914,16 @@ class _GameCardState extends ConsumerState<GameCard>
     final isFetching = ref.read(batchFetchProvider).isActive;
     final hasSteamTargets = targetGames.any((g) => g.platform == 'Steam');
 
-    PopupMenuItem<String> menuRowItem({
-      required String value,
-      required IconData icon,
-      required String label,
+    // Items with a [lockedLabel] are disabled while a Steam fetch runs.
+    PopupMenuItem<String> menuRowItem(
+      String value,
+      IconData icon,
+      String label, {
       Color? iconColor,
       Color? textColor,
-      bool enabled = true,
-      IconData? disabledIcon,
-      String? disabledLabel,
-      Color? disabledColor,
+      String? lockedLabel,
     }) {
-      final resolvedLabel = enabled ? label : (disabledLabel ?? label);
+      final enabled = lockedLabel == null || !isFetching;
       final mutedColor = theme.textSecondary.withValues(alpha: 0.5);
       return PopupMenuItem<String>(
         value: enabled ? value : null,
@@ -1026,19 +931,15 @@ class _GameCardState extends ConsumerState<GameCard>
         child: Row(
           children: [
             Icon(
-              enabled ? icon : (disabledIcon ?? icon),
+              enabled ? icon : Icons.lock_rounded,
               size: 18,
-              color: enabled
-                  ? (iconColor ?? theme.textSecondary)
-                  : (disabledColor ?? mutedColor),
+              color: enabled ? (iconColor ?? theme.textSecondary) : mutedColor,
             ),
             const SizedBox(width: 12),
             Text(
-              resolvedLabel,
+              enabled ? '$label$suffix' : '$lockedLabel (Locked)$suffix',
               style: TextStyle(
-                color: enabled
-                    ? (textColor ?? theme.textPrimary)
-                    : (disabledColor ?? mutedColor),
+                color: enabled ? (textColor ?? theme.textPrimary) : mutedColor,
               ),
             ),
           ],
@@ -1057,54 +958,41 @@ class _GameCardState extends ConsumerState<GameCard>
         Offset.zero & overlayObject.size,
       ),
       items: [
-        menuRowItem(value: 'copy', icon: Icons.copy_all, label: 'Copy$suffix'),
+        menuRowItem('copy', Icons.copy_all, 'Copy'),
         const PopupMenuDivider(),
         menuRowItem(
-          value: 'details',
-          icon: Icons.edit_outlined,
-          label: 'Game Editor$suffix',
-          enabled: !isFetching,
-          disabledIcon: Icons.lock_rounded,
-          disabledLabel: 'Game Editor (Locked)$suffix',
+          'details',
+          Icons.edit_outlined,
+          'Game Editor',
+          lockedLabel: 'Game Editor',
         ),
         if (hasSteamTargets) ...[
+          menuRowItem('open_steam', Icons.open_in_new, 'Open Steam Page'),
           menuRowItem(
-            value: 'open_steam',
-            icon: Icons.open_in_new,
-            label: 'Open Steam Page$suffix',
-          ),
-          menuRowItem(
-            value: 'steam_lookup',
-            icon: Icons.cloud_download,
-            label: 'Fetch Steam Data$suffix',
+            'steam_lookup',
+            Icons.cloud_download,
+            'Fetch Steam Data',
             iconColor: theme.accent,
-            enabled: !isFetching,
-            disabledIcon: Icons.lock_rounded,
-            disabledLabel: 'Fetch Steam Data (Locked)$suffix',
+            lockedLabel: 'Fetch Steam Data',
           ),
         ],
         const PopupMenuDivider(),
         menuRowItem(
-          value: 'toggle_used',
-          icon: widget.game.isUsed
+          'toggle_used',
+          widget.game.isUsed
               ? Icons.radio_button_unchecked
               : Icons.check_circle,
-          label:
-              (widget.game.isUsed ? 'Mark as Unused' : 'Mark as Used') + suffix,
-          enabled: !isFetching,
-          disabledIcon: Icons.lock_rounded,
-          disabledLabel: 'Mark as Used/Unused (Locked)$suffix',
+          widget.game.isUsed ? 'Mark as Unused' : 'Mark as Used',
+          lockedLabel: 'Mark as Used/Unused',
         ),
         const PopupMenuDivider(),
         menuRowItem(
-          value: 'delete',
-          icon: Icons.delete_outline,
-          label: 'Delete$suffix',
+          'delete',
+          Icons.delete_outline,
+          'Delete',
           iconColor: theme.error,
           textColor: theme.error,
-          enabled: !isFetching,
-          disabledIcon: Icons.lock_rounded,
-          disabledLabel: 'Delete (Locked)$suffix',
+          lockedLabel: 'Delete',
         ),
       ],
     );
@@ -1130,15 +1018,10 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  List<Game> _getTargetGames() {
-    final selectedIds = ref.read(
-      gamesProvider.select((s) => s.selectedGameIds),
-    );
-    if (selectedIds.contains(widget.game.id)) {
-      return ref.read(selectedGamesProvider);
-    }
-    return [widget.game];
-  }
+  List<Game> _getTargetGames() =>
+      ref.read(gamesProvider).selectedGameIds.contains(widget.game.id)
+      ? ref.read(selectedGamesProvider)
+      : [widget.game];
 
   bool _shouldShowNewBadge(bool hasBeenViewed) {
     if (hasBeenViewed) return false;

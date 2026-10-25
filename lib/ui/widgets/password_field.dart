@@ -77,36 +77,29 @@ class _PasswordFieldState extends State<PasswordField> {
 /// ```
 FormFieldValidator<String> requiredPassword({
   String message = 'Password is required',
-}) {
-  return (value) {
-    if (value == null || value.isEmpty) return message;
-    return null;
-  };
-}
+}) => (value) {
+  if (value == null || value.isEmpty) return message;
+  return null;
+};
 
 /// Returns a validator that checks both presence and minimum length.
 FormFieldValidator<String> requiredPasswordWithLength({
   int minLength = 4,
   String emptyMessage = 'Password is required',
   String? tooShortMessage,
-}) {
-  return (value) {
-    if (value == null || value.isEmpty) return emptyMessage;
-    if (value.length < minLength) {
-      return tooShortMessage ??
-          'Password must be at least $minLength characters';
-    }
-    return null;
-  };
-}
+}) => (value) {
+  if (value == null || value.isEmpty) return emptyMessage;
+  if (value.length < minLength) {
+    return tooShortMessage ?? 'Password must be at least $minLength characters';
+  }
+  return null;
+};
 
 /// Returns a confirm-password validator that checks the value matches [match].
 FormFieldValidator<String> confirmPassword(
   TextEditingController match, {
   String message = 'Passwords do not match',
-}) {
-  return (value) {
-    if (value != match.text) return message;
-    return null;
-  };
-}
+}) => (value) {
+  if (value != match.text) return message;
+  return null;
+};

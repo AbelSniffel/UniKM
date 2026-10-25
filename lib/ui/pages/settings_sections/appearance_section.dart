@@ -121,14 +121,16 @@ class AppearanceSection extends ConsumerWidget {
         visibleTab == 1 && !builtInIds.contains(current.id);
 
     // Check which sections match search
+    bool themeNameMatches() =>
+        builtInThemes.any((t) => matchesSearch(t.name)) ||
+        customThemes.any((t) => matchesSearch(t.name));
     final showThemeSection =
         shouldShowSettingsGroup(
           query: searchQuery,
           matchesSearch: matchesSearch,
           group: themeSearchGroup,
         ) ||
-        builtInThemes.any((t) => matchesSearch(t.name)) ||
-        customThemes.any((t) => matchesSearch(t.name));
+        themeNameMatches();
     final showToggleSection = shouldShowSettingsGroup(
       query: searchQuery,
       matchesSearch: matchesSearch,
@@ -156,86 +158,82 @@ class AppearanceSection extends ConsumerWidget {
           titleIcon: Icons.color_lens,
           searchQuery: searchQuery,
           matchesSearch: matchesSearch,
-          extraMatch: () =>
-              builtInThemes.any((t) => matchesSearch(t.name)) ||
-              customThemes.any((t) => matchesSearch(t.name)),
-          childBuilder: () {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppTabBar(
-                  theme: theme,
-                  tabs: const [AppTab('Default'), AppTab('Custom')],
-                  selectedIndex: visibleTab,
-                  onChanged: (index) => ref
-                      .read(appearanceThemeTabProvider.notifier)
-                      .setIndex(index),
-                ),
-                const SizedBox(height: 10),
-                // Only the panel animates its height, so the actions below
-                // move with the groupbox instead of jumping to their place.
-                _animatedPanelHeight(
-                  context,
-                  AppTabTransition(
-                    index: visibleTab,
-                    child: visibleThemes.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Text(
-                              'No custom themes yet. Create one from your current colors.',
-                              style: TextStyle(color: theme.textSecondary),
-                            ),
-                          )
-                        : PreviewCardWrap(
-                            spacing: kElementHSpacing,
-                            runSpacing: 10,
-                            children: [
-                              for (final themeData in visibleThemes)
-                                ThemePreviewCard(
-                                  key: ValueKey(themeData.id),
-                                  data: themeData,
-                                  theme: theme,
-                                  preview: builtInIds.contains(themeData.id)
-                                      ? themeData.copyWith(
-                                          navPanelOverlayStyle:
-                                              builtInOverlayStyle,
-                                        )
-                                      : themeData,
-                                  selected: current.id == themeData.id,
-                                  onDoubleTap: builtInIds.contains(themeData.id)
-                                      ? null
-                                      : () => _openThemeEditor(
-                                          context,
-                                          ref,
-                                          existing: themeData,
-                                        ),
-                                  onTap: () => ref
-                                      .read(themeProvider.notifier)
-                                      .setTheme(themeData),
-                                ),
-                            ],
+          extraMatch: themeNameMatches,
+          childBuilder: () => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppTabBar(
+                theme: theme,
+                tabs: const [AppTab('Default'), AppTab('Custom')],
+                selectedIndex: visibleTab,
+                onChanged: (index) => ref
+                    .read(appearanceThemeTabProvider.notifier)
+                    .setIndex(index),
+              ),
+              const SizedBox(height: 10),
+              // Only the panel animates its height, so the actions below
+              // move with the groupbox instead of jumping to their place.
+              _animatedPanelHeight(
+                context,
+                AppTabTransition(
+                  index: visibleTab,
+                  child: visibleThemes.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text(
+                            'No custom themes yet. Create one from your current colors.',
+                            style: TextStyle(color: theme.textSecondary),
                           ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ThemePickerActions(
-                  theme: theme,
-                  onCreate: () => _openThemeEditor(context, ref),
-                  onEdit: canManageCurrent
-                      ? () => _openThemeEditor(context, ref, existing: current)
-                      : null,
-                  onDelete: canManageCurrent
-                      ? () => deleteCustomThemeWithConfirmation(
-                          context,
-                          ref,
-                          current.id,
-                          current.name,
                         )
-                      : null,
+                      : PreviewCardWrap(
+                          spacing: kElementHSpacing,
+                          runSpacing: 10,
+                          children: [
+                            for (final themeData in visibleThemes)
+                              ThemePreviewCard(
+                                key: ValueKey(themeData.id),
+                                data: themeData,
+                                theme: theme,
+                                preview: builtInIds.contains(themeData.id)
+                                    ? themeData.copyWith(
+                                        navPanelOverlayStyle:
+                                            builtInOverlayStyle,
+                                      )
+                                    : themeData,
+                                selected: current.id == themeData.id,
+                                onDoubleTap: builtInIds.contains(themeData.id)
+                                    ? null
+                                    : () => _openThemeEditor(
+                                        context,
+                                        ref,
+                                        existing: themeData,
+                                      ),
+                                onTap: () => ref
+                                    .read(themeProvider.notifier)
+                                    .setTheme(themeData),
+                              ),
+                          ],
+                        ),
                 ),
-              ],
-            );
-          },
+              ),
+              const SizedBox(height: 10),
+              ThemePickerActions(
+                theme: theme,
+                onCreate: () => _openThemeEditor(context, ref),
+                onEdit: canManageCurrent
+                    ? () => _openThemeEditor(context, ref, existing: current)
+                    : null,
+                onDelete: canManageCurrent
+                    ? () => deleteCustomThemeWithConfirmation(
+                        context,
+                        ref,
+                        current.id,
+                        current.name,
+                      )
+                    : null,
+              ),
+            ],
+          ),
         ),
         SectionGroupEntry(
           visible: showToggleSection,
@@ -313,11 +311,11 @@ Future<void> _importThemes(BuildContext context, WidgetRef ref) async {
       return;
     }
 
-    var message = 'Imported ${importResult.importedCount} theme(s)';
-    if (importResult.invalidCount > 0) {
-      message += ' • ${importResult.invalidCount} invalid';
-    }
-    NotificationManager.instance.success(message);
+    final invalid = importResult.invalidCount;
+    NotificationManager.instance.success(
+      'Imported ${importResult.importedCount} theme(s)'
+      '${invalid > 0 ? ' • $invalid invalid' : ''}',
+    );
   } on FormatException catch (e) {
     NotificationManager.instance.error('Import failed: ${e.message}');
   } catch (e) {

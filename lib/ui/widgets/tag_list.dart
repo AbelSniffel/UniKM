@@ -97,11 +97,9 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   double? _lastKnownHeight;
   final _buttons = <int, AppTagButton>{};
   final _textSizes = <String, Size>{};
-  TextStyle? _measureStyle;
-  TextScaler? _measureScaler;
-  TextDirection? _measureDirection;
-  Locale? _measureLocale;
-  bool? _measureStatusHidden;
+  // Text style, scaler, direction, locale and status-hidden flag that
+  // [_textSizes] was measured with.
+  Object? _measureMetrics;
   List<Tag> _rowTags = const [];
   double? _rowWidth;
   double _rowHeight = 32;
@@ -163,12 +161,9 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
         .toList();
   }
 
-  bool _isSelected(Tag tag) {
-    if (widget.selectedTagIds != null) {
-      return widget.selectedTagIds!.contains(tag.id);
-    }
-    return widget.onTagToggled == null || widget.allSelected;
-  }
+  bool _isSelected(Tag tag) =>
+      widget.selectedTagIds?.contains(tag.id) ??
+      (widget.onTagToggled == null || widget.allSelected);
 
   @override
   Widget build(BuildContext context) {
@@ -305,18 +300,10 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     final direction = Directionality.of(context);
     final locale = Localizations.maybeLocaleOf(context);
     final statusHidden = widget.onTagToggled == null;
-    final metricsChanged =
-        style != _measureStyle ||
-        scaler != _measureScaler ||
-        direction != _measureDirection ||
-        locale != _measureLocale ||
-        statusHidden != _measureStatusHidden;
+    final metrics = (style, scaler, direction, locale, statusHidden);
+    final metricsChanged = metrics != _measureMetrics;
     if (metricsChanged) {
-      _measureStyle = style;
-      _measureScaler = scaler;
-      _measureDirection = direction;
-      _measureLocale = locale;
-      _measureStatusHidden = statusHidden;
+      _measureMetrics = metrics;
       _textSizes.clear();
     }
     if (!metricsChanged &&

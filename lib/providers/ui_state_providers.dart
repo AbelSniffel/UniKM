@@ -190,9 +190,7 @@ class ViewModeNotifier extends Notifier<GameListViewMode> {
 }
 
 final viewModeProvider = NotifierProvider<ViewModeNotifier, GameListViewMode>(
-  () {
-    return ViewModeNotifier();
-  },
+  ViewModeNotifier.new,
 );
 
 /// Last selected game ID for range selection
@@ -254,13 +252,11 @@ class DragSelectionState {
     bool? isActive,
     DragSelectionMode? mode,
     Set<int>? visitedIds,
-  }) {
-    return DragSelectionState(
-      isActive: isActive ?? this.isActive,
-      mode: mode ?? this.mode,
-      visitedIds: visitedIds ?? this.visitedIds,
-    );
-  }
+  }) => DragSelectionState(
+    isActive: isActive ?? this.isActive,
+    mode: mode ?? this.mode,
+    visitedIds: visitedIds ?? this.visitedIds,
+  );
 }
 
 class DragSelectionNotifier extends Notifier<DragSelectionState> {
@@ -289,6 +285,6 @@ class DragSelectionNotifier extends Notifier<DragSelectionState> {
 }
 
 final dragSelectionProvider =
-    NotifierProvider<DragSelectionNotifier, DragSelectionState>(() {
-      return DragSelectionNotifier();
-    });
+    NotifierProvider<DragSelectionNotifier, DragSelectionState>(
+      DragSelectionNotifier.new,
+    );

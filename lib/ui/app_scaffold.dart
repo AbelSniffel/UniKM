@@ -714,23 +714,21 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     NavItem currentNav,
     int databaseRevision,
     bool isVeryNarrowLayout,
-  ) {
-    return AppPageStack(
-      key: ValueKey(databaseRevision),
-      index: currentNav.index,
-      children: [
-        // Const page configurations keep unrelated shell rebuilds from
-        // rebuilding the retained page trees. Providers still update normally.
-        if (isVeryNarrowLayout)
-          const HomePage(isVeryNarrowLayout: true)
-        else
-          const HomePage(),
-        const AddGamesPage(),
-        const UpdatePage(),
-        const SettingsPage(),
-      ],
-    );
-  }
+  ) => AppPageStack(
+    key: ValueKey(databaseRevision),
+    index: currentNav.index,
+    children: [
+      // Const page configurations keep unrelated shell rebuilds from
+      // rebuilding the retained page trees. Providers still update normally.
+      if (isVeryNarrowLayout)
+        const HomePage(isVeryNarrowLayout: true)
+      else
+        const HomePage(),
+      const AddGamesPage(),
+      const UpdatePage(),
+      const SettingsPage(),
+    ],
+  );
 
   Future<void> _showIncomingPairRequestPrompt(
     BuildContext context,

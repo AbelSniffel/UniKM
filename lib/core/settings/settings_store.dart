@@ -205,19 +205,15 @@ class SettingsStore {
   }
 
   Future<void> save(String key, Object? value) async {
-    if (value is bool) {
-      await _prefs.setBool(key, value);
-    } else if (value is int) {
-      await _prefs.setInt(key, value);
-    } else if (value is double) {
-      await _prefs.setDouble(key, value);
-    } else if (value is String) {
-      await _prefs.setString(key, value);
-    } else if (value is List<String>) {
-      await _prefs.setStringList(key, value);
-    } else if (value is Enum) {
-      await _prefs.setString(key, value.name);
-    }
+    await switch (value) {
+      final bool value => _prefs.setBool(key, value),
+      final int value => _prefs.setInt(key, value),
+      final double value => _prefs.setDouble(key, value),
+      final String value => _prefs.setString(key, value),
+      final List<String> value => _prefs.setStringList(key, value),
+      final Enum value => _prefs.setString(key, value.name),
+      _ => null,
+    };
   }
 
   /// Reset all settings to defaults

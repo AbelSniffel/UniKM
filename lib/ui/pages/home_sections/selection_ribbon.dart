@@ -340,22 +340,14 @@ class _RibbonBar extends StatelessWidget {
               Icon(
                 action.icon,
                 size: 20,
-                color: action.onPressed == null
-                    ? theme.textHint
-                    : action.destructive
-                    ? theme.error
-                    : theme.accent,
+                color: _menuColor(action) ?? theme.accent,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   action.label,
                   style: TextStyle(
-                    color: action.onPressed == null
-                        ? theme.textHint
-                        : action.destructive
-                        ? theme.error
-                        : theme.textPrimary,
+                    color: _menuColor(action) ?? theme.textPrimary,
                   ),
                 ),
               ),
@@ -392,6 +384,22 @@ class _RibbonBar extends StatelessWidget {
         ],
       ),
     ),
+  );
+
+  /// Disabled and destructive menu items override the usual colours.
+  Color? _menuColor(_RibbonAction action) => action.onPressed == null
+      ? theme.textHint
+      : action.destructive
+      ? theme.error
+      : null;
+
+  /// A rounded button group background.
+  Widget _group({required Key key, required Widget child}) => Material(
+    key: key,
+    color: theme.buttonGroupBackground,
+    borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
+    clipBehavior: Clip.antiAlias,
+    child: child,
   );
 
   double _textWidth(BuildContext context, String text, TextStyle style) {
@@ -493,13 +501,8 @@ class _RibbonBar extends StatelessWidget {
             children: [
               for (final (index, group) in groups.indexed) ...[
                 if (index > 0) const SizedBox(width: 8),
-                Material(
+                _group(
                   key: ValueKey('selection-group-${group.first.group.name}'),
-                  color: theme.buttonGroupBackground,
-                  borderRadius: BorderRadius.circular(
-                    theme.cornerRadius * 1.25,
-                  ),
-                  clipBehavior: Clip.antiAlias,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -523,13 +526,8 @@ class _RibbonBar extends StatelessWidget {
               ],
               if (hasOverflow) ...[
                 if (visibleCount > 0) const SizedBox(width: 8),
-                Material(
+                _group(
                   key: const ValueKey('selection-group-more'),
-                  color: theme.buttonGroupBackground,
-                  borderRadius: BorderRadius.circular(
-                    theme.cornerRadius * 1.25,
-                  ),
-                  clipBehavior: Clip.antiAlias,
                   child: SizedBox(
                     width: moreWidth,
                     height: 40,
@@ -632,11 +630,18 @@ class _ActionControl extends StatelessWidget {
       ),
       textStyle: WidgetStatePropertyAll(_actionLabelStyle(context)),
     );
+    final child = showLabel
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [icon, const SizedBox(width: 6), Text(action.label)],
+          )
+        : icon;
+    final key = ValueKey('selection-action-${action.id}');
     return Tooltip(
       message: action.tooltip ?? action.label,
       child: action.id == 'edit'
           ? ElevatedButton(
-              key: ValueKey('selection-action-${action.id}'),
+              key: key,
               onPressed: action.onPressed,
               style: style.copyWith(
                 backgroundColor: WidgetStateProperty.resolveWith(
@@ -645,31 +650,13 @@ class _ActionControl extends StatelessWidget {
                       : theme.primaryButton,
                 ),
               ),
-              child: showLabel
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        icon,
-                        const SizedBox(width: 6),
-                        Text(action.label),
-                      ],
-                    )
-                  : icon,
+              child: child,
             )
           : TextButton(
-              key: ValueKey('selection-action-${action.id}'),
+              key: key,
               onPressed: action.onPressed,
               style: style,
-              child: showLabel
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        icon,
-                        const SizedBox(width: 6),
-                        Text(action.label),
-                      ],
-                    )
-                  : icon,
+              child: child,
             ),
     );
   }

@@ -49,14 +49,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    final initialSearchQuery = ref.read(gamesProvider).searchQuery;
-    _syncSearchController(initialSearchQuery);
-    final initialOffset = ref.read(gameLibraryScrollOffsetProvider);
+    _syncSearchController(ref.read(gamesProvider).searchQuery);
     _scrollController = ScrollController(
-      initialScrollOffset: initialOffset,
-      keepScrollOffset: true,
-    );
-    _scrollController.addListener(_saveScrollOffset);
+      initialScrollOffset: ref.read(gameLibraryScrollOffsetProvider),
+    )..addListener(_saveScrollOffset);
   }
 
   void _saveScrollOffset() {
@@ -64,9 +60,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     final offset = _scrollController.offset;
     if (!offset.isFinite) return;
 
-    final notifier = ref.read(gameLibraryScrollOffsetProvider.notifier);
-    final savedOffset = ref.read(gameLibraryScrollOffsetProvider);
-    if ((savedOffset - offset).abs() >= 1.0) notifier.set(offset);
+    if ((ref.read(gameLibraryScrollOffsetProvider) - offset).abs() >= 1.0) {
+      ref.read(gameLibraryScrollOffsetProvider.notifier).set(offset);
+    }
   }
 
   void _syncSearchController(String searchQuery) {
@@ -135,7 +131,13 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Future<void> _handleCopySelection(BuildContext context) async {
     if (_searchFocusNode.hasFocus) return;
-    await _copySelectedGames(context);
+    final gamesState = ref.read(gamesProvider);
+    final selectedIds = gamesState.selectedGameIds;
+    if (selectedIds.isEmpty) return;
+    await showCopyActionsDialog(context, [
+      for (final game in gamesState.games)
+        if (selectedIds.contains(game.id)) game,
+    ]);
   }
 
   Future<void> _handleDeleteSelection(BuildContext context) async {
@@ -165,16 +167,5 @@ class _HomePageState extends ConsumerState<HomePage> {
         'Deleted ${selectedIds.length} game${selectedIds.length > 1 ? 's' : ''}',
       );
     }
-  }
-
-  Future<void> _copySelectedGames(BuildContext context) async {
-    final selectedIds = ref.read(gamesProvider).selectedGameIds;
-    if (selectedIds.isEmpty) return;
-
-    final gamesState = ref.read(gamesProvider);
-    final selectedGames = gamesState.games
-        .where((g) => selectedIds.contains(g.id))
-        .toList();
-    await showCopyActionsDialog(context, selectedGames);
   }
 }

@@ -67,18 +67,16 @@ class BatchGamesEditingController extends TextEditingController {
           composing.end > offset) {
         final start = math.max(0, composing.start - offset);
         final stop = math.min(text.length, composing.end - offset);
-        children.add(
+        children.addAll([
           TextSpan(text: text.substring(0, start), style: partStyle),
-        );
-        children.add(
           TextSpan(
             text: text.substring(start, stop),
             style: (partStyle ?? const TextStyle()).copyWith(
               decoration: TextDecoration.underline,
             ),
           ),
-        );
-        children.add(TextSpan(text: text.substring(stop), style: partStyle));
+          TextSpan(text: text.substring(stop), style: partStyle),
+        ]);
       } else {
         children.add(TextSpan(text: text, style: partStyle));
       }
@@ -509,6 +507,15 @@ class _RenderBatchRows extends RenderBox
     final inputData = input.parentData! as ContainerBoxParentData<RenderBox>;
     inputData.offset = Offset.zero;
     final editable = _findEditable(input);
+    // The box of the first character of [line], if it has one.
+    Rect? firstBox(_BatchLine line) {
+      if (line.text.isEmpty || editable == null) return null;
+      final boxes = editable.getBoxesForSelection(
+        TextSelection(baseOffset: line.offset, extentOffset: line.offset + 1),
+      );
+      return boxes.isEmpty ? null : boxes.first.toRect();
+    }
+
     var indicator = inputData.nextSibling;
     for (final row in iconRows) {
       if (indicator == null) break;
@@ -516,31 +523,15 @@ class _RenderBatchRows extends RenderBox
         const BoxConstraints(maxWidth: 24, maxHeight: 24),
         parentUsesSize: true,
       );
-      final line = lines[row];
-      final boxes = line.text.isEmpty || editable == null
-          ? <ui.TextBox>[]
-          : editable.getBoxesForSelection(
-              TextSelection(
-                baseOffset: line.offset,
-                extentOffset: line.offset + 1,
-              ),
-            );
-      final rect = boxes.isEmpty ? null : boxes.first.toRect();
-      var center = rect?.center.dy;
+      var center = firstBox(lines[row])?.center.dy;
       if (editable != null && center == null) {
         // Use an existing row as the vertical anchor, including blank lines.
         // Reading the caret during ancestor layout would read a descendant size.
         for (var anchor = 0; anchor < lines.length; anchor++) {
-          if (lines[anchor].text.isEmpty) continue;
-          final anchorBoxes = editable.getBoxesForSelection(
-            TextSelection(
-              baseOffset: lines[anchor].offset,
-              extentOffset: lines[anchor].offset + 1,
-            ),
-          );
-          if (anchorBoxes.isNotEmpty) {
+          final anchorBox = firstBox(lines[anchor]);
+          if (anchorBox != null) {
             center =
-                anchorBoxes.first.toRect().center.dy +
+                anchorBox.center.dy +
                 (row - anchor) * editable.preferredLineHeight;
             break;
           }

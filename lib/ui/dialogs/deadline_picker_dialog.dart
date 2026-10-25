@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/time/calendar_date.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/section_groupbox.dart';
 import '../../core/settings/settings_model.dart';
@@ -14,6 +15,7 @@ const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
 // Date entry is reformatted on every keystroke; compile these once.
 final _nonDigitPattern = RegExp(r'\D');
 final _digitPattern = RegExp(r'\d');
+final _dateFormat = DateFormat('dd/MM/yyyy');
 
 Future<DateTime?> showDeadlinePickerDialog({
   required BuildContext context,
@@ -47,11 +49,12 @@ Future<DateTime?> showDeadlinePickerDialog({
   );
 }
 
-DateTime _clampDate(DateTime value, DateTime firstDate, DateTime lastDate) {
-  if (value.isBefore(firstDate)) return firstDate;
-  if (value.isAfter(lastDate)) return lastDate;
-  return value;
-}
+DateTime _clampDate(DateTime value, DateTime firstDate, DateTime lastDate) =>
+    value.isBefore(firstDate)
+    ? firstDate
+    : value.isAfter(lastDate)
+    ? lastDate
+    : value;
 
 class _DeadlinePickerDialog extends StatefulWidget {
   const _DeadlinePickerDialog({
@@ -95,74 +98,44 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
     super.dispose();
   }
 
-  void _syncExactDateFromSelectedDate() {
-    final text = DateFormat('dd/MM/yyyy').format(_selectedDate);
-    _exactDateController.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-  }
+  static void _setText(TextEditingController controller, String text) =>
+      controller.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+
+  void _syncExactDateFromSelectedDate() =>
+      _setText(_exactDateController, _dateFormat.format(_selectedDate));
 
   DateTime get _currentDateOnly => DateUtils.dateOnly(widget.currentDate);
 
-  int _daysUntilFromCurrentDate(DateTime date) {
-    // Count calendar days independently of daylight-saving time changes.
-    return DateTime.utc(date.year, date.month, date.day)
-        .difference(
-          DateTime.utc(
-            _currentDateOnly.year,
-            _currentDateOnly.month,
-            _currentDateOnly.day,
-          ),
-        )
-        .inDays;
-  }
-
   void _syncDayAmountFromSelectedDate() {
-    final dayAmount = _daysUntilFromCurrentDate(_selectedDate);
-    final text = dayAmount < 0 ? '' : '$dayAmount';
-    _dayAmountController.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
+    final dayAmount = calendarDaysUntil(_selectedDate, _currentDateOnly);
+    _setText(_dayAmountController, dayAmount < 0 ? '' : '$dayAmount');
   }
 
   void _handleExactDateChanged(String value) {
     final digits = value.replaceAll(_nonDigitPattern, '');
-    if (digits.isEmpty) {
-      setState(() => _exactDateError = null);
-      return;
-    }
-
-    final resolution = _resolveExactDateFromDigits(digits);
-    if (resolution.error != null) {
-      setState(() => _exactDateError = resolution.error);
-      return;
-    }
-    if (resolution.date == null) {
-      setState(() => _exactDateError = null);
-      return;
-    }
-
+    final resolution = digits.isEmpty
+        ? (date: null, error: null)
+        : _resolveExactDateFromDigits(digits);
     setState(() {
-      _exactDateError = null;
-      _selectedDate = resolution.date!;
-      _syncDayAmountFromSelectedDate();
+      _exactDateError = resolution.error;
+      if (resolution.date case final date?) {
+        _selectedDate = date;
+        _syncDayAmountFromSelectedDate();
+      }
     });
   }
 
+  /// The date typed so far; null with no error while it is still incomplete.
   ({DateTime? date, String? error}) _resolveExactDateFromDigits(String digits) {
-    var day = _selectedDate.day;
+    if (digits.length < 2) return (date: null, error: null);
+    final day = int.parse(digits.substring(0, 2));
     var month = _selectedDate.month;
     var year = _selectedDate.year;
-
-    if (digits.length >= 2) {
-      day = int.parse(digits.substring(0, 2));
-      if (day < 1 || day > 31) {
-        return (date: null, error: 'Day must be between 01 and 31');
-      }
-    } else {
-      return (date: null, error: null);
+    if (day < 1 || day > 31) {
+      return (date: null, error: 'Day must be between 01 and 31');
     }
 
     if (digits.length >= 4) {
@@ -236,7 +209,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final formattedDate = DateFormat('dd/MM/yyyy').format(_selectedDate);
+    final formattedDate = _dateFormat.format(_selectedDate);
     final textScale =
         MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 3).scale(14) /
         14;

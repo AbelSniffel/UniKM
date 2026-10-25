@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/device_sync_models.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/format_utils.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
@@ -128,12 +129,8 @@ Future<bool?> showChooseSyncDirectionDialog({
   );
 }
 
-String _formatLastSync(DateTime? value) {
-  if (value == null) return 'Never';
-  final local = value.toLocal();
-  return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
-      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-}
+String _formatLastSync(DateTime? value) =>
+    value == null ? 'Never' : formatDateTimeMinutes(value.toLocal());
 
 void showOutgoingPairCodeDialog({
   required BuildContext context,
@@ -340,28 +337,31 @@ class _SyncContent extends ConsumerWidget {
     _ => Icons.link,
   };
 
-  bool _isPlaceholderName(String? value) {
-    final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.isEmpty) return true;
-    return normalized == 'localhost' ||
-        normalized == '127.0.0.1' ||
-        normalized == '::1' ||
-        normalized == '0.0.0.0' ||
-        normalized == 'unknown';
-  }
+  static const _placeholderNames = {
+    '',
+    'localhost',
+    '127.0.0.1',
+    '::1',
+    '0.0.0.0',
+    'unknown',
+  };
+  static const _genericDeviceNames = {
+    '',
+    'unikm device',
+    'mobile device',
+    'desktop device',
+    'android device',
+    'ios device',
+    'windows pc',
+    'linux pc',
+    'mac',
+  };
 
-  bool _isGenericDeviceName(String? value) {
-    final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.isEmpty) return true;
-    return normalized == 'unikm device' ||
-        normalized == 'mobile device' ||
-        normalized == 'desktop device' ||
-        normalized == 'android device' ||
-        normalized == 'ios device' ||
-        normalized == 'windows pc' ||
-        normalized == 'linux pc' ||
-        normalized == 'mac';
-  }
+  bool _isPlaceholderName(String value) =>
+      _placeholderNames.contains(value.toLowerCase());
+
+  bool _isGenericDeviceName(String value) =>
+      _genericDeviceNames.contains(value.toLowerCase());
 
   String _preferredPeerName(String primary, String? secondary) {
     final first = primary.trim();
@@ -386,15 +386,18 @@ class _SyncContent extends ConsumerWidget {
     if (discoveredType != SyncDeviceType.unknown) return discoveredType;
 
     final lower = row.name.toLowerCase();
-    final looksMobile =
-        lower.contains('iphone') ||
-        lower.contains('ipad') ||
-        lower.contains('android') ||
-        lower.contains('pixel') ||
-        lower.contains('galaxy') ||
-        lower.contains('phone') ||
-        lower.contains('mobile');
-    return looksMobile ? SyncDeviceType.mobile : SyncDeviceType.desktop;
+    const mobileHints = [
+      'iphone',
+      'ipad',
+      'android',
+      'pixel',
+      'galaxy',
+      'phone',
+      'mobile',
+    ];
+    return mobileHints.any(lower.contains)
+        ? SyncDeviceType.mobile
+        : SyncDeviceType.desktop;
   }
 
   IconData _deviceTypeIcon(_UnifiedDeviceRow row) =>
@@ -470,18 +473,13 @@ class _SyncContent extends ConsumerWidget {
       );
     }
 
-    final rows = byId.values.toList(growable: false)
-      ..sort((a, b) {
-        final aRank = a.pendingRequest != null
-            ? 0
-            : (a.trusted != null ? 1 : 2);
-        final bRank = b.pendingRequest != null
-            ? 0
-            : (b.trusted != null ? 1 : 2);
-        if (aRank != bRank) return aRank.compareTo(bRank);
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
-    return rows;
+    int rank(_UnifiedDeviceRow row) =>
+        row.pendingRequest != null ? 0 : (row.trusted != null ? 1 : 2);
+    return byId.values.toList(growable: false)..sort(
+      (a, b) => rank(a) != rank(b)
+          ? rank(a).compareTo(rank(b))
+          : a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
   }
 
   @override
@@ -496,7 +494,6 @@ class _SyncContent extends ConsumerWidget {
     final isBusy =
         isRefreshing ||
         sync.status == DeviceSyncStatus.syncing ||
-        sync.status == DeviceSyncStatus.discovering ||
         sync.status == DeviceSyncStatus.connecting;
     // Treat messages that indicate a failure/rejection as a "broken link" state
     // even when the status itself is idle (e.g. "Pair request declined.").

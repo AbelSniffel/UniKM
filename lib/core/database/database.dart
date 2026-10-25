@@ -30,6 +30,21 @@ class AppDatabase extends _$AppDatabase {
   static const String _syncClockKey = 'logical_clock';
   static const String _syncOriginKey = 'database_origin';
 
+  /// Inserts or replaces a sync record:
+  /// (sync_id, local_game_id, game_key, change_clock, change_origin,
+  /// deleted_at, local_revision).
+  static const String _upsertSyncRecordSql =
+      'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, '
+      'change_clock, change_origin, deleted_at, local_revision) VALUES(?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT(sync_id) DO UPDATE SET local_game_id = excluded.local_game_id, '
+      'game_key = excluded.game_key, change_clock = excluded.change_clock, '
+      'change_origin = excluded.change_origin, deleted_at = excluded.deleted_at, '
+      'local_revision = excluded.local_revision';
+
+  /// Removes other active records of a local game: (local_game_id, sync_id).
+  static const String _deleteOtherSyncRecordsSql =
+      'DELETE FROM $_syncRecordsTable WHERE local_game_id = ? AND deleted_at = 0 AND sync_id != ?';
+
   AppDatabase() : super(_openConnection());
 
   /// Constructor for testing with custom executor
@@ -50,148 +65,143 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  MigrationStrategy get migration {
-    return MigrationStrategy(
-      beforeOpen: (_) async {
-        // Repair only dangling relationships left by older connections.
-        await customStatement(
-          'DELETE FROM game_tags WHERE game_id NOT IN '
-          '(SELECT id FROM games) OR tag_id NOT IN (SELECT id FROM tags)',
+  MigrationStrategy get migration => MigrationStrategy(
+    beforeOpen: (_) async {
+      // Repair only dangling relationships left by older connections.
+      await customStatement(
+        'DELETE FROM game_tags WHERE game_id NOT IN '
+        '(SELECT id FROM games) OR tag_id NOT IN (SELECT id FROM tags)',
+      );
+      await customStatement('PRAGMA foreign_keys = ON');
+    },
+    onCreate: (Migrator m) async {
+      await m.createAll();
+      await _createSyncMetadataTables();
+      await _initializeSyncMetadata();
+      await _createSyncConvergenceTables();
+      // Create indexes for better query performance
+      await _createIndexes();
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      Future<bool> columnExists(String table, String column) async {
+        final rows = await customSelect('PRAGMA table_info($table)').get();
+        return rows.any((row) => row.data['name'] == column);
+      }
+
+      Future<bool> tableExists(String table) async {
+        final rows = await customSelect(
+          'SELECT name FROM sqlite_master WHERE type = ? AND name = ?',
+          variables: [Variable.withString('table'), Variable.withString(table)],
+        ).get();
+        return rows.isNotEmpty;
+      }
+
+      Future<void> addColumnIfMissing(
+        String table,
+        String column,
+        String definition,
+      ) async {
+        if (!await columnExists(table, column)) {
+          await customStatement(
+            'ALTER TABLE $table ADD COLUMN $column $definition',
+          );
+        }
+      }
+
+      if (from < 2) {
+        for (final column in {
+          'cover_image': 'TEXT NOT NULL DEFAULT ""',
+          'has_deadline': 'INTEGER NOT NULL DEFAULT 0',
+          'deadline_date': 'TEXT',
+          'is_dlc': 'INTEGER NOT NULL DEFAULT 0',
+          'steam_app_id': 'TEXT NOT NULL DEFAULT ""',
+          'review_score': 'INTEGER NOT NULL DEFAULT 0',
+          'review_count': 'INTEGER NOT NULL DEFAULT 0',
+        }.entries) {
+          await addColumnIfMissing('games', column.key, column.value);
+        }
+        await addColumnIfMissing(
+          'tags',
+          'is_steam_tag',
+          'INTEGER NOT NULL DEFAULT 0',
         );
-        await customStatement('PRAGMA foreign_keys = ON');
-      },
-      onCreate: (Migrator m) async {
-        await m.createAll();
+      }
+
+      if (from < 3) {
+        await addColumnIfMissing(
+          'games',
+          'updated_at',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+
+      if (from < 4) {
+        if (await columnExists('games', 'updated_at')) {
+          await customStatement(
+            "UPDATE games SET updated_at = date_added WHERE updated_at IS NULL OR updated_at = '' OR updated_at = 0 OR typeof(updated_at) != 'integer'",
+          );
+        }
+      }
+
+      // Clean up any orphaned entries which could have accumulated in
+      // earlier versions where cascading deletes weren't enforced. Those
+      // orphaned rows prevented `deleteUnusedTags` from working properly
+      // and are the root cause of the bug reported by the user.
+      if (from < 5) {
+        await customStatement(
+          'DELETE FROM game_tags WHERE game_id NOT IN (SELECT id FROM games) OR '
+          'tag_id NOT IN (SELECT id FROM tags)',
+        );
+      }
+
+      if (from < 6) {
+        await addColumnIfMissing(
+          'games',
+          'developer',
+          'TEXT NOT NULL DEFAULT ""',
+        );
+      }
+
+      if (from < 7) {
         await _createSyncMetadataTables();
         await _initializeSyncMetadata();
-        await _createSyncConvergenceTables();
-        // Create indexes for better query performance
-        await _createIndexes();
-      },
-      onUpgrade: (Migrator m, int from, int to) async {
-        Future<bool> columnExists(String table, String column) async {
-          final rows = await customSelect('PRAGMA table_info($table)').get();
-          return rows.any((row) => row.data['name'] == column);
-        }
+      }
 
-        Future<bool> tableExists(String table) async {
-          final rows = await customSelect(
-            'SELECT name FROM sqlite_master WHERE type = ? AND name = ?',
-            variables: [
-              Variable.withString('table'),
-              Variable.withString(table),
-            ],
-          ).get();
-          return rows.isNotEmpty;
-        }
-
-        Future<void> addColumnIfMissing(
-          String table,
-          String column,
-          String definition,
-        ) async {
-          if (!await columnExists(table, column)) {
-            await customStatement(
-              'ALTER TABLE $table ADD COLUMN $column $definition',
-            );
-          }
-        }
-
-        if (from < 2) {
-          for (final column in {
-            'cover_image': 'TEXT NOT NULL DEFAULT ""',
-            'has_deadline': 'INTEGER NOT NULL DEFAULT 0',
-            'deadline_date': 'TEXT',
-            'is_dlc': 'INTEGER NOT NULL DEFAULT 0',
-            'steam_app_id': 'TEXT NOT NULL DEFAULT ""',
-            'review_score': 'INTEGER NOT NULL DEFAULT 0',
-            'review_count': 'INTEGER NOT NULL DEFAULT 0',
-          }.entries) {
-            await addColumnIfMissing('games', column.key, column.value);
-          }
-          await addColumnIfMissing(
-            'tags',
-            'is_steam_tag',
-            'INTEGER NOT NULL DEFAULT 0',
-          );
-        }
-
-        if (from < 3) {
-          await addColumnIfMissing(
-            'games',
-            'updated_at',
-            'INTEGER NOT NULL DEFAULT 0',
-          );
-        }
-
-        if (from < 4) {
-          if (await columnExists('games', 'updated_at')) {
-            await customStatement(
-              "UPDATE games SET updated_at = date_added WHERE updated_at IS NULL OR updated_at = '' OR updated_at = 0 OR typeof(updated_at) != 'integer'",
-            );
-          }
-        }
-
-        // Clean up any orphaned entries which could have accumulated in
-        // earlier versions where cascading deletes weren't enforced. Those
-        // orphaned rows prevented `deleteUnusedTags` from working properly
-        // and are the root cause of the bug reported by the user.
-        if (from < 5) {
-          await customStatement(
-            'DELETE FROM game_tags WHERE game_id NOT IN (SELECT id FROM games) OR '
-            'tag_id NOT IN (SELECT id FROM tags)',
-          );
-        }
-
-        if (from < 6) {
-          await addColumnIfMissing(
-            'games',
-            'developer',
-            'TEXT NOT NULL DEFAULT ""',
-          );
-        }
-
-        if (from < 7) {
-          await _createSyncMetadataTables();
-          await _initializeSyncMetadata();
-        }
-
-        if (from < 8) {
-          final tombstonesTableExists = await tableExists(
+      if (from < 8) {
+        final tombstonesTableExists = await tableExists(
+          _syncGameTombstonesTable,
+        );
+        if (tombstonesTableExists) {
+          final hasGameId = await columnExists(
             _syncGameTombstonesTable,
+            'game_id',
           );
-          if (tombstonesTableExists) {
-            final hasGameId = await columnExists(
-              _syncGameTombstonesTable,
-              'game_id',
+          if (!hasGameId) {
+            await customStatement(
+              'DROP TABLE IF EXISTS $_legacySyncGameTombstonesTable',
             );
-            if (!hasGameId) {
-              await customStatement(
-                'DROP TABLE IF EXISTS $_legacySyncGameTombstonesTable',
-              );
-              await customStatement(
-                'ALTER TABLE $_syncGameTombstonesTable '
-                'RENAME TO $_legacySyncGameTombstonesTable',
-              );
-            }
+            await customStatement(
+              'ALTER TABLE $_syncGameTombstonesTable '
+              'RENAME TO $_legacySyncGameTombstonesTable',
+            );
           }
-
-          // Recreate tombstones as SKM-ID centric. Legacy key-only tombstones
-          // are intentionally dropped because they cannot be mapped safely
-          // when duplicate keys exist.
-          await _createSyncTombstonesTable();
-          await customStatement(
-            'DROP TABLE IF EXISTS $_legacySyncGameTombstonesTable',
-          );
         }
 
-        if (from < 9) await _createSyncConvergenceTables();
+        // Recreate tombstones as SKM-ID centric. Legacy key-only tombstones
+        // are intentionally dropped because they cannot be mapped safely
+        // when duplicate keys exist.
+        await _createSyncTombstonesTable();
+        await customStatement(
+          'DROP TABLE IF EXISTS $_legacySyncGameTombstonesTable',
+        );
+      }
 
-        // Always try to create indexes (will be ignored if they exist)
-        await _createIndexes();
-      },
-    );
-  }
+      if (from < 9) await _createSyncConvergenceTables();
+
+      // Always try to create indexes (will be ignored if they exist)
+      await _createIndexes();
+    },
+  );
 
   Future<void> _createSyncMetadataTables() async {
     await customStatement(
@@ -520,29 +530,18 @@ class AppDatabase extends _$AppDatabase {
       [changeClock, _syncClockKey],
     );
     if (localGameId != null && deletedAt == 0) {
-      await customStatement(
-        'DELETE FROM $_syncRecordsTable WHERE local_game_id = ? AND deleted_at = 0 AND sync_id != ?',
-        [localGameId, syncId],
-      );
+      await customStatement(_deleteOtherSyncRecordsSql, [localGameId, syncId]);
       await clearGameTombstone(localGameId);
     }
-    await customStatement(
-      'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, '
-      'change_clock, change_origin, deleted_at, local_revision) VALUES(?, ?, ?, ?, ?, ?, ?) '
-      'ON CONFLICT(sync_id) DO UPDATE SET local_game_id = excluded.local_game_id, '
-      'game_key = excluded.game_key, change_clock = excluded.change_clock, '
-      'change_origin = excluded.change_origin, deleted_at = excluded.deleted_at, '
-      'local_revision = excluded.local_revision',
-      [
-        syncId,
-        localGameId,
-        gameKey,
-        changeClock,
-        changeOrigin,
-        deletedAt,
-        revision,
-      ],
-    );
+    await customStatement(_upsertSyncRecordSql, [
+      syncId,
+      localGameId,
+      gameKey,
+      changeClock,
+      changeOrigin,
+      deletedAt,
+      revision,
+    ]);
   }
 
   Future<void> acceptRemoteSyncRecords(
@@ -550,11 +549,9 @@ class AppDatabase extends _$AppDatabase {
   ) async {
     if (records.isEmpty) return;
     final revision = await markLocalDataChanged();
-    var maxClock = 0;
-    for (final record in records) {
-      final clock = (record['changeClock'] as num).toInt();
-      if (clock > maxClock) maxClock = clock;
-    }
+    final maxClock = records
+        .map((record) => (record['changeClock'] as num).toInt())
+        .fold(0, (max, clock) => clock > max ? clock : max);
     await customStatement(
       'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), ?) WHERE key = ?',
       [maxClock, _syncClockKey],
@@ -564,58 +561,43 @@ class AppDatabase extends _$AppDatabase {
         final localId = record['id'];
         final deletedAt = record['deletedAt'] ?? 0;
         if (localId != null && deletedAt == 0) {
-          batch.customStatement(
-            'DELETE FROM $_syncRecordsTable WHERE local_game_id = ? AND deleted_at = 0 AND sync_id != ?',
-            [localId, record['syncId']],
-          );
+          batch.customStatement(_deleteOtherSyncRecordsSql, [
+            localId,
+            record['syncId'],
+          ]);
           batch.customStatement(
             'DELETE FROM $_syncGameTombstonesTable WHERE game_id = ?',
             [localId],
           );
         }
-        batch.customStatement(
-          'INSERT INTO $_syncRecordsTable(sync_id, local_game_id, game_key, change_clock, '
-          'change_origin, deleted_at, local_revision) VALUES(?, ?, ?, ?, ?, ?, ?) '
-          'ON CONFLICT(sync_id) DO UPDATE SET local_game_id = excluded.local_game_id, '
-          'game_key = excluded.game_key, change_clock = excluded.change_clock, '
-          'change_origin = excluded.change_origin, deleted_at = excluded.deleted_at, '
-          'local_revision = excluded.local_revision',
-          [
-            record['syncId'],
-            localId,
-            record['gameKey'],
-            record['changeClock'],
-            record['changeOrigin'],
-            deletedAt,
-            revision,
-          ],
-        );
+        batch.customStatement(_upsertSyncRecordSql, [
+          record['syncId'],
+          localId,
+          record['gameKey'],
+          record['changeClock'],
+          record['changeOrigin'],
+          deletedAt,
+          revision,
+        ]);
       }
     });
   }
 
   /// Create indexes for better query performance
+  /// Search (title), filters (platform), tag lookups in both directions and
+  /// Steam duplicate detection (steam_app_id).
   Future<void> _createIndexes() async {
-    // Index on games.title for search queries
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_games_title ON games(title)',
-    );
-    // Index on games.platform for filter queries
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_games_platform ON games(platform)',
-    );
-    // Index on game_tags.game_id for efficient tag lookups
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_game_tags_game_id ON game_tags(game_id)',
-    );
-    // Index on game_tags.tag_id for efficient reverse lookups
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_game_tags_tag_id ON game_tags(tag_id)',
-    );
-    // Index on games.steam_app_id for Steam duplicate detection
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_games_steam_app_id ON games(steam_app_id)',
-    );
+    for (final (table, column) in const [
+      ('games', 'title'),
+      ('games', 'platform'),
+      ('game_tags', 'game_id'),
+      ('game_tags', 'tag_id'),
+      ('games', 'steam_app_id'),
+    ]) {
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_${table}_$column ON $table($column)',
+      );
+    }
   }
 
   Future<void> _writeSyncMetadataValue(String key, String value) async {
@@ -1214,13 +1196,15 @@ class AppDatabase extends _$AppDatabase {
       await batch((b) {
         b.insertAll(
           tags,
-          missingSpecs.map((s) {
-            return TagsCompanion.insert(
-              name: s.name.trim(),
-              color: Value(s.color.trim()),
-              isSteamTag: Value(s.isSteamTag),
-            );
-          }).toList(),
+          missingSpecs
+              .map(
+                (s) => TagsCompanion.insert(
+                  name: s.name.trim(),
+                  color: Value(s.color.trim()),
+                  isSteamTag: Value(s.isSteamTag),
+                ),
+              )
+              .toList(),
         );
       });
 
