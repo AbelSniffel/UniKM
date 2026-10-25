@@ -120,24 +120,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   bool _includeNotes = true;
   bool _isExporting = false;
 
-  Widget _buildExportOptionButton({
-    required AppThemeData theme,
-    required String label,
-    required bool value,
-    required VoidCallback onTap,
-  }) {
-    return AppActionButton(
-      theme: theme,
-      label: label,
-      selected: value,
-      onTap: onTap,
-    );
-  }
-
-  String _escapeSqlString(String value) {
-    return value.replaceAll("'", "''");
-  }
-
   Future<String> _resolveBaseDbPath() async {
     final configured = ref.read(currentDatabasePathProvider);
     if (configured.isNotEmpty) return configured;
@@ -154,7 +136,9 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       mode: sqlite3.OpenMode.readOnly,
     );
     try {
-      sourceDb.execute("VACUUM INTO '${_escapeSqlString(destinationPath)}'");
+      sourceDb.execute(
+        "VACUUM INTO '${destinationPath.replaceAll("'", "''")}'",
+      );
     } finally {
       sourceDb.close();
     }
@@ -295,23 +279,23 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildExportOptionButton(
+                  AppActionButton(
                     theme: theme,
                     label: 'Used Keys',
-                    value: _includeUsed,
+                    selected: _includeUsed,
                     onTap: () => setState(() => _includeUsed = !_includeUsed),
                   ),
                   if (_exportFormat != 'txt') ...[
-                    _buildExportOptionButton(
+                    AppActionButton(
                       theme: theme,
                       label: 'Tags',
-                      value: _includeTags,
+                      selected: _includeTags,
                       onTap: () => setState(() => _includeTags = !_includeTags),
                     ),
-                    _buildExportOptionButton(
+                    AppActionButton(
                       theme: theme,
                       label: 'Notes',
-                      value: _includeNotes,
+                      selected: _includeNotes,
                       onTap: () =>
                           setState(() => _includeNotes = !_includeNotes),
                     ),
@@ -325,11 +309,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
         ElevatedButton.icon(
           onPressed: _isExporting ? null : _export,
           icon: _isExporting
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: AppCircularProgressIndicator(),
-                )
+              ? const AppCircularProgressIndicator(size: 18)
               : const Icon(Icons.upload),
           label: const Text('Export'),
         ),
@@ -384,14 +364,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         actionLabel: _importCommitted || _cancelRequested
             ? null
             : 'Cancel import',
-        onAction: _importCommitted || _cancelRequested
-            ? null
-            : () {
-                _cancelRequested = true;
-                _importMessage =
-                    'Cancelling import and restoring checkpoint...';
-                _showImportProgress();
-              },
+        onAction: _importCommitted || _cancelRequested ? null : _requestCancel,
       );
     } else {
       _importTask!.update(
@@ -400,6 +373,12 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         clearAction: _importCommitted || _cancelRequested,
       );
     }
+  }
+
+  void _requestCancel() {
+    _cancelRequested = true;
+    _importMessage = 'Cancelling import and restoring checkpoint...';
+    _showImportProgress();
   }
 
   void _reportImportProgress(int done, int total) {
@@ -482,26 +461,16 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
   Future<_ImportFileKind> _classifyImportFile(String path) async {
     final lowerPath = path.toLowerCase();
-    if (lowerPath.endsWith('.db') ||
-        lowerPath.endsWith('.sqlite') ||
-        lowerPath.endsWith('.sqlite3') ||
-        lowerPath.endsWith('.db.bak') ||
-        lowerPath.endsWith('.sqlite.bak') ||
-        lowerPath.endsWith('.sqlite3.bak')) {
+    bool hasSuffix(List<String> suffixes, {bool backup = true}) => suffixes.any(
+      (s) => lowerPath.endsWith(s) || (backup && lowerPath.endsWith('$s.bak')),
+    );
+    if (hasSuffix(['.db', '.sqlite', '.sqlite3'])) {
       return _ImportFileKind.sqlite;
     }
-    if (lowerPath.endsWith('.enc') || lowerPath.endsWith('.enc.bak')) {
-      return _ImportFileKind.encrypted;
-    }
-    if (lowerPath.endsWith('.json') || lowerPath.endsWith('.json.bak')) {
-      return _ImportFileKind.json;
-    }
-    if (lowerPath.endsWith('.csv')) {
-      return _ImportFileKind.csv;
-    }
-    if (lowerPath.endsWith('.txt')) {
-      return _ImportFileKind.txt;
-    }
+    if (hasSuffix(['.enc'])) return _ImportFileKind.encrypted;
+    if (hasSuffix(['.json'])) return _ImportFileKind.json;
+    if (hasSuffix(['.csv'], backup: false)) return _ImportFileKind.csv;
+    if (hasSuffix(['.txt'], backup: false)) return _ImportFileKind.txt;
 
     // Linux database files may have no suffix. Require the SQLite signature;
     // never reinterpret arbitrary extensionless files as a text import.
@@ -538,51 +507,47 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
   Future<void> _scanFileForCount(File file, int revision) async {
     try {
-      final kind = await _classifyImportFile(file.path);
-      int count = 0;
-
-      if (kind == _ImportFileKind.sqlite) {
-        // Count games in SQLite
-        sqlite3.Database? sourceDb;
-        try {
-          sourceDb = sqlite3.sqlite3.open(
-            file.path,
-            mode: sqlite3.OpenMode.readOnly,
-          );
-          final tables = sourceDb.select(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='games'",
-          );
-          if (tables.isNotEmpty) {
-            final result = sourceDb.select(
-              'SELECT COUNT(*) as count FROM games',
-            );
-            count = result.first['count'] as int;
-          }
-        } finally {
-          sourceDb?.close();
-        }
-      } else if (kind == _ImportFileKind.encrypted) {
-        // Can't preview count without password.
-        count = 0;
-      } else if (kind == _ImportFileKind.json) {
-        final content = await file.readAsString();
-        final data = jsonDecode(content);
-        if (data is Map && data['games'] is List) {
-          count = (data['games'] as List).length;
-        } else if (looksLikeSteamKm1JsonExportData(data)) {
-          count = parseSteamKm1JsonExportData(data).length;
-        }
-      } else if (kind == _ImportFileKind.txt) {
-        final content = await file.readAsString();
-        count = parseSteamKm1TextExport(content).length;
-      } else if (kind == _ImportFileKind.csv) {
-        count = parseLibraryCsv(await file.readAsString()).length;
-      }
+      final count = switch (await _classifyImportFile(file.path)) {
+        _ImportFileKind.sqlite => _countSqliteGames(file.path),
+        _ImportFileKind.json => switch (jsonDecode(await file.readAsString())) {
+          {'games': final List games} => games.length,
+          final data when looksLikeSteamKm1JsonExportData(data) =>
+            parseSteamKm1JsonExportData(data).length,
+          _ => 0,
+        },
+        _ImportFileKind.txt => parseSteamKm1TextExport(
+          await file.readAsString(),
+        ).length,
+        _ImportFileKind.csv => parseLibraryCsv(
+          await file.readAsString(),
+        ).length,
+        // Encrypted files cannot be counted without the password.
+        _ImportFileKind.encrypted || _ImportFileKind.unsupported => 0,
+      };
 
       if (!mounted || revision != _fileSelectionRevision) return;
       setState(() => _previewCount = count);
     } catch (e) {
       // Ignore errors during preview count
+    }
+  }
+
+  static int _countSqliteGames(String path) {
+    final sourceDb = sqlite3.sqlite3.open(
+      path,
+      mode: sqlite3.OpenMode.readOnly,
+    );
+    try {
+      final tables = sourceDb.select(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='games'",
+      );
+      if (tables.isEmpty) return 0;
+      return sourceDb
+              .select('SELECT COUNT(*) as count FROM games')
+              .first['count']
+          as int;
+    } finally {
+      sourceDb.close();
     }
   }
 
@@ -618,7 +583,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         case _ImportFileKind.sqlite:
           await _importSqliteDatabase(file);
         case _ImportFileKind.encrypted:
-          completed = await _importEncryptedFile(file, task: _importTask);
+          completed = await _importEncryptedFile(file);
         case _ImportFileKind.json:
           await _importJson(file);
         case _ImportFileKind.txt:
@@ -687,10 +652,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     }
   }
 
-  Future<bool> _importEncryptedFile(
-    File file, {
-    NotificationHandle? task,
-  }) async {
+  Future<bool> _importEncryptedFile(File file) async {
     final encryptedKind = await detectEncryptedImportKind(file);
     switch (encryptedKind) {
       case EncryptedImportKind.uniKmDatabase:
@@ -698,7 +660,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           title: 'Unlock UniKM Backup',
           message:
               'This UniKM backup is encrypted. Enter the password to import it.',
-          task: task,
           decrypt: (password) => decryptUniKmDatabaseToTemp(file, password),
         );
       case EncryptedImportKind.steamKm2Database:
@@ -706,11 +667,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           title: 'Unlock SteamKM2 Backup',
           message:
               'This SteamKM2 backup is encrypted. Enter the password to import it.',
-          task: task,
           decrypt: (password) => decryptSteamKm2DatabaseToTemp(file, password),
         );
       case EncryptedImportKind.steamKm1Json:
-        return _importSteamKm1EncryptedBackup(file, task: task);
+        return _importSteamKm1EncryptedBackup(file);
       case EncryptedImportKind.unknown:
         throw Exception('Unsupported encrypted import format');
     }
@@ -721,12 +681,10 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required String message,
     required Future<PreparedEncryptedDatabaseImport> Function(String password)
     decrypt,
-    NotificationHandle? task,
   }) async {
     final prepared = await _promptForEncryptedImport(
       title: title,
       message: message,
-      task: task,
       action: decrypt,
     );
     if (prepared == null) {
@@ -734,22 +692,18 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     }
 
     try {
-      await _importSqliteDatabase(File(prepared.databasePath), task: task);
+      await _importSqliteDatabase(File(prepared.databasePath));
       return true;
     } finally {
       await prepared.dispose();
     }
   }
 
-  Future<bool> _importSteamKm1EncryptedBackup(
-    File file, {
-    NotificationHandle? task,
-  }) async {
+  Future<bool> _importSteamKm1EncryptedBackup(File file) async {
     final decryptedJson = await _promptForEncryptedImport<String>(
       title: 'Unlock SteamKM1 Backup',
       message:
           'This SteamKM1 backup is encrypted. Enter the password to import it.',
-      task: task,
       action: (password) => decryptSteamKm1JsonExport(file, password),
     );
     if (decryptedJson == null) {
@@ -762,7 +716,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       records,
       sourceFile: file,
       sourceLabel: 'SteamKM1 encrypted backup',
-      task: task,
     );
     return true;
   }
@@ -771,7 +724,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required String title,
     required String message,
     required Future<T> Function(String password) action,
-    NotificationHandle? task,
   }) async {
     while (true) {
       _checkImport();
@@ -787,7 +739,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         _checkImport();
         return await action(password);
       } on InvalidPasswordException {
-        task?.update(message: 'Incorrect password, try again...');
+        _importTask?.update(message: 'Incorrect password, try again...');
       }
     }
   }
@@ -805,10 +757,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     );
   }
 
-  Future<void> _importSqliteDatabase(
-    File file, {
-    NotificationHandle? task,
-  }) async {
+  Future<void> _importSqliteDatabase(File file) async {
     final prepared = await readSqliteImport(
       file.path,
       checkCancelled: _checkImport,
@@ -918,9 +867,16 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       return raw;
     }
 
-    final destinationFile = await _resolveImageDestination(
-      sourceFile,
-      targetImagesDir,
+    // One image per name: a same-named image from another source is
+    // overwritten.
+    final sourceName = p.basename(sourceFile.path);
+    final destinationFile = File(
+      p.join(
+        targetImagesDir.path,
+        sourceName.isEmpty
+            ? 'cover_${DateTime.now().millisecondsSinceEpoch}.img'
+            : sourceName,
+      ),
     );
 
     final sourceCanonical = _normalizeForCompare(sourceFile.absolute.path);
@@ -952,38 +908,11 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     return File(p.normalize(p.join(dbDir.path, normalizedRaw)));
   }
 
-  Future<File> _resolveImageDestination(
-    File sourceFile,
-    Directory targetImagesDir,
-  ) async {
-    final sourceName = p.basename(sourceFile.path);
-    final safeName = sourceName.isEmpty
-        ? 'cover_${DateTime.now().millisecondsSinceEpoch}.img'
-        : sourceName;
-
-    final initial = File(p.join(targetImagesDir.path, safeName));
-    if (!await initial.exists()) {
-      return initial;
-    }
-
-    final sourceCanonical = _normalizeForCompare(sourceFile.absolute.path);
-    final initialCanonical = _normalizeForCompare(initial.absolute.path);
-    if (sourceCanonical == initialCanonical) {
-      return initial;
-    }
-
-    // A file with the same name already exists at the destination but the
-    // source is a different path (e.g. re-importing the same database from
-    // another location). Overwrite it so there is always exactly one image
-    // per appID
-    return initial;
-  }
-
   String _normalizeForCompare(String path) {
     return p.normalize(path).replaceAll('\\', '/').toLowerCase();
   }
 
-  Future<void> _importJson(File file, {NotificationHandle? task}) async {
+  Future<void> _importJson(File file) async {
     final content = await file.readAsString();
     final decoded = jsonDecode(content);
     if (looksLikeSteamKm1JsonExportData(decoded)) {
@@ -992,7 +921,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         records,
         sourceFile: file,
         sourceLabel: 'SteamKM1 JSON',
-        task: task,
       );
       return;
     }
@@ -1030,7 +958,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     }
   }
 
-  Future<void> _importTxt(File file, {NotificationHandle? task}) async {
+  Future<void> _importTxt(File file) async {
     final content = await file.readAsString();
     final records = parseSteamKm1TextExport(content);
     if (records.isEmpty) {
@@ -1041,7 +969,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       records,
       sourceFile: file,
       sourceLabel: 'SteamKM1 text',
-      task: task,
     );
   }
 
@@ -1049,7 +976,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     List<SteamKm1ImportedGame> records, {
     required File sourceFile,
     required String sourceLabel,
-    NotificationHandle? task,
   }) async {
     final imagesDir = await AppDatabase.getSteamImagesDirectory();
     final cache = <String, String>{};
@@ -1209,14 +1135,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       actions: [
         if (_isImporting && !_importCommitted)
           OutlinedButton(
-            onPressed: _cancelRequested
-                ? null
-                : () {
-                    _cancelRequested = true;
-                    _importMessage =
-                        'Cancelling import and restoring checkpoint...';
-                    _showImportProgress();
-                  },
+            onPressed: _cancelRequested ? null : _requestCancel,
             child: const Text('Cancel import'),
           ),
         DialogActionBar(

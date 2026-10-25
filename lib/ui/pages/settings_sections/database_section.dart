@@ -738,12 +738,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
               mainAxisSize: MainAxisSize.min,
               spacing: kElementHSpacing,
               children: [
-                if (_isLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: AppCircularProgressIndicator(),
-                  ),
+                if (_isLoading) const AppCircularProgressIndicator(size: 20),
                 _DatabaseEncryptionButton(theme: widget.theme),
               ],
             ),
@@ -1018,11 +1013,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
               titleLocation: SectionTitleLocation.top,
               theme: widget.theme,
               child: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: AppCircularProgressIndicator(),
-                    )
+                  ? const AppCircularProgressIndicator(size: 20)
                   : DatabaseFileRow(
                       theme: widget.theme,
                       title: p.basename(_activeFilePath),

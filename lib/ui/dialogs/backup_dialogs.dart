@@ -485,11 +485,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
               ElevatedButton.icon(
                 onPressed: _isCreatingBackup ? null : _createBackup,
                 icon: _isCreatingBackup
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: AppCircularProgressIndicator(),
-                      )
+                    ? const AppCircularProgressIndicator(size: 18)
                     : const Icon(Icons.backup),
                 label: Text(
                   _isCreatingBackup ? 'Creating...' : 'Create Backup',

@@ -1,6 +1,8 @@
 /// Game Editor dialog - view and edit game information
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
@@ -106,48 +108,23 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     super.initState();
     _sessionRevision = ref.read(databaseNotifierProvider).revision;
 
-    // Read the maskKeys setting - if maskKeys is true, keys should be hidden by default
-    final maskKeys = ref.read(securitySettingsProvider).maskKeys;
-    _isKeyVisible =
-        !maskKeys; // Invert: maskKeys=true means key should be hidden (not visible)
+    // Masked keys start hidden.
+    _isKeyVisible = !ref.read(securitySettingsProvider).maskKeys;
 
-    // Initialize navigation list
-    if (widget.gameIds != null && widget.gameIds!.isNotEmpty) {
-      _gameIds = List.from(widget.gameIds!);
-    } else if (widget.game != null) {
-      _gameIds = [widget.game!.id];
-    } else {
-      // Should not happen based on logic but handled safe
-      _gameIds = [];
-    }
-
-    // Determine initial game
+    // Navigation list; a lone game is a list of one.
+    _gameIds = [...?widget.gameIds];
+    if (_gameIds.isEmpty && widget.game != null) _gameIds = [widget.game!.id];
     final startId = widget.initialGameId ?? widget.game?.id;
-    if (startId != null && _gameIds.contains(startId)) {
-      _currentIndex = _gameIds.indexOf(startId);
-    } else {
-      _currentIndex = 0;
-    }
+    _currentIndex = startId == null
+        ? 0
+        : math.max(0, _gameIds.indexOf(startId));
 
-    // Set current game - try to get fresh from provider if possible, else use widget.game
+    // Prefer the provider's copy over a possibly stale widget.game.
+    final currentId = _gameIds[_currentIndex];
     _currentGame =
+        ref.read(gameByIdProvider(currentId)) ??
         widget.game ??
-        ref.read(gameByIdProvider(_gameIds[_currentIndex])) ??
-        ref
-            .read(allGamesProvider)
-            .firstWhere((g) => g.id == _gameIds[_currentIndex]);
-
-    // If we have an ID but widget.game is null or stale, ensure we have the latest
-    if (_gameIds.isNotEmpty) {
-      try {
-        final fresh = ref.read(gameByIdProvider(_gameIds[_currentIndex]));
-        if (fresh != null) {
-          _currentGame = fresh;
-        }
-      } catch (e) {
-        // keep default
-      }
-    }
+        ref.read(allGamesProvider).firstWhere((g) => g.id == currentId);
 
     _initializeFromGame();
     _fields.title.addListener(() {
@@ -157,27 +134,16 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   void _scheduleViewedGameNotification() {
-    if (_viewedNotificationScheduled) {
-      return;
-    }
-
+    if (_viewedNotificationScheduled) return;
     _viewedNotificationScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       _viewedNotificationScheduled = false;
-      _notifyViewedGame();
+      final gameId = _currentGame.id;
+      if (_lastViewedNotifiedId == gameId) return;
+      _lastViewedNotifiedId = gameId;
+      widget.onViewedGame?.call(gameId);
     });
-  }
-
-  void _notifyViewedGame() {
-    final gameId = _currentGame.id;
-    if (_lastViewedNotifiedId == gameId) {
-      return;
-    }
-    _lastViewedNotifiedId = gameId;
-    widget.onViewedGame?.call(gameId);
   }
 
   void _initializeFromGame() {
@@ -216,11 +182,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     super.dispose();
   }
 
-  void _markChanged() {
-    setState(() {
-      _hasChanges = true;
-    });
-  }
+  void _markChanged() => setState(() => _hasChanges = true);
 
   Future<void> _save({bool close = true}) async {
     if (!_hasChanges) {
@@ -319,13 +281,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         title: _fields.title.text.trim(),
         steamService: steamService,
       );
-      if (!mounted) return;
-      if (resolution.cancelled) {
-        return;
-      }
+      if (!mounted || resolution == null) return;
 
       final result = resolution.result;
-
       if (result == null) {
         NotificationManager.instance.info('No Steam data found for this game');
         return;
@@ -343,7 +301,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   Future<void> _applySteamResult(SteamSearchResult result) async {
     try {
       final applyError = await applySteamResultToGame(
-        ref,
+        ProviderScope.containerOf(context, listen: false),
         _currentGame,
         result,
         SteamApplyOptions.defaults,
@@ -423,15 +381,8 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     if (newIndex >= 0 && newIndex < _gameIds.length) {
       setState(() {
         _currentIndex = newIndex;
-        // Fetch fresh
-        try {
-          final fresh = ref.read(gameByIdProvider(_gameIds[_currentIndex]));
-          if (fresh != null) {
-            _currentGame = fresh;
-          }
-        } catch (_) {
-          // If not found in provider (maybe filtered out?), assume broken state or fallback
-        }
+        _currentGame =
+            ref.read(gameByIdProvider(_gameIds[newIndex])) ?? _currentGame;
         _initializeFromGame();
       });
       _scheduleViewedGameNotification();
@@ -596,47 +547,44 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   Widget _buildNavigationBar(AppThemeData theme) {
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          decoration: BoxDecoration(
-            color: theme.background,
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.chevron_left,
-                  color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
-                ),
-                tooltip: 'Previous Game',
-                onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.background,
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(
+                Icons.chevron_left,
+                color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  '${_currentIndex + 1}/${_gameIds.length}',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
+              tooltip: 'Previous Game',
+              onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '${_currentIndex + 1}/${_gameIds.length}',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
-              IconButton(
-                icon: Icon(
-                  Icons.chevron_right,
-                  color: _currentIndex < _gameIds.length - 1
-                      ? theme.textPrimary
-                      : theme.textHint,
-                ),
-                tooltip: 'Next Game',
-                onPressed: _currentIndex < _gameIds.length - 1
-                    ? () => _navigate(1)
-                    : null,
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.chevron_right,
+                color: _currentIndex < _gameIds.length - 1
+                    ? theme.textPrimary
+                    : theme.textHint,
               ),
-            ],
-          ),
+              tooltip: 'Next Game',
+              onPressed: _currentIndex < _gameIds.length - 1
+                  ? () => _navigate(1)
+                  : null,
+            ),
+          ],
         ),
       ),
     );
@@ -660,11 +608,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             child: IconButton(
               onPressed: _isFetching ? null : _fetchSteamData,
               icon: _isFetching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: AppCircularProgressIndicator(),
-                    )
+                  ? const AppCircularProgressIndicator(size: 18)
                   : const FaIcon(FontAwesomeIcons.steam, size: 18),
             ),
           ),
@@ -681,11 +625,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         ElevatedButton.icon(
           onPressed: _hasChanges && !_isSaving ? _save : null,
           icon: _isSaving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: AppCircularProgressIndicator(),
-                )
+              ? const AppCircularProgressIndicator(size: 18)
               : const Icon(Icons.save),
           label: const Text('Save'),
         ),
@@ -760,115 +700,71 @@ class _DetailsTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _MetadataRow(
+                GameMetadataRow(
+                  theme: theme,
                   label: 'Added',
                   value: DateFormat('dd/MM/yyyy HH:mm').format(game.createdAt),
-                  theme: theme,
                 ),
-                _MetadataRow(
+                GameMetadataRow(
+                  theme: theme,
                   label: 'Updated',
                   value: DateFormat(
                     'dd/MM/yyyy HH:mm',
                   ).format(lastUpdatedAt ?? game.updatedAt),
-                  theme: theme,
                 ),
                 if (platform == 'Steam')
-                  _MetadataRow(
+                  GameMetadataRow(
+                    theme: theme,
                     label: 'Cache',
                     value: steamCacheAt != null
                         ? DateFormat('dd/MM/yyyy HH:mm').format(steamCacheAt!)
                         : 'No cached data',
-                    theme: theme,
                   ),
                 if (steamDeveloper != null && steamDeveloper!.isNotEmpty)
-                  _MetadataRow(
+                  GameMetadataRow(
+                    theme: theme,
                     label: 'Developer',
                     value: steamDeveloper!,
-                    theme: theme,
                   ),
                 if (platform == 'Steam')
-                  _MetadataRow(
+                  GameMetadataRow(
+                    theme: theme,
                     label: 'Reviews',
                     value: (steamReviewCount == null || steamReviewCount == 0)
                         ? 'No reviews'
                         : '${steamReviewScore ?? game.reviewScore}% · ${Game.reviewRatingFor(steamReviewScore ?? game.reviewScore)} · ${NumberFormat.compact().format(steamReviewCount)} reviews',
-                    theme: theme,
                   ),
                 // Steam AppID (only shown for Steam platform)
                 if (platform == 'Steam')
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 95,
-                          child: Text(
-                            'Steam AppID',
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            steamAppId.isEmpty ? 'Not set' : steamAppId,
-                            style: TextStyle(color: theme.textPrimary),
-                          ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.copy,
-                            color: theme.textSecondary,
-                            size: 20,
-                          ),
-                          tooltip: 'Copy AppID',
-                          iconSize: 20,
-                          padding: const EdgeInsets.all(5),
-                          constraints: const BoxConstraints(),
-                          onPressed: steamAppId.isEmpty
-                              ? null
-                              : () {
-                                  Clipboard.setData(
-                                    ClipboardData(text: steamAppId),
-                                  );
-                                  NotificationManager.instance.success(
-                                    'Steam AppID copied to clipboard',
-                                  );
-                                },
-                        ),
-                      ],
+                  GameMetadataRow(
+                    theme: theme,
+                    label: 'Steam AppID',
+                    value: steamAppId.isEmpty ? 'Not set' : steamAppId,
+                    labelWidth: 95,
+                    trailing: IconButton(
+                      icon: Icon(
+                        Icons.copy,
+                        color: theme.textSecondary,
+                        size: 20,
+                      ),
+                      tooltip: 'Copy AppID',
+                      iconSize: 20,
+                      padding: const EdgeInsets.all(5),
+                      constraints: const BoxConstraints(),
+                      onPressed: steamAppId.isEmpty
+                          ? null
+                          : () {
+                              Clipboard.setData(
+                                ClipboardData(text: steamAppId),
+                              );
+                              NotificationManager.instance.success(
+                                'Steam AppID copied to clipboard',
+                              );
+                            },
                     ),
                   ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetadataRow extends StatelessWidget {
-  const _MetadataRow({
-    required this.label,
-    required this.value,
-    required this.theme,
-  });
-
-  final String label;
-  final String value;
-  final AppThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label, style: TextStyle(color: theme.textSecondary)),
-          ),
-          Expanded(
-            child: Text(value, style: TextStyle(color: theme.textPrimary)),
           ),
         ],
       ),

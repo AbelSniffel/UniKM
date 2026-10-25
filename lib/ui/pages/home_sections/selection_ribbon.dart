@@ -21,8 +21,6 @@ import '../../widgets/popup_menu_helpers.dart';
 final _ribbonSelectedCountProvider = gamesProvider.select(
   (s) => s.selectedGameIds.length,
 );
-final _ribbonSelectedGamesProvider = selectedGamesProvider;
-final _ribbonMultiSelectEnabledProvider = selectionMultiSelectModeProvider;
 
 const double kSelectionRibbonExpandedPanelMaxHeight = 204.0;
 
@@ -40,60 +38,6 @@ class SelectionRibbon extends ConsumerWidget {
   final VoidCallback onToggleExpand;
   final bool isVeryNarrowLayout;
 
-  void _openDetails(BuildContext context, WidgetRef ref) {
-    final selectedGames = ref.read(selectedGamesProvider);
-    if (selectedGames.isEmpty) return;
-    GameSelectionActions.openDetails(
-      context,
-      ref,
-      targets: selectedGames,
-      initialGame: selectedGames.first,
-    );
-  }
-
-  void _showCopyDialog(BuildContext context, WidgetRef ref) {
-    final selectedGames = ref.read(selectedGamesProvider);
-    if (selectedGames.isEmpty) return;
-    GameSelectionActions.showCopyDialog(context, ref, selectedGames);
-  }
-
-  void _openSteamPage(WidgetRef ref) {
-    GameSelectionActions.openSteamPages(
-      ref,
-      ref.read(selectedSteamGamesProvider),
-    );
-  }
-
-  void _toggleUsed(WidgetRef ref) {
-    final allUsed = ref.read(selectedGamesAllUsedProvider);
-    GameSelectionActions.toggleUsed(
-      ref,
-      ref.read(selectedGamesProvider),
-      !allUsed,
-    );
-  }
-
-  void _fetchSelectedSteamGames(BuildContext context, WidgetRef ref) {
-    GameSelectionActions.fetchSteamData(
-      context,
-      ref,
-      ref.read(selectedSteamGamesProvider),
-    );
-  }
-
-  void _deleteSelection(
-    BuildContext context,
-    WidgetRef ref,
-    AppThemeData theme,
-  ) {
-    GameSelectionActions.deleteGames(
-      context,
-      ref,
-      theme,
-      ref.read(selectedGamesProvider),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedCount = ref.watch(_ribbonSelectedCountProvider);
@@ -109,7 +53,9 @@ class SelectionRibbon extends ConsumerWidget {
             ),
       ),
     );
-    final isMultiSelectEnabled = ref.watch(_ribbonMultiSelectEnabledProvider);
+    final isMultiSelectEnabled = ref.watch(selectionMultiSelectModeProvider);
+    List<Game> selected() => ref.read(selectedGamesProvider);
+    List<Game> selectedSteam() => ref.read(selectedSteamGamesProvider);
     final isFetchActive = ref.watch(
       batchFetchProvider.select((s) => s.isActive),
     );
@@ -122,20 +68,41 @@ class SelectionRibbon extends ConsumerWidget {
         label: 'Edit',
         tooltip: 'Game Editor',
         icon: Icons.edit_outlined,
-        onPressed: isFetchActive ? null : () => _openDetails(context, ref),
+        onPressed: isFetchActive
+            ? null
+            : () {
+                final games = selected();
+                if (games.isEmpty) return;
+                GameSelectionActions.openDetails(
+                  context,
+                  ref,
+                  targets: games,
+                  initialGame: games.first,
+                );
+              },
       ),
       _RibbonAction(
         id: 'copy',
         label: 'Copy',
         icon: Icons.copy_all_outlined,
-        onPressed: () => _showCopyDialog(context, ref),
+        onPressed: () {
+          final games = selected();
+          if (games.isEmpty) return;
+          GameSelectionActions.showCopyDialog(context, ref, games);
+        },
       ),
       _RibbonAction(
         id: 'used',
         label: allUsed ? 'Mark unused' : 'Mark used',
         tooltip: allUsed ? 'Mark Unused' : 'Mark Used',
         icon: allUsed ? Icons.check_box : Icons.check_box_outline_blank,
-        onPressed: isFetchActive ? null : () => _toggleUsed(ref),
+        onPressed: isFetchActive
+            ? null
+            : () => GameSelectionActions.toggleUsed(
+                ref,
+                selected(),
+                !ref.read(selectedGamesAllUsedProvider),
+              ),
       ),
       _RibbonAction(
         id: 'all',
@@ -163,14 +130,20 @@ class SelectionRibbon extends ConsumerWidget {
         busy: isFetchActive,
         onPressed: isFetchActive || !hasSteamGames
             ? null
-            : () => _fetchSelectedSteamGames(context, ref),
+            : () => GameSelectionActions.fetchSteamData(
+                context,
+                ref,
+                selectedSteam(),
+              ),
       ),
       _RibbonAction(
         id: 'steam',
         group: _RibbonActionGroup.steam,
         label: 'Open Steam page',
         icon: Icons.open_in_new,
-        onPressed: hasSteamGames ? () => _openSteamPage(ref) : null,
+        onPressed: hasSteamGames
+            ? () => GameSelectionActions.openSteamPages(ref, selectedSteam())
+            : null,
       ),
       _RibbonAction(
         id: 'delete',
@@ -180,7 +153,12 @@ class SelectionRibbon extends ConsumerWidget {
         destructive: true,
         onPressed: isFetchActive
             ? null
-            : () => _deleteSelection(context, ref, theme),
+            : () => GameSelectionActions.deleteGames(
+                context,
+                ref,
+                theme,
+                selected(),
+              ),
       ),
     ];
     return _RibbonBar(
@@ -202,7 +180,7 @@ class SelectionRibbonExpandedPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final selectedGames = ref.watch(_ribbonSelectedGamesProvider);
+    final selectedGames = ref.watch(selectedGamesProvider);
     final notifier = ref.read(gamesProvider.notifier);
 
     return ClipRect(
@@ -625,11 +603,7 @@ class _ActionControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = action.busy
-        ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: AppCircularProgressIndicator(),
-          )
+        ? const AppCircularProgressIndicator(size: 18)
         : Icon(action.icon, size: 20);
     final style = ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(Size(40, 40)),

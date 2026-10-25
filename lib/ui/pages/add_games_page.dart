@@ -443,10 +443,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
         title: title,
         steamService: steamService,
       );
-      if (!mounted) return;
-      if (resolution.cancelled) {
-        return;
-      }
+      if (!mounted || resolution == null) return;
 
       final result = resolution.result;
       if (result == null) {
@@ -617,11 +614,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                 OutlinedButton.icon(
                   onPressed: _isFetchingSteamData ? null : _fetchSteamData,
                   icon: _isFetchingSteamData
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: AppCircularProgressIndicator(),
-                        )
+                      ? const AppCircularProgressIndicator(size: 18)
                       : const FaIcon(FontAwesomeIcons.steam, size: 18),
                   label: const Text('Fetch'),
                 ),
@@ -635,11 +628,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   ElevatedButton.icon(
                     onPressed: _isSubmitting ? null : _submit,
                     icon: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: AppCircularProgressIndicator(),
-                          )
+                        ? const AppCircularProgressIndicator(size: 18)
                         : const Icon(Icons.save),
                     label: const Text('Save Game'),
                   ),
@@ -725,20 +714,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
   );
 
   Widget _steamMetadataRow(AppThemeData theme, String label, String value) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 95,
-              child: Text(label, style: TextStyle(color: theme.textSecondary)),
-            ),
-            Expanded(
-              child: Text(value, style: TextStyle(color: theme.textPrimary)),
-            ),
-          ],
-        ),
-      );
+      GameMetadataRow(theme: theme, label: label, value: value, labelWidth: 95);
 }
 
 /// Batch add tab
@@ -1123,11 +1099,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                         ? null
                         : _import,
                     icon: _isImporting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: AppCircularProgressIndicator(),
-                          )
+                        ? const AppCircularProgressIndicator(size: 18)
                         : const Icon(Icons.save),
                     label: Text('Save ${_parsedGames.length} Games'),
                   ),
@@ -1138,11 +1110,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                     ? OutlinedButton.icon(
                         onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
                         icon: _isFetchingSteam
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: AppCircularProgressIndicator(),
-                              )
+                            ? const AppCircularProgressIndicator(size: 16)
                             : const FaIcon(FontAwesomeIcons.steam, size: 18),
                         label: const Text('Fetch'),
                       )

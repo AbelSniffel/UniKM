@@ -19,10 +19,10 @@ import '../../dialogs/device_sync_dialog.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/app_search_field.dart';
-import '../../widgets/page_bar_surface.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../widgets/settings_header_actions.dart';
 import '../../widgets/tag_list.dart';
 import 'animated_view_mode_toggle.dart';
 
@@ -184,60 +184,71 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     // panel scrolls below the toolbar, which stays put, so the library always
     // keeps room on short or large-text screens.
     final maxHeight = MediaQuery.sizeOf(context).height * 0.55;
-    return PageBarSurface(
-      theme: theme,
-      child: Padding(
-        // 6px of the side and bottom insets sit inside the toolbar and the
-        // scrolling panel, so groupbox shadows are never clipped.
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: math.max(0, maxHeight - 14)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => _buildToolbar(
-                    theme,
-                    filters,
-                    platformFilter: platformFilter,
-                    showSync: showSync,
-                    width: constraints.maxWidth,
-                  ),
-                ),
-              ),
-              Flexible(
-                child: Scrollbar(
-                  controller: _filtersScrollController,
-                  child: SingleChildScrollView(
-                    controller: _filtersScrollController,
-                    primary: false,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizeTransition(
-                          sizeFactor: _filterPanelController,
-                          alignment: Alignment.topCenter,
-                          child: FadeTransition(
-                            opacity: _filterPanelController,
-                            child: IgnorePointer(
-                              ignoring: !_showFiltersPanel,
-                              child: _buildFiltersPanel(
-                                theme,
-                                filters,
-                                platformFilter,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+    // Sits on the page background like the settings page header, without a
+    // raised surface or shadow; a bottom border separates it from the library.
+    return Material(
+      key: const ValueKey('home-header-surface'),
+      color: theme.background,
+      // Keep the inherited text style, as the raised bar did.
+      textStyle: DefaultTextStyle.of(context).style,
+      animationDuration: Duration.zero,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: theme.border)),
+        ),
+        child: Padding(
+          // 6px of the side and bottom insets sit inside the toolbar and the
+          // scrolling panel, so groupbox shadows are never clipped.
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: math.max(0, maxHeight - 14)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => _buildToolbar(
+                      theme,
+                      filters,
+                      platformFilter: platformFilter,
+                      showSync: showSync,
+                      width: constraints.maxWidth,
                     ),
                   ),
                 ),
-              ),
-            ],
+                Flexible(
+                  child: Scrollbar(
+                    controller: _filtersScrollController,
+                    child: SingleChildScrollView(
+                      controller: _filtersScrollController,
+                      primary: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizeTransition(
+                            sizeFactor: _filterPanelController,
+                            alignment: Alignment.topCenter,
+                            child: FadeTransition(
+                              opacity: _filterPanelController,
+                              child: IgnorePointer(
+                                ignoring: !_showFiltersPanel,
+                                child: _buildFiltersPanel(
+                                  theme,
+                                  filters,
+                                  platformFilter,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -264,38 +275,48 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     final selectedPlatform = platformFilter?.isNotEmpty == true
         ? GamePlatform.fromDisplayName(platformFilter!)
         : null;
-    // The count holds sync and the view toggle at its ends. It ends the
-    // search row, or spans a row of its own on very narrow layouts.
+    // On very narrow layouts the count spans a row of its own and holds sync
+    // and the view toggle at its ends. Otherwise it leads the search row
+    // as a plain label, with sync before it and the view toggle at the end.
     final stacked = widget.isVeryNarrowLayout;
-    final countLabel = _GamesCount(
+    final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
+    final viewToggle = AnimatedViewModeToggle(
       theme: theme,
-      expand: stacked,
-      leading: showSync ? _LibrarySyncButton(theme: theme) : null,
-      trailing: AnimatedViewModeToggle(
-        theme: theme,
-        isGridView: viewMode == GameListViewMode.grid,
-        selectedListViewMode: resolveListViewDensityMode(
-          slimListView: slimListView,
-        ),
-        onToggle: () => ref
-            .read(viewModeProvider.notifier)
-            .setViewMode(
-              viewMode == GameListViewMode.grid
-                  ? GameListViewMode.list
-                  : GameListViewMode.grid,
-            ),
-        onSelectGridView: () => ref
-            .read(viewModeProvider.notifier)
-            .setViewMode(GameListViewMode.grid),
-        onSelectListViewMode: (mode) =>
-            ref.read(settingsProvider.notifier).setMany({
-              ...listViewDensityModeSettings(mode),
-              SettingsKeys.gameListViewMode: GameListViewMode.list,
-            }),
+      isGridView: viewMode == GameListViewMode.grid,
+      selectedListViewMode: resolveListViewDensityMode(
+        slimListView: slimListView,
       ),
+      onToggle: () => ref
+          .read(viewModeProvider.notifier)
+          .setViewMode(
+            viewMode == GameListViewMode.grid
+                ? GameListViewMode.list
+                : GameListViewMode.grid,
+          ),
+      onSelectGridView: () => ref
+          .read(viewModeProvider.notifier)
+          .setViewMode(GameListViewMode.grid),
+      onSelectListViewMode: (mode) =>
+          ref.read(settingsProvider.notifier).setMany({
+            ...listViewDensityModeSettings(mode),
+            SettingsKeys.gameListViewMode: GameListViewMode.list,
+          }),
     );
+    final countLabel = stacked
+        ? _GamesCount(
+            theme: theme,
+            expand: true,
+            leading: sync,
+            trailing: viewToggle,
+          )
+        : _GamesCount(theme: theme);
     final searchRow = Row(
       children: [
+        if (!stacked) ...[
+          if (sync != null) ...[sync, gap],
+          countLabel,
+          gap,
+        ],
         Expanded(
           child: AppSearchField(
             theme: theme,
@@ -311,62 +332,71 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           ),
         ),
         gap,
-        _IconMenuButton<String>(
-          key: const ValueKey('home-platform-button'),
+        // Platform, sort and filters form one group, like settings headers.
+        SettingsHeaderActions(
+          key: const ValueKey('home-toolbar-actions'),
           theme: theme,
-          tooltip:
-              'Platform: ${selectedPlatform?.displayName ?? 'All Platforms'}',
-          highlighted: selectedPlatform != null,
-          iconBuilder: (context, color, size) => selectedPlatform == null
-              ? Icon(Icons.videogame_asset_outlined, color: color, size: size)
-              : PlatformIcon(
-                  platform: selectedPlatform,
-                  color: color,
-                  size: size,
+          children: [
+            _IconMenuButton<String>(
+              key: const ValueKey('home-platform-button'),
+              theme: theme,
+              tooltip:
+                  'Platform: ${selectedPlatform?.displayName ?? 'All Platforms'}',
+              highlighted: selectedPlatform != null,
+              iconBuilder: (context, color, size) => selectedPlatform == null
+                  ? Icon(
+                      Icons.videogame_asset_outlined,
+                      color: color,
+                      size: size,
+                    )
+                  : PlatformIcon(
+                      platform: selectedPlatform,
+                      color: color,
+                      size: size,
+                    ),
+              selected: platformFilter ?? '',
+              entries: [
+                (
+                  value: '',
+                  label: 'All Platforms',
+                  icon: const Icon(Icons.videogame_asset_outlined, size: 18),
                 ),
-          selected: platformFilter ?? '',
-          entries: [
-            (
-              value: '',
-              label: 'All Platforms',
-              icon: const Icon(Icons.videogame_asset_outlined, size: 18),
+                for (final platform in GamePlatform.values)
+                  (
+                    value: platform.displayName,
+                    label: platform.displayName,
+                    icon: PlatformIcon(
+                      platform: platform,
+                      color: theme.textPrimary,
+                      size: 18,
+                    ),
+                  ),
+              ],
+              onSelected: (value) =>
+                  _notifier.setPlatformFilter(value.isEmpty ? null : value),
             ),
-            for (final platform in GamePlatform.values)
-              (
-                value: platform.displayName,
-                label: platform.displayName,
-                icon: PlatformIcon(
-                  platform: platform,
-                  color: theme.textPrimary,
-                  size: 18,
-                ),
-              ),
+            _IconMenuButton<GameSortMode>(
+              key: const ValueKey('home-sort-button'),
+              theme: theme,
+              tooltip: 'Sort: ${sortMode.displayName}',
+              highlighted: sortMode != DefaultSettings.gameSortMode,
+              iconBuilder: (context, color, size) =>
+                  Icon(_sortIconFor(sortMode), color: color, size: size),
+              selected: sortMode,
+              entries: [
+                for (final mode in GameSortMode.values)
+                  (
+                    value: mode,
+                    label: mode.displayName,
+                    icon: Icon(_sortIconFor(mode), size: 18),
+                  ),
+              ],
+              onSelected: _notifier.setSortMode,
+            ),
+            _buildFiltersToggleButton(theme, filters, platformFilter),
           ],
-          onSelected: (value) =>
-              _notifier.setPlatformFilter(value.isEmpty ? null : value),
         ),
-        gap,
-        _IconMenuButton<GameSortMode>(
-          key: const ValueKey('home-sort-button'),
-          theme: theme,
-          tooltip: 'Sort: ${sortMode.displayName}',
-          highlighted: sortMode != DefaultSettings.gameSortMode,
-          iconBuilder: (context, color, size) =>
-              Icon(_sortIconFor(sortMode), color: color, size: size),
-          selected: sortMode,
-          entries: [
-            for (final mode in GameSortMode.values)
-              (
-                value: mode,
-                label: mode.displayName,
-                icon: Icon(_sortIconFor(mode), size: 18),
-              ),
-          ],
-          onSelected: _notifier.setSortMode,
-        ),
-        gap,
-        _buildFiltersToggleButton(theme, filters, platformFilter),
-        if (!stacked) ...[gap, countLabel],
+        if (!stacked) ...[gap, viewToggle],
       ],
     );
     if (!stacked) return searchRow;

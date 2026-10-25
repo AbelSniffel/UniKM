@@ -316,13 +316,10 @@ class DialogActionBar extends StatelessWidget {
 
     final effectiveEnabled = !isLoading && isEnabled;
 
-    final Widget spinnerWidget = SizedBox(
-      width: spinnerSize,
-      height: spinnerSize,
-      child: AppCircularProgressIndicator(
-        color: destructive ? theme.primaryButtonText : null,
-        strokeWidth: theme.progressIndicatorStrokeWidth,
-      ),
+    final Widget spinnerWidget = AppCircularProgressIndicator(
+      color: destructive ? theme.primaryButtonText : null,
+      strokeWidth: theme.progressIndicatorStrokeWidth,
+      size: spinnerSize,
     );
 
     final primaryButton = ElevatedButton.icon(

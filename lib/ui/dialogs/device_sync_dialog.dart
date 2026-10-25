@@ -156,6 +156,13 @@ void showOutgoingPairCodeDialog({
     if (ctx != null && ctx.mounted) Navigator.of(ctx).maybePop();
   }
 
+  void cancel() {
+    if (cancelTriggered) return;
+    cancelTriggered = true;
+    maybeClose();
+    onCancel();
+  }
+
   showAppDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -163,12 +170,7 @@ void showOutgoingPairCodeDialog({
       dialogCtx ??= ctx;
       return DialogInteractionScope(
         enableEnterToPrimary: false,
-        onDismiss: () {
-          if (cancelTriggered) return;
-          cancelTriggered = true;
-          maybeClose();
-          onCancel();
-        },
+        onDismiss: cancel,
         child: ThemedAlertDialog(
           theme: theme,
           title: DialogHeader(
@@ -194,15 +196,7 @@ void showOutgoingPairCodeDialog({
             ],
           ),
           actions: [
-            ElevatedButton(
-              onPressed: () {
-                if (cancelTriggered) return;
-                cancelTriggered = true;
-                maybeClose();
-                onCancel();
-              },
-              child: const Text('Cancel'),
-            ),
+            ElevatedButton(onPressed: cancel, child: const Text('Cancel')),
           ],
         ),
       );
@@ -305,13 +299,7 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
       content: syncAsync.when(
         loading: () => const SizedBox(
           height: 160,
-          child: Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: AppCircularProgressIndicator(),
-            ),
-          ),
+          child: Center(child: AppCircularProgressIndicator(size: 24)),
         ),
         error: (error, _) => _ErrorView(error: error.toString(), theme: theme),
         data: (sync) => _SyncContent(
@@ -645,11 +633,7 @@ class _SyncContent extends ConsumerWidget {
             child: Row(
               children: [
                 if (isBusy)
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: AppCircularProgressIndicator(strokeWidth: 2),
-                  )
+                  const AppCircularProgressIndicator(strokeWidth: 2, size: 14)
                 else
                   Icon(
                     isNegativeMessage

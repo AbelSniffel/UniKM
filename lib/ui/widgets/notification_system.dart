@@ -3,7 +3,6 @@
 library;
 
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -136,9 +135,7 @@ class NotificationHandle {
     );
   }
 
-  void setProgress(double progress) {
-    update(progress: progress);
-  }
+  void setProgress(double progress) => update(progress: progress);
 
   void completeSuccess(String message, {String? title}) =>
       _complete(message, NotificationType.success, title: title);
@@ -160,9 +157,7 @@ class NotificationHandle {
     );
   }
 
-  void dismiss() {
-    _manager.dismiss(id);
-  }
+  void dismiss() => _manager.dismiss(id);
 }
 
 /// Notification manager singleton
@@ -173,7 +168,7 @@ class NotificationManager {
 
   static const Duration dismissAnimationDuration = Duration(milliseconds: 200);
 
-  final _notifications = Queue<AppNotification>();
+  final _notifications = <AppNotification>[];
   final Map<String, Timer> _dismissTimers = <String, Timer>{};
   final Map<String, Timer> _removeTimers = <String, Timer>{};
   final _controller = StreamController<List<AppNotification>>.broadcast();
@@ -198,25 +193,16 @@ class NotificationManager {
     _position = position;
   }
 
-  static Duration defaultDuration(NotificationType type) {
-    // Match UniKM-Sonnet defaults.
-    switch (type) {
-      case NotificationType.success:
-        return const Duration(milliseconds: 5000);
-      case NotificationType.error:
-        return const Duration(milliseconds: 7000);
-      case NotificationType.warning:
-        return const Duration(milliseconds: 6000);
-      case NotificationType.info:
-        return const Duration(milliseconds: 5000);
-      case NotificationType.update:
-        return Duration.zero; // No auto-hide
-      case NotificationType.download:
-        return Duration.zero; // Progress/task
-      case NotificationType.steam:
-        return Duration.zero; // Progress/task
-    }
-  }
+  /// Auto-hide delay; zero keeps update and progress/task notifications.
+  static Duration defaultDuration(NotificationType type) => switch (type) {
+    NotificationType.success ||
+    NotificationType.info => const Duration(milliseconds: 5000),
+    NotificationType.error => const Duration(milliseconds: 7000),
+    NotificationType.warning => const Duration(milliseconds: 6000),
+    NotificationType.update ||
+    NotificationType.download ||
+    NotificationType.steam => Duration.zero,
+  };
 
   NotificationHandle showHandle({
     required String message,
@@ -237,13 +223,12 @@ class NotificationManager {
       return NotificationHandle(this, 'disabled');
     }
 
-    if (dedupe &&
-        _notifications.any((n) => n.message == message && n.type == type)) {
-      final existing = _notifications.firstWhere(
-        (n) => n.message == message && n.type == type,
-      );
-      return NotificationHandle(this, existing.id);
-    }
+    final existing = dedupe
+        ? _notifications
+              .where((n) => n.message == message && n.type == type)
+              .firstOrNull
+        : null;
+    if (existing != null) return NotificationHandle(this, existing.id);
 
     final notification = AppNotification(
       message: message,
@@ -273,22 +258,6 @@ class NotificationManager {
     }
 
     return NotificationHandle(this, notification.id);
-  }
-
-  void show({
-    required String message,
-    NotificationType type = NotificationType.info,
-    String? title,
-    double? progress,
-    VoidCallback? onTap,
-  }) {
-    showHandle(
-      message: message,
-      type: type,
-      title: title,
-      progress: progress,
-      onTap: onTap,
-    );
   }
 
   /// Start a sticky "task" notification that stays until completed.
@@ -330,12 +299,10 @@ class NotificationManager {
     Duration? autoDismissAfter,
     bool? dismissible,
   }) {
-    final list = _notifications.toList(growable: false);
-    final index = list.indexWhere((n) => n.id == id);
+    final index = _notifications.indexWhere((n) => n.id == id);
     if (index == -1) return;
 
-    final old = list[index];
-    final updated = old.copyWith(
+    final updated = _notifications[index].copyWith(
       message: message,
       type: type,
       title: title,
@@ -349,13 +316,7 @@ class NotificationManager {
       clearSecondaryAction: clearSecondaryAction,
       dismissible: dismissible,
     );
-
-    _notifications
-      ..clear()
-      ..addAll(list.take(index))
-      ..add(updated)
-      ..addAll(list.skip(index + 1));
-
+    _notifications[index] = updated;
     _controller.add(_notifications.toList());
 
     // Reschedule auto-dismiss if requested and it's no longer a task.
@@ -371,19 +332,10 @@ class NotificationManager {
     _dismissTimers.remove(id)?.cancel();
     if (_removeTimers.containsKey(id)) return;
 
-    final list = _notifications.toList(growable: false);
-    final index = list.indexWhere((n) => n.id == id);
-    if (index == -1) return;
+    final index = _notifications.indexWhere((n) => n.id == id);
+    if (index == -1 || _notifications[index].isDismissing) return;
 
-    final old = list[index];
-    if (old.isDismissing) return;
-
-    final updated = old.copyWith(isDismissing: true);
-    _notifications
-      ..clear()
-      ..addAll(list.take(index))
-      ..add(updated)
-      ..addAll(list.skip(index + 1));
+    _notifications[index] = _notifications[index].copyWith(isDismissing: true);
     _controller.add(_notifications.toList());
 
     _removeTimers[id] = Timer(dismissAnimationDuration, () {
@@ -406,13 +358,14 @@ class NotificationManager {
     _controller.add(_notifications.toList());
   }
 
-  void success(String message, {String? title}) {
-    showHandle(message: message, type: NotificationType.success, title: title);
-  }
+  void success(String message, {String? title}) => showHandle(
+    message: message,
+    type: NotificationType.success,
+    title: title,
+  );
 
-  void error(String message, {String? title}) {
-    showHandle(message: message, type: NotificationType.error, title: title);
-  }
+  void error(String message, {String? title}) =>
+      showHandle(message: message, type: NotificationType.error, title: title);
 
   void warning(String message, {String? title, Duration? autoDismissAfter}) {
     showHandle(
@@ -423,9 +376,8 @@ class NotificationManager {
     );
   }
 
-  void info(String message, {String? title}) {
-    showHandle(message: message, type: NotificationType.info, title: title);
-  }
+  void info(String message, {String? title}) =>
+      showHandle(message: message, type: NotificationType.info, title: title);
 
   void dispose() {
     dismissAll();
@@ -479,18 +431,9 @@ class NotificationOverlay extends StatelessWidget {
     );
   }
 
-  bool get _isTop =>
-      position == NotificationPosition.topLeft ||
-      position == NotificationPosition.topCenter ||
-      position == NotificationPosition.topRight;
-
-  bool get _isLeft =>
-      position == NotificationPosition.topLeft ||
-      position == NotificationPosition.bottomLeft;
-
-  bool get _isRight =>
-      position == NotificationPosition.topRight ||
-      position == NotificationPosition.bottomRight;
+  bool get _isTop => position.name.startsWith('top');
+  bool get _isLeft => position.name.endsWith('Left');
+  bool get _isRight => position.name.endsWith('Right');
 
   CrossAxisAlignment _getCrossAxisAlignment() {
     if (_isLeft) return CrossAxisAlignment.start;

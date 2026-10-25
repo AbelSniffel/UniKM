@@ -145,24 +145,6 @@ List<Tag> _steamPreviewTags(List<String> names) {
 /// Apply a SteamSearchResult to a game with the given options.
 /// Returns null on success or an error message on failure.
 Future<String?> applySteamResultToGame(
-  WidgetRef ref,
-  Game game,
-  SteamSearchResult result,
-  SteamApplyOptions options, {
-  int? expectedRevision,
-}) async {
-  return _applySteamResultToGameWithRead(
-    ref.read,
-    ref,
-    game,
-    result,
-    options,
-    expectedRevision: expectedRevision,
-  );
-}
-
-/// Apply a SteamSearchResult using a ProviderContainer reader.
-Future<String?> applySteamResultToGameWithContainer(
   ProviderContainer container,
   Game game,
   SteamSearchResult result,
@@ -170,93 +152,68 @@ Future<String?> applySteamResultToGameWithContainer(
   int? expectedRevision,
   bool Function()? isCancelled,
 }) async {
-  return _applySteamResultToGameWithRead(
-    container.read,
-    container,
-    game,
-    result,
-    options,
-    expectedRevision: expectedRevision,
-    isCancelled: isCancelled,
-  );
-}
-
-Future<String?> _applySteamResultToGameWithRead(
-  dynamic read,
-  dynamic refLike,
-  Game game,
-  SteamSearchResult result,
-  SteamApplyOptions options, {
-  int? expectedRevision,
-  bool Function()? isCancelled,
-}) async {
   try {
-    final session = read(databaseNotifierProvider) as DatabaseState;
+    final session = container.read(databaseNotifierProvider);
     final db = session.database;
     if (db == null ||
         (expectedRevision != null && expectedRevision != session.revision)) {
       throw StateError('Database session changed during the operation');
     }
-    final steamService = read(steamServiceProvider);
+    final steamService = container.read(steamServiceProvider);
     await ApplySteamMetadata(
       database: db,
       isCurrent: () =>
-          read(databaseNotifierProvider).revision == session.revision &&
+          container.read(databaseNotifierProvider).revision ==
+              session.revision &&
           !(isCancelled?.call() ?? false),
       downloadImage: (appId) =>
           steamService.downloadImage(appId, imageUrl: result.imageUrl),
     ).apply(game.id, result, options);
-    await persistEncryptedDbIfNeeded(refLike, database: db);
+    await persistEncryptedDbIfNeeded(container, database: db);
     return null;
   } catch (e) {
     return e.toString();
   }
 }
 
+/// A confirmed fetch choice. [cached] is set when the user chose cached data.
+typedef SteamFetchChoice = ({
+  SteamSearchResult? cached,
+  DateTime? cachedAt,
+  SteamApplyOptions options,
+});
+
 /// Show Steam fetch options, including a cache choice when cached data exists.
-/// Returns a map with keys: 'choice' -> 'cache'|'fresh'|'cancel',
-/// 'cached' -> SteamSearchResult?, 'options' -> SteamApplyOptions.
-Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
+/// Returns null when cancelled.
+Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
   BuildContext context, {
   required String title,
   bool showApplyOptions = true,
 }) async {
   final container = ProviderScope.containerOf(context);
 
-  // Use top-level cache helpers to avoid depending on a service instance
-  SteamSearchResult? cached;
-  DateTime? cachedAt;
-
   // Only use title-based cache/lookups. AppID-based lookups are removed for consistency.
   final preview = AppDialogPreviewScope.maybeOf(context);
-  cached = preview != null
+  final cached = preview != null
       ? preview.steamResult
       : await getCachedResultForTitle(title);
-  cachedAt = preview != null
+  final cachedAt = preview != null
       ? preview.steamCachedAt
       : await getCachedAtForTitle(title);
 
-  // If no cache and no apply options are needed, return immediately.
-  if (cached == null && !showApplyOptions) {
-    return {
-      'choice': 'fresh',
-      'cached': null,
-      'options': SteamApplyOptions.defaults,
-    };
-  }
-
-  if (!context.mounted) {
-    return {
-      'choice': 'fresh',
-      'cached': null,
-      'options': SteamApplyOptions.defaults,
-    };
+  // Without a cache or apply options there is nothing to ask.
+  if ((cached == null && !showApplyOptions) || !context.mounted) {
+    return (
+      cached: null,
+      cachedAt: cachedAt,
+      options: SteamApplyOptions.defaults,
+    );
   }
 
   final theme = container.read(themeProvider);
 
   var options = SteamApplyOptions.defaults;
-  final choice = await showAppDialog<String>(
+  final useCache = await showAppDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) {
@@ -313,11 +270,11 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
             actions: [
               if (cached != null)
                 OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx, 'cache'),
+                  onPressed: () => Navigator.pop(ctx, true),
                   child: Text('Use Cache'),
                 ),
               ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, 'fresh'),
+                onPressed: () => Navigator.pop(ctx, false),
                 child: Text(cached != null ? 'Fetch Fresh' : 'Fetch'),
               ),
             ],
@@ -327,81 +284,40 @@ Future<Map<String, dynamic>> showSteamFetchOptionsDialog(
     },
   );
 
-  if (choice == null || choice == 'cancel') {
-    return {
-      'choice': 'cancel',
-      'cached': null,
-      'options': SteamApplyOptions.defaults,
-    };
-  }
-
-  if (choice == 'cache') {
-    return {'choice': 'cache', 'cached': cached, 'options': options};
-  }
-  return {'choice': 'fresh', 'cached': null, 'options': options};
+  if (useCache == null) return null;
+  return (
+    cached: useCache ? cached : null,
+    cachedAt: cachedAt,
+    options: options,
+  );
 }
 
-class SteamFetchResolution {
-  const SteamFetchResolution({
-    required this.cancelled,
-    required this.result,
-    required this.usedCache,
-    this.cachedAt,
-  });
+/// The data a single fetch resolved to; [cachedAt] is when the cache entry
+/// was written, whether or not it was used.
+typedef SteamFetchResolution = ({
+  SteamSearchResult? result,
+  bool usedCache,
+  DateTime? cachedAt,
+});
 
-  final bool cancelled;
-  final SteamSearchResult? result;
-  final bool usedCache;
-  final DateTime? cachedAt;
-}
-
-Future<SteamFetchResolution> resolveSteamResultForTitle(
+/// Asks whether to use cached data, then resolves the result.
+/// Returns null when cancelled.
+Future<SteamFetchResolution?> resolveSteamResultForTitle(
   BuildContext context, {
   required String title,
   required SteamService steamService,
-  bool promptForCacheChoice = true,
 }) async {
-  DateTime? cachedAt;
-
-  if (promptForCacheChoice) {
-    cachedAt = await getCachedAtForTitle(title);
-    if (!context.mounted) {
-      return const SteamFetchResolution(
-        cancelled: true,
-        result: null,
-        usedCache: false,
-      );
-    }
-    final choice = await showSteamFetchOptionsDialog(
-      context,
-      title: title,
-      showApplyOptions: false,
-    );
-
-    if (choice['choice'] == 'cancel') {
-      return const SteamFetchResolution(
-        cancelled: true,
-        result: null,
-        usedCache: false,
-      );
-    }
-
-    if (choice['choice'] == 'cache' && choice['cached'] != null) {
-      return SteamFetchResolution(
-        cancelled: false,
-        result: choice['cached'] as SteamSearchResult,
-        usedCache: true,
-        cachedAt: cachedAt,
-      );
-    }
-  }
-
-  final result = await steamService.searchGame(title, forceRefresh: true);
-  return SteamFetchResolution(
-    cancelled: false,
-    result: result,
-    usedCache: false,
-    cachedAt: cachedAt,
+  final choice = await showSteamFetchOptionsDialog(
+    context,
+    title: title,
+    showApplyOptions: false,
+  );
+  if (choice == null) return null;
+  final cached = choice.cached;
+  return (
+    result: cached ?? await steamService.searchGame(title, forceRefresh: true),
+    usedCache: cached != null,
+    cachedAt: choice.cachedAt,
   );
 }
 
@@ -423,7 +339,7 @@ Future<void> performSingleSteamLookup(
       steamService: steamService,
     );
     if (!context.mounted ||
-        resolution.cancelled ||
+        resolution == null ||
         ref.read(databaseNotifierProvider).revision != sessionRevision) {
       return;
     }
@@ -455,23 +371,20 @@ Future<void> performSteamBatchLookup(
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final sessionRevision = container.read(databaseNotifierProvider).revision;
-  bool sessionChanged() =>
-      container.read(databaseNotifierProvider).revision != sessionRevision;
   final batchNotifier = container.read(batchFetchProvider.notifier);
+  bool stopped() =>
+      batchNotifier.isCancelled ||
+      container.read(databaseNotifierProvider).revision != sessionRevision;
 
   final steamTargets = targets.where((g) => g.platform == 'Steam').toList();
   if (steamTargets.isEmpty) {
     NotificationManager.instance.info('No Steam games selected');
     return;
   }
-
-  final gameSnapshots = steamTargets
-      .map((g) => {'id': g.id, 'title': g.title})
-      .toList();
-  final total = gameSnapshots.length;
+  final total = steamTargets.length;
 
   // Start batch fetch tracking
-  batchNotifier.startBatch(gameSnapshots.map((g) => g['id'] as int).toList());
+  batchNotifier.startBatch([for (final g in steamTargets) g.id]);
 
   late NotificationHandle handle;
   handle = NotificationManager.instance.beginTask(
@@ -491,24 +404,22 @@ Future<void> performSteamBatchLookup(
   int failed = 0;
   final freshResultCache = <String, SteamSearchResult>{};
 
-  String? choiceForAll;
-  SteamApplyOptions optionsForAll = SteamApplyOptions.defaults;
+  // The first confirmed choice applies to the rest of the batch.
+  SteamFetchChoice? choiceForAll;
 
-  for (var i = 0; i < gameSnapshots.length; i++) {
-    final gameSnapshot = gameSnapshots[i];
-    final gameId = gameSnapshot['id'] as int;
-    final gameTitle = gameSnapshot['title'] as String;
+  for (var i = 0; i < total; i++) {
+    final target = steamTargets[i];
+    final gameId = target.id;
+    final gameTitle = target.title;
 
     // Check for cancellation (user-initiated via notification button)
-    if (batchNotifier.isCancelled || sessionChanged()) break;
+    if (stopped()) break;
 
     // Mark this game as processing
     batchNotifier.setProcessing(gameId);
 
     // Auto-deselect the game being fetched so the selection UI reflects
     // in-progress items and the user can continue selecting other games.
-    // This mirrors the UX of the context-menu path and keeps behavior
-    // deterministic for batch operations.
     try {
       container.read(gamesProvider.notifier).deselectGame(gameId);
     } catch (_) {
@@ -518,7 +429,7 @@ Future<void> performSteamBatchLookup(
     handle.update(
       message: 'Fetching Steam data (${i + 1}/$total)',
       title: gameTitle,
-      progress: total == 0 ? 0 : (i / total).clamp(0.0, 1.0),
+      progress: (i / total).clamp(0.0, 1.0),
     );
     unawaited(
       DeadlineNotificationService.instance.showFetchProgressNotification(
@@ -528,61 +439,37 @@ Future<void> performSteamBatchLookup(
       ),
     );
 
-    String choice;
+    // Without a prompt (or a mounted context) the batch fetches fresh data.
     SteamSearchResult? cached;
-    SteamApplyOptions options;
-
-    if (!promptForOptions) {
-      choice = 'fresh';
-      cached = null;
-      options = SteamApplyOptions.defaults;
-    } else if (choiceForAll == null) {
-      if (!context.mounted) {
-        // Continue processing without dialog - use fresh fetch
-        choice = 'fresh';
-        cached = null;
-        options = SteamApplyOptions.defaults;
-      } else {
-        final selection = await showSteamFetchOptionsDialog(
-          context,
-          title: gameTitle,
-        );
-
-        // Check cancellation after dialog
-        if (batchNotifier.isCancelled || sessionChanged()) break;
-
-        choice = selection['choice'] as String;
-        if (choice == 'cancel') {
-          batchNotifier.cancelBatch();
-          handle.update(message: 'Cancelled', clearAction: true);
-          break;
-        }
-        cached = selection['cached'] as SteamSearchResult?;
-        options =
-            (selection['options'] as SteamApplyOptions?) ??
-            SteamApplyOptions.defaults;
-
-        choiceForAll = choice;
-        optionsForAll = options;
-      }
-    } else {
-      choice = choiceForAll;
-      options = optionsForAll;
-      if (choice == 'cache') {
+    var options = SteamApplyOptions.defaults;
+    final chosen = choiceForAll;
+    if (chosen != null) {
+      options = chosen.options;
+      if (chosen.cached != null) {
         cached = await getCachedResultForTitle(gameTitle);
-        // Check cancellation after cache lookup
-        if (batchNotifier.isCancelled || sessionChanged()) break;
-      } else {
-        cached = null;
+        if (stopped()) break;
       }
+    } else if (promptForOptions && context.mounted) {
+      final selection = await showSteamFetchOptionsDialog(
+        context,
+        title: gameTitle,
+      );
+      if (stopped()) break;
+      if (selection == null) {
+        batchNotifier.cancelBatch();
+        handle.update(message: 'Cancelled', clearAction: true);
+        break;
+      }
+      cached = selection.cached;
+      options = selection.options;
+      choiceForAll = selection;
     }
 
     // Fetch the current game state from provider just before applying
-    final games = container.read(gamesProvider).games;
-    final game = games.firstWhere(
-      (g) => g.id == gameId,
-      orElse: () => steamTargets.firstWhere((g) => g.id == gameId),
-    );
+    final game = container
+        .read(gamesProvider)
+        .games
+        .firstWhere((g) => g.id == gameId, orElse: () => target);
 
     AppLog.d(
       '[SteamBatchFetch] Processing game ${i + 1}/$total: "${game.title}" (ID: ${game.id})',
@@ -591,27 +478,19 @@ Future<void> performSteamBatchLookup(
       '[SteamBatchFetch]   Current tags: ${game.tags.map((t) => '${t.name}(${t.isSteamTag ? "steam" : "custom"})').join(", ")}',
     );
 
-    // Resolve result for the chosen option
-    SteamSearchResult? result;
+    // A later game with the same title reuses this result instead of the
+    // network.
     final batchCacheKey = cleanTitleForSearch(game.title);
-    if (choice == 'cache' && cached != null) {
-      result = cached;
-      // Populate freshResultCache so that a later game with the same title
-      // that ends up on the 'fresh' path can skip the network call.
-      freshResultCache[batchCacheKey] = cached;
-    } else {
-      result = freshResultCache[batchCacheKey];
-      if (result == null) {
-        final steamService = container.read(steamServiceProvider);
-        result = await steamService.searchGame(game.title, forceRefresh: true);
-        if (result != null) {
-          freshResultCache[batchCacheKey] = result;
-        }
-      }
-    }
+    final result =
+        cached ??
+        freshResultCache[batchCacheKey] ??
+        await container
+            .read(steamServiceProvider)
+            .searchGame(game.title, forceRefresh: true);
+    if (result != null) freshResultCache[batchCacheKey] = result;
 
     // Check cancellation after fetch
-    if (batchNotifier.isCancelled || sessionChanged()) break;
+    if (stopped()) break;
 
     if (result == null) {
       AppLog.d('[SteamBatchFetch]   Result: NOT FOUND');
@@ -620,36 +499,26 @@ Future<void> performSteamBatchLookup(
       continue;
     }
 
-    // Apply the fetched result via the container-friendly API
-    // Check cancellation before the DB write to avoid a pointless write.
-    if (batchNotifier.isCancelled || sessionChanged()) break;
-    try {
-      final applyError = await applySteamResultToGameWithContainer(
-        container,
-        game,
-        result,
-        options,
-        expectedRevision: sessionRevision,
-        isCancelled: () => batchNotifier.isCancelled,
-      );
-
-      if (applyError != null) {
-        AppLog.w('[SteamBatchFetch]   ERROR APPLYING: $applyError');
-        batchNotifier.setError(gameId);
-        failed++;
-      } else {
-        AppLog.i('[SteamBatchFetch]   SUCCESS: Updated game');
-        batchNotifier.setDone(gameId);
-        updated++;
-      }
-    } catch (e, st) {
-      AppLog.w('[SteamBatchFetch]   ERROR: $e\n$st');
+    final applyError = await applySteamResultToGame(
+      container,
+      game,
+      result,
+      options,
+      expectedRevision: sessionRevision,
+      isCancelled: () => batchNotifier.isCancelled,
+    );
+    if (applyError != null) {
+      AppLog.w('[SteamBatchFetch]   ERROR APPLYING: $applyError');
       batchNotifier.setError(gameId);
       failed++;
+    } else {
+      AppLog.i('[SteamBatchFetch]   SUCCESS: Updated game');
+      batchNotifier.setDone(gameId);
+      updated++;
     }
 
     // Check cancellation after applying
-    if (batchNotifier.isCancelled || sessionChanged()) break;
+    if (stopped()) break;
   }
 
   AppLog.i(
@@ -665,22 +534,18 @@ Future<void> performSteamBatchLookup(
     batchNotifier.endBatch();
   } else {
     // Normal completion: keep done/error status visible briefly then clear.
-    Future.delayed(const Duration(seconds: 2), () {
-      batchNotifier.endBatch();
-    });
+    Future.delayed(const Duration(seconds: 2), batchNotifier.endBatch);
   }
 
+  final summary = [
+    'Updated $updated',
+    if (failed > 0) 'failed $failed',
+    if (notFound > 0) 'not found $notFound',
+  ].join(', ');
   if (failed > 0) {
-    final errorMessage = StringBuffer('Updated $updated, failed $failed');
-    if (notFound > 0) {
-      errorMessage.write(', not found $notFound');
-    }
-    handle.completeError(errorMessage.toString());
+    handle.completeError(summary);
   } else {
-    final successMessage = notFound > 0
-        ? 'Updated $updated, not found $notFound'
-        : 'Updated $updated';
-    handle.completeSuccess(successMessage);
+    handle.completeSuccess(summary);
   }
 }
 
@@ -763,7 +628,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 
     try {
       final error = await applySteamResultToGame(
-        ref,
+        ProviderScope.containerOf(context, listen: false),
         widget.game,
         _result!,
         _options,
@@ -819,11 +684,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           ElevatedButton(
             onPressed: _isApplying ? null : _applyData,
             child: _isApplying
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: AppCircularProgressIndicator(),
-                  )
+                ? const AppCircularProgressIndicator(size: 20)
                 : const Text('Save'),
           ),
       ],

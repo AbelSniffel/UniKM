@@ -250,23 +250,17 @@ class _DiskCache {
   }
 }
 
-Future<DateTime?> getCachedAtForTitle(String title) async {
-  return _DiskCache.instance.getCachedAt(title);
-}
+Future<DateTime?> getCachedAtForTitle(String title) =>
+    _DiskCache.instance.getCachedAt(title);
 
-Future<SteamSearchResult?> getCachedResultForTitle(String title) async {
-  return _DiskCache.instance.getCachedResult(title);
-}
+Future<SteamSearchResult?> getCachedResultForTitle(String title) =>
+    _DiskCache.instance.getCachedResult(title);
 
-Future<Map<String, dynamic>> exportSteamCacheSnapshotForSync() async {
-  return _DiskCache.instance.exportForSync();
-}
+Future<Map<String, dynamic>> exportSteamCacheSnapshotForSync() =>
+    _DiskCache.instance.exportForSync();
 
-Future<void> mergeSteamCacheSnapshotFromSync(
-  Map<String, dynamic> incoming,
-) async {
-  await _DiskCache.instance.mergeFromSync(incoming);
-}
+Future<void> mergeSteamCacheSnapshotFromSync(Map<String, dynamic> incoming) =>
+    _DiskCache.instance.mergeFromSync(incoming);
 
 /// Tags to ignore - Steam platform features, not gameplay descriptors
 const _ignoredTags = <String>{
@@ -508,25 +502,17 @@ class SteamService {
     _lastRequestAt = DateTime.now();
   }
 
-  bool _shouldRetryStatus(int? statusCode) {
-    return statusCode == 429 ||
-        statusCode == 403 ||
-        statusCode == 500 ||
-        statusCode == 502 ||
-        statusCode == 503 ||
-        statusCode == 504;
-  }
+  bool _shouldRetryStatus(int? statusCode) =>
+      const {429, 403, 500, 502, 503, 504}.contains(statusCode);
 
-  bool _shouldRetryError(DioException error) {
-    if (_shouldRetryStatus(error.response?.statusCode)) {
-      return true;
-    }
-
-    return error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.sendTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.connectionError;
-  }
+  bool _shouldRetryError(DioException error) =>
+      _shouldRetryStatus(error.response?.statusCode) ||
+      const {
+        DioExceptionType.connectionTimeout,
+        DioExceptionType.sendTimeout,
+        DioExceptionType.receiveTimeout,
+        DioExceptionType.connectionError,
+      }.contains(error.type);
 
   Future<void> _backoff(int attempt) async {
     final ms = 400 * (1 << attempt);
@@ -652,7 +638,7 @@ class SteamService {
 
     // If the query itself doesn't look like DLC content, attempt a non-DLC
     // fallback from the remaining candidates before accepting the DLC result.
-    if (_searchLooksLikeDlc(title)) {
+    if (_looksLikeAddonTitle(title.toLowerCase())) {
       return primaryResult;
     }
 
@@ -688,13 +674,8 @@ class SteamService {
     return primaryResult;
   }
 
-  bool _searchLooksLikeDlc(String title) {
-    return _looksLikeAddonTitle(title.toLowerCase());
-  }
-
-  bool _looksLikeAddonTitle(String titleLower) {
-    return _addonPattern.hasMatch(titleLower);
-  }
+  bool _looksLikeAddonTitle(String titleLower) =>
+      _addonPattern.hasMatch(titleLower);
 
   double _scoreCandidate(String cleanSearch, Map<String, dynamic> item) {
     final name = item['name'] as String? ?? '';
@@ -824,19 +805,10 @@ class SteamService {
       variants.add(noParens);
     }
 
-    // 5. Base title before colon
-    if (original.contains(':')) {
-      final base = original.split(':').first.trim();
-      if (base.isNotEmpty &&
-          base.split(' ').length >= 2 &&
-          !variants.contains(base)) {
-        variants.add(base);
-      }
-    }
-
-    // 6. Base title before dash
-    if (original.contains(' - ')) {
-      final base = original.split(' - ').first.trim();
+    // 5-6. Base title before a colon, then before a dash
+    for (final separator in const [':', ' - ']) {
+      if (!original.contains(separator)) continue;
+      final base = original.split(separator).first.trim();
       if (base.isNotEmpty &&
           base.split(' ').length >= 2 &&
           !variants.contains(base)) {
@@ -976,6 +948,7 @@ class SteamService {
     required SteamSearchSource searchSource,
     required List<SteamSearchSource> searchSourcesTried,
   }) async {
+    SteamSearchResult result;
     try {
       // Collect tags (SteamSpy first, then app details genres/categories)
       final tags = <String>[];
@@ -1084,7 +1057,7 @@ class SteamService {
       }
 
       // Return result even if tags are empty (image/review data are useful on their own)
-      final result = SteamSearchResult(
+      result = SteamSearchResult(
         appId: appId,
         name: gameName,
         imageUrl: headerImage ?? SteamApi.headerImage(appId),
@@ -1097,26 +1070,22 @@ class SteamService {
         searchSourcesTried: searchSourcesTried,
         dataSources: List.unmodifiable(dataSources),
       );
-      final key = _normalizeCacheKey(result.name);
-      await _cacheResultSafely(key, result);
-      return result;
     } catch (e) {
       // Return basic result without details
       developer.log(
         'Failed to fetch details for AppID $appId: $e',
         name: 'SteamService',
       );
-      final result = SteamSearchResult(
+      result = SteamSearchResult(
         appId: appId,
         name: name ?? 'Unknown',
         imageUrl: SteamApi.headerImage(appId),
         searchSource: searchSource,
         searchSourcesTried: searchSourcesTried,
       );
-      final key = _normalizeCacheKey(result.name);
-      await _cacheResultSafely(key, result);
-      return result;
     }
+    await _cacheResultSafely(_normalizeCacheKey(result.name), result);
+    return result;
   }
 
   Future<List<String>> _fetchSteamSpyTags(String appId) async {

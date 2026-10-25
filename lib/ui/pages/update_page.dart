@@ -143,7 +143,6 @@ bool canShowUpdateAvailableNotification(UpdateState state) {
 /// Update notifier using real GitHub API
 class UpdateNotifier extends Notifier<UpdateState> {
   late UpdateService _updateService;
-  GitHubRelease? _currentRelease;
   NotificationHandle? _updateNotificationHandle;
   NotificationHandle? _downloadNotificationHandle;
 
@@ -177,9 +176,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
       } else if (prev == NavItem.updates) {
         // User navigated away from the updates page.
         if (state.isDownloading) {
-          _showOrUpdateDownloadNotification(
-            downloadedBytes: state.downloadedBytes,
-            totalBytes: state.totalBytes,
+          _showDownloadNotification(
+            _downloadNotificationMessage(
+              downloadedBytes: state.downloadedBytes,
+              totalBytes: state.totalBytes,
+            ),
             progress: state.downloadProgress,
           );
         } else if (state.downloadedFilePath != null) {
@@ -218,69 +219,53 @@ class UpdateNotifier extends Notifier<UpdateState> {
     }
   }
 
-  NotificationHandle _showOrUpdateDownloadNotification({
-    required int downloadedBytes,
-    required int totalBytes,
-    required double progress,
-  }) {
-    final message = _downloadNotificationMessage(
-      downloadedBytes: downloadedBytes,
-      totalBytes: totalBytes,
-    );
+  /// Shows or updates the persistent download notification. Without a
+  /// [progress] the download is complete and the bar is cleared.
+  void _showDownloadNotification(String message, {double? progress}) {
+    final done = progress == null;
+    final type = done ? NotificationType.success : NotificationType.download;
+    final title = done ? 'Download Complete' : 'Update Download';
+    final actionLabel = done ? 'Install' : 'Cancel';
+    final VoidCallback onAction = done
+        ? () => launchInstaller()
+        : cancelDownload;
     final handle = _downloadNotificationHandle;
-
     if (handle == null) {
       _downloadNotificationHandle = NotificationManager.instance.showHandle(
         message: message,
-        type: NotificationType.download,
-        title: 'Update Download',
+        type: type,
+        title: title,
         progress: progress,
-        actionLabel: 'Cancel',
-        onAction: cancelDownload,
+        actionLabel: actionLabel,
+        onAction: onAction,
         persistent: true,
         dedupe: false,
       );
     } else {
       handle.update(
         message: message,
-        type: NotificationType.download,
-        title: 'Update Download',
+        type: type,
+        title: title,
         progress: progress,
-        actionLabel: 'Cancel',
-        onAction: cancelDownload,
+        clearProgress: done,
+        actionLabel: actionLabel,
+        onAction: onAction,
       );
     }
-
-    ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
-    return _downloadNotificationHandle!;
-  }
-
-  void _showDownloadReadyNotification() {
-    final handle = _downloadNotificationHandle;
-
-    if (handle == null) {
-      _downloadNotificationHandle = NotificationManager.instance.showHandle(
-        message: 'Update ready to install.',
-        type: NotificationType.success,
-        title: 'Download Complete',
-        actionLabel: 'Install',
-        onAction: () => launchInstaller(),
-        persistent: true,
-        dedupe: false,
-      );
-    } else {
-      handle.update(
-        message: 'Update ready to install.',
-        type: NotificationType.success,
-        title: 'Download Complete',
-        clearProgress: true,
-        actionLabel: 'Install',
-        onAction: () => launchInstaller(),
-      );
-    }
-
     ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
   }
+
+  void _showDownloadProgressNotification(int received, int total) =>
+      _showDownloadNotification(
+        _downloadNotificationMessage(
+          downloadedBytes: received,
+          totalBytes: total,
+        ),
+        progress: total > 0 ? received / total : 0.0,
+      );
+
+  void _showDownloadReadyNotification() =>
+      _showDownloadNotification('Update ready to install.');
 
   void previewState(UpdatePreviewState preview) {
     if (!kDebugMode) return;
@@ -288,7 +273,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
     _clearOffPageNotifications();
 
     final cachedReleases = state.allReleases;
-    _currentRelease = null;
 
     switch (preview) {
       case UpdatePreviewState.idle:
@@ -302,7 +286,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
       case UpdatePreviewState.upToDate:
         state = UpdateState(hasChecked: true, allReleases: cachedReleases);
       case UpdatePreviewState.updateAvailable:
-        _currentRelease = _devPreviewRelease;
         state = UpdateState(
           hasChecked: true,
           hasUpdate: true,
@@ -310,7 +293,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
           allReleases: cachedReleases,
         );
       case UpdatePreviewState.downloading:
-        _currentRelease = _devPreviewRelease;
         state = UpdateState(
           hasChecked: true,
           hasUpdate: true,
@@ -345,7 +327,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   Future<void> checkForUpdates() async {
     final notificationState = state;
-    _currentRelease = null;
     state = state.copyWith(
       isChecking: true,
       hasUpdate: false,
@@ -386,8 +367,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
         return;
       }
 
-      _currentRelease = result.release;
-
       state = state.copyWith(
         isChecking: false,
         hasChecked: true,
@@ -411,22 +390,18 @@ class UpdateNotifier extends Notifier<UpdateState> {
         final notifSettings = ref.read(notificationsSettingsProvider);
         if (notifSettings.updateNotifications) {
           final version = result.release!.version;
+          void openUpdates() =>
+              ref.read(currentNavProvider.notifier).set(NavItem.updates);
           _updateNotificationHandle?.dismiss();
           _updateNotificationHandle = NotificationManager.instance.showHandle(
             message: 'Version $version is available.',
             type: NotificationType.update,
             title: 'Update Available',
-            onTap: () {
-              ref.read(currentNavProvider.notifier).set(NavItem.updates);
-            },
+            onTap: openUpdates,
             actionLabel: 'View',
-            onAction: () {
-              ref.read(currentNavProvider.notifier).set(NavItem.updates);
-            },
+            onAction: openUpdates,
             secondaryActionLabel: 'Skip',
-            onSecondaryAction: () {
-              skipVersion();
-            },
+            onSecondaryAction: skipVersion,
             persistent: true,
             dedupe: false,
           );
@@ -446,10 +421,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> downloadUpdate() async {
-    if (_currentRelease == null) return;
+    final release = state.release;
+    if (release == null) return;
 
     await _downloadRelease(
-      release: _currentRelease!,
+      release: release,
       completionMessage: 'Update downloaded — ready to install.',
     );
   }
@@ -471,16 +447,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
       downloadedFilePath: null,
       error: null,
     );
-    _currentRelease = release;
 
     if (isOnUpdatesPage) {
       _clearOffPageNotifications(update: false);
     } else {
-      _showOrUpdateDownloadNotification(
-        downloadedBytes: 0,
-        totalBytes: 0,
-        progress: 0,
-      );
+      _showDownloadProgressNotification(0, 0);
     }
 
     try {
@@ -494,11 +465,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
             totalBytes: total,
           );
           if (ref.read(currentNavProvider) != NavItem.updates) {
-            _showOrUpdateDownloadNotification(
-              downloadedBytes: received,
-              totalBytes: total,
-              progress: progress,
-            );
+            _showDownloadProgressNotification(received, total);
           }
         },
       );
@@ -586,7 +553,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
             .setSetting(SettingsKeys.skippedVersions, updatedSkipped);
       }
 
-      _currentRelease = null;
       state = state.copyWith(
         hasUpdate: false,
         hasChecked: false,
@@ -651,7 +617,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
   /// Clear any update state.
   void clearUpdate() {
     _clearOffPageNotifications();
-    _currentRelease = null;
     state = UpdateState(allReleases: state.allReleases);
     NotificationManager.instance.info('Update cleared');
   }
@@ -931,11 +896,7 @@ class _UpdateStatusPanel extends ConsumerWidget {
           ),
           child: Center(
             child: busy
-                ? SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: AppCircularProgressIndicator(color: color),
-                  )
+                ? AppCircularProgressIndicator(size: 24, color: color)
                 : Icon(icon, color: color, size: 28),
           ),
         ),
@@ -1444,11 +1405,7 @@ class _ChangelogSectionState extends ConsumerState<_ChangelogSection> {
                           ? () => notifier.switchToVersion(release)
                           : null,
                       icon: isDownloading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: AppCircularProgressIndicator(),
-                            )
+                          ? const AppCircularProgressIndicator(size: 20)
                           : Icon(
                               isCurrent
                                   ? Icons.check_circle

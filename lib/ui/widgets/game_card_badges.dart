@@ -126,11 +126,7 @@ abstract final class GameCardBadges {
         return FetchStatusVisual(
           color: theme.background,
           tooltip: 'Fetching from Steam',
-          icon: SizedBox(
-            width: spinnerSize,
-            height: spinnerSize,
-            child: AppCircularProgressIndicator(),
-          ),
+          icon: AppCircularProgressIndicator(size: spinnerSize),
         );
       case GameFetchStatus.done:
         return FetchStatusVisual(

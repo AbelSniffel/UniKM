@@ -570,3 +570,40 @@ class GameEditorNotes extends StatelessWidget {
     ),
   );
 }
+
+/// A label/value row in the editors' metadata groups.
+class GameMetadataRow extends StatelessWidget {
+  const GameMetadataRow({
+    super.key,
+    required this.theme,
+    required this.label,
+    required this.value,
+    this.labelWidth = 80,
+    this.trailing,
+  });
+
+  final AppThemeData theme;
+  final String label;
+  final String value;
+  final double labelWidth;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Text(label, style: TextStyle(color: theme.textSecondary)),
+          ),
+          Expanded(
+            child: Text(value, style: TextStyle(color: theme.textPrimary)),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}

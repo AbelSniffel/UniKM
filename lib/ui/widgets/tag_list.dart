@@ -247,13 +247,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
           if (!_tagsVisible) {
             return SizedBox(
               height: preservedHeight,
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: AppCircularProgressIndicator(),
-                ),
-              ),
+              child: Center(child: AppCircularProgressIndicator(size: 24)),
             );
           }
 

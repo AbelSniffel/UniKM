@@ -72,28 +72,21 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _workingThemeId =
         widget.existingTheme?.id ?? AppThemeData.generateThemeId();
 
-    if (widget.existingTheme != null) {
-      _nameController.text = widget.existingTheme!.name;
-      _backgroundHex = colorToHex(widget.existingTheme!.baseBackground);
-      _secondaryHex = colorToHex(widget.existingTheme!.baseSecondary);
-      _accentHex = colorToHex(widget.existingTheme!.baseAccent);
-      _navPanelOverlayStyle = widget.existingTheme!.navPanelOverlayStyle;
-      _cornerRadius = widget.existingTheme!.cornerRadius.clamp(
-        _minCornerRadius,
-        _maxCornerRadius,
-      );
-      _selectedIconCodePoint = widget.existingTheme!.iconData?.codePoint;
-    } else {
-      _backgroundHex = colorToHex(widget.theme.baseBackground);
-      _secondaryHex = colorToHex(widget.theme.baseSecondary);
-      _accentHex = colorToHex(widget.theme.baseAccent);
-      _navPanelOverlayStyle = widget.theme.navPanelOverlayStyle;
-      _cornerRadius = widget.theme.cornerRadius.clamp(
-        _minCornerRadius,
-        _maxCornerRadius,
-      );
-      _selectedIconCodePoint = widget.theme.icon.codePoint;
-    }
+    // A new theme starts from the current one.
+    final existing = widget.existingTheme;
+    final source = existing ?? widget.theme;
+    if (existing != null) _nameController.text = existing.name;
+    _backgroundHex = colorToHex(source.baseBackground);
+    _secondaryHex = colorToHex(source.baseSecondary);
+    _accentHex = colorToHex(source.baseAccent);
+    _navPanelOverlayStyle = source.navPanelOverlayStyle;
+    _cornerRadius = source.cornerRadius.clamp(
+      _minCornerRadius,
+      _maxCornerRadius,
+    );
+    _selectedIconCodePoint = existing != null
+        ? existing.iconData?.codePoint
+        : source.icon.codePoint;
 
     _hexFocusNode.addListener(() {
       if (!_hexFocusNode.hasFocus) {
@@ -361,43 +354,34 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     // Glow color on hover (background circle's own color is invisible against dialog)
     final glowColor = slot == 'background' ? theme.accent : color;
 
+    Widget circle({
+      bool isActive = false,
+      bool isDropTarget = false,
+      bool isHovered = false,
+      double size = 70,
+    }) => _circleWidget(
+      theme,
+      color,
+      label,
+      highlightBorderColor: highlightBorderColor,
+      glowColor: glowColor,
+      isActive: isActive,
+      isDropTarget: isDropTarget,
+      isHovered: isHovered,
+      size: size,
+    );
+
     return DragTarget<_ColorSlot>(
       onWillAcceptWithDetails: (details) => details.data != slot,
       onAcceptWithDetails: (details) => _swapSlots(slot, details.data),
       builder: (context, candidateData, _) {
-        final isDropTarget = candidateData.isNotEmpty;
         return Draggable<_ColorSlot>(
           data: slot,
           feedback: Material(
             color: Colors.transparent,
-            child: Opacity(
-              opacity: 0.85,
-              child: _circleWidget(
-                theme,
-                color,
-                label,
-                highlightBorderColor: highlightBorderColor,
-                glowColor: glowColor,
-                isActive: false,
-                isDropTarget: false,
-                isHovered: false,
-                size: 72,
-              ),
-            ),
+            child: Opacity(opacity: 0.85, child: circle(size: 72)),
           ),
-          childWhenDragging: Opacity(
-            opacity: 0.3,
-            child: _circleWidget(
-              theme,
-              color,
-              label,
-              highlightBorderColor: highlightBorderColor,
-              glowColor: glowColor,
-              isActive: false,
-              isDropTarget: false,
-              isHovered: false,
-            ),
-          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: circle()),
           child: MouseRegion(
             onEnter: (_) => setState(() => _circleHovered[slot] = true),
             onExit: (_) => setState(() => _circleHovered[slot] = false),
@@ -406,14 +390,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 _activeSlot = slot;
                 _syncHsvFromActiveSlot();
               }),
-              child: _circleWidget(
-                theme,
-                color,
-                label,
-                highlightBorderColor: highlightBorderColor,
-                glowColor: glowColor,
+              child: circle(
                 isActive: isActive,
-                isDropTarget: isDropTarget,
+                isDropTarget: candidateData.isNotEmpty,
                 isHovered: isHovered,
               ),
             ),
@@ -435,15 +414,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     double size = 70,
   }) {
     final highlight = isActive || isDropTarget;
-    final Widget? centerIcon = isDropTarget
+    final Widget? centerIcon = highlight
         ? Icon(
-            Icons.swap_horiz,
-            size: 22,
-            color: contrastColor(color).withValues(alpha: 0.8),
-          )
-        : isActive
-        ? Icon(
-            Icons.edit,
+            isDropTarget ? Icons.swap_horiz : Icons.edit,
             size: 22,
             color: contrastColor(color).withValues(alpha: 0.8),
           )
@@ -639,65 +612,72 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     required ValueChanged<double> onChanged,
     bool ensureHandleContrast = false,
   }) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 76,
-          child: Text(
-            label,
-            style: TextStyle(color: theme.textSecondary, fontSize: 12),
-          ),
-        ),
-        Expanded(
-          child: SliderTheme(
-            data:
-                buildAppSliderTheme(
-                  accent: theme.accent,
-                  disabledColor: theme.textSecondary,
-                  indicatorTextColor: contrastColor(theme.accent),
-                  cornerRadius: theme.cornerRadius,
-                ).copyWith(
-                  showValueIndicator: ShowValueIndicator.onDrag,
-                  trackShape: trackShape,
-                  thumbShape: AppSliderThumbShape(
-                    cornerRadius: theme.cornerRadius,
-                    outlineColor: ensureHandleContrast
-                        ? contrastColor(theme.surface).withValues(alpha: 0.5)
-                        : null,
-                  ),
-                  thumbColor: thumbColor,
-                  overlayColor: ensureHandleContrast
-                      ? contrastColor(theme.surface).withValues(alpha: 0.18)
-                      : thumbColor.withValues(alpha: 0.14),
-                ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              label: displayText,
-              onChanged: onChanged,
+    return _sliderRow(
+      theme,
+      label,
+      displayText,
+      SliderTheme(
+        data:
+            buildAppSliderTheme(
+              accent: theme.accent,
+              disabledColor: theme.textSecondary,
+              indicatorTextColor: contrastColor(theme.accent),
+              cornerRadius: theme.cornerRadius,
+            ).copyWith(
+              showValueIndicator: ShowValueIndicator.onDrag,
+              trackShape: trackShape,
+              thumbShape: AppSliderThumbShape(
+                cornerRadius: theme.cornerRadius,
+                outlineColor: ensureHandleContrast
+                    ? contrastColor(theme.surface).withValues(alpha: 0.5)
+                    : null,
+              ),
+              thumbColor: thumbColor,
+              overlayColor: ensureHandleContrast
+                  ? contrastColor(theme.surface).withValues(alpha: 0.18)
+                  : thumbColor.withValues(alpha: 0.14),
             ),
-          ),
+        child: Slider(
+          value: value,
+          min: min,
+          max: max,
+          label: displayText,
+          onChanged: onChanged,
         ),
-        SizedBox(
-          width: 44,
-          child: Text(
-            displayText,
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 11,
-              fontFamily: 'monospace',
-            ),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Icon picker
-  // ---------------------------------------------------------------------------
+  /// Label, slider and value readout, aligned across the editor's sliders.
+  Widget _sliderRow(
+    AppThemeData theme,
+    String label,
+    String displayText,
+    Widget slider,
+  ) => Row(
+    children: [
+      SizedBox(
+        width: 76,
+        child: Text(
+          label,
+          style: TextStyle(color: theme.textSecondary, fontSize: 12),
+        ),
+      ),
+      Expanded(child: slider),
+      SizedBox(
+        width: 44,
+        child: Text(
+          displayText,
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 11,
+            fontFamily: 'monospace',
+          ),
+          textAlign: TextAlign.right,
+        ),
+      ),
+    ],
+  );
 
   // ---------------------------------------------------------------------------
   // Overlay style picker
@@ -740,49 +720,29 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 
   Widget _buildCornerRadiusSlider(AppThemeData theme) {
     final roundedRadius = _cornerRadius.roundToDouble();
-    return Row(
-      children: [
-        SizedBox(
-          width: 76,
-          child: Text(
-            'Roundness',
-            style: TextStyle(color: theme.textSecondary, fontSize: 12),
-          ),
+    return _sliderRow(
+      theme,
+      'Roundness',
+      roundedRadius.toStringAsFixed(0),
+      SliderTheme(
+        data: buildAppSliderTheme(
+          accent: theme.accent,
+          disabledColor: theme.textSecondary,
+          indicatorTextColor: contrastColor(theme.accent),
+          cornerRadius: theme.cornerRadius,
         ),
-        Expanded(
-          child: SliderTheme(
-            data: buildAppSliderTheme(
-              accent: theme.accent,
-              disabledColor: theme.textSecondary,
-              indicatorTextColor: contrastColor(theme.accent),
-              cornerRadius: theme.cornerRadius,
-            ),
-            child: Slider(
-              value: roundedRadius,
-              min: _minCornerRadius,
-              max: _maxCornerRadius,
-              divisions: (_maxCornerRadius - _minCornerRadius).round(),
-              label: roundedRadius.toStringAsFixed(0),
-              onChanged: (value) {
-                setState(() => _cornerRadius = value);
-                _updatePreview();
-              },
-            ),
-          ),
+        child: Slider(
+          value: roundedRadius,
+          min: _minCornerRadius,
+          max: _maxCornerRadius,
+          divisions: (_maxCornerRadius - _minCornerRadius).round(),
+          label: roundedRadius.toStringAsFixed(0),
+          onChanged: (value) {
+            setState(() => _cornerRadius = value);
+            _updatePreview();
+          },
         ),
-        SizedBox(
-          width: 44,
-          child: Text(
-            roundedRadius.toStringAsFixed(0),
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 11,
-              fontFamily: 'monospace',
-            ),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
