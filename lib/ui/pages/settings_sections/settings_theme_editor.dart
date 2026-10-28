@@ -16,6 +16,7 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/theme_icon_menu.dart';
+import '../../widgets/tinted_tiles.dart';
 import '../../../core/constants/app_constants.dart';
 
 // ---------------------------------------------------------------------------
@@ -214,12 +215,15 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.only(top: 4),
+            // Room for the name field's floating label.
+            padding: const EdgeInsets.only(top: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 16,
               children: [
                 // Theme name + icon circle
                 Row(
+                  spacing: kElementHSpacing,
                   children: [
                     Expanded(
                       child: TextField(
@@ -234,7 +238,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                         onChanged: (_) => _updatePreview(),
                       ),
                     ),
-                    const SizedBox(width: kElementHSpacing),
                     ThemeIconMenuButton(
                       theme: previewTheme,
                       selectedIconCodePoint: _selectedIconCodePoint,
@@ -245,21 +248,32 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: kDialogSpacing),
-
-                // Color circles — click to select, drag to swap
-                _buildColorCirclesRow(previewTheme),
-                const SizedBox(height: kDialogSpacing),
-
+                // Color tiles — click to select, drag to swap
+                _section(
+                  previewTheme,
+                  'Colors',
+                  _buildColorCirclesRow(previewTheme),
+                  trailing: 'Tap to edit · Drag to swap',
+                ),
                 // Shared color editor for the active slot
-                _buildActiveColorEditor(previewTheme),
-                const SizedBox(height: kDialogSpacing),
-
-                _buildCornerRadiusSlider(previewTheme),
-                const SizedBox(height: kDialogSpacing),
-
-                // Nav panel overlay
-                _buildOverlayStylePicker(previewTheme),
+                _section(
+                  previewTheme,
+                  '${_slotLabel(_activeSlot)} Color',
+                  _buildActiveColorEditor(previewTheme),
+                ),
+                _section(
+                  previewTheme,
+                  'Style',
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 8,
+                    children: [
+                      _buildCornerRadiusSlider(previewTheme),
+                      // Nav panel overlay
+                      _buildOverlayStylePicker(previewTheme),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -283,32 +297,36 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Color circles row
   // ---------------------------------------------------------------------------
 
-  Widget _buildColorCirclesRow(AppThemeData theme) => Column(
-    crossAxisAlignment: CrossAxisAlignment.center,
+  /// A heading over its [child], as in the other Tinted Tile dialogs.
+  static Widget _section(
+    AppThemeData theme,
+    String title,
+    Widget child, {
+    String? trailing,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: 8,
     children: [
-      Text(
-        'Theme Colors  \u2022  Click to edit  \u2022  Drag to swap',
-        style: TextStyle(color: theme.textSecondary, fontSize: 11),
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 28,
-        runSpacing: 12,
-        children: [
-          _buildColorCircle(theme, 'background'),
-          _buildColorCircle(theme, 'accent'),
-          _buildColorCircle(theme, 'secondary'),
-        ],
-      ),
+      TintedHeading(theme: theme, title: title, trailing: trailing),
+      child,
+    ],
+  );
+
+  static String _slotLabel(_ColorSlot slot) =>
+      '${slot[0].toUpperCase()}${slot.substring(1)}';
+
+  Widget _buildColorCirclesRow(AppThemeData theme) => Row(
+    spacing: 8,
+    children: [
+      for (final slot in ['background', 'accent', 'secondary'])
+        Expanded(child: _buildColorCircle(theme, slot)),
     ],
   );
 
   Widget _buildColorCircle(AppThemeData theme, _ColorSlot slot) {
     final isActive = _activeSlot == slot;
     final color = parseHexColor(_hex[slot]!);
-    final label = '${slot[0].toUpperCase()}${slot.substring(1)}';
+    final label = _slotLabel(slot);
     final isHovered = _circleHovered[slot] ?? false;
 
     // Border shown when circle is active/drop-target
@@ -322,17 +340,18 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       bool isActive = false,
       bool isDropTarget = false,
       bool isHovered = false,
-      double size = 70,
+      double? width,
     }) => _circleWidget(
       theme,
       color,
       label,
+      _hex[slot]!,
       highlightBorderColor: highlightBorderColor,
       glowColor: glowColor,
       isActive: isActive,
       isDropTarget: isDropTarget,
       isHovered: isHovered,
-      size: size,
+      width: width,
     );
 
     return DragTarget<_ColorSlot>(
@@ -342,7 +361,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         data: slot,
         feedback: Material(
           color: Colors.transparent,
-          child: Opacity(opacity: 0.85, child: circle(size: 72)),
+          child: Opacity(opacity: 0.85, child: circle(width: 110)),
         ),
         childWhenDragging: Opacity(opacity: 0.3, child: circle()),
         child: MouseRegion(
@@ -364,71 +383,72 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     );
   }
 
+  /// A tile with the slot's swatch, name and hex code, tinted more strongly
+  /// and outlined while the slot is being edited or a swatch hovers over it.
   Widget _circleWidget(
     AppThemeData theme,
     Color color,
-    String label, {
+    String label,
+    String hex, {
     required Color highlightBorderColor,
     required Color glowColor,
     required bool isActive,
     required bool isDropTarget,
     required bool isHovered,
-    double size = 70,
+    double? width,
   }) {
     final highlight = isActive || isDropTarget;
+    final radius = BorderRadius.circular(theme.cornerRadius);
     final Widget? centerIcon = highlight
         ? Icon(
             isDropTarget ? Icons.swap_horiz : Icons.edit,
-            size: 22,
+            size: 20,
             color: contrastColor(color).withValues(alpha: 0.8),
           )
         : null;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          duration: kFastAnimation,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(
-              math.min(theme.cornerRadius, size / 2),
-            ),
-            border: Border.all(
-              color: highlight ? highlightBorderColor : theme.border,
-              width: highlight ? 3 : 2,
-            ),
-            boxShadow: highlight
-                ? [
-                    BoxShadow(
-                      color: highlightBorderColor.withValues(alpha: 0.8),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : isHovered
-                ? [
-                    BoxShadow(
-                      color: glowColor.withValues(alpha: 0.60),
-                      blurRadius: 8,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : [],
-          ),
-          child: centerIcon,
+    return AnimatedContainer(
+      duration: kFastAnimation,
+      width: width,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: (highlight ? highlightBorderColor : glowColor).withValues(
+          alpha: highlight ? 0.16 : (isHovered ? 0.12 : 0.08),
         ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: isActive ? theme.textPrimary : theme.textSecondary,
-            fontSize: 12,
-          ),
+        borderRadius: radius,
+        border: Border.all(
+          color: highlight ? highlightBorderColor : Colors.transparent,
         ),
-      ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 6,
+        children: [
+          Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(
+                math.min(theme.cornerRadius, 24),
+              ),
+              border: Border.all(color: theme.border),
+            ),
+            child: Center(child: centerIcon),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? theme.textPrimary : theme.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '#${hex.replaceFirst('#', '').toUpperCase()}',
+            style: TextStyle(color: theme.textHint, fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 

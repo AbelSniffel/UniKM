@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'multi_child_render_box.dart';
 
 /// Edit this value (1 or greater) to cap columns in All and search views.
 const int kSettingsSectionMaxColumns = 2;
@@ -48,18 +49,7 @@ class SettingsSectionGrid extends MultiChildRenderObjectWidget {
       );
 }
 
-class _SettingsSectionParentData extends ContainerBoxParentData<RenderBox> {}
-
-class _RenderSettingsSectionGrid extends RenderBox
-    with
-        ContainerRenderObjectMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        >,
-        RenderBoxContainerDefaultsMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        > {
+class _RenderSettingsSectionGrid extends MultiChildRenderBox {
   _RenderSettingsSectionGrid(this._columns, this._spacing, this._textDirection);
 
   int _columns;
@@ -76,13 +66,6 @@ class _RenderSettingsSectionGrid extends RenderBox
     _spacing = spacing;
     _textDirection = textDirection;
     markNeedsLayout();
-  }
-
-  @override
-  void setupParentData(RenderBox child) {
-    if (child.parentData is! ContainerBoxParentData<RenderBox>) {
-      child.parentData = _SettingsSectionParentData();
-    }
   }
 
   @override
@@ -113,7 +96,7 @@ class _RenderSettingsSectionGrid extends RenderBox
         BoxConstraints.tightFor(width: columnWidth),
         parentUsesSize: true,
       );
-      final data = child.parentData! as ContainerBoxParentData<RenderBox>;
+      final data = childData(child);
       final visualColumn = _textDirection == TextDirection.ltr
           ? column
           : columns - column - 1;
@@ -145,15 +128,11 @@ class _RenderSettingsSectionGrid extends RenderBox
     ).inflate(12);
     var child = firstChild;
     while (child != null) {
-      final data = child.parentData! as ContainerBoxParentData<RenderBox>;
+      final data = childData(child);
       if (visible.overlaps(data.offset & child.size)) {
         context.paintChild(child, offset + data.offset);
       }
       child = data.nextSibling;
     }
   }
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      defaultHitTestChildren(result, position: position);
 }

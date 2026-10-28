@@ -68,7 +68,7 @@ class TagsNotifier extends Notifier<List<Tag>> {
           identical(ref.read(databaseProvider), db)) {
         // Stream delivery may overtake this read. Re-read rather than publish
         // stale rows or return before an intervening cleanup is reflected.
-        if (snapshotEpoch != _snapshotEpoch) return _loadTags();
+        if (snapshotEpoch != _snapshotEpoch) return await _loadTags();
         _replaceTags(tags);
       }
     } catch (_) {

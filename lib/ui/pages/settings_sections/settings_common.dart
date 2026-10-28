@@ -4,16 +4,19 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
-import '../../../core/constants/app_constants.dart';
 import 'settings_control_cards.dart';
 
 /// Canonical setting text metadata that can drive both UI labels and search index text.
 class SettingTextSpec {
-  const SettingTextSpec({required this.label, this.description});
+  const SettingTextSpec({required this.label, this.description, this.icon});
 
   final String label;
   final String? description;
+
+  /// Leads the setting's card.
+  final IconData? icon;
 
   List<String> get indexTexts => [
     label,
@@ -31,6 +34,9 @@ bool shouldShowSettingsGroup({
 }) =>
     query.trim().isEmpty ||
     matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group);
+
+/// The gap between the headed groups of a settings panel.
+const double kSettingsGroupSpacing = 20;
 
 // ---------------------------------------------------------------------------
 // Connected group strip helpers
@@ -96,9 +102,56 @@ SectionGroupEntry buildSearchableSectionEntry({
                     _ => position,
                   },
             alternateBackground: isAlternate,
+            trailing: group.info == null
+                ? null
+                : SettingsInfoButton(theme: theme, message: group.info!),
             child: childBuilder(),
           ),
   );
+}
+
+/// An info icon whose tooltip also opens on tap, for a group's title bar.
+class SettingsInfoButton extends StatefulWidget {
+  const SettingsInfoButton({
+    super.key,
+    required this.theme,
+    required this.message,
+  });
+
+  final AppThemeData theme;
+  final String message;
+
+  @override
+  State<SettingsInfoButton> createState() => _SettingsInfoButtonState();
+}
+
+class _SettingsInfoButtonState extends State<SettingsInfoButton> {
+  final _tooltip = GlobalKey<TooltipState>();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    // Tinted when the settings search matches the info.
+    final query = SettingsSearchScope.queryOf(context);
+    final matched =
+        query.isNotEmpty && settingsSearchMatches(query, widget.message);
+    return Tooltip(
+      key: _tooltip,
+      message: widget.message,
+      child: IconButton(
+        style: matched
+            ? theme.compactIconButtonStyle.copyWith(
+                backgroundColor: WidgetStatePropertyAll(
+                  theme.accent.withValues(alpha: 0.3),
+                ),
+              )
+            : theme.compactIconButtonStyle,
+        icon: const Icon(Icons.info_outline, size: 26),
+        color: theme.accent,
+        onPressed: () => _tooltip.currentState?.ensureTooltipVisible(),
+      ),
+    );
+  }
 }
 
 /// Renders the groupboxes inside a settings section as a connected vertical
@@ -134,7 +187,9 @@ class SettingsSectionGroups extends StatelessWidget {
             key: ValueKey(visible[i].$1),
             child: Padding(
               padding: EdgeInsets.only(
-                bottom: spaced && i < visible.length - 1 ? kGroupBoxSpacing : 0,
+                bottom: spaced && i < visible.length - 1
+                    ? kSettingsGroupSpacing
+                    : 0,
               ),
               child: visible[i].$2.builder(
                 spaced
@@ -207,16 +262,21 @@ class SettingsSearchGroup {
     required this.title,
     this.settings = const [],
     this.extraTexts = const [],
+    this.info,
   });
 
   final String title;
   final List<SettingTextSpec> settings;
   final List<String> extraTexts;
 
+  /// General notes on the group, behind an info button in its title bar.
+  final String? info;
+
   List<String> get indexTexts => [
     title,
     ...settings.expand((setting) => setting.indexTexts),
     ...extraTexts,
+    ?info,
   ];
 }
 
@@ -246,6 +306,12 @@ class SpecSettingRow extends StatelessWidget {
   final SettingTextSpec spec;
   final Widget child;
 
+  /// The settings search when it matches the label, else empty.
+  String _matchedQuery(BuildContext context) {
+    final query = SettingsSearchScope.queryOf(context);
+    return settingsSearchMatches(query, spec.label) ? query : '';
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -254,21 +320,24 @@ class SpecSettingRow extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
             children: [
-              Text(
-                spec.label,
-                style: TextStyle(
-                  color: theme.textPrimary,
-                  fontWeight: FontWeight.w500,
+              Text.rich(
+                searchHighlightSpan(
+                  spec.label,
+                  _matchedQuery(context),
+                  TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  searchMarkStyle(theme.accent),
                 ),
               ),
-              if (spec.description case final description?) ...[
-                const SizedBox(height: 2),
+              if (spec.description case final description?)
                 Text(
                   description,
                   style: TextStyle(color: theme.textSecondary, fontSize: 12),
                 ),
-              ],
             ],
           ),
         ),
@@ -281,7 +350,7 @@ class SpecSettingRow extends StatelessWidget {
 typedef SpecToggleSettingEntry = ({
   SettingTextSpec spec,
   bool value,
-  ValueChanged<bool> onChanged,
+  ValueChanged<bool>? onChanged,
 });
 
 Widget buildSpecToggleSettingList({
@@ -297,6 +366,7 @@ Widget buildSpecToggleSettingList({
           theme: theme,
           label: entry.spec.label,
           description: entry.spec.description,
+          icon: entry.spec.icon,
           value: entry.value,
           onChanged: entry.onChanged,
         ),

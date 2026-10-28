@@ -27,6 +27,7 @@ SliderThemeData buildAppSliderTheme({
   activeTickMarkColor: indicatorTextColor.withValues(alpha: 0.55),
   inactiveTickMarkColor: accent.withValues(alpha: 0.65),
   valueIndicatorColor: accent,
+  valueIndicatorShape: AppSliderValueIndicatorShape(cornerRadius: cornerRadius),
   valueIndicatorTextStyle: TextStyle(
     color: indicatorTextColor,
     fontWeight: FontWeight.w600,
@@ -104,6 +105,92 @@ class AppSliderThumbShape extends SliderComponentShape {
           ..strokeWidth = 2,
       );
     }
+  }
+}
+
+/// A value bubble with the theme's corner radius, pointing down at the
+/// value from just above the handle's ring.
+class AppSliderValueIndicatorShape extends SliderComponentShape {
+  const AppSliderValueIndicatorShape({required this.cornerRadius});
+  final double cornerRadius;
+
+  static const _padding = EdgeInsets.symmetric(horizontal: 12, vertical: 6);
+  static const _pointer = 6.0;
+  static const _edgeGap = 8.0;
+
+  /// How far above the centre it is given the pointer's tip sits.
+  static const tipGap = kSliderHandleSize / 2 + kSliderHandleGap;
+
+  @override
+  Size getPreferredSize(
+    bool isEnabled,
+    bool isDiscrete, {
+    TextPainter? labelPainter,
+    double? textScaleFactor,
+  }) => labelPainter!.size + Offset(_padding.horizontal, _padding.vertical);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final scale = activationAnimation.value;
+    if (scale == 0) return;
+    final bubble = getPreferredSize(
+      true,
+      isDiscrete,
+      labelPainter: labelPainter,
+    );
+    // Shift the bubble, not its pointer, to keep it on screen.
+    final globalX = parentBox.localToGlobal(center).dx;
+    final shift =
+        math.max(0.0, _edgeGap - (globalX - bubble.width / 2)) -
+        math.max(
+          0.0,
+          globalX + bubble.width / 2 - (sizeWithOverflow.width - _edgeGap),
+        );
+    final rect = Rect.fromLTWH(
+      shift - bubble.width / 2,
+      -_pointer - bubble.height,
+      bubble.width,
+      bubble.height,
+    );
+    final radius = math.min(cornerRadius, bubble.height / 2);
+    // The pointer stays clear of the rounded corners.
+    final inset = radius + _pointer;
+    final pointerX = rect.width <= inset * 2
+        ? rect.center.dx
+        : 0.0.clamp(rect.left + inset, rect.right - inset).toDouble();
+    final paint = Paint()..color = sliderTheme.valueIndicatorColor!;
+    final canvas = context.canvas
+      ..save()
+      ..translate(center.dx, center.dy - tipGap)
+      // Grow from the pointer's tip, as the slider's own bubbles do.
+      ..scale(scale)
+      ..drawRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)), paint)
+      ..drawPath(
+        Path()
+          ..moveTo(pointerX - _pointer, rect.bottom - 1)
+          ..lineTo(pointerX, 0)
+          ..lineTo(pointerX + _pointer, rect.bottom - 1)
+          ..close(),
+        paint,
+      );
+    labelPainter.paint(
+      canvas,
+      rect.center - Offset(labelPainter.width / 2, labelPainter.height / 2),
+    );
+    canvas.restore();
   }
 }
 

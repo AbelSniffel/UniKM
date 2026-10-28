@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/batch_parser.dart';
 import '../../core/constants/platform_patterns.dart';
 import 'platform_icon.dart';
+import 'multi_child_render_box.dart';
 
 const _pillHorizontalPadding = 12.0;
 const _dividerClearance = 8.0;
@@ -89,32 +90,46 @@ class BatchGamesEditingController extends TextEditingController {
       if (parts == null) {
         append(line.text, line.offset, null);
       } else {
+        // Separators remain text for clipboard/undo, but their breaks are painted.
+        void separator(int start, int end) {
+          final text = line.text.substring(start, end);
+          append(
+            text,
+            line.offset + start,
+            TextStyle(
+              color: Colors.transparent,
+              // Reserve padding around the break without changing clipboard text.
+              // Additional typed spaces retain their own normal advance width.
+              letterSpacing: text.isEmpty
+                  ? null
+                  : (style?.letterSpacing ?? 0) +
+                        ui.lerpDouble(
+                              _separatorExtraWidth,
+                              _joinedSeparatorExtraWidth,
+                              _rowMerges[i] ?? 0,
+                            )! /
+                            text.characters.length,
+            ),
+          );
+        }
+
+        final keyEnd = parts.keyEnd ?? line.text.length;
         append(line.text.substring(0, parts.titleEnd), line.offset, null);
-        // The separator remains text for clipboard/undo, but its break is painted.
-        final separator = line.text.substring(parts.titleEnd, parts.keyStart);
+        separator(parts.titleEnd, parts.keyStart);
         append(
-          separator,
-          line.offset + parts.titleEnd,
-          TextStyle(
-            color: Colors.transparent,
-            // Reserve padding around the break without changing clipboard text.
-            // Additional typed spaces retain their own normal advance width.
-            letterSpacing: separator.isEmpty
-                ? null
-                : (style?.letterSpacing ?? 0) +
-                      ui.lerpDouble(
-                            _separatorExtraWidth,
-                            _joinedSeparatorExtraWidth,
-                            _rowMerges[i] ?? 0,
-                          )! /
-                          separator.characters.length,
-          ),
-        );
-        append(
-          line.text.substring(parts.keyStart),
+          line.text.substring(parts.keyStart, keyEnd),
           line.offset + parts.keyStart,
           TextStyle(fontFamily: 'monospace', color: theme?.textSecondary),
         );
+        // A deadline date after the key gets its own segment.
+        if (parts.dateStart case final dateStart?) {
+          separator(keyEnd, dateStart);
+          append(
+            line.text.substring(dateStart),
+            line.offset + dateStart,
+            TextStyle(color: theme?.accent),
+          );
+        }
       }
       if (i < lines.length - 1) {
         append('\n', line.offset + line.text.length, null);
@@ -473,28 +488,10 @@ class _BatchRows extends MultiChildRenderObjectWidget {
   }
 }
 
-class _BatchRowParentData extends ContainerBoxParentData<RenderBox> {}
-
-class _RenderBatchRows extends RenderBox
-    with
-        ContainerRenderObjectMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        >,
-        RenderBoxContainerDefaultsMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        > {
+class _RenderBatchRows extends MultiChildRenderBox {
   _RenderBatchRows(this.lines, this.iconRows);
   List<_BatchLine> lines;
   List<int> iconRows;
-
-  @override
-  void setupParentData(RenderBox child) {
-    if (child.parentData is! ContainerBoxParentData<RenderBox>) {
-      child.parentData = _BatchRowParentData();
-    }
-  }
 
   @override
   void performLayout() {
@@ -504,7 +501,7 @@ class _RenderBatchRows extends RenderBox
       parentUsesSize: true,
     );
     size = constraints.constrain(input.size);
-    final inputData = input.parentData! as ContainerBoxParentData<RenderBox>;
+    final inputData = childData(input);
     inputData.offset = Offset.zero;
     final editable = _findEditable(input);
     // The box of the first character of [line], if it has one.
@@ -541,7 +538,7 @@ class _RenderBatchRows extends RenderBox
       center =
           editable?.localToGlobal(Offset(0, center ?? 0), ancestor: input).dy ??
           0;
-      final data = indicator.parentData! as ContainerBoxParentData<RenderBox>;
+      final data = childData(indicator);
       data.offset = Offset(
         (_platformIconSlotWidth - indicator.size.width) / 2,
         center - indicator.size.height / 2,
@@ -571,12 +568,6 @@ class _RenderBatchRows extends RenderBox
   @override
   double? computeDistanceToActualBaseline(TextBaseline baseline) =>
       defaultComputeDistanceToFirstActualBaseline(baseline);
-  @override
-  void paint(PaintingContext context, Offset offset) =>
-      defaultPaint(context, offset);
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      defaultHitTestChildren(result, position: position);
 }
 
 RenderEditable? _findEditable(RenderObject root) {
@@ -612,9 +603,7 @@ class _BatchPillSurface extends SingleChildRenderObjectWidget {
   void updateRenderObject(
     BuildContext context,
     _RenderBatchPills renderObject,
-  ) {
-    renderObject.configuration = this;
-  }
+  ) => renderObject.configuration = this;
 }
 
 class _RenderBatchPills extends RenderProxyBox {
@@ -703,12 +692,19 @@ class _RenderBatchPills extends RenderProxyBox {
               )
             : const <Rect>[];
         final parts = line.parts;
-        final title = parts == null
-            ? <Rect>[]
-            : _boxes(editable, start, line.offset + parts.titleEnd);
-        final key = parts == null
-            ? <Rect>[]
-            : _boxes(editable, line.offset + parts.keyStart, end);
+        // Title, key and, when the line has one, its deadline date.
+        final segments = parts == null
+            ? const <List<Rect>>[]
+            : [
+                _boxes(editable, start, line.offset + parts.titleEnd),
+                _boxes(
+                  editable,
+                  line.offset + parts.keyStart,
+                  parts.keyEnd == null ? end : line.offset + parts.keyEnd!,
+                ),
+                if (parts.dateStart case final dateStart?)
+                  _boxes(editable, line.offset + dateStart, end),
+              ];
         final merge = _configuration.merge(i);
         for (final box in all) {
           final bounds = Rect.fromLTRB(
@@ -717,44 +713,47 @@ class _RenderBatchPills extends RenderProxyBox {
             box.right + _pillHorizontalPadding,
             box.bottom - 3,
           );
-          final titles = title.where((r) => (r.top - box.top).abs() < 1);
-          final keys = key.where((r) => (r.top - box.top).abs() < 1);
-          if (titles.isEmpty || keys.isEmpty) {
-            _pill(canvas, bounds, merge: merge, highlights: highlights);
-            continue;
-          }
-          final titleEnd = titles.last.right;
-          final keyStart = keys.first.left;
-          final seam = (titleEnd + keyStart) / 2;
-          final padding = math.min(
-            _pillHorizontalPadding,
-            math.max(0.0, (keyStart - titleEnd) / 2 - _dividerClearance),
-          );
-          final left = Rect.fromLTRB(
-            bounds.left,
-            bounds.top,
-            ui.lerpDouble(titleEnd + padding, seam, merge)!,
-            bounds.bottom,
-          );
-          final right = Rect.fromLTRB(
-            ui.lerpDouble(keyStart - padding, seam, merge)!,
-            bounds.top,
-            bounds.right,
-            bounds.bottom,
-          );
-          if (merge >= 0.999) {
+          final onRow = [
+            for (final segment in segments)
+              segment.where((r) => (r.top - box.top).abs() < 1).toList(),
+          ];
+          // The gap between each pair of neighbouring segments on this row.
+          final gaps = [
+            for (var s = 1; s < onRow.length; s++)
+              if (onRow[s - 1].isNotEmpty && onRow[s].isNotEmpty)
+                (onRow[s - 1].last.right, onRow[s].first.left),
+          ];
+          if (gaps.isEmpty || merge >= 0.999) {
             _pill(canvas, bounds, merge: merge, highlights: highlights);
           } else {
+            // One pill per segment, their inner ends meeting at each seam.
+            var left = bounds.left;
+            var innerLeft = false;
+            for (final (segmentEnd, nextStart) in gaps) {
+              final seam = (segmentEnd + nextStart) / 2;
+              final padding = math.min(
+                _pillHorizontalPadding,
+                math.max(0.0, (nextStart - segmentEnd) / 2 - _dividerClearance),
+              );
+              _pill(
+                canvas,
+                Rect.fromLTRB(
+                  left,
+                  bounds.top,
+                  ui.lerpDouble(segmentEnd + padding, seam, merge)!,
+                  bounds.bottom,
+                ),
+                merge: merge,
+                innerLeft: innerLeft,
+                innerRight: true,
+                highlights: highlights,
+              );
+              left = ui.lerpDouble(nextStart - padding, seam, merge)!;
+              innerLeft = true;
+            }
             _pill(
               canvas,
-              left,
-              merge: merge,
-              innerRight: true,
-              highlights: highlights,
-            );
-            _pill(
-              canvas,
-              right,
+              Rect.fromLTRB(left, bounds.top, bounds.right, bounds.bottom),
               merge: merge,
               innerLeft: true,
               highlights: highlights,
@@ -764,16 +763,19 @@ class _RenderBatchPills extends RenderProxyBox {
             editable.cursorHeight / 2,
             bounds.height / 2 - 7,
           );
-          canvas.drawLine(
-            Offset(seam, bounds.center.dy - dividerHalfHeight),
-            Offset(seam, bounds.center.dy + dividerHalfHeight),
-            Paint()
-              ..color = _configuration.theme.accent.withValues(
-                alpha: 0.65 * (1 - math.sin(math.pi * merge)),
-              )
-              ..strokeWidth = 1.5
-              ..strokeCap = StrokeCap.round,
-          );
+          for (final (segmentEnd, nextStart) in gaps) {
+            final seam = (segmentEnd + nextStart) / 2;
+            canvas.drawLine(
+              Offset(seam, bounds.center.dy - dividerHalfHeight),
+              Offset(seam, bounds.center.dy + dividerHalfHeight),
+              Paint()
+                ..color = _configuration.theme.accent.withValues(
+                  alpha: 0.65 * (1 - math.sin(math.pi * merge)),
+                )
+                ..strokeWidth = 1.5
+                ..strokeCap = StrokeCap.round,
+            );
+          }
         }
       }
       canvas.restore();

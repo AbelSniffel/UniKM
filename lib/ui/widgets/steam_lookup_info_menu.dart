@@ -121,12 +121,11 @@ class _SteamLookupInfoMenuState extends State<SteamLookupInfoMenu> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 6,
                     children: [
                       Text(matchService.label, style: valueStyle),
-                      if (matchService == SteamSearchSource.community) ...[
-                        const SizedBox(height: 6),
+                      if (matchService == SteamSearchSource.community)
                         _badge('Fallback match'),
-                      ],
                     ],
                   ),
                 ),

@@ -30,25 +30,20 @@ class AdvancedSection extends ConsumerWidget {
 
   static const SettingTextSpec frameRateSpec = SettingTextSpec(
     label: 'Frame Rate',
-    description:
-        'Target frame rate for rendering. Auto uses the display default. '
-        'Higher values require display and compositor support.',
+    icon: Icons.speed,
   );
   static const SettingTextSpec devWindowSpec = SettingTextSpec(
     label: 'Developer Window',
-    description:
-        'Open a floating window with developer tools and FPS controls (Ctrl+Alt+D)',
   );
   static const SettingTextSpec resetSettingsSpec = SettingTextSpec(
     label: 'Reset settings',
-    description:
-        'Restore all settings, library filters, and sorting to defaults',
   );
   // Reserved for future experimental settings; hidden from UI and search.
   static const showExperimentalSettings = false;
 
   static const SettingTextSpec interactionCardsSpec = SettingTextSpec(
     label: 'Interaction cards',
+    icon: Icons.touch_app_outlined,
     description:
         'Use compact interactive cards instead of full-width settings rows',
   );
@@ -56,11 +51,14 @@ class AdvancedSection extends ConsumerWidget {
   static const SettingsSearchGroup displaySearchGroup = SettingsSearchGroup(
     title: 'Display',
     settings: [frameRateSpec],
+    info: 'Auto matches your display. Higher rates need display support.',
   );
 
   static const SettingsSearchGroup systemSearchGroup = SettingsSearchGroup(
     title: 'System',
     settings: [devWindowSpec, resetSettingsSpec],
+    extraTexts: ['FPS', 'defaults'],
+    info: 'Ctrl+Alt+D opens the Developer Window. Reset keeps your games.',
   );
   static const SettingsSearchGroup experimentalSearchGroup =
       SettingsSearchGroup(
@@ -103,6 +101,7 @@ class AdvancedSection extends ConsumerWidget {
                   theme: theme,
                   label: interactionCardsSpec.label,
                   description: interactionCardsSpec.description,
+                  icon: interactionCardsSpec.icon,
                   value: ref.watch(experimentalInteractionCardsProvider),
                   onChanged: settingsNotifier.setter(
                     SettingsKeys.experimentalInteractionCards,
@@ -122,7 +121,7 @@ class AdvancedSection extends ConsumerWidget {
               SettingsChoiceCard<String>(
                 theme: theme,
                 label: frameRateSpec.label,
-                description: frameRateSpec.description,
+                icon: frameRateSpec.icon,
                 value: currentFrameRate,
                 choices: [
                   for (final option in _frameRateOptions)

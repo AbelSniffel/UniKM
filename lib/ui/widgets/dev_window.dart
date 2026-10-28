@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../providers/app_providers.dart';
-import '../pages/update_page.dart';
+import '../../app/application/update_controller.dart';
 import '../dialogs/dialog_gallery.dart';
 import '../../core/theme/app_theme.dart';
 import 'app_action_button.dart';
@@ -87,7 +87,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       );
     }
 
-    _fetchPreviewStep = (_fetchPreviewStep + 1) % _fetchPreviewStates.length;
+    _fetchPreviewStep = (step + 1) % count;
     setState(() {});
   }
 
@@ -95,9 +95,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     _fetchPreviewHandle?.dismiss();
     _fetchPreviewHandle = null;
     _fetchPreviewStep = 0;
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _clearSelectedSteamData() async {
@@ -192,19 +190,17 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       0 => [
         section('Notifications', [
           action('In-app preview', Icons.notifications_outlined, () {
-            final notifications = NotificationManager.instance;
-            notifications.info(
-              'Test info notification from Dev Tools.',
-              title: 'Info',
-            );
-            notifications.warning(
-              'Test warning notification from Dev Tools.',
-              title: 'Warning',
-            );
-            notifications.error(
-              'Test error notification from Dev Tools.',
-              title: 'Error',
-            );
+            for (final (type, title) in const [
+              (NotificationType.info, 'Info'),
+              (NotificationType.warning, 'Warning'),
+              (NotificationType.error, 'Error'),
+            ]) {
+              NotificationManager.instance.showHandle(
+                message: 'Test ${type.name} notification from Dev Tools.',
+                type: type,
+                title: title,
+              );
+            }
           }),
           action(
             'OS notification',

@@ -34,7 +34,6 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
   void _handleTap() => widget.onToggle();
 
   Future<void> _showContextMenu(Offset globalPosition) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final allowRegularListView = !PlatformFileActions.isMobilePlatform;
     final availableModes = [
       if (allowRegularListView) ListViewDensityMode.regular,
@@ -42,10 +41,7 @@ class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
     ];
     final action = await showAppMenu<String>(
       context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
+      position: overlayMenuPosition(context, globalPosition & const Size(1, 1)),
       items: [
         CheckedPopupMenuItem<String>(
           value: GameListViewMode.grid.name,

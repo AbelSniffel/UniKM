@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/surface_depth.dart';
 
-/// Shared database and backup row, with an encryption icon and optional actions.
-class DatabaseFileRow extends StatefulWidget {
+/// Shared database and backup row, with an encryption icon and optional
+/// actions, tinted like the Tinted Tile dialogs' tiles. Missing files are
+/// tinted orange; the [highlighted] row is tinted more strongly and outlined.
+class DatabaseFileRow extends StatelessWidget {
   const DatabaseFileRow({
     super.key,
     required this.theme,
@@ -29,77 +30,61 @@ class DatabaseFileRow extends StatefulWidget {
   final EdgeInsets margin;
 
   @override
-  State<DatabaseFileRow> createState() => _DatabaseFileRowState();
-}
-
-class _DatabaseFileRowState extends State<DatabaseFileRow> {
-  bool _hovering = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final iconColor = widget.available ? theme.accent : Colors.orange;
+    final color = available ? theme.accent : Colors.orange;
+    final radius = BorderRadius.circular(theme.cornerRadius);
     return Padding(
-      padding: widget.margin,
+      padding: margin,
       child: Material(
-        color: Colors.transparent,
+        color: color.withValues(alpha: highlighted ? 0.16 : 0.08),
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: highlighted ? color : Colors.transparent),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          hoverColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          onHover: (value) => setState(() => _hovering = value),
-          onTap: widget.available ? widget.onTap : null,
-          child: Container(
+          onTap: available ? onTap : null,
+          child: Padding(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              gradient: SurfaceDepth.gradient(theme.surface, highlight: 0.085),
-              boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              border: Border.all(
-                color: _hovering || widget.highlighted
-                    ? theme.accent
-                    : theme.border,
-                width: widget.highlighted ? 1.5 : 1,
-              ),
-            ),
             child: Row(
+              spacing: 12,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: color.withValues(alpha: 0.18),
+                    borderRadius: radius,
                   ),
                   child: Icon(
-                    !widget.available
+                    !available
                         ? Icons.warning_amber
-                        : widget.isEncrypted
+                        : isEncrypted
                         ? Icons.lock
                         : Icons.lock_open,
-                    color: iconColor,
+                    color: color,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
+                    spacing: 2,
                     children: [
                       Text(
-                        widget.title,
+                        title,
                         style: TextStyle(
                           color: theme.textPrimary,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Tooltip(
-                        message: widget.subtitle,
+                        message: subtitle,
                         child: Text(
-                          widget.subtitle,
+                          subtitle,
                           style: TextStyle(
                             color: theme.textSecondary,
                             fontSize: 12,
@@ -111,10 +96,8 @@ class _DatabaseFileRowState extends State<DatabaseFileRow> {
                     ],
                   ),
                 ),
-                if (widget.actions.isNotEmpty) ...[
-                  const SizedBox(width: 5),
-                  Row(mainAxisSize: MainAxisSize.min, children: widget.actions),
-                ],
+                if (actions.isNotEmpty)
+                  Row(mainAxisSize: MainAxisSize.min, children: actions),
               ],
             ),
           ),

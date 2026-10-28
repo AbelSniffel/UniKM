@@ -235,8 +235,13 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   /// A faint fill makes disabled actions distinct from ready buttons.
   Color get primaryButtonDisabled => primaryButton.withValues(alpha: 0.18);
 
-  /// Primary button text
-  Color get primaryButtonText => textPrimary;
+  /// Text and icons on [primaryButton] (tabs, elevated buttons, accent
+  /// fills): black or white, whichever reads on that fill, so light accents
+  /// in custom themes stay legible.
+  Color get primaryButtonText => contrastColor(primaryButton);
+
+  /// Text and icons on [secondary] (and [error]) fills.
+  Color get onSecondaryText => contrastColor(baseSecondary);
 
   /// Primary button foreground when disabled.
   Color get primaryButtonDisabledText => textSecondary.withValues(alpha: 0.5);
@@ -420,11 +425,11 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
         primary: baseSecondary,
-        onPrimary: primaryButtonText,
+        onPrimary: onSecondaryText,
         secondary: baseAccent,
         onSecondary: contrastColor(baseAccent),
         error: error,
-        onError: primaryButtonText,
+        onError: onSecondaryText,
         surface: surface,
         onSurface: textPrimary,
       ),
@@ -1276,7 +1281,10 @@ class AppLinearProgressBar extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: theme.textPrimary,
+                  // The centred label sits over the fill from halfway on.
+                  color: (value ?? 0) >= 0.5
+                      ? contrastColor(theme.accent)
+                      : theme.textPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),

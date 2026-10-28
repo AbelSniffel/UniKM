@@ -39,6 +39,7 @@ class AppNotification {
     this.onSecondaryAction,
     this.isDismissing = false,
     this.dismissible = true,
+    this.autoDismiss,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -57,6 +58,10 @@ class AppNotification {
   /// task that owns it completes or dismisses it.
   final bool dismissible;
 
+  /// When the scheduled auto-dismiss started and how long it lasts, for the
+  /// toast's countdown line; null while the notification stays.
+  final ({DateTime start, Duration length})? autoDismiss;
+
   AppNotification copyWith({
     String? message,
     NotificationType? type,
@@ -73,6 +78,8 @@ class AppNotification {
     bool clearSecondaryAction = false,
     bool? isDismissing,
     bool? dismissible,
+    ({DateTime start, Duration length})? autoDismiss,
+    bool clearAutoDismiss = false,
   }) => AppNotification(
     id: id,
     message: message ?? this.message,
@@ -90,6 +97,7 @@ class AppNotification {
         : (onSecondaryAction ?? this.onSecondaryAction),
     isDismissing: isDismissing ?? this.isDismissing,
     dismissible: dismissible ?? this.dismissible,
+    autoDismiss: clearAutoDismiss ? null : (autoDismiss ?? this.autoDismiss),
   );
 }
 
@@ -169,6 +177,9 @@ class NotificationManager {
   final _notifications = <AppNotification>[];
   final Map<String, Timer> _dismissTimers = <String, Timer>{};
   final Map<String, Timer> _removeTimers = <String, Timer>{};
+
+  /// How far each paused auto-dismiss had run when it was paused.
+  final Map<String, Duration> _pausedElapsed = <String, Duration>{};
   final _controller = StreamController<List<AppNotification>>.broadcast();
 
   bool _enabled = true;
@@ -222,6 +233,9 @@ class NotificationManager {
         : null;
     if (existing != null) return NotificationHandle(this, existing.id);
 
+    final dismissAfter = autoDismissAfter ?? defaultDuration(type);
+    final autoDismisses =
+        !persistent && progress == null && dismissAfter != Duration.zero;
     final notification = AppNotification(
       message: message,
       type: type,
@@ -234,14 +248,15 @@ class NotificationManager {
       onSecondaryAction: onSecondaryAction,
       isDismissing: false,
       dismissible: dismissible,
+      autoDismiss: autoDismisses
+          ? (start: DateTime.now(), length: dismissAfter)
+          : null,
     );
 
     _notifications.add(notification);
     _controller.add(_notifications.toList());
 
-    final shouldAutoDismiss = !persistent && progress == null;
-    final dismissAfter = autoDismissAfter ?? defaultDuration(type);
-    if (shouldAutoDismiss && dismissAfter != Duration.zero) {
+    if (autoDismisses) {
       _dismissTimers[notification.id]?.cancel();
       _dismissTimers[notification.id] = Timer(
         dismissAfter,
@@ -292,6 +307,11 @@ class NotificationManager {
     final index = _notifications.indexWhere((n) => n.id == id);
     if (index == -1) return;
 
+    final reschedules =
+        autoDismissAfter != null &&
+        autoDismissAfter != Duration.zero &&
+        (progress == null || clearProgress) &&
+        (_notifications[index].progress == null || clearProgress);
     final updated = _notifications[index].copyWith(
       message: message,
       type: type,
@@ -305,6 +325,10 @@ class NotificationManager {
       clearAction: clearAction,
       clearSecondaryAction: clearSecondaryAction,
       dismissible: dismissible,
+      autoDismiss: reschedules
+          ? (start: DateTime.now(), length: autoDismissAfter)
+          : null,
+      clearAutoDismiss: autoDismissAfter != null && !reschedules,
     );
     _notifications[index] = updated;
     _controller.add(_notifications.toList());
@@ -312,14 +336,53 @@ class NotificationManager {
     // Reschedule auto-dismiss if requested and it's no longer a task.
     if (autoDismissAfter != null) {
       _dismissTimers[id]?.cancel();
-      if (autoDismissAfter != Duration.zero && updated.progress == null) {
+      if (reschedules && _pausedElapsed.containsKey(id)) {
+        // Still hovered: the new countdown starts when the pointer leaves.
+        _pausedElapsed[id] = Duration.zero;
+      } else if (reschedules) {
         _dismissTimers[id] = Timer(autoDismissAfter, () => dismiss(id));
       }
     }
   }
 
+  /// Holds a notification's auto-dismiss, for example while it is hovered.
+  void pauseAutoDismiss(String id) {
+    final notification = _notifications.where((n) => n.id == id).firstOrNull;
+    final schedule = notification?.autoDismiss;
+    if (schedule == null ||
+        notification!.isDismissing ||
+        _pausedElapsed.containsKey(id)) {
+      return;
+    }
+    _dismissTimers.remove(id)?.cancel();
+    _pausedElapsed[id] = DateTime.now().difference(schedule.start);
+  }
+
+  /// Carries on a paused auto-dismiss for the time it had left.
+  void resumeAutoDismiss(String id) {
+    final elapsed = _pausedElapsed.remove(id);
+    final index = _notifications.indexWhere((n) => n.id == id);
+    if (elapsed == null || index == -1) return;
+    final schedule = _notifications[index].autoDismiss;
+    if (schedule == null) return;
+    // Moving the start keeps the countdown line where it stopped.
+    _notifications[index] = _notifications[index].copyWith(
+      autoDismiss: (
+        start: DateTime.now().subtract(elapsed),
+        length: schedule.length,
+      ),
+    );
+    _controller.add(_notifications.toList());
+    final remaining = schedule.length - elapsed;
+    _dismissTimers[id] = Timer(
+      remaining.isNegative ? Duration.zero : remaining,
+      () => dismiss(id),
+    );
+  }
+
   void dismiss(String id) {
     _dismissTimers.remove(id)?.cancel();
+    _pausedElapsed.remove(id);
     if (_removeTimers.containsKey(id)) return;
 
     final index = _notifications.indexWhere((n) => n.id == id);
@@ -341,6 +404,7 @@ class NotificationManager {
     }
     _dismissTimers.clear();
     _removeTimers.clear();
+    _pausedElapsed.clear();
     _notifications.clear();
     _controller.add(_notifications.toList());
   }
@@ -382,6 +446,9 @@ class NotificationOverlay extends StatelessWidget {
   final AppThemeData theme;
   final NotificationPosition position;
 
+  /// How many notifications show at once; newer ones wait their turn.
+  static const maxVisible = 8;
+
   // Without notifications this is an empty box rather than a Positioned.
   @override
   Widget build(BuildContext context) => StreamBuilder<List<AppNotification>>(
@@ -399,22 +466,31 @@ class NotificationOverlay extends StatelessWidget {
         bottom: isTop ? null : 16,
         left: isLeft ? 16 : null,
         right: isRight ? 16 : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: isLeft
-              ? CrossAxisAlignment.start
-              : isRight
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.center,
-          children: [
-            for (final n in notifications.take(5))
-              NotificationToast(
-                key: ValueKey(n.id),
-                notification: n,
-                theme: theme,
-                onDismiss: () => NotificationManager.instance.dismiss(n.id),
-              ),
-          ],
+        // A full stack on a short window scrolls instead of overflowing.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.max(0, MediaQuery.sizeOf(context).height - 32),
+          ),
+          child: SingleChildScrollView(
+            reverse: !isTop,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: isLeft
+                  ? CrossAxisAlignment.start
+                  : isRight
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.center,
+              children: [
+                for (final n in notifications.take(maxVisible))
+                  NotificationToast(
+                    key: ValueKey(n.id),
+                    notification: n,
+                    theme: theme,
+                    onDismiss: () => NotificationManager.instance.dismiss(n.id),
+                  ),
+              ],
+            ),
+          ),
         ),
       );
     },
@@ -439,8 +515,45 @@ class NotificationToast extends StatefulWidget {
   State<NotificationToast> createState() => _NotificationToastState();
 }
 
-class _NotificationToastState extends State<NotificationToast> {
+class _NotificationToastState extends State<NotificationToast>
+    with SingleTickerProviderStateMixin {
   double _dragOffset = 0.0;
+
+  /// Runs the countdown line while an auto-dismiss is scheduled.
+  late final _countdown = AnimationController(vsync: this);
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  @override
+  void didUpdateWidget(NotificationToast oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.notification.autoDismiss != widget.notification.autoDismiss) {
+      _startCountdown();
+    }
+  }
+
+  @override
+  void dispose() {
+    _countdown.dispose();
+    super.dispose();
+  }
+
+  void _startCountdown() {
+    final schedule = widget.notification.autoDismiss;
+    if (schedule == null) {
+      _countdown.stop();
+      return;
+    }
+    final elapsed = DateTime.now().difference(schedule.start);
+    _countdown
+      ..duration = schedule.length
+      ..value = elapsed.inMicroseconds / schedule.length.inMicroseconds
+      ..forward();
+  }
 
   bool get _isMobileTarget {
     final platform = Theme.of(context).platform;
@@ -504,7 +617,24 @@ class _NotificationToastState extends State<NotificationToast> {
                       setState(() => _dragOffset = 0.0);
                     }
                   },
-                  child: _buildSurface(maxWidth),
+                  // Hovering holds the countdown and the auto-dismiss.
+                  child: MouseRegion(
+                    onEnter: (_) {
+                      _countdown.stop();
+                      NotificationManager.instance.pauseAutoDismiss(
+                        notification.id,
+                      );
+                    },
+                    onExit: (_) {
+                      if (notification.autoDismiss != null) {
+                        _countdown.forward();
+                      }
+                      NotificationManager.instance.resumeAutoDismiss(
+                        notification.id,
+                      );
+                    },
+                    child: _buildSurface(maxWidth),
+                  ),
                 ),
               ),
             ),
@@ -524,106 +654,127 @@ class _NotificationToastState extends State<NotificationToast> {
         : child;
   }
 
+  /// A neutral card: the type's icon in its colour beside a small
+  /// uppercase label (the title, or the type) and the message, with any
+  /// actions or progress under the text and a countdown line along the
+  /// bottom while it is set to close by itself.
   Widget _buildSurface(double maxWidth) {
     final theme = widget.theme;
     final notification = widget.notification;
-    final radius = BorderRadius.circular(theme.cornerRadius);
+    final color = _getTypeColor();
     return Container(
       constraints: BoxConstraints(
         maxWidth: maxWidth,
         minWidth: maxWidth >= 280 ? 280 : 0,
       ),
       decoration: BoxDecoration(
-        color: Color.alphaBlend(
-          _getTypeColor().withValues(alpha: 0.10),
-          theme.background,
-        ).withValues(alpha: 0.95),
-        borderRadius: radius,
+        color: theme.surface,
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: theme.isDark ? 0.35 : 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
+      // Drawn over the content, so a border does not inset the countdown
+      // line from the bottom edge.
       foregroundDecoration: BoxDecoration(
-        borderRadius: radius,
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
         border: Border.all(color: theme.border),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 56,
-            child: ColoredBox(
-              color: _getTypeColor().withValues(alpha: 0.55),
-              child: Center(
-                child: Icon(_getTypeIcon(), color: Colors.white, size: 28),
-              ),
-            ),
-          ),
           Padding(
-            padding: const EdgeInsets.only(left: 56),
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 8, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (notification.title != null)
-                              Text(
-                                notification.title!,
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            Text(
-                              notification.message,
-                              style: TextStyle(
-                                color: notification.title != null
-                                    ? theme.textSecondary
-                                    : theme.textPrimary,
-                              ),
+                Row(
+                  spacing: 12,
+                  children: [
+                    Icon(_getTypeIcon(), color: color, size: 28),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 2,
+                        children: [
+                          Text(
+                            (notification.title ?? _typeLabel).toUpperCase(),
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
                             ),
-                          ],
+                          ),
+                          Text(
+                            notification.message,
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (notification.dismissible)
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: theme.textHint,
+                        ),
+                        onPressed: widget.onDismiss,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
                         ),
                       ),
-                      if (notification.dismissible)
-                        IconButton(
-                          icon: Icon(
-                            Icons.close,
-                            size: 18,
-                            color: theme.textHint,
-                          ),
-                          onPressed: widget.onDismiss,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 24,
-                            minHeight: 24,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
-                _buildFooter(),
+                // Lined up under the text, past the icon and its gap.
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 40),
+                  child: _buildFooter(),
+                ),
               ],
             ),
           ),
+          if (notification.autoDismiss != null)
+            RepaintBoundary(
+              child: AnimatedBuilder(
+                animation: _countdown,
+                builder: (context, _) => Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FractionallySizedBox(
+                    widthFactor: 1 - _countdown.value,
+                    child: ColoredBox(
+                      color: color,
+                      child: const SizedBox(height: 3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+
+  String get _typeLabel => switch (widget.notification.type) {
+    NotificationType.success => 'Done',
+    NotificationType.error => 'Error',
+    NotificationType.warning => 'Warning',
+    NotificationType.info => 'Info',
+    NotificationType.update => 'Update',
+    NotificationType.download => 'Download',
+    NotificationType.steam => 'Steam',
+  };
 
   Widget _buildFooter() {
     final notification = widget.notification;
@@ -639,7 +790,7 @@ class _NotificationToastState extends State<NotificationToast> {
     final progress = notification.progress;
     if (progress == null && actions.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+      padding: const EdgeInsets.only(top: 6),
       child: progress == null
           ? Align(
               alignment: Alignment.centerRight,
@@ -663,12 +814,12 @@ class _NotificationToastState extends State<NotificationToast> {
 
   IconData _getTypeIcon() => switch (widget.notification.type) {
     NotificationType.success => Icons.check_circle_outline,
-    NotificationType.error => Icons.error,
+    NotificationType.error => Icons.error_outline,
     NotificationType.warning => Icons.warning_amber_outlined,
     NotificationType.info => Icons.info_outline,
     NotificationType.update => Icons.update,
     NotificationType.download => Icons.download,
-    NotificationType.steam => Icons.cloud_download,
+    NotificationType.steam => Icons.cloud_download_outlined,
   };
 
   Color _getTypeColor() => switch (widget.notification.type) {

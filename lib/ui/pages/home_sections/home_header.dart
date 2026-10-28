@@ -16,13 +16,13 @@ import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/device_sync_dialog.dart';
+import '../../dialogs/library_stats_dialog.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
-import '../../widgets/settings_header_actions.dart';
 import '../../widgets/tag_list.dart';
 import 'animated_view_mode_toggle.dart';
 
@@ -330,10 +330,11 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           ),
         ),
         gap,
-        // Platform, sort and filters form one group, like settings headers.
-        SettingsHeaderActions(
+        // Platform, sort and filters are separate buttons on the header.
+        Row(
           key: const ValueKey('home-toolbar-actions'),
-          theme: theme,
+          mainAxisSize: MainAxisSize.min,
+          spacing: kElementHSpacing,
           children: [
             _IconMenuButton<String>(
               key: const ValueKey('home-platform-button'),
@@ -341,15 +342,15 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
               tooltip:
                   'Platform: ${selectedPlatform?.displayName ?? 'All Platforms'}',
               highlighted: selectedPlatform != null,
-              iconBuilder: (context, color, size) => selectedPlatform == null
+              iconBuilder: (context, _, size) => selectedPlatform == null
                   ? Icon(
                       Icons.videogame_asset_outlined,
-                      color: color,
+                      color: theme.accent,
                       size: size,
                     )
                   : PlatformIcon(
                       platform: selectedPlatform,
-                      color: color,
+                      color: theme.accent,
                       size: size,
                     ),
               selected: platformFilter ?? '',
@@ -378,8 +379,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
               theme: theme,
               tooltip: 'Sort: ${sortMode.displayName}',
               highlighted: sortMode != DefaultSettings.gameSortMode,
-              iconBuilder: (context, color, size) =>
-                  Icon(_sortIconFor(sortMode), color: color, size: size),
+              iconBuilder: (context, _, size) =>
+                  Icon(_sortIconFor(sortMode), color: theme.accent, size: size),
               selected: sortMode,
               entries: [
                 for (final mode in GameSortMode.values)
@@ -421,7 +422,11 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         isHorizontal: true,
         hasNotification: hasActiveFilters,
         onTap: _toggleFilterPanel,
-        iconData: _showFiltersPanel ? Icons.expand_less : Icons.tune,
+        iconBuilder: (context, _, size) => Icon(
+          _showFiltersPanel ? Icons.expand_less : Icons.tune,
+          color: theme.accent,
+          size: size,
+        ),
         tooltipMessage: hasActiveFilters
             ? 'Filters ($filterCount active)'
             : 'Filters',
@@ -543,7 +548,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       ),
     );
 
-    const gap = SizedBox.square(dimension: 8);
     final panel = LayoutBuilder(
       key: const ValueKey('home-filter-panel'),
       builder: (context, constraints) =>
@@ -552,20 +556,17 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
               height: _kSideBySideGroupHeight,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 8,
                 children: [
                   Expanded(child: tagsGroup(fill: true)),
-                  gap,
                   SizedBox(width: 320, child: optionsGroup(fill: true)),
                 ],
               ),
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                tagsGroup(fill: false),
-                gap,
-                optionsGroup(fill: false),
-              ],
+              spacing: 8,
+              children: [tagsGroup(fill: false), optionsGroup(fill: false)],
             ),
     );
     // The padding sits inside the clipping size animation, leaving room for
@@ -666,7 +667,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
 }
 
 /// The library size, or "12 / 263 Games" while filters narrow it, centered
-/// in a full-width label with optional controls at either end.
+/// in a full-width label with optional controls at either end. Tapping it
+/// opens the library stats.
 class _GamesCount extends ConsumerWidget {
   const _GamesCount({
     required this.theme,
@@ -688,20 +690,23 @@ class _GamesCount extends ConsumerWidget {
       gamesProvider.select((s) => s.filteredGames.length),
     );
     final total = ref.watch(gamesProvider.select((s) => s.games.length));
-    final text = Text(
-      shown < total ? '$shown / $total Games' : '$total Games',
-      style: TextStyle(color: theme.accent, fontWeight: FontWeight.w600),
-      textAlign: TextAlign.center,
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.ellipsis,
+    final text = Tooltip(
+      message: 'Library stats',
+      child: Text(
+        shown < total ? '$shown / $total Games' : '$total Games',
+        style: TextStyle(color: theme.accent, fontWeight: FontWeight.w600),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
     final hasControls = leading != null || trailing != null;
     // A min-size row keeps each control at its natural width; the toolbar
     // buttons otherwise fill the width they are offered.
     Widget control(Widget child) =>
         Row(mainAxisSize: MainAxisSize.min, children: [child]);
-    return Container(
+    final label = Container(
       key: const ValueKey('library-game-counter'),
       // Controls inside keep clear of the label's edges.
       padding: hasControls
@@ -735,8 +740,9 @@ class _GamesCount extends ConsumerWidget {
             )
           : Row(
               mainAxisSize: MainAxisSize.min,
+              spacing: 6,
               children: [
-                if (leading != null) ...[leading!, const SizedBox(width: 6)],
+                ?leading,
                 Flexible(
                   child: Padding(
                     padding: EdgeInsets.symmetric(
@@ -745,9 +751,18 @@ class _GamesCount extends ConsumerWidget {
                     child: text,
                   ),
                 ),
-                if (trailing != null) ...[const SizedBox(width: 6), trailing!],
+                ?trailing,
               ],
             ),
+    );
+    // Controls inside the label keep their own taps.
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () =>
+            showLibraryStatsDialog(context, ref.read(allGamesProvider)),
+        child: label,
+      ),
     );
   }
 }
@@ -864,7 +879,7 @@ class _LibrarySyncButton extends ConsumerWidget {
   (IconData, Color) _iconForStatus(DeviceSyncStatus status) => switch (status) {
     DeviceSyncStatus.discovering => (Icons.radar, theme.accent),
     DeviceSyncStatus.connecting => (Icons.link, theme.accent),
-    DeviceSyncStatus.connected => (Icons.link, theme.secondary),
+    DeviceSyncStatus.connected => (Icons.link, theme.accent),
     DeviceSyncStatus.syncing => (Icons.sync, theme.accent),
     DeviceSyncStatus.error => (Icons.link_off, theme.error),
     DeviceSyncStatus.idle => (Icons.sync_disabled, theme.textSecondary),
@@ -902,7 +917,7 @@ class _LibrarySyncButton extends ConsumerWidget {
           ? SizedBox.square(
               dimension: size - 2,
               child: AppCircularProgressIndicator(
-                color: enabled ? theme.secondary : theme.textSecondary,
+                color: enabled ? theme.accent : theme.textSecondary,
                 strokeWidth: 2,
               ),
             )

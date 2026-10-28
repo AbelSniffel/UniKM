@@ -170,6 +170,8 @@ class SettingsStore {
     SettingsKeys.encryptionEnabled: false,
     SettingsKeys.maskKeys: true,
     SettingsKeys.autoHideKeys: true,
+    SettingsKeys.autoLockMinutes: 0,
+    SettingsKeys.hideInRecents: false,
     SettingsKeys.developerMode: DefaultSettings.developerMode,
     SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
     SettingsKeys.showFpsCounter: DefaultSettings.showFpsCounter,

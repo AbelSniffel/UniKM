@@ -30,7 +30,8 @@ enum SectionGroupPosition {
   onlyAttached,
 }
 
-/// Settings layout uses separated groupboxes; visual styling is shared.
+/// Settings panels show their groups as plain headings over their content,
+/// without a frame, like the Tinted Tile dialogs.
 class SpacedSettingsGroups extends InheritedWidget {
   const SpacedSettingsGroups({super.key, required super.child});
 
@@ -106,33 +107,77 @@ class SectionGroupBox extends ConsumerWidget {
     final SectionTitleLocation effectiveTitleLocation =
         titleLocation ?? ref.watch(sectionTitleLocationProvider);
 
+    if (spaced) return _buildFlat(effectiveTitleLocation);
     return SearchHighlight(
       query: searchQuery,
       isMatch: isSearchMatch,
-      builder: (context, highlightValue) => _buildFrame(
-        context,
-        highlightValue,
-        effectiveTitleLocation,
-        spaced: spaced,
-      ),
+      builder: (context, highlightValue) =>
+          _buildFrame(context, highlightValue, effectiveTitleLocation),
     );
   }
 
-  Widget _buildHeaderText() {
+  /// The heading and content alone; a search marks its words in the title.
+  Widget _buildFlat(SectionTitleLocation location) =>
+      location == SectionTitleLocation.left
+      ? Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 12,
+          children: [
+            if (showTitle)
+              SizedBox(
+                width: 150,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 12,
+                  children: [_buildTitleRow(flat: true), ?trailing],
+                ),
+              ),
+            Expanded(child: child),
+          ],
+        )
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          spacing: 8,
+          children: [if (showTitle) _buildHeader(flat: true), child],
+        );
+
+  /// Flat headings centre their title on the trailing actions.
+  CrossAxisAlignment _alignment(bool flat) =>
+      flat ? CrossAxisAlignment.center : headerCrossAxisAlignment;
+
+  /// The icon and title; flat headings title in the text colour.
+  Widget _buildTitleRow({bool flat = false}) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: _alignment(flat),
+    children: [
+      if (titleIcon != null) ...[
+        Icon(titleIcon, size: 20, color: theme.accent),
+        const SizedBox(width: kElementHSpacing),
+      ],
+      Expanded(child: _buildHeaderText(flat: flat)),
+    ],
+  );
+
+  Widget _buildHeaderText({bool flat = false}) {
     final description = this.description?.trim();
     final hasDescription = description != null && description.isNotEmpty;
 
+    final titleStyle = TextStyle(
+      color: flat ? theme.textPrimary : theme.accent,
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      height: 1.35,
+    );
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(
-            text: title,
-            style: TextStyle(
-              color: theme.accent,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              height: 1.35,
-            ),
+          // A flat heading marks the searched words in its title.
+          searchHighlightSpan(
+            title,
+            flat && isSearchMatch ? searchQuery : '',
+            titleStyle,
+            searchMarkStyle(theme.accent),
           ),
           if (hasDescription)
             WidgetSpan(
@@ -166,9 +211,8 @@ class SectionGroupBox extends ConsumerWidget {
   Widget _buildFrame(
     BuildContext context,
     double highlightValue,
-    SectionTitleLocation location, {
-    bool spaced = false,
-  }) {
+    SectionTitleLocation location,
+  ) {
     final baseBorderColor = theme.border;
     final effectiveBorderColor =
         Color.lerp(
@@ -178,11 +222,11 @@ class SectionGroupBox extends ConsumerWidget {
         ) ??
         baseBorderColor;
     final highlightBg = theme.accent.withValues(alpha: 0.10 * highlightValue);
-    final pos = spaced ? SectionGroupPosition.only : groupPosition;
+    final pos = groupPosition;
 
     // Subtle alternating background: blend 40% toward the base background so
     // the difference is visible but not jarring.
-    final baseColor = alternateBackground && !spaced
+    final baseColor = alternateBackground
         ? Color.lerp(theme.surface, theme.background, 0.6)!
         : theme.surface;
     final bgColor = Color.alphaBlend(highlightBg, baseColor);
@@ -325,6 +369,35 @@ class SectionGroupBox extends ConsumerWidget {
     );
   }
 
+  // Both header layouts are built outside the layout callback, so a width
+  // change only picks one instead of rebuilding the title and trailing.
+  Widget _buildHeader({bool flat = false}) {
+    final title = Expanded(child: _buildTitleRow(flat: flat));
+    Column header(List<Widget> children) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 4,
+      children: children,
+    );
+    final inline = header([
+      Row(
+        crossAxisAlignment: _alignment(flat),
+        spacing: 12,
+        children: [title, ?trailing],
+      ),
+    ]);
+    if (!stackTrailingWhenCompact || trailing == null) return inline;
+    final stacked = header([
+      Row(crossAxisAlignment: _alignment(flat), children: [title]),
+      Align(alignment: Alignment.centerRight, child: trailing!),
+    ]);
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          constraints.maxWidth <= kSettingsCompactLayoutBreakpoint
+          ? stacked
+          : inline,
+    );
+  }
+
   Widget _buildTopTitle(BorderRadius outerRadius) {
     // Title header rounds only its own top corners (clipped by outer layer).
     final titleHeaderRadius = BorderRadius.only(
@@ -340,62 +413,25 @@ class SectionGroupBox extends ConsumerWidget {
         headerBottomPadding,
       ),
       decoration: BoxDecoration(borderRadius: titleHeaderRadius),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final stacked =
-              stackTrailingWhenCompact &&
-              trailing != null &&
-              constraints.maxWidth <= kSettingsCompactLayoutBreakpoint;
-          final title = Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: headerCrossAxisAlignment,
-            children: [
-              if (titleIcon != null) ...[
-                Icon(titleIcon, size: 20, color: theme.accent),
-                const SizedBox(width: kElementHSpacing),
-              ],
-              Expanded(child: _buildHeaderText()),
-            ],
-          );
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: headerCrossAxisAlignment,
-                children: [
-                  Expanded(child: title),
-                  if (!stacked && trailing != null) ...[
-                    const SizedBox(width: 12),
-                    trailing!,
-                  ],
-                ],
-              ),
-              if (stacked) ...[
-                const SizedBox(height: 4),
-                Align(alignment: Alignment.centerRight, child: trailing!),
-              ],
-            ],
-          );
-        },
-      ),
+      child: _buildHeader(),
     );
 
     // Bounded sections give their content the space remaining below the title.
     // The selected fit either fills that space or shrinks around short content.
     // Unbounded sections size naturally inside their surrounding scroll view.
+    final contentWidget = Padding(
+      padding: showTitle
+          ? EdgeInsets.only(
+              left: padding.left,
+              right: padding.right,
+              bottom: padding.bottom,
+            )
+          : padding,
+      child: child,
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final fitToHeight = constraints.hasBoundedHeight;
-        final contentWidget = Padding(
-          padding: showTitle
-              ? EdgeInsets.only(
-                  left: padding.left,
-                  right: padding.right,
-                  bottom: padding.bottom,
-                )
-              : padding,
-          child: child,
-        );
         return Column(
           mainAxisSize: contentFit == FlexFit.loose
               ? MainAxisSize.min

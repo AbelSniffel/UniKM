@@ -41,7 +41,9 @@ ButtonStyle themedFilledButtonStyle(
   bool destructive = false,
 }) {
   final backgroundColor = destructive ? theme.error : theme.primaryButton;
-  final foregroundColor = theme.primaryButtonText;
+  final foregroundColor = destructive
+      ? theme.onSecondaryText
+      : theme.primaryButtonText;
   final disabledBackground = destructive
       ? backgroundColor.withValues(alpha: 0.18)
       : theme.primaryButtonDisabled;
@@ -299,7 +301,7 @@ class DialogActionBar extends StatelessWidget {
     final effectiveEnabled = !isLoading && isEnabled;
 
     final Widget spinnerWidget = AppCircularProgressIndicator(
-      color: destructive ? theme.primaryButtonText : null,
+      color: destructive ? theme.onSecondaryText : null,
       strokeWidth: theme.progressIndicatorStrokeWidth,
       size: spinnerSize,
     );

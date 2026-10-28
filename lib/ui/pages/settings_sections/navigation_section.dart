@@ -35,14 +35,11 @@ class NavigationSection extends ConsumerWidget {
 
   static const SettingTextSpec navPositionSpec = SettingTextSpec(
     label: 'Position',
-    description: 'Select the position of the navigation bar in the app',
+    icon: Icons.view_sidebar_outlined,
   );
   // Horizontal and vertical panels keep separate placements with one label.
   static const SettingTextSpec navButtonArrangementHorizontalSpec =
-      SettingTextSpec(
-        label: 'Navigation Button Placement',
-        description: 'Position the page buttons relative to the gradient bar',
-      );
+      SettingTextSpec(label: 'Buttons', icon: Icons.smart_button_outlined);
   static const navButtonArrangementVerticalSpec =
       navButtonArrangementHorizontalSpec;
   static const SettingTextSpec navPanelOverlayStyleSpec = SettingTextSpec(
@@ -54,13 +51,22 @@ class NavigationSection extends ConsumerWidget {
     description: 'Alternative look for the gradient bar',
   );
   static const SettingsSearchGroup navigationSearchGroup = SettingsSearchGroup(
-    title: 'Layout',
+    title: 'Navigation Bar',
     settings: [
       navPositionSpec,
       navButtonArrangementHorizontalSpec,
       navButtonArrangementVerticalSpec,
     ],
-    extraTexts: ['Left', 'Right', 'Top', 'Bottom', 'Split'],
+    extraTexts: [
+      'Layout',
+      'Navigation Button Placement',
+      'Left',
+      'Right',
+      'Top',
+      'Bottom',
+      'Split',
+    ],
+    info: 'Where the bar sits and where its page buttons go.',
   );
 
   static const SettingsSearchGroup navOverlaySearchGroup = SettingsSearchGroup(
@@ -150,7 +156,7 @@ class NavigationSection extends ConsumerWidget {
               SettingsChoiceCard<NavBarPosition>(
                 theme: theme,
                 label: navPositionSpec.label,
-                description: navPositionSpec.description,
+                icon: navPositionSpec.icon,
                 value: navBarPosition,
                 choices: [
                   for (final position in NavBarPosition.values)
@@ -161,7 +167,7 @@ class NavigationSection extends ConsumerWidget {
               SettingsChoiceCard<NavButtonArrangement>(
                 theme: theme,
                 label: navButtonArrangementHorizontalSpec.label,
-                description: navButtonArrangementHorizontalSpec.description,
+                icon: navButtonArrangementHorizontalSpec.icon,
                 value: navButtonArrangement,
                 choices: [
                   for (final arrangement in NavButtonArrangement.values)

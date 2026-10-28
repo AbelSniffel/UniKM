@@ -163,9 +163,7 @@ class _PulseContent extends SingleChildRenderObjectWidget {
   void updateRenderObject(
     BuildContext context,
     _RenderPulseContent renderObject,
-  ) {
-    renderObject.decoration = decoration;
-  }
+  ) => renderObject.decoration = decoration;
 }
 
 class _RenderPulseContent extends RenderProxyBox {

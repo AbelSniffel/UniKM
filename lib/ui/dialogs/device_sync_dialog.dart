@@ -13,11 +13,9 @@ import '../../core/utils/format_utils.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/tinted_tiles.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/pair_code_widgets.dart';
-import '../widgets/section_groupbox.dart';
-import '../widgets/groupbox_family_title.dart';
-import '../widgets/settings_header_actions.dart';
 import '../widgets/toggle_switch.dart';
 
 Future<void> showDeviceSyncDialog(BuildContext context) => showAppDialog<void>(
@@ -36,11 +34,6 @@ Future<bool?> showChooseSyncDirectionDialog({
   required String peerName,
   required String peerId,
 }) {
-  const directionButtonStyle = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-  );
-
   return showAppDialog<bool>(
     context: context,
     barrierDismissible: true,
@@ -55,20 +48,9 @@ Future<bool?> showChooseSyncDirectionDialog({
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
         children: [
-          Text(
-            'Sync with $peerName',
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Choose where to send changes. Changes are merged into the destination library.',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          const SizedBox(height: 16),
+          TintedHeading(theme: theme, title: 'Sync with $peerName'),
           Consumer(
             builder: (context, ref, _) {
               final lastSync = ref.watch(syncPeerLastSyncProvider(peerId));
@@ -78,53 +60,30 @@ Future<bool?> showChooseSyncDirectionDialog({
               );
             },
           ),
-          if (hasMismatch) ...[
-            const SizedBox(height: 16),
+          if (hasMismatch)
             DialogBanner.warning(
               theme: theme,
               message:
                   'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
             ),
-          ],
+          const SizedBox(height: 8),
+          // Each direction merges its changes into the other library.
+          TintedOptionTile(
+            theme: theme,
+            icon: Icons.download,
+            title: 'Receive',
+            subtitle: 'Merge $peerName\'s changes into this library',
+            onTap: () => Navigator.pop(ctx, false),
+          ),
+          TintedOptionTile(
+            theme: theme,
+            icon: Icons.upload,
+            title: 'Send',
+            subtitle: 'Merge this library\'s changes into $peerName',
+            onTap: () => Navigator.pop(ctx, true),
+          ),
         ],
       ),
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.pop(ctx, false),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  textStyle: directionButtonStyle,
-                ),
-                icon: const Icon(Icons.download, size: 18),
-                label: const Text('Receive'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  textStyle: directionButtonStyle,
-                ),
-                icon: const Icon(Icons.upload, size: 18),
-                label: const Text('Send'),
-              ),
-            ),
-          ],
-        ),
-      ],
     ),
   );
 }
@@ -290,6 +249,12 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
             ),
           ),
         ),
+        if (isDesktop)
+          IconButton(
+            tooltip: 'Grant Firewall Access',
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            onPressed: grantFirewallAccess,
+          ),
       ],
       content: syncAsync.when(
         loading: () => const SizedBox(
@@ -300,7 +265,6 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
         data: (sync) => _SyncContent(
           sync: sync,
           theme: theme,
-          onGrantFirewallAccess: isDesktop ? grantFirewallAccess : null,
           refreshing: _refreshing,
           onRefresh: _refreshDiscovery,
         ),
@@ -319,14 +283,12 @@ class _SyncContent extends ConsumerWidget {
   const _SyncContent({
     required this.sync,
     required this.theme,
-    this.onGrantFirewallAccess,
     required this.refreshing,
     required this.onRefresh,
   });
 
   final DeviceSyncSnapshot sync;
   final AppThemeData theme;
-  final VoidCallback? onGrantFirewallAccess;
   final bool refreshing;
   final VoidCallback onRefresh;
 
@@ -501,110 +463,84 @@ class _SyncContent extends ConsumerWidget {
         sync.statusMessage?.toLowerCase().contains('declined') == true ||
         sync.statusMessage?.toLowerCase().contains('failed') == true;
 
+    final statusColor =
+        sync.status == DeviceSyncStatus.error || isNegativeMessage
+        ? theme.error
+        : theme.secondary;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
       children: [
-        GroupBoxFamilyTitle(
+        TintedHeading(
           theme: theme,
-          title: 'Device List',
-          icon: Icons.devices_outlined,
-          trailingBuilder: (expanded) => SettingsHeaderActions(
-            theme: theme,
-            expanded: expanded,
-            children: [
-              if (onGrantFirewallAccess != null)
-                AppNavigationButton(
-                  theme: theme,
-                  isSelected: false,
-                  isEnabled: true,
-                  isHorizontal: true,
-                  tooltipMessage: 'Grant Firewall Access',
-                  iconData: Icons.admin_panel_settings_outlined,
-                  iconSize: 20,
-                  minWidth: 40,
-                  minHeight: 36,
-                  onTap: onGrantFirewallAccess,
-                ),
-              AppNavigationButton(
-                theme: theme,
-                isSelected: false,
-                isEnabled: sync.enabled && !isBusy,
-                isHorizontal: true,
-                tooltipMessage: 'Refresh device discovery',
-                iconData: isRefreshing ? null : Icons.refresh,
-                iconSize: 20,
-                minWidth: 40,
-                minHeight: 36,
-                onTap: sync.enabled && !isBusy ? onRefresh : null,
-                iconBuilder: isRefreshing
-                    ? (context, color, size) => SizedBox(
-                        width: size,
-                        height: size,
-                        child: AppCircularProgressIndicator(color: color),
-                      )
-                    : null,
-              ),
-            ],
+          title: 'Devices',
+          trailing: '${unifiedRows.length}',
+          action: IconButton(
+            style: theme.compactIconButtonStyle,
+            tooltip: 'Refresh device discovery',
+            icon: isRefreshing
+                ? const AppCircularProgressIndicator(size: 18)
+                : const Icon(Icons.refresh),
+            onPressed: sync.enabled && !isBusy ? onRefresh : null,
           ),
         ),
-        const SizedBox(height: kGroupBoxSpacing),
-        SectionGroupBox(
-          title: '',
-          showTitle: false,
-          theme: theme,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 200),
-            child: unifiedRows.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      'No devices found yet. Searching the local network while this window is open.',
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: unifiedRows.length,
-                    itemBuilder: (_, i) {
-                      final row = unifiedRows[i];
-                      final visual = _deviceVisual(row);
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Consumer(
-                          builder: (context, ref, _) {
-                            final lastSync = row.trusted == null
-                                ? null
-                                : ref.watch(syncPeerLastSyncProvider(row.id));
-                            return Tooltip(
-                              message: lastSync == null
-                                  ? ''
-                                  : 'Last sync: ${lastSync.when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
-                              child: Icon(
-                                _deviceTypeIcon(row),
-                                color: visual.color,
-                              ),
-                            );
-                          },
-                        ),
-                        title: Text(row.name, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          '${row.host}:${row.port} \u2022 ${visual.label}',
-                        ),
-                        trailing: _buildRowActions(context, row, ref, notifier),
-                      );
-                    },
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 260),
+          child: unifiedRows.isEmpty
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.accent.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(theme.cornerRadius),
                   ),
-          ),
+                  child: Row(
+                    spacing: 12,
+                    children: [
+                      Icon(Icons.radar, color: theme.textHint),
+                      Expanded(
+                        child: Text(
+                          'No devices found yet. Searching the local network while this window is open.',
+                          style: TextStyle(
+                            color: theme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: unifiedRows.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final row = unifiedRows[i];
+                    final visual = _deviceVisual(row);
+                    return _DeviceTile(
+                      key: ValueKey(row.id),
+                      theme: theme,
+                      icon: _deviceTypeIcon(row),
+                      color: visual.color,
+                      name: row.name,
+                      address: '${row.host}:${row.port}',
+                      status: visual.label,
+                      pairedId: row.trusted == null ? null : row.id,
+                      actions: _buildRowActions(context, row, ref, notifier),
+                    );
+                  },
+                ),
         ),
         if (hasStatus)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, left: 4, right: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+            ),
             child: Row(
+              spacing: 8,
               children: [
                 if (isBusy)
                   const AppCircularProgressIndicator(strokeWidth: 2, size: 14)
@@ -613,14 +549,9 @@ class _SyncContent extends ConsumerWidget {
                     isNegativeMessage
                         ? Icons.link_off
                         : _statusIcon(sync.status),
-                    size: 14,
-                    color:
-                        (sync.status == DeviceSyncStatus.error ||
-                            isNegativeMessage)
-                        ? theme.error
-                        : theme.secondary,
+                    size: 16,
+                    color: statusColor,
                   ),
-                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     sync.statusMessage!,
@@ -631,12 +562,9 @@ class _SyncContent extends ConsumerWidget {
             ),
           ),
         if (showDeviceId)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, left: 4),
-            child: SelectableText(
-              'Device ID: ${sync.deviceId}',
-              style: TextStyle(color: theme.textSecondary, fontSize: 11),
-            ),
+          SelectableText(
+            'Device ID: ${sync.deviceId}',
+            style: TextStyle(color: theme.textSecondary, fontSize: 11),
           ),
       ],
     );
@@ -778,6 +706,102 @@ class _SyncContent extends ConsumerWidget {
     }
 
     return const SizedBox.shrink();
+  }
+}
+
+/// A device as a tinted tile: its type icon in a square tinted with its
+/// state's colour, its name, address and state, and its actions. Paired
+/// devices show their last sync on hovering the icon.
+class _DeviceTile extends StatelessWidget {
+  const _DeviceTile({
+    super.key,
+    required this.theme,
+    required this.icon,
+    required this.color,
+    required this.name,
+    required this.address,
+    required this.status,
+    required this.pairedId,
+    required this.actions,
+  });
+
+  final AppThemeData theme;
+  final IconData icon;
+  final Color color;
+  final String name;
+  final String address;
+  final String status;
+
+  /// The peer id of a paired device, for its last sync.
+  final String? pairedId;
+  final Widget actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(theme.cornerRadius);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.08),
+        borderRadius: radius,
+      ),
+      child: Row(
+        spacing: 12,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final pairedId = this.pairedId;
+              return Tooltip(
+                message: pairedId == null
+                    ? ''
+                    : 'Last sync: ${ref.watch(syncPeerLastSyncProvider(pairedId)).when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.18),
+                    borderRadius: radius,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+              );
+            },
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: '$address  ·  '),
+                      TextSpan(
+                        text: status,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          actions,
+        ],
+      ),
+    );
   }
 }
 

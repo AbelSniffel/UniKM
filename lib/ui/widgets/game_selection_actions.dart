@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -18,9 +19,12 @@ import '../dialogs/game_editor_dialog.dart';
 import '../dialogs/steam_lookup_dialog.dart';
 import '../widgets/notification_system.dart';
 
+/// Reads a provider through a widget's ref or a provider container.
+typedef _Read = T Function<T>(ProviderListenable<T> provider);
+
 abstract final class GameSelectionActions {
-  static bool _syncOperationLocked(WidgetRef ref, {required String action}) {
-    if (!ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
+  static bool _syncOperationLocked(_Read read, {required String action}) {
+    if (!read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
       return false;
     }
     NotificationManager.instance.warning(
@@ -43,7 +47,7 @@ abstract final class GameSelectionActions {
     required List<Game> targets,
     Game? initialGame,
   }) {
-    if (_syncOperationLocked(ref, action: 'edit games')) return;
+    if (_syncOperationLocked(ref.read, action: 'edit games')) return;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.info(
         'Please wait for the Steam fetch to complete before opening Game Editor',
@@ -111,6 +115,53 @@ abstract final class GameSelectionActions {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Redeem
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /// Opens the store page that redeems each Steam or GOG key, then offers to
+  /// mark those games as used.
+  static Future<void> openRedeemPages(
+    ProviderContainer container,
+    List<Game> targets,
+  ) async {
+    final pages = [
+      for (final game in targets)
+        if (redeemPageUrl(game.platform, game.gameKey) case final url?)
+          (game: game, url: url),
+    ];
+    if (pages.isEmpty) {
+      NotificationManager.instance.info('No Steam or GOG keys selected');
+      return;
+    }
+
+    for (final (:game, :url) in pages) {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {
+        NotificationManager.instance.error(
+          'Failed to open the redeem page for ${game.title}',
+        );
+      }
+    }
+
+    final unused = [
+      for (final page in pages)
+        if (!page.game.isUsed) page.game,
+    ];
+    late final NotificationHandle notice;
+    notice = NotificationManager.instance.showHandle(
+      message: pages.length == 1
+          ? 'Opened the redeem page for ${pages.first.game.title}'
+          : 'Opened ${pages.length} redeem pages',
+      actionLabel: unused.isEmpty ? null : 'Mark as Used',
+      onAction: () {
+        notice.dismiss();
+        _setUsed(container.read, unused, true);
+      },
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Steam data fetch
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -144,21 +195,27 @@ abstract final class GameSelectionActions {
     WidgetRef ref,
     List<Game> targets,
     bool nextValue,
+  ) => _setUsed(ref.read, targets, nextValue);
+
+  static Future<void> _setUsed(
+    _Read read,
+    List<Game> targets,
+    bool nextValue,
   ) async {
-    if (_syncOperationLocked(ref, action: 'edit games')) return;
-    if (ref.read(batchFetchProvider).isActive) {
+    if (_syncOperationLocked(read, action: 'edit games')) return;
+    if (read(batchFetchProvider).isActive) {
       NotificationManager.instance.warning(
         'Cannot edit games while Steam data fetch is in progress',
       );
       return;
     }
 
-    final ok = await ref
-        .read(gamesProvider.notifier)
-        .setGamesUsed(targets.map((g) => g.id).toList(), nextValue);
+    final ok = await read(
+      gamesProvider.notifier,
+    ).setGamesUsed(targets.map((g) => g.id).toList(), nextValue);
 
     if (!ok) {
-      final error = ref.read(gamesProvider.select((s) => s.error));
+      final error = read(gamesProvider.select((s) => s.error));
       NotificationManager.instance.error(error ?? 'Failed to update games');
       return;
     }
@@ -181,7 +238,7 @@ abstract final class GameSelectionActions {
     AppThemeData theme,
     List<Game> targets,
   ) async {
-    if (_syncOperationLocked(ref, action: 'delete games')) return;
+    if (_syncOperationLocked(ref.read, action: 'delete games')) return;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.warning(
         'Cannot delete games while Steam data fetch is in progress',

@@ -15,6 +15,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_search_field.dart';
 import '../widgets/app_tab_bar.dart';
+import '../widgets/search_highlight.dart';
 import '../widgets/groupbox_family_title.dart';
 import '../widgets/settings_section_grid.dart';
 import '../widgets/settings_section_family.dart';
@@ -255,7 +256,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       selectedSection,
     );
 
-    bool matchesSearch(String text) => _matchesSearch(searchQuery, text);
+    bool matchesSearch(String text) => settingsSearchMatches(searchQuery, text);
 
     // Created outside the layout callback: a resize then reuses these widgets,
     // so the page lays out again at the new width without rebuilding. The
@@ -280,7 +281,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       searchQuery: searchQuery,
       onSearchChanged: (value) => ref
           .read(settingsPageSearchQueryProvider.notifier)
-          .set(value.toLowerCase()),
+          .set(value.trim().toLowerCase()),
       sections: effectiveSection == 'all'
           ? _settingsSections
           : [?selectedSectionDefinition],
@@ -298,12 +299,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ],
       ),
     );
-  }
-
-  /// Check if a text matches the search query (partial match)
-  bool _matchesSearch(String searchQuery, String text) {
-    if (searchQuery.isEmpty) return true;
-    return text.toLowerCase().contains(searchQuery);
   }
 
   _SettingsSectionDefinition? _selectedSectionDefinitionFor(String sectionId) {
@@ -509,6 +504,7 @@ class _SettingsPageBody extends ConsumerWidget {
         RepaintBoundary(
           key: ValueKey('settings-section-card-${section.id}'),
           child: SettingsSectionFamily(
+            theme: theme,
             header: GroupBoxFamilyTitle(
               key: ValueKey<String>(
                 'settings-section-header-${section.headerTitle}',
@@ -525,8 +521,6 @@ class _SettingsPageBody extends ConsumerWidget {
                 ),
                 _ => null,
               },
-              searchQuery: searchQuery,
-              isSearchMatch: showOnlyMatches,
             ),
             child: section.builder(
               theme: theme,
@@ -547,50 +541,54 @@ class _SettingsPageBody extends ConsumerWidget {
               index: sectionIndex,
               slide: false,
               child: RepaintBoundary(
-                child: CustomScrollView(
-                  controller: scrollController,
-                  key: const ValueKey<String>('settings-content-scroll'),
-                  slivers: [
-                    if (visibleSections.isEmpty)
-                      SliverFillRemaining(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search_off,
-                                size: 48,
-                                color: theme.textHint,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No settings found for "$searchQuery"',
-                                style: TextStyle(
+                // Settings cards mark their label when it matches.
+                child: SettingsSearchScope(
+                  query: searchQuery,
+                  child: CustomScrollView(
+                    controller: scrollController,
+                    key: const ValueKey<String>('settings-content-scroll'),
+                    slivers: [
+                      if (visibleSections.isEmpty)
+                        SliverFillRemaining(
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off,
+                                  size: 48,
                                   color: theme.textHint,
-                                  fontSize: 16,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                        sliver: SliverToBoxAdapter(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) =>
-                                SettingsSectionGrid(
-                                  columns: settingsSectionColumnCount(
-                                    constraints.maxWidth,
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No settings found for "$searchQuery"',
+                                  style: TextStyle(
+                                    color: theme.textHint,
+                                    fontSize: 16,
                                   ),
-                                  spacing: kSettingsSectionSpacing,
-                                  children: sectionCards,
                                 ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                          sliver: SliverToBoxAdapter(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) =>
+                                  SettingsSectionGrid(
+                                    columns: settingsSectionColumnCount(
+                                      constraints.maxWidth,
+                                    ),
+                                    spacing: kSettingsSectionSpacing,
+                                    children: sectionCards,
+                                  ),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

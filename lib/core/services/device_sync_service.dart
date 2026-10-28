@@ -1312,7 +1312,7 @@ class DeviceSyncService {
       }
 
       requirePairingActive();
-      return _upsertTrustedPeer(
+      return await _upsertTrustedPeer(
         peer,
         fingerprint: remoteDecisionSpub,
         pairingId: requestId,

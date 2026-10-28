@@ -26,63 +26,51 @@ class CardDisplaySection extends ConsumerWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec showTitleSpec = SettingTextSpec(
-    label: 'Show title chip',
-    description: 'Display game title chip on cards',
+    label: 'Title',
+    icon: Icons.title,
   );
   static const SettingTextSpec showTitleOnNoPictureSpec = SettingTextSpec(
-    label: 'Show title on only picture-less cards',
-    description: 'Show the title chip only on cards that have no cover image',
+    label: 'Title over covers',
+    icon: Icons.hide_image_outlined,
   );
   static const SettingTextSpec showPlatformSpec = SettingTextSpec(
-    label: 'Show platform chip',
-    description: 'Display platform icon on game cards',
+    label: 'Platform',
+    icon: Icons.storefront_outlined,
   );
   static const SettingTextSpec showTagsSpec = SettingTextSpec(
-    label: 'Show tag chips',
-    description: 'Display tags on game cards',
+    label: 'Tags',
+    icon: Icons.label_outline,
   );
   static const SettingTextSpec showTagsOnHoverOnlySpec = SettingTextSpec(
-    label: 'Show game tags and ratings only on hover',
-    description:
-        'Hide tag chips and ratings at rest and reveal them only while hovering',
+    label: 'Tags & ratings until hover',
+    icon: Icons.mouse_outlined,
   );
   static const SettingTextSpec showPlatformOnHoverOnlySpec = SettingTextSpec(
-    label: 'Show platform type only on hover',
-    description:
-        'Hide the platform chip at rest and reveal it only while hovering',
+    label: 'Platform until hover',
+    icon: Icons.ads_click,
   );
   static const SettingTextSpec showDeadlineSpec = SettingTextSpec(
-    label: 'Show deadline chip',
-    description: 'Display deadline info on game cards',
+    label: 'Deadline',
+    icon: Icons.event_outlined,
   );
   static const SettingTextSpec showRatingsSpec = SettingTextSpec(
-    label: 'Show ratings',
-    description: 'Display review info on game cards',
+    label: 'Ratings',
+    icon: Icons.thumb_up_outlined,
   );
   static const SettingTextSpec listViewModeSpec = SettingTextSpec(
-    label: 'List view mode',
-    description: 'Choose how dense list view cards should be',
+    label: 'Density',
+    icon: Icons.view_agenda_outlined,
   );
 
   static const SettingsSearchGroup listViewSearchGroup = SettingsSearchGroup(
     title: 'List View',
     settings: [listViewModeSpec],
-    extraTexts: ['regular', 'slim', 'list', 'dense'],
+    extraTexts: ['List view mode', 'regular', 'slim', 'list', 'dense'],
+    info: 'Slim fits more games in list view.',
   );
 
-  static const SettingsSearchGroup displayRulesSearchGroup =
-      SettingsSearchGroup(
-        title: 'Display Rules',
-        settings: [
-          showTagsOnHoverOnlySpec,
-          showPlatformOnHoverOnlySpec,
-          showTitleOnNoPictureSpec,
-        ],
-        extraTexts: ['hover', 'picture-less', 'cover image'],
-      );
-
   static const SettingsSearchGroup chipsSearchGroup = SettingsSearchGroup(
-    title: 'Information Chips',
+    title: 'Card Chips',
     settings: [
       showTitleSpec,
       showPlatformSpec,
@@ -90,8 +78,21 @@ class CardDisplaySection extends ConsumerWidget {
       showDeadlineSpec,
       showRatingsSpec,
     ],
-    extraTexts: ['card', 'display'],
+    extraTexts: ['Information Chips', 'card', 'display', 'review'],
+    info: 'Chips shown on game cards.',
   );
+
+  static const SettingsSearchGroup displayRulesSearchGroup =
+      SettingsSearchGroup(
+        title: 'Hide Chips',
+        settings: [
+          showTagsOnHoverOnlySpec,
+          showPlatformOnHoverOnlySpec,
+          showTitleOnNoPictureSpec,
+        ],
+        extraTexts: ['Display Rules', 'hover', 'picture-less', 'cover image'],
+        info: 'Hovering a card shows its hidden chips.',
+      );
 
   static bool supportsListViewMode(TargetPlatform platform) =>
       switch (platform) {
@@ -103,8 +104,8 @@ class CardDisplaySection extends ConsumerWidget {
 
   static List<SettingsSearchGroup> searchGroupsFor(TargetPlatform platform) => [
     if (supportsListViewMode(platform)) listViewSearchGroup,
-    displayRulesSearchGroup,
     chipsSearchGroup,
+    displayRulesSearchGroup,
   ];
 
   @override
@@ -134,7 +135,7 @@ class CardDisplaySection extends ConsumerWidget {
               SettingsChoiceCard<ListViewDensityMode>(
                 theme: theme,
                 label: listViewModeSpec.label,
-                description: listViewModeSpec.description,
+                icon: listViewModeSpec.icon,
                 value: resolveListViewDensityMode(
                   slimListView: cardSettings.slimListView,
                 ),
@@ -151,41 +152,8 @@ class CardDisplaySection extends ConsumerWidget {
         ),
         buildSearchableSectionEntry(
           theme: theme,
-          group: displayRulesSearchGroup,
-          titleIcon: Icons.tune,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          childBuilder: () => buildSpecToggleSettingList(
-            theme: theme,
-            entries: [
-              (
-                spec: showTagsOnHoverOnlySpec,
-                value: cardSettings.showTagsOnHoverOnly,
-                onChanged: settingsNotifier.setter(
-                  SettingsKeys.showTagsOnHoverOnly,
-                ),
-              ),
-              (
-                spec: showPlatformOnHoverOnlySpec,
-                value: cardSettings.showPlatformOnHoverOnly,
-                onChanged: settingsNotifier.setter(
-                  SettingsKeys.showPlatformOnHoverOnly,
-                ),
-              ),
-              (
-                spec: showTitleOnNoPictureSpec,
-                value: cardSettings.showTitleOnNoPicture,
-                onChanged: settingsNotifier.setter(
-                  SettingsKeys.showTitleOnNoPicture,
-                ),
-              ),
-            ],
-          ),
-        ),
-        buildSearchableSectionEntry(
-          theme: theme,
           group: chipsSearchGroup,
-          titleIcon: Icons.crop,
+          titleIcon: Icons.style_outlined,
           searchQuery: searchQuery,
           matchesSearch: matchesSearch,
           childBuilder: () => buildSpecToggleSettingList(
@@ -219,6 +187,39 @@ class CardDisplaySection extends ConsumerWidget {
                 spec: showRatingsSpec,
                 value: cardSettings.showRatings,
                 onChanged: settingsNotifier.setter(SettingsKeys.showRatings),
+              ),
+            ],
+          ),
+        ),
+        buildSearchableSectionEntry(
+          theme: theme,
+          group: displayRulesSearchGroup,
+          titleIcon: Icons.visibility_outlined,
+          searchQuery: searchQuery,
+          matchesSearch: matchesSearch,
+          childBuilder: () => buildSpecToggleSettingList(
+            theme: theme,
+            entries: [
+              (
+                spec: showTagsOnHoverOnlySpec,
+                value: cardSettings.showTagsOnHoverOnly,
+                onChanged: settingsNotifier.setter(
+                  SettingsKeys.showTagsOnHoverOnly,
+                ),
+              ),
+              (
+                spec: showPlatformOnHoverOnlySpec,
+                value: cardSettings.showPlatformOnHoverOnly,
+                onChanged: settingsNotifier.setter(
+                  SettingsKeys.showPlatformOnHoverOnly,
+                ),
+              ),
+              (
+                spec: showTitleOnNoPictureSpec,
+                value: cardSettings.showTitleOnNoPicture,
+                onChanged: settingsNotifier.setter(
+                  SettingsKeys.showTitleOnNoPicture,
+                ),
               ),
             ],
           ),

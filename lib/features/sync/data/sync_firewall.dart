@@ -343,118 +343,63 @@ class SyncFirewall {
     return false;
   }
 
-  // Linux rule arguments shared by grant and clear, so both always name the
-  // same rules for the discovery (UDP) and transfer (TCP) ports.
-  static List<String> _ufwRule(int port, String protocol) => [
-    'allow',
-    'from',
-    'any',
-    'to',
-    'any',
-    'port',
-    '$port',
-    'proto',
-    protocol,
+  // Each Linux firewall tool in the order tried, with the rule arguments for
+  // a port. Grant and clear share them so both always name the same rules for
+  // the discovery (UDP) and transfer (TCP) ports.
+  static List<(String, List<String> Function(int port, String protocol))>
+  _linuxRuleTools({required bool add}) => [
+    (
+      'ufw',
+      (port, protocol) => [
+        if (!add) 'delete',
+        ...'allow from any to any port $port proto $protocol'.split(' '),
+      ],
+    ),
+    (
+      'firewall-cmd',
+      (port, protocol) => [
+        '--${add ? 'add' : 'remove'}-port=$port/$protocol',
+        '--permanent',
+      ],
+    ),
+    (
+      'iptables',
+      (port, protocol) => [
+        add ? '-A' : '-D',
+        ...'INPUT -p $protocol --dport $port -j ACCEPT'.split(' '),
+      ],
+    ),
   ];
 
-  static List<String> _iptablesRule(String action, String protocol, int port) =>
-      [action, 'INPUT', '-p', protocol, '--dport', '$port', '-j', 'ACCEPT'];
+  /// Adds the rules with the first tool that accepts the discovery rule, or
+  /// removes them with every tool. True when any discovery rule changed.
+  Future<bool> _applyLinuxRules({required bool add}) async {
+    var anyApplied = false;
+    for (final (tool, rule) in _linuxRuleTools(add: add)) {
+      try {
+        if (await _runWithElevation(tool, rule(SyncPorts.discovery, 'udp'))) {
+          anyApplied = true;
+        } else if (add) {
+          continue;
+        }
+        await _runWithElevation(tool, rule(SyncPorts.transfer, 'tcp'));
+        if (tool == 'firewall-cmd' && anyApplied) {
+          await _runWithElevation(tool, ['--reload']);
+        }
+        if (add) return true;
+      } catch (_) {}
+    }
+    return anyApplied;
+  }
 
   Future<bool> grantLinuxFirewallAccess() async {
     if (kIsWeb || !Platform.isLinux) return false;
-
-    // Try ufw
-    try {
-      final udpOk = await _runWithElevation(
-        'ufw',
-        _ufwRule(SyncPorts.discovery, 'udp'),
-      );
-      if (udpOk) {
-        await _runWithElevation('ufw', _ufwRule(SyncPorts.transfer, 'tcp'));
-        return true;
-      }
-    } catch (_) {}
-
-    // Try firewalld
-    try {
-      final udpOk = await _runWithElevation('firewall-cmd', [
-        '--add-port=${SyncPorts.discovery}/udp',
-        '--permanent',
-      ]);
-      if (udpOk) {
-        await _runWithElevation('firewall-cmd', [
-          '--add-port=${SyncPorts.transfer}/tcp',
-          '--permanent',
-        ]);
-        await _runWithElevation('firewall-cmd', ['--reload']);
-        return true;
-      }
-    } catch (_) {}
-
-    // Try iptables as fallback
-    try {
-      final udpOk = await _runWithElevation(
-        'iptables',
-        _iptablesRule('-A', 'udp', SyncPorts.discovery),
-      );
-      if (udpOk) {
-        await _runWithElevation(
-          'iptables',
-          _iptablesRule('-A', 'tcp', SyncPorts.transfer),
-        );
-        return true;
-      }
-    } catch (_) {}
-
-    return false;
+    return _applyLinuxRules(add: true);
   }
 
   /// Remove the firewall rules added by [grantLinuxFirewallAccess].
   Future<bool> clearLinuxFirewallAccess() async {
     if (kIsWeb || !Platform.isLinux) return false;
-
-    bool anyRemoved = false;
-
-    // Try ufw
-    try {
-      final udpOk = await _runWithElevation('ufw', [
-        'delete',
-        ..._ufwRule(SyncPorts.discovery, 'udp'),
-      ]);
-      if (udpOk) anyRemoved = true;
-      await _runWithElevation('ufw', [
-        'delete',
-        ..._ufwRule(SyncPorts.transfer, 'tcp'),
-      ]);
-    } catch (_) {}
-
-    // Try firewalld
-    try {
-      final udpOk = await _runWithElevation('firewall-cmd', [
-        '--remove-port=${SyncPorts.discovery}/udp',
-        '--permanent',
-      ]);
-      if (udpOk) anyRemoved = true;
-      await _runWithElevation('firewall-cmd', [
-        '--remove-port=${SyncPorts.transfer}/tcp',
-        '--permanent',
-      ]);
-      if (anyRemoved) await _runWithElevation('firewall-cmd', ['--reload']);
-    } catch (_) {}
-
-    // Try iptables
-    try {
-      final udpOk = await _runWithElevation(
-        'iptables',
-        _iptablesRule('-D', 'udp', SyncPorts.discovery),
-      );
-      if (udpOk) anyRemoved = true;
-      await _runWithElevation(
-        'iptables',
-        _iptablesRule('-D', 'tcp', SyncPorts.transfer),
-      );
-    } catch (_) {}
-
-    return anyRemoved;
+    return _applyLinuxRules(add: false);
   }
 }

@@ -28,12 +28,12 @@ class GameEditorLayout extends ConsumerStatefulWidget {
     required this.theme,
     required this.titleController,
     required this.cover,
-    required this.informationBuilder,
+    required this.information,
     required this.detailsBuilder,
     required this.tags,
     required this.notesController,
     required this.onNotesChanged,
-    this.optionsBuilder,
+    this.options,
     this.wideDetails,
     this.trailing,
   });
@@ -41,11 +41,11 @@ class GameEditorLayout extends ConsumerStatefulWidget {
   final AppThemeData theme;
   final TextEditingController titleController;
   final Widget cover;
-  final Widget Function(SectionGroupPosition position) informationBuilder;
+  final Widget information;
   final Widget Function(Widget? information) detailsBuilder;
 
   /// When supplied, stack Options under Information beside the cover.
-  final Widget Function(SectionGroupPosition position)? optionsBuilder;
+  final Widget? options;
 
   /// Optional remaining Details content after both groups move to the header.
   final Widget? wideDetails;
@@ -91,18 +91,14 @@ class GameEditorLayoutState extends ConsumerState<GameEditorLayout>
       position: navigation.$1,
       appearance: navigation.$2,
     );
-    final information = widget.informationBuilder(
-      informationBesideCover
-          ? SectionGroupPosition.only
-          : SectionGroupPosition.first,
-    );
+    final information = widget.information;
     return LayoutBuilder(
       builder: (context, constraints) {
         final notesBesideInformation =
             informationBesideCover &&
             constraints.maxWidth >= kGameEditorNotesBreakpoint;
         final optionsBesideCover =
-            informationBesideCover && widget.optionsBuilder != null;
+            informationBesideCover && widget.options != null;
         final scaler = MediaQuery.textScalerOf(context);
         final headerBudget =
             constraints.maxHeight - scaler.scale(72) - 20 - 160;
@@ -146,9 +142,7 @@ class GameEditorLayoutState extends ConsumerState<GameEditorLayout>
               cover: widget.cover,
               trailing: widget.trailing,
               information: informationBesideCover ? information : null,
-              options: optionsBesideCover
-                  ? widget.optionsBuilder!(SectionGroupPosition.only)
-                  : null,
+              options: optionsBesideCover ? widget.options : null,
               maxPanelHeight: optionsBesideCover
                   ? math.max(scaler.scale(44) + 136, headerBudget)
                   : null,
@@ -251,11 +245,8 @@ class GameEditorHeader extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            information!,
-                            const SizedBox(height: kDialogSpacing),
-                            options!,
-                          ],
+                          spacing: kDialogSpacing,
+                          children: [information!, options!],
                         ),
                       ),
                     ),
@@ -291,19 +282,14 @@ class GameEditorHeader extends StatelessWidget {
                   )
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: kDialogSpacing,
                     children: [
                       SizedBox(
                         width: CoverImageCard.preferredWidth,
                         child: cover,
                       ),
-                      if (information != null) ...[
-                        const SizedBox(width: kDialogSpacing),
-                        Expanded(child: information!),
-                      ],
-                      if (notes != null) ...[
-                        const SizedBox(width: kDialogSpacing),
-                        Expanded(child: notes!),
-                      ],
+                      if (information != null) Expanded(child: information!),
+                      if (notes != null) Expanded(child: notes!),
                     ],
                   ),
           ),
@@ -368,7 +354,6 @@ class GameEditorInformation extends StatelessWidget {
     this.keyLabel = 'Game Key',
     this.titleValidator,
     this.keyValidator,
-    this.groupPosition = SectionGroupPosition.first,
   });
 
   final AppThemeData theme;
@@ -385,7 +370,6 @@ class GameEditorInformation extends StatelessWidget {
   final String keyLabel;
   final FormFieldValidator<String>? titleValidator;
   final FormFieldValidator<String>? keyValidator;
-  final SectionGroupPosition groupPosition;
 
   @override
   Widget build(BuildContext context) => SectionGroupBox(
@@ -395,7 +379,6 @@ class GameEditorInformation extends StatelessWidget {
     titleLocation: SectionTitleLocation.top,
     headerCrossAxisAlignment: CrossAxisAlignment.center,
     trailing: platformSelector,
-    groupPosition: groupPosition,
     child: SingleChildScrollView(
       child: Column(
         children: [
@@ -485,41 +468,47 @@ class GameEditorTags extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.only(top: 16),
-    children: [
-      SectionGroupBox(
-        title: 'Custom Tags',
-        description: 'click to add/remove',
-        theme: theme,
-        titleIcon: Icons.label,
-        groupPosition: SectionGroupPosition.first,
-        child: customTags.isEmpty
-            ? _placeholder('No custom tags created yet')
-            : SizedBox(
-                height: 120,
-                child: TagList(
-                  tags: customTags,
-                  theme: theme,
-                  selectedTagIds: selectedTagIds,
-                  onTagToggled: onTagToggled,
-                  showSearch: true,
+  Widget build(BuildContext context) {
+    final chosen = customTags
+        .where((tag) => selectedTagIds.contains(tag.id))
+        .length;
+    return ListView(
+      padding: const EdgeInsets.only(top: 16),
+      children: [
+        SectionGroupBox(
+          title: 'Custom Tags',
+          description: customTags.isEmpty
+              ? null
+              : '$chosen of ${customTags.length} selected',
+          theme: theme,
+          titleIcon: Icons.label,
+          child: customTags.isEmpty
+              ? _placeholder('No custom tags created yet')
+              : SizedBox(
+                  height: 120,
+                  child: TagList(
+                    tags: customTags,
+                    theme: theme,
+                    selectedTagIds: selectedTagIds,
+                    onTagToggled: onTagToggled,
+                    showSearch: true,
+                  ),
                 ),
-              ),
-      ),
-      SectionGroupBox(
-        title: 'Steam Tags',
-        description: 'auto-managed',
-        theme: theme,
-        titleIcon: FontAwesomeIcons.steam.data,
-        groupPosition: SectionGroupPosition.last,
-        alternateBackground: true,
-        child: steamTags.isEmpty
-            ? _placeholder('No Steam tags imported yet')
-            : TagList(tags: steamTags, theme: theme, allSelected: true),
-      ),
-    ],
-  );
+        ),
+        const SizedBox(height: kDialogSpacing),
+        SectionGroupBox(
+          title: 'Steam Tags',
+          description: 'auto-managed',
+          theme: theme,
+          titleIcon: FontAwesomeIcons.steam.data,
+          alternateBackground: true,
+          child: steamTags.isEmpty
+              ? _placeholder('No Steam tags imported yet')
+              : TagList(tags: steamTags, theme: theme, allSelected: true),
+        ),
+      ],
+    );
+  }
 }
 
 class GameEditorNotes extends StatelessWidget {

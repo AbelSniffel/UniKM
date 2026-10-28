@@ -5,6 +5,7 @@ import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/biometric_unlock.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
@@ -180,6 +181,7 @@ class EncryptionManagementDialog extends StatefulWidget {
     required this.onDisable,
     required this.onChangePassword,
     this.initialTab = 0,
+    this.biometric,
   });
 
   final AppThemeData theme;
@@ -188,12 +190,17 @@ class EncryptionManagementDialog extends StatefulWidget {
   final Future<void> Function(String currentPassword, String newPassword)
   onChangePassword;
 
+  /// Adds a tab that pairs or unpairs biometric unlock, on phones that
+  /// support it.
+  final BiometricPairing? biometric;
+
   static Future<bool> show(
     BuildContext context,
     AppThemeData theme, {
     required Future<void> Function(String password) onDisable,
     required Future<void> Function(String currentPassword, String newPassword)
     onChangePassword,
+    BiometricPairing? biometric,
   }) async =>
       await showAppDialog<bool>(
         context: context,
@@ -201,6 +208,7 @@ class EncryptionManagementDialog extends StatefulWidget {
           theme: theme,
           onDisable: onDisable,
           onChangePassword: onChangePassword,
+          biometric: biometric,
         ),
       ) ??
       false;
@@ -214,7 +222,9 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
     with SingleTickerProviderStateMixin {
   final _disableForm = GlobalKey<FormState>();
   final _changeForm = GlobalKey<FormState>();
+  final _biometricForm = GlobalKey<FormState>();
   final _disablePassword = TextEditingController();
+  final _biometricPassword = TextEditingController();
   final _currentPassword = TextEditingController();
   final _newPassword = TextEditingController();
   final _confirmPassword = TextEditingController();
@@ -228,7 +238,7 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
     super.initState();
     _selectedTab = widget.initialTab;
     _tabs = TabController(
-      length: 2,
+      length: widget.biometric == null ? 2 : 3,
       initialIndex: widget.initialTab,
       vsync: this,
       animationDuration: kTabTransition,
@@ -249,46 +259,57 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
     _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     _disablePassword.dispose();
+    _biometricPassword.dispose();
     _currentPassword.dispose();
     _newPassword.dispose();
     _confirmPassword.dispose();
     super.dispose();
   }
 
+  /// Whether the biometric tab turns an existing pairing off.
+  bool get _unpairing => widget.biometric?.paired ?? false;
+
   Future<void> _submit() async {
     if (_busy) return;
-    final disabling = _selectedTab == 0;
-    final form = disabling ? _disableForm : _changeForm;
-    if (!form.currentState!.validate()) return;
+    final tab = _selectedTab;
+    final form = switch (tab) {
+      0 => _disableForm,
+      1 => _changeForm,
+      _ => _biometricForm,
+    };
+    if (!(tab == 2 && _unpairing) && !form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
       _error = null;
     });
+    final label = BiometricUnlock.label;
     try {
-      if (disabling) {
-        await widget.onDisable(_disablePassword.text);
-      } else {
-        await widget.onChangePassword(_currentPassword.text, _newPassword.text);
-      }
+      await switch (tab) {
+        0 => widget.onDisable(_disablePassword.text),
+        1 => widget.onChangePassword(_currentPassword.text, _newPassword.text),
+        _ when _unpairing => widget.biometric!.unpair(),
+        _ => widget.biometric!.pair(_biometricPassword.text),
+      };
       if (!mounted) return;
-      NotificationManager.instance.success(
-        disabling
-            ? 'Database encryption disabled'
-            : 'Password changed successfully',
-      );
+      NotificationManager.instance.success(switch (tab) {
+        0 => 'Database encryption disabled',
+        1 => 'Password changed successfully',
+        _ when _unpairing => '$label unlock turned off for this database',
+        _ => '$label unlock turned on for this database',
+      });
       // Re-enable popping after the operation; the busy route blocks dismissals.
       setState(() => _busy = false);
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       setState(
-        () => _error = switch ((error, disabling)) {
-          (InvalidPasswordException(), true) => 'Incorrect password',
-          (InvalidPasswordException(), false) =>
-            'Current password is incorrect',
-          (_, true) => 'Failed to disable encryption: $error',
-          (_, false) => 'Failed to change password: $error',
+        () => _error = switch ((error, tab)) {
+          (InvalidPasswordException(), 1) => 'Current password is incorrect',
+          (InvalidPasswordException(), _) => 'Incorrect password',
+          (_, 0) => 'Failed to disable encryption: $error',
+          (_, 1) => 'Failed to change password: $error',
+          _ => '$label was not confirmed, so nothing changed. Try again.',
         },
       );
     } finally {
@@ -316,6 +337,37 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
       ],
     ),
   );
+
+  Widget _biometricContent() {
+    final label = BiometricUnlock.label;
+    final text = Text(
+      _unpairing
+          ? '$label unlock is on for this database on this phone. Turn it off '
+                'to require the password again.'
+          : 'Unlock this database with $label instead of its password. '
+                'Enter the password once, then confirm with $label. Other '
+                'databases are paired separately.',
+      style: TextStyle(color: widget.theme.textSecondary, fontSize: 13),
+    );
+    if (_unpairing) return text;
+    return Form(
+      key: _biometricForm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
+        children: [
+          text,
+          PasswordField(
+            controller: _biometricPassword,
+            labelText: 'Database Password',
+            validator: requiredPassword(),
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _submit(),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _changeContent() => Form(
     key: _changeForm,
@@ -360,7 +412,9 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final disabling = _selectedTab == 0;
+    final tab = _selectedTab;
+    final disabling = tab == 0;
+    final label = BiometricUnlock.label;
     return PopScope(
       canPop: !_busy,
       child: DialogInteractionScope(
@@ -374,10 +428,12 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
           maxHeight: 600,
           showCloseButton: !_busy,
           title: DialogHeader(
-            icon: Icons.lock,
-            title: disabling
-                ? 'Disable Encryption'
-                : 'Change Database Password',
+            icon: tab == 2 ? Icons.fingerprint : Icons.lock,
+            title: switch (tab) {
+              0 => 'Disable Encryption',
+              1 => 'Change Database Password',
+              _ => '$label Unlock',
+            },
             theme: theme,
           ),
           content: Column(
@@ -389,7 +445,11 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
                 child: AppTabBar(
                   theme: theme,
                   controller: _tabs,
-                  tabs: const [AppTab('Disable'), AppTab('Change Password')],
+                  tabs: [
+                    const AppTab('Disable'),
+                    const AppTab('Change Password'),
+                    if (widget.biometric != null) AppTab(label),
+                  ],
                 ),
               ),
               const SizedBox(height: kDialogSpacing),
@@ -400,15 +460,18 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: kDialogSpacing,
                     children: [
                       AppTabTransition(
                         index: _selectedTab,
-                        child: disabling ? _disableContent() : _changeContent(),
+                        child: switch (tab) {
+                          0 => _disableContent(),
+                          1 => _changeContent(),
+                          _ => _biometricContent(),
+                        },
                       ),
-                      if (_error != null) ...[
-                        const SizedBox(height: kDialogSpacing),
+                      if (_error != null)
                         Text(_error!, style: TextStyle(color: theme.secondary)),
-                      ],
                     ],
                   ),
                 ),
@@ -433,9 +496,22 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
                   theme: theme,
                   onCancel: () => Navigator.of(context).pop(false),
                   onConfirm: _submit,
-                  confirmIcon: disabling ? Icons.lock_open : Icons.key,
-                  confirmLabel: disabling ? 'Disable' : 'Change Password',
-                  loadingLabel: disabling ? 'Disabling...' : 'Changing...',
+                  confirmIcon: switch (tab) {
+                    0 => Icons.lock_open,
+                    1 => Icons.key,
+                    _ => Icons.fingerprint,
+                  },
+                  confirmLabel: switch (tab) {
+                    0 => 'Disable',
+                    1 => 'Change Password',
+                    _ when _unpairing => 'Turn Off',
+                    _ => 'Turn On',
+                  },
+                  loadingLabel: switch (tab) {
+                    0 => 'Disabling...',
+                    1 => 'Changing...',
+                    _ => 'Confirming...',
+                  },
                   isLoading: _busy,
                 ),
               ],

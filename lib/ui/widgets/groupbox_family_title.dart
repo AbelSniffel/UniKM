@@ -3,22 +3,21 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
-import 'search_highlight.dart';
 
 /// Header actions move below the title at this content width or narrower.
 /// The short title and compact actions fit inline slightly below the card
 /// compact width, so the header stays on one row a little longer.
 const double kFamilyTitleStackWidth = kSettingsCompactLayoutBreakpoint - 10;
 
-/// Shared inset title pill for groupbox families throughout the GUI.
+/// A settings panel's header, on top of its groups with a line between
+/// them: an accent tint with the icon in its own square and the title
+/// beside it.
 class GroupBoxFamilyTitle extends StatelessWidget {
   const GroupBoxFamilyTitle({
     super.key,
     required this.theme,
     required this.title,
     required this.icon,
-    this.searchQuery = '',
-    this.isSearchMatch = false,
     this.trailingBuilder,
   });
 
@@ -26,84 +25,70 @@ class GroupBoxFamilyTitle extends StatelessWidget {
   final AppThemeData theme;
   final String title;
   final IconData icon;
-  final String searchQuery;
-  final bool isSearchMatch;
 
   @override
-  Widget build(BuildContext context) => SearchHighlight(
-    query: searchQuery,
-    isMatch: isSearchMatch,
-    builder: (context, highlightValue) {
-      final backgroundColor = Color.lerp(
-        theme.accent,
-        theme.secondary,
-        0.15 * highlightValue,
-      )!;
-      final iconAndTextColor =
-          ThemeData.estimateBrightnessForColor(backgroundColor) ==
-              Brightness.dark
-          ? Colors.white
-          : Colors.black87;
-
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          gradient: SurfaceDepth.gradient(backgroundColor),
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-          border: Border.all(
-            color: Color.lerp(backgroundColor, Colors.black, 0.22)!,
-          ),
-          boxShadow: [
-            SurfaceDepth.shadow(isDark: theme.isDark),
-            if (highlightValue > 0)
-              BoxShadow(
-                color: theme.accent.withValues(alpha: 0.18 * highlightValue),
-                blurRadius: 14,
-                spreadRadius: 1.5,
-              ),
-          ],
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Measured like the inset body width below the header.
-            final contentWidth = constraints.maxWidth + 2;
-            final stacked =
-                trailingBuilder != null &&
-                contentWidth <= kFamilyTitleStackWidth;
-            final titleRow = Row(
-              children: [
-                Icon(icon, size: 20, color: iconAndTextColor),
-                const SizedBox(width: kElementHSpacing),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: iconAndTextColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                if (!stacked && trailingBuilder != null) ...[
-                  const SizedBox(width: 12),
-                  trailingBuilder!(false),
-                ],
-              ],
-            );
-            if (!stacked) return titleRow;
-            return Column(
-              children: [
-                titleRow,
-                const SizedBox(height: 4),
-                SizedBox(width: double.infinity, child: trailingBuilder!(true)),
-              ],
-            );
-          },
-        ),
-      );
-    },
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      gradient: SurfaceDepth.gradient(
+        Color.alphaBlend(theme.accent.withValues(alpha: 0.12), theme.surface),
+        highlight: 0.085,
+      ),
+      border: Border(bottom: BorderSide(color: theme.border)),
+    ),
+    child: _buildTitle(),
   );
+
+  // Both layouts are built once per build, outside the layout callback, so a
+  // width change only picks one instead of rebuilding the header actions.
+  Widget _buildTitle() {
+    final icon = Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+      ),
+      child: Icon(this.icon, size: 20, color: theme.accent),
+    );
+    final text = Expanded(
+      child: Text(
+        title,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: theme.textPrimary,
+          fontWeight: FontWeight.w700,
+          fontSize: 17,
+        ),
+      ),
+    );
+    const gap = SizedBox(width: 12);
+    final titleRow = Row(children: [icon, gap, text]);
+    final trailingBuilder = this.trailingBuilder;
+    if (trailingBuilder == null) return titleRow;
+    final inline = Row(
+      children: [
+        icon,
+        gap,
+        text,
+        const SizedBox(width: 12),
+        trailingBuilder(false),
+      ],
+    );
+    final stacked = Column(
+      children: [
+        titleRow,
+        const SizedBox(height: 4),
+        SizedBox(width: double.infinity, child: trailingBuilder(true)),
+      ],
+    );
+    // Measured like the groups below, which the panel's padding makes 8px
+    // narrower than this header's content.
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          constraints.maxWidth - 8 <= kFamilyTitleStackWidth ? stacked : inline,
+    );
+  }
 }

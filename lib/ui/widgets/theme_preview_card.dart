@@ -14,7 +14,7 @@ class ThemePreviewCard extends StatelessWidget {
     required this.onTap,
     this.onDoubleTap,
     this.preview,
-    this.height = 68,
+    this.height = PreviewCard.defaultHeight,
     this.tapKey,
   });
 

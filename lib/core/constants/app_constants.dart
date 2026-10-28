@@ -70,6 +70,7 @@ const double kMinWindowHeight = 560.0;
 const Duration kVeryFastAnimation = Duration(milliseconds: 100);
 const Duration kFastAnimation = Duration(milliseconds: 160);
 const Duration kMediumAnimation = Duration(milliseconds: 250);
+
 /// Shared timing for tab selection, tab content, and main-page navigation.
 const Duration kTabTransition = Duration(milliseconds: 350);
 const Curve kTabTransitionCurve = Curves.easeInOutCubic;
@@ -113,5 +114,15 @@ String steamSearchPageUrl(String term) =>
     steamStoreUrl('search/?term=${Uri.encodeComponent(term)}');
 String steamRegisterKeyPageUrl(String key) =>
     steamStoreUrl('account/registerkey?key=${Uri.encodeComponent(key)}');
+
+/// The store page that redeems [key] on [platform], or null when that store
+/// has no such link.
+String? redeemPageUrl(String platform, String key) => key.isEmpty
+    ? null
+    : switch (platform) {
+        'Steam' => steamRegisterKeyPageUrl(key),
+        'GOG' => 'https://www.gog.com/redeem/${Uri.encodeComponent(key)}',
+        _ => null,
+      };
 String steamCdnAppImageUrl(String appId, String assetName) =>
     '$kSteamCdnBase/steam/apps/$appId/$assetName';

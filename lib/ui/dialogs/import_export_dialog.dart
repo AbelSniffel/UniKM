@@ -33,50 +33,93 @@ import '../pages/settings_sections/settings_control_cards.dart';
 import 'database_unlock_dialog.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/app_action_button.dart';
-import '../widgets/app_radio_list_tile.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
-import '../widgets/section_groupbox.dart';
-import '../../core/constants/app_constants.dart';
+import '../widgets/tinted_tiles.dart';
 
 enum _ImportFileKind { sqlite, encrypted, json, csv, txt, unsupported }
 
-typedef _DialogRadioOption = ({String value, String title, String subtitle});
+typedef _DialogOption = ({
+  String value,
+  IconData icon,
+  String title,
+  String subtitle,
+});
 
-const _exportFormatOptions = <_DialogRadioOption>[
+const _exportFormatOptions = <_DialogOption>[
   (
     value: 'db',
+    icon: Icons.storage,
     title: 'SQLite (.db)',
     subtitle: 'Full database file (recommended backup)',
   ),
-  (value: 'json', title: 'JSON', subtitle: 'Full data with structure'),
-  (value: 'csv', title: 'CSV', subtitle: 'Spreadsheet compatible'),
-  (value: 'txt', title: 'Text', subtitle: 'Simple title | key format'),
+  (
+    value: 'json',
+    icon: Icons.data_object,
+    title: 'JSON',
+    subtitle: 'Full data with structure',
+  ),
+  (
+    value: 'csv',
+    icon: Icons.table_chart_outlined,
+    title: 'CSV',
+    subtitle: 'Spreadsheet compatible',
+  ),
+  (
+    value: 'txt',
+    icon: Icons.notes,
+    title: 'Text',
+    subtitle: 'Simple title | key format',
+  ),
 ];
 
 const _encryptedExportFormatOption = (
   value: 'enc',
+  icon: Icons.lock_outline,
   title: 'Encrypted DB (.enc)',
   subtitle: 'Encrypted database file (no password included)',
 );
 
-const _importModeOptions = <_DialogRadioOption>[
-  (value: 'merge', title: 'Merge', subtitle: 'Add new games, skip duplicates'),
+const _importModeOptions = <_DialogOption>[
+  (
+    value: 'merge',
+    icon: Icons.merge_type,
+    title: 'Merge',
+    subtitle: 'Add new games, skip duplicates',
+  ),
   (
     value: 'replace',
+    icon: Icons.delete_sweep_outlined,
     title: 'Replace',
     subtitle: 'Clear existing data and import',
   ),
-  (value: 'update', title: 'Update', subtitle: 'Add new and update existing'),
+  (
+    value: 'update',
+    icon: Icons.sync,
+    title: 'Update',
+    subtitle: 'Add new and update existing',
+  ),
 ];
 
-Widget _buildDialogRadioOption(AppThemeData theme, _DialogRadioOption option) =>
-    AppRadioListTile<String>(
+/// One tile per option, the [selected] one checked. Replace is tinted in the
+/// error colour, as it clears the library.
+List<Widget> _optionTiles(
+  AppThemeData theme,
+  Iterable<_DialogOption> options,
+  String selected,
+  ValueChanged<String> onSelected,
+) => [
+  for (final option in options)
+    TintedOptionTile(
       theme: theme,
-      value: option.value,
+      icon: option.icon,
       title: option.title,
       subtitle: option.subtitle,
-    );
+      selected: option.value == selected,
+      color: option.value == 'replace' ? theme.error : null,
+      onTap: () => onSelected(option.value),
+    ),
+];
 
 /// Show export dialog
 Future<void> showExportDialog(BuildContext context) => showAppDialog<void>(
@@ -217,71 +260,60 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
         children: [
-          // Format selection
-          SectionGroupBox(
-            title: 'Format',
-            titleIcon: Icons.format_align_center,
-            theme: theme,
-            groupPosition: showsAdditionalInfo
-                ? SectionGroupPosition.first
-                : SectionGroupPosition.only,
-            child: RadioGroup<String>(
-              groupValue: _exportFormat,
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => _exportFormat = v);
-              },
-              child: Column(
-                children: [
-                  _buildDialogRadioOption(theme, _exportFormatOptions[0]),
-                  if (hasEncryptedSession)
-                    _buildDialogRadioOption(
-                      theme,
-                      _encryptedExportFormatOption,
-                    ),
-                  for (final option in _exportFormatOptions.skip(1))
-                    _buildDialogRadioOption(theme, option),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              TintedHeading(theme: theme, title: 'Format'),
+              ..._optionTiles(
+                theme,
+                [
+                  _exportFormatOptions.first,
+                  if (hasEncryptedSession) _encryptedExportFormatOption,
+                  ..._exportFormatOptions.skip(1),
                 ],
+                _exportFormat,
+                (value) => setState(() => _exportFormat = value),
               ),
-            ),
+            ],
           ),
-
-          // Options
           if (showsAdditionalInfo)
-            SectionGroupBox(
-              title: 'Include Additional Information',
-              titleIcon: Icons.info_outline,
-              theme: theme,
-              groupPosition: SectionGroupPosition.last,
-              alternateBackground: true,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  AppActionButton(
-                    theme: theme,
-                    label: 'Used Keys',
-                    selected: _includeUsed,
-                    onTap: () => setState(() => _includeUsed = !_includeUsed),
-                  ),
-                  if (_exportFormat != 'txt') ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 8,
+              children: [
+                TintedHeading(theme: theme, title: 'Include'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
                     AppActionButton(
                       theme: theme,
-                      label: 'Tags',
-                      selected: _includeTags,
-                      onTap: () => setState(() => _includeTags = !_includeTags),
+                      label: 'Used Keys',
+                      selected: _includeUsed,
+                      onTap: () => setState(() => _includeUsed = !_includeUsed),
                     ),
-                    AppActionButton(
-                      theme: theme,
-                      label: 'Notes',
-                      selected: _includeNotes,
-                      onTap: () =>
-                          setState(() => _includeNotes = !_includeNotes),
-                    ),
+                    if (_exportFormat != 'txt') ...[
+                      AppActionButton(
+                        theme: theme,
+                        label: 'Tags',
+                        selected: _includeTags,
+                        onTap: () =>
+                            setState(() => _includeTags = !_includeTags),
+                      ),
+                      AppActionButton(
+                        theme: theme,
+                        label: 'Notes',
+                        selected: _includeNotes,
+                        onTap: () =>
+                            setState(() => _includeNotes = !_includeNotes),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+              ],
             ),
         ],
       ),
@@ -979,101 +1011,60 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
         children: [
-          // File selection
-          SectionGroupBox(
-            title: 'Source File',
-            titleIcon: Icons.upload_file,
-            theme: theme,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FileDropField(
-                  key: const ValueKey('import-source-file-target'),
-                  theme: theme,
-                  description:
-                      'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
-                  selectedName: _selectedFile == null
-                      ? null
-                      : p.basename(_selectedFile!),
-                  enabled: !_isImporting,
-                  onBrowse: _selectFile,
-                  onFileSelected: _handleSelectedFilePath,
-                  onClear: _clearFileSelection,
-                  invalidDropMessage:
-                      'Drop one supported database import file.',
-                ),
-                if (_selectedFile != null && _previewCount > 0) ...[
-                  const SizedBox(height: kElementVSpacing),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(theme.cornerRadius),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: theme.accent),
-                        const SizedBox(width: kElementHSpacing),
-                        Text(
-                          '$_previewCount games found in file',
-                          style: TextStyle(
-                            color: theme.accent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              TintedHeading(
+                theme: theme,
+                title: 'Source File',
+                trailing: _selectedFile != null && _previewCount > 0
+                    ? '$_previewCount games found in file'
+                    : null,
+              ),
+              FileDropField(
+                key: const ValueKey('import-source-file-target'),
+                theme: theme,
+                description:
+                    'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
+                selectedName: _selectedFile == null
+                    ? null
+                    : p.basename(_selectedFile!),
+                enabled: !_isImporting,
+                onBrowse: _selectFile,
+                onFileSelected: _handleSelectedFilePath,
+                onClear: _clearFileSelection,
+                invalidDropMessage: 'Drop one supported database import file.',
+              ),
+            ],
           ),
-
-          const SizedBox(height: kDialogSpacing),
-
-          SectionGroupBox(
-            title: 'Import Mode',
-            titleIcon: Icons.swap_horiz,
-            theme: theme,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                RadioGroup<String>(
-                  groupValue: _importMode,
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _importMode = v);
-                  },
-                  child: Column(
-                    children: [
-                      for (final option in _importModeOptions)
-                        _buildDialogRadioOption(theme, option),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              TintedHeading(theme: theme, title: 'Import Mode'),
+              ..._optionTiles(
+                theme,
+                _importModeOptions,
+                _importMode,
+                (value) => setState(() => _importMode = value),
+              ),
+              SettingsToggleCard(
+                theme: theme,
+                icon: Icons.content_copy_outlined,
+                label: 'Allow duplicate keys',
+                value: _allowDuplicates,
+                onChanged: (value) => setState(() => _allowDuplicates = value),
+              ),
+            ],
           ),
-          const SizedBox(height: kDialogSpacing),
-          SettingsToggleCard(
-            theme: theme,
-            label: 'Allow duplicate keys',
-            value: _allowDuplicates,
-            onChanged: (value) => setState(() => _allowDuplicates = value),
-          ),
-
-          if (_importMode == 'replace') ...[
-            const SizedBox(height: 12),
+          if (_importMode == 'replace')
             DialogBanner.warning(
               theme: theme,
               message: 'Replace mode will delete all existing data!',
             ),
-          ],
         ],
       ),
       actions: [

@@ -4,7 +4,6 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -16,16 +15,18 @@ import '../../models/game.dart';
 import '../controllers/game_editor_fields.dart';
 import '../../providers/app_providers.dart';
 import 'delete_games_dialog.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/cover_image_card.dart';
+import '../widgets/deadline_chip.dart';
+import '../widgets/game_options_row.dart';
 import '../widgets/game_editor_layout.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
-import '../widgets/section_groupbox.dart';
 import '../widgets/platform_menu_button.dart';
-import '../widgets/game_options_row.dart';
-import '../widgets/deadline_chip.dart';
+import '../widgets/tinted_tiles.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/services/key_privacy.dart';
 import '../../core/services/steam_service.dart';
 import '../dialogs/steam_lookup_dialog.dart';
 
@@ -263,7 +264,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   void _copyKey() {
-    Clipboard.setData(ClipboardData(text: _currentGame.gameKey));
+    KeyPrivacy.copy(_currentGame.gameKey);
     NotificationManager.instance.success('Key copied to clipboard');
   }
 
@@ -409,16 +410,11 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
           theme: theme,
           titleController: _fields.title,
           cover: _buildCover(theme),
-          trailing: IconButton(
-            tooltip: 'Close Game Editor',
-            icon: Icon(Icons.close, color: theme.textSecondary),
-            onPressed: _dismissDialog,
-          ),
+          trailing: _buildHeaderActions(theme),
           notesController: _fields.notes,
           onNotesChanged: _markChanged,
-          informationBuilder: (position) => GameEditorInformation(
+          information: GameEditorInformation(
             theme: theme,
-            groupPosition: position,
             platformSelector: PlatformMenuButton(
               theme: theme,
               value: _platform,
@@ -447,7 +443,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             lastUpdatedAt: _lastUpdatedAt,
             steamReviewScore: _fetchedReviewScore,
             steamReviewCount: _fetchedReviewCount,
-            options: _buildChips(theme),
+            status: _buildStatus(theme),
           ),
           tags: GameEditorTags(
             theme: theme,
@@ -492,7 +488,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   });
 
-  Widget _buildChips(AppThemeData theme) => GameOptionsRow(
+  Widget _buildStatus(AppThemeData theme) => GameOptionsRow(
     theme: theme,
     isDlc: _isDlc,
     onDlcChanged: (value) => _edit(() => _isDlc = value),
@@ -520,79 +516,111 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   }
 
-  Widget _buildNavigationBar(AppThemeData theme) => Center(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.background,
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: Icon(
-              Icons.chevron_left,
-              color: _currentIndex > 0 ? theme.textPrimary : theme.textHint,
-            ),
-            tooltip: 'Previous Game',
-            onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              '${_currentIndex + 1}/${_gameIds.length}',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.chevron_right,
-              color: _currentIndex < _gameIds.length - 1
-                  ? theme.textPrimary
-                  : theme.textHint,
-            ),
-            tooltip: 'Next Game',
-            onPressed: _currentIndex < _gameIds.length - 1
-                ? () => _navigate(1)
-                : null,
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _buildFooter(AppThemeData theme) => Row(
+  /// The Steam actions beside the close button.
+  Widget _buildHeaderActions(AppThemeData theme) => Row(
+    mainAxisSize: MainAxisSize.min,
     spacing: kElementHSpacing,
     children: [
-      // Delete icon button
+      if (_platform == 'Steam') ...[
+        IconButton(
+          tooltip: 'Fetch Steam data',
+          onPressed: _isFetching ? null : _fetchSteamData,
+          color: theme.accent,
+          icon: _isFetching
+              ? const AppCircularProgressIndicator(size: 18)
+              : const Icon(Icons.cloud_download_outlined),
+        ),
+        IconButton(
+          tooltip: 'Steam Page',
+          onPressed: _openSteamPage,
+          color: theme.accent,
+          icon: const Icon(Icons.open_in_new),
+        ),
+      ],
+      IconButton(
+        tooltip: 'Close Game Editor',
+        icon: Icon(Icons.close, color: theme.textSecondary),
+        onPressed: _dismissDialog,
+      ),
+    ],
+  );
+
+  /// Two filled arrow buttons around a darker tinted label, on a raised
+  /// strip, so it is hard to miss.
+  Widget _buildNavigationBar(AppThemeData theme) {
+    final radius = BorderRadius.circular(theme.cornerRadius);
+    final arrowStyle = IconButton.styleFrom(
+      backgroundColor: theme.primaryButton,
+      foregroundColor: theme.primaryButtonText,
+      disabledBackgroundColor: theme.primaryButtonDisabled,
+      disabledForegroundColor: theme.primaryButtonDisabledText,
+      shape: RoundedRectangleBorder(borderRadius: radius),
+    );
+    return Center(
+      child: Material(
+        color: theme.surface,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: theme.accent.withValues(alpha: 0.35)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [
+              IconButton(
+                style: arrowStyle,
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Previous Game',
+                onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
+              ),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.accent.withValues(alpha: 0.12),
+                    borderRadius: radius,
+                  ),
+                  child: Text(
+                    'Game ${_currentIndex + 1} of ${_gameIds.length}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                style: arrowStyle,
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Next Game',
+                onPressed: _currentIndex < _gameIds.length - 1
+                    ? () => _navigate(1)
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter(AppThemeData theme) => Row(
+    children: [
       IconButton(
         tooltip: 'Delete',
         onPressed: _confirmDelete,
         icon: const Icon(Icons.delete),
         color: theme.secondary,
       ),
-
-      if (_platform == 'Steam') ...[
-        Tooltip(
-          message: 'Fetch',
-          child: IconButton(
-            onPressed: _isFetching ? null : _fetchSteamData,
-            icon: _isFetching
-                ? const AppCircularProgressIndicator(size: 18)
-                : const FaIcon(FontAwesomeIcons.steam, size: 18),
-          ),
-        ),
-        IconButton(
-          tooltip: 'Steam Page',
-          onPressed: _openSteamPage,
-          icon: const Icon(Icons.open_in_new),
-        ),
-      ],
-
       const Spacer(),
-
-      // Save button
       ElevatedButton.icon(
         onPressed: _hasChanges && !_isSaving ? _save : null,
         icon: _isSaving
@@ -604,7 +632,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   );
 }
 
-/// Details tab
+/// Details tab: Information on narrow screens, then status and metadata.
 class _DetailsTab extends StatelessWidget {
   const _DetailsTab({
     required this.theme,
@@ -617,7 +645,7 @@ class _DetailsTab extends StatelessWidget {
     this.lastUpdatedAt,
     this.steamReviewScore,
     this.steamReviewCount,
-    required this.options,
+    required this.status,
     this.steamDeveloper,
   });
 
@@ -626,7 +654,7 @@ class _DetailsTab extends StatelessWidget {
   final Game game;
   final bool showGameDetailsSkmId;
   final String platform;
-  final Widget options;
+  final Widget status;
 
   // Steam fetch props
   final String steamAppId;
@@ -638,88 +666,63 @@ class _DetailsTab extends StatelessWidget {
   final int? steamReviewScore;
   final int? steamReviewCount;
 
-  static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+  Widget _tile(IconData icon, String label, String value, [Widget? trailing]) =>
+      TintedOptionTile(
+        theme: theme,
+        icon: icon,
+        title: value,
+        subtitle: label,
+        trailing: trailing,
+      );
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.only(top: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ?information,
-
-        SectionGroupBox(
-          title: 'Options',
-          theme: theme,
-          titleIcon: Icons.tune,
-          groupPosition: information == null
-              ? SectionGroupPosition.first
-              : SectionGroupPosition.middle,
-          alternateBackground: true,
-          child: options,
-        ),
-
-        // Metadata
-        SectionGroupBox(
-          title: showGameDetailsSkmId
-              ? 'Metadata / SKM-ID ${game.id}'
-              : 'Metadata',
-          theme: theme,
-          titleIcon: Icons.schedule,
-          groupPosition: SectionGroupPosition.last,
-          alternateBackground: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final steam = platform == 'Steam';
+    final score = steamReviewScore ?? game.reviewScore;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          if (information != null) ...[information!, const SizedBox(height: 8)],
+          TintedHeading(theme: theme, title: 'Status'),
+          status,
+          const SizedBox(height: 8),
+          TintedHeading(
+            theme: theme,
+            title: 'Metadata',
+            trailing: showGameDetailsSkmId ? 'SKM-ID ${game.id}' : null,
+          ),
+          _DatesTile(
+            theme: theme,
+            added: game.createdAt,
+            updated: lastUpdatedAt ?? game.updatedAt,
+            steam: steam,
+            cachedAt: steamCacheAt,
+          ),
+          SettingsControlWrap(
+            minimumCardWidth: 220,
             children: [
-              GameMetadataRow(
-                theme: theme,
-                label: 'Added',
-                value: _dateFormat.format(game.createdAt),
-              ),
-              GameMetadataRow(
-                theme: theme,
-                label: 'Updated',
-                value: _dateFormat.format(lastUpdatedAt ?? game.updatedAt),
-              ),
-              if (platform == 'Steam')
-                GameMetadataRow(
-                  theme: theme,
-                  label: 'Cache',
-                  value: steamCacheAt != null
-                      ? _dateFormat.format(steamCacheAt!)
-                      : 'No cached data',
-                ),
-              if (steamDeveloper != null && steamDeveloper!.isNotEmpty)
-                GameMetadataRow(
-                  theme: theme,
-                  label: 'Developer',
-                  value: steamDeveloper!,
-                ),
-              if (platform == 'Steam')
-                GameMetadataRow(
-                  theme: theme,
-                  label: 'Reviews',
-                  value: (steamReviewCount == null || steamReviewCount == 0)
-                      ? 'No reviews'
-                      : '${steamReviewScore ?? game.reviewScore}% · ${Game.reviewRatingFor(steamReviewScore ?? game.reviewScore)} · ${NumberFormat.compact().format(steamReviewCount)} reviews',
-                ),
-              // Steam AppID (only shown for Steam platform)
-              if (platform == 'Steam')
-                GameMetadataRow(
-                  theme: theme,
-                  label: 'Steam AppID',
-                  value: steamAppId.isEmpty ? 'Not set' : steamAppId,
-                  labelWidth: 95,
-                  trailing: IconButton(
-                    icon: Icon(
-                      Icons.copy,
-                      color: theme.textSecondary,
-                      size: 20,
-                    ),
+              if (steamDeveloper?.isNotEmpty == true)
+                _tile(Icons.business_outlined, 'Developer', steamDeveloper!),
+              if (steam)
+                steamReviewCount == null || steamReviewCount == 0
+                    ? _tile(Icons.thumb_up_outlined, 'Reviews', 'No reviews')
+                    : _tile(
+                        Icons.thumb_up_outlined,
+                        '${NumberFormat.compact().format(steamReviewCount)} reviews',
+                        '$score% · ${Game.reviewRatingFor(score)}',
+                      ),
+              if (steam)
+                _tile(
+                  Icons.pin_outlined,
+                  'Steam AppID',
+                  steamAppId.isEmpty ? 'Not set' : steamAppId,
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    color: theme.textSecondary,
                     tooltip: 'Copy AppID',
-                    iconSize: 20,
-                    padding: const EdgeInsets.all(5),
-                    constraints: const BoxConstraints(),
                     onPressed: steamAppId.isEmpty
                         ? null
                         : () {
@@ -732,10 +735,120 @@ class _DetailsTab extends StatelessWidget {
                 ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The game's dates side by side, each as how long ago it was over the
+/// date itself; hovering one shows its exact time. An update no later than
+/// the add says Unchanged, and a game without Steam data says Not cached.
+class _DatesTile extends StatelessWidget {
+  const _DatesTile({
+    required this.theme,
+    required this.added,
+    required this.updated,
+    required this.steam,
+    this.cachedAt,
+  });
+
+  final AppThemeData theme;
+  final DateTime added;
+  final DateTime updated;
+  final bool steam;
+  final DateTime? cachedAt;
+
+  static final _day = DateFormat('d MMM yyyy');
+  static final _exact = DateFormat('dd/MM/yyyy HH:mm');
+
+  static String _ago(DateTime date) {
+    final days = DateUtils.dateOnly(
+      DateTime.now(),
+    ).difference(DateUtils.dateOnly(date)).inDays;
+    String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'} ago';
+    return switch (days) {
+      <= 0 => 'Today',
+      1 => 'Yesterday',
+      < 30 => plural(days, 'day'),
+      < 365 => plural(days ~/ 30, 'month'),
+      _ => plural(days ~/ 365, 'year'),
+    };
+  }
+
+  Widget _entry(IconData icon, String label, DateTime? date, String fallback) {
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        Row(
+          spacing: 6,
+          children: [
+            Icon(icon, color: theme.accent, size: 16),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              ),
+            ),
+          ],
         ),
+        Text(
+          date == null ? fallback : _ago(date),
+          style: TextStyle(
+            color: date == null ? theme.textSecondary : theme.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (date != null)
+          Text(
+            _day.format(date),
+            style: TextStyle(color: theme.textHint, fontSize: 12),
+          ),
       ],
-    ),
-  );
+    );
+    return Expanded(
+      child: date == null
+          ? column
+          : Tooltip(message: _exact.format(date), child: column),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final divider = VerticalDivider(
+      width: 20,
+      color: theme.accent.withValues(alpha: 0.2),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _entry(Icons.add_circle_outline, 'Added', added, ''),
+            divider,
+            _entry(
+              Icons.edit_outlined,
+              'Updated',
+              updated.isAfter(added.add(const Duration(minutes: 1)))
+                  ? updated
+                  : null,
+              'Unchanged',
+            ),
+            if (steam) ...[
+              divider,
+              _entry(Icons.history, 'Cached', cachedAt, 'Not cached'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<String?> showUnsavedGameChangesDialog(

@@ -111,6 +111,8 @@ class DeadlineNotificationService {
   Future<void> checkDeadlines(List<Game> games, {required bool enabled}) async {
     if (!enabled) return;
 
+    // A used key no longer needs a reminder.
+    games = games.where((g) => !g.isUsed).toList();
     final groups = [
       (
         games.where((g) => g.hasDeadline && g.isExpired).toList(),
@@ -205,6 +207,9 @@ class DeadlineNotificationService {
 
   /// Clears the per-day dedup set (e.g. after a database switch).
   void resetSession() => _notifiedGameIds.clear();
+
+  /// Stops the 24-hour timer.
+  void stopPeriodicCheck() => _periodicTimer?.cancel();
 
   // ---------------------------------------------------------------------------
   // Dev-tools helpers

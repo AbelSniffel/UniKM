@@ -6,16 +6,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/database/database.dart';
+import '../../core/services/biometric_unlock.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/encrypted_db_session.dart';
 import '../../core/services/database_switching.dart';
+import '../../core/services/display_refresh_rate.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../../ui/dialogs/database_unlock_dialog.dart';
 import '../../ui/dialogs/encryption_dialogs.dart';
+import '../../ui/widgets/app_privacy_guard.dart';
 import '../../ui/widgets/app_progress_indicator.dart';
 import '../../ui/widgets/notification_system.dart';
 import '../application/database_session_loader.dart';
@@ -48,16 +51,25 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
   @override
   void initState() {
     super.initState();
+    ref.listenManual(
+      frameRatePreferenceProvider,
+      (_, preference) => applyFrameRatePreference(preference),
+      fireImmediately: true,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Register the switch callback so the UI can trigger database switches
-      ref
-          .read(databaseSwitchCallbackProvider.notifier)
-          .set(_switchDatabase);
+      ref.read(databaseSwitchCallbackProvider.notifier).set(_switchDatabase);
       // Also update encrypted session provider when it changes
       _updateEncryptedSessionProvider();
       // Start bootstrapping after the first frame so we have a MaterialApp.
       _bootstrap();
     });
+  }
+
+  @override
+  void dispose() {
+    DeadlineNotificationService.instance.stopPeriodicCheck();
+    super.dispose();
   }
 
   void _updateEncryptedSessionProvider() {
@@ -86,7 +98,9 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
   Future<StartupDatabaseUnlockResult> _promptForStartupDatabasePassword(
     String currentDatabasePath,
+    String baseDbPath,
   ) async {
+    final biometricUnlock = await _biometricUnlockFor(baseDbPath);
     final dialogContext = await _materialContextCompleter.future;
     if (!mounted || !dialogContext.mounted) {
       return const StartupDatabaseUnlockResult.cancelled();
@@ -97,6 +111,40 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       dialogContext,
       theme,
       currentDatabasePath: currentDatabasePath,
+      onBiometricUnlock: biometricUnlock,
+    );
+  }
+
+  /// The password most recently read with a biometric check, so a pairing
+  /// whose password no longer opens its file can be removed.
+  String? _biometricPassword;
+
+  /// Reads [baseDbPath]'s password with a biometric check when this phone
+  /// has paired that database; null when only its password can unlock it.
+  Future<Future<String?> Function()?> _biometricUnlockFor(
+    String baseDbPath,
+  ) async {
+    final biometric = ref.read(biometricUnlockProvider);
+    if (!await biometric.isPaired(baseDbPath) ||
+        !await biometric.isAvailable()) {
+      return null;
+    }
+    return () async =>
+        _biometricPassword = await biometric.readPassword(baseDbPath);
+  }
+
+  /// Reports a wrong password, removing a stale biometric pairing when the
+  /// password came from it.
+  Future<void> _rejectPassword(String password, String baseDbPath) async {
+    if (password != _biometricPassword) {
+      NotificationManager.instance.error('Incorrect password');
+      return;
+    }
+    _biometricPassword = null;
+    await ref.read(biometricUnlockProvider).forget(baseDbPath);
+    NotificationManager.instance.error(
+      '${BiometricUnlock.label} unlock no longer matches this database '
+      'and was turned off. Enter the password.',
     );
   }
 
@@ -139,6 +187,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
         while (true) {
           final unlockResult = await _promptForStartupDatabasePassword(
             encryptionManager.encryptedPath,
+            baseDbPath,
           );
 
           if (unlockResult.cancelled) exit(0);
@@ -168,7 +217,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
             _activateDatabase(opened.database, opened.encryptedSession);
             break;
           } on InvalidPasswordException {
-            NotificationManager.instance.error('Incorrect password');
+            await _rejectPassword(password, baseDbPath);
           }
         }
       } else {
@@ -232,6 +281,47 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
     );
   }
 
+  /// Closes the open database, saving an encrypted one back to its file.
+  Future<void> _closeDatabase() async {
+    final database = _database;
+    final session = _encryptedSession;
+    // Clear database from notifier so providers know it's gone
+    ref.read(databaseNotifierProvider.notifier).clearDatabase();
+    ref.read(encryptedDbSessionProvider.notifier).set(null);
+    _encryptedSession = null;
+    if (database != null) await _sessionLoader.close(database, session);
+  }
+
+  /// Closes the encrypted database after the app was idle and asks for its
+  /// password again. Waits while a sync, Steam fetch or switch is running.
+  Future<void> _lock() async {
+    if (_booting ||
+        _encryptedSession == null ||
+        ref.read(databaseSwitchingProvider) ||
+        ref.read(batchFetchProvider).isActive ||
+        ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
+      return;
+    }
+    final materialContext = await _materialContextCompleter.future;
+    if (!mounted || !materialContext.mounted) return;
+    // Dialogs and menus would outlive the database they show.
+    Navigator.of(materialContext).popUntil((route) => route.isFirst);
+    setState(() => _booting = true);
+    try {
+      await _closeDatabase();
+    } catch (e) {
+      // Saving failed: show the error and its Retry rather than reopening
+      // the file without the latest changes.
+      if (!mounted) return;
+      setState(() {
+        _booting = false;
+        _error = e;
+      });
+      return;
+    }
+    await _restartBootstrap();
+  }
+
   Future<void> _switchDatabase(DatabaseSwitchRequest request) async {
     if (_booting) return;
 
@@ -249,15 +339,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       final encryptionManager = EncryptionManager(baseDbPath);
 
       // Close current database (and persist if encrypted) before switching.
-      final oldDb = _database;
-      final oldSession = _encryptedSession;
-
-      // Clear database from notifier so providers know it's gone
-      ref.read(databaseNotifierProvider.notifier).clearDatabase();
-      ref.read(encryptedDbSessionProvider.notifier).set(null);
-      _encryptedSession = null;
-
-      if (oldDb != null) await _sessionLoader.close(oldDb, oldSession);
+      await _closeDatabase();
 
       AppDatabase newDb;
       EncryptedDbSession? newSession;
@@ -307,9 +389,18 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
               : null;
 
           while (true) {
+            final biometricUnlock = providedPassword == null
+                ? await _biometricUnlockFor(baseDbPath)
+                : null;
             final password =
                 providedPassword ??
-                await _promptForPassword(DatabaseUnlockDialog.show);
+                await _promptForPassword(
+                  (context, theme) => DatabaseUnlockDialog.show(
+                    context,
+                    theme,
+                    onBiometricUnlock: biometricUnlock,
+                  ),
+                );
             if (password == null) {
               // User cancelled; reopen the previous db by re-running bootstrap.
               await _restartBootstrap();
@@ -325,7 +416,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
               newSession = opened.encryptedSession;
               break;
             } on InvalidPasswordException {
-              NotificationManager.instance.error('Incorrect password');
+              await _rejectPassword(password, baseDbPath);
               // If we attempted a provided password, clear it so the user is prompted
               // on the next loop iteration.
               providedPassword = null;
@@ -387,12 +478,25 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
     final materialTheme = ref.watch(themeDataProvider);
     // Watch the database state so we rebuild when it changes
     final dbState = ref.watch(databaseNotifierProvider);
+    final (autoLockMinutes, hideInRecents) = ref.watch(
+      securitySettingsProvider.select(
+        (s) => (s.autoLockMinutes, s.hideInRecents),
+      ),
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: materialTheme,
       themeAnimationDuration: Duration.zero,
       themeAnimationCurve: Curves.linear,
+      builder: (context, child) => AppPrivacyGuard(
+        lockAfter: _booting || _encryptedSession == null || autoLockMinutes <= 0
+            ? null
+            : Duration(minutes: autoLockMinutes),
+        onLock: _lock,
+        hideInRecents: hideInRecents,
+        child: child!,
+      ),
       home: Builder(
         builder: (materialContext) {
           final isSwitching = ref.watch(databaseSwitchingProvider);

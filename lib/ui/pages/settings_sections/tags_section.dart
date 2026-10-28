@@ -9,6 +9,7 @@ import '../../../core/constants/legacy_default_tag_names.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/game.dart';
 import '../../dialogs/add_tags_dialog.dart';
 import '../../dialogs/custom_tag_dialogs.dart';
 import '../../../providers/app_providers.dart';
@@ -113,233 +114,212 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
     }
   }
 
+  // Confirms a destructive tag cleanup, then reports how many tags went.
+  Future<void> _confirmCleanup({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Future<int> Function() delete,
+    required String Function(int count) removed,
+    required String nothingRemoved,
+    required String failed,
+  }) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      theme: widget.theme,
+      title: title,
+      titleIcon: Icons.delete_forever,
+      message: message,
+      confirmLabel: confirmLabel,
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    try {
+      final deletedCount = await delete();
+      if (deletedCount > 0) {
+        NotificationManager.instance.success(removed(deletedCount));
+      } else {
+        NotificationManager.instance.info(nothingRemoved);
+      }
+    } catch (e) {
+      NotificationManager.instance.error('$failed: $e');
+    }
+  }
+
   Future<void> _cleanupLegacyDefaultTagsOnce(int legacyCustomCount) async {
     if (legacyCustomCount <= 0) {
       NotificationManager.instance.info('No legacy default tags found');
       return;
     }
-
-    final confirmed = await showConfirmDialog(
-      context: context,
-      theme: widget.theme,
+    await _confirmCleanup(
       title: 'One-time Cleanup',
-      titleIcon: Icons.delete_forever,
       message:
           'Remove $legacyCustomCount old default tags (non-Steam)?\n\nThey will also be removed from any games.\nThis button disappears after running once.',
       confirmLabel: 'Remove',
-      destructive: true,
+      delete: () async {
+        final deletedCount = await ref
+            .read(tagsProvider.notifier)
+            .deleteLegacyDefaultCustomTags();
+        await ref.read(gamesProvider.notifier).refresh();
+        await ref
+            .read(settingsProvider.notifier)
+            .set(SettingsKeys.legacyDefaultTagsCleanupDone, true);
+        return deletedCount;
+      },
+      removed: (count) => 'Removed $count legacy default tags',
+      nothingRemoved: 'Nothing to remove',
+      failed: 'Cleanup failed',
     );
-
-    if (!confirmed) return;
-
-    try {
-      final deletedCount = await ref
-          .read(tagsProvider.notifier)
-          .deleteLegacyDefaultCustomTags();
-      await ref.read(gamesProvider.notifier).refresh();
-      await ref
-          .read(settingsProvider.notifier)
-          .set(SettingsKeys.legacyDefaultTagsCleanupDone, true);
-
-      if (deletedCount > 0) {
-        NotificationManager.instance.success(
-          'Removed $deletedCount legacy default tags',
-        );
-      } else {
-        NotificationManager.instance.info('Nothing to remove');
-      }
-    } catch (e) {
-      NotificationManager.instance.error('Cleanup failed: $e');
-    }
   }
 
-  Future<void> _clearUnusedNonUserTags() async {
-    final confirmed = await showConfirmDialog(
-      context: context,
-      theme: widget.theme,
-      title: 'Clear Unused Tags',
-      titleIcon: Icons.delete_forever,
-      message:
-          'Delete Steam and old default tags not used by any game? Other custom tags stay.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    );
+  Future<void> _clearUnusedNonUserTags() => _confirmCleanup(
+    title: 'Clear Unused Tags',
+    message:
+        'Delete Steam and old default tags not used by any game? Other custom tags stay.',
+    confirmLabel: 'Delete',
+    delete: ref.read(tagsProvider.notifier).deleteUnusedNonUserTags,
+    removed: (count) => 'Deleted $count unused tags',
+    nothingRemoved: 'No unused tags to delete',
+    failed: 'Failed to clear unused tags',
+  );
 
-    if (!confirmed) return;
-
-    try {
-      final deletedCount = await ref
-          .read(tagsProvider.notifier)
-          .deleteUnusedNonUserTags();
-      if (deletedCount > 0) {
-        NotificationManager.instance.success(
-          'Deleted $deletedCount unused tags',
-        );
-      } else {
-        NotificationManager.instance.info('No unused tags to delete');
-      }
-    } catch (e) {
-      NotificationManager.instance.error('Failed to clear unused tags: $e');
-    }
-  }
+  IconButton _iconButton(
+    String tooltip,
+    IconData icon,
+    Color color,
+    VoidCallback onPressed,
+  ) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    icon: Icon(icon, size: 26),
+    color: color,
+  );
 
   @override
   Widget build(BuildContext context) {
+    final theme = widget.theme;
     final tags = ref.watch(tagsProvider);
     final customTags = tags.where((t) => !t.isSteamTag).toList();
     final steamTags = tags.where((t) => t.isSteamTag).toList();
     final isSearching = widget.searchQuery.trim().isNotEmpty;
-
     final legacyCleanupDone = ref.watch(legacyDefaultTagsCleanupDoneProvider);
-
     final legacyCustomCount = customTags
         .where((t) => kLegacyDefaultTagNames.contains(t.name))
         .length;
-
-    final showCustomTags = matchesSettingsSearchGroup(
+    bool matches(SettingsSearchGroup group) => matchesSettingsSearchGroup(
       matchesSearch: widget.matchesSearch,
-      group: TagsSection.customTagsSearchGroup,
+      group: group,
     );
 
-    final showSteamTags = matchesSettingsSearchGroup(
-      matchesSearch: widget.matchesSearch,
-      group: TagsSection.steamTagsSearchGroup,
+    // A counted tag list, or a hint while there are none.
+    SectionGroupEntry tagGroup(
+      SettingsSearchGroup group,
+      IconData icon,
+      List<Tag> groupTags, {
+      required Widget? trailing,
+      required String emptyText,
+      required double maxHeight,
+      ValueChanged<int>? onTagToggled,
+    }) => SectionGroupEntry(
+      visible: matches(group),
+      builder: (position, isAlternate) => SectionGroupBox(
+        title: '${group.title} (${groupTags.length})',
+        theme: theme,
+        titleIcon: icon,
+        titleLocation: SectionTitleLocation.top,
+        headerCrossAxisAlignment: CrossAxisAlignment.center,
+        trailing: trailing,
+        searchQuery: widget.searchQuery,
+        isSearchMatch: isSearching,
+        groupPosition: position,
+        alternateBackground: isAlternate,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (groupTags.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  emptyText,
+                  style: TextStyle(color: theme.textHint),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              TagList(
+                tags: groupTags,
+                theme: theme,
+                allSelected: true,
+                deleteOnTap: onTagToggled != null,
+                onTagToggled: onTagToggled,
+                maxHeight: maxHeight,
+              ),
+          ],
+        ),
+      ),
     );
-
-    final showTagMaintenance =
-        TagsSection.isMaintenanceAvailable(
-          cleanupDone: legacyCleanupDone,
-          customTagNames: customTags.map((tag) => tag.name),
-        ) &&
-        matchesSettingsSearchGroup(
-          matchesSearch: widget.matchesSearch,
-          group: TagsSection.maintenanceSearchGroup,
-        );
-
-    if (isSearching &&
-        !showCustomTags &&
-        !showSteamTags &&
-        !showTagMaintenance) {
-      return const SizedBox.shrink();
-    }
 
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
-        // Custom tags section
-        SectionGroupEntry(
-          visible: showCustomTags,
-          builder: (position, isAlternate) => SectionGroupBox(
-            title:
-                '${TagsSection.customTagsSearchGroup.title} (${customTags.length})',
-            theme: widget.theme,
-            titleIcon: Icons.label,
-            titleLocation: SectionTitleLocation.top,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: kElementHSpacing,
-              children: [
-                IconButton(
-                  tooltip: 'Add Tag',
-                  onPressed: _showAddTagsDialog,
-                  icon: const Icon(Icons.add, size: 26),
-                  color: widget.theme.accent,
+        tagGroup(
+          TagsSection.customTagsSearchGroup,
+          Icons.label,
+          customTags,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: kElementHSpacing,
+            children: [
+              _iconButton(
+                'Add Tag',
+                Icons.add,
+                theme.accent,
+                _showAddTagsDialog,
+              ),
+              if (customTags.isNotEmpty)
+                _iconButton(
+                  'Delete All Custom Tags',
+                  Icons.delete,
+                  theme.error,
+                  _deleteAllCustomTags,
                 ),
-                if (customTags.isNotEmpty)
-                  IconButton(
-                    tooltip: 'Delete All Custom Tags',
-                    onPressed: _deleteAllCustomTags,
-                    icon: const Icon(Icons.delete, size: 26),
-                    color: widget.theme.error,
-                  ),
-              ],
-            ),
-            searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
-            groupPosition: position,
-            alternateBackground: isAlternate,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (customTags.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      'No custom tags created yet',
-                      style: TextStyle(color: widget.theme.textHint),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                else ...[
-                  TagList(
-                    tags: customTags,
-                    theme: widget.theme,
-                    allSelected: true,
-                    deleteOnTap: true,
-                    onTagToggled: (tagId) {
-                      final tag = customTags.firstWhere((t) => t.id == tagId);
-                      _deleteTag(tag.id, tag.name);
-                    },
-                    maxHeight: 300,
-                  ),
-                ],
-              ],
-            ),
+            ],
           ),
+          emptyText: 'No custom tags created yet',
+          maxHeight: 300,
+          onTagToggled: (tagId) {
+            final tag = customTags.firstWhere((t) => t.id == tagId);
+            _deleteTag(tag.id, tag.name);
+          },
         ),
-        // Steam tags section
-        SectionGroupEntry(
-          visible: showSteamTags,
-          builder: (position, isAlternate) => SectionGroupBox(
-            title:
-                '${TagsSection.steamTagsSearchGroup.title} (${steamTags.length})',
-            theme: widget.theme,
-            titleIcon: FontAwesomeIcons.steam.data,
-            titleLocation: SectionTitleLocation.top,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: steamTags.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Clear unused Steam tags',
-                    onPressed: _clearUnusedNonUserTags,
-                    icon: const Icon(Icons.delete, size: 26),
-                    color: widget.theme.error,
-                  ),
-            searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
-            groupPosition: position,
-            alternateBackground: isAlternate,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (steamTags.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      '${TagsSection.steamTagsInfoSpec.label}\n\n${TagsSection.steamTagsInfoSpec.description}',
-                      style: TextStyle(color: widget.theme.textHint),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                else ...[
-                  TagList(
-                    tags: steamTags,
-                    theme: widget.theme,
-                    allSelected: true,
-                    maxHeight: 200,
-                  ),
-                ],
-              ],
-            ),
-          ),
+        tagGroup(
+          TagsSection.steamTagsSearchGroup,
+          FontAwesomeIcons.steam.data,
+          steamTags,
+          trailing: steamTags.isEmpty
+              ? null
+              : _iconButton(
+                  'Clear unused Steam tags',
+                  Icons.delete,
+                  theme.error,
+                  _clearUnusedNonUserTags,
+                ),
+          emptyText:
+              '${TagsSection.steamTagsInfoSpec.label}\n\n${TagsSection.steamTagsInfoSpec.description}',
+          maxHeight: 200,
         ),
         SectionGroupEntry(
-          visible: showTagMaintenance,
+          visible:
+              TagsSection.isMaintenanceAvailable(
+                cleanupDone: legacyCleanupDone,
+                customTagNames: customTags.map((tag) => tag.name),
+              ) &&
+              matches(TagsSection.maintenanceSearchGroup),
           builder: (position, isAlternate) => SectionGroupBox(
             title: TagsSection.maintenanceSearchGroup.title,
             titleIcon: Icons.cleaning_services,
-            theme: widget.theme,
+            theme: theme,
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,
@@ -349,18 +329,15 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
               children: [
                 Text(
                   TagsSection.maintenanceInfoSpec.label,
-                  style: TextStyle(
-                    color: widget.theme.textSecondary,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
                 ElevatedButton.icon(
                   onPressed: () =>
                       _cleanupLegacyDefaultTagsOnce(legacyCustomCount),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.theme.secondary,
-                    foregroundColor: widget.theme.primaryButtonText,
+                    backgroundColor: theme.secondary,
+                    foregroundColor: theme.onSecondaryText,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 12,

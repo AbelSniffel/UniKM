@@ -5,25 +5,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../features/steam/application/apply_steam_metadata.dart';
 export '../../features/steam/application/apply_steam_metadata.dart'
     show SteamApplyOptions;
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
-import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../pages/settings_sections/settings_control_cards.dart';
 import '../../core/constants/app_constants.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
-import '../widgets/section_groupbox.dart';
+import '../widgets/segmented_bar.dart';
+import '../widgets/tinted_tiles.dart';
 import '../widgets/game_cover_image.dart';
 import '../widgets/steam_lookup_info_menu.dart';
 import '../../core/services/logging.dart';
@@ -66,12 +65,14 @@ class _SteamOptionsGrid extends StatelessWidget {
         '${NumberFormat.compact().format(result!.reviewCount)} reviews',
     ].join(' · ');
     Widget option(
+      IconData icon,
       String label,
       String description,
       bool value,
       SteamApplyOptions Function(bool) update,
     ) => SettingsToggleCard(
       theme: theme,
+      icon: icon,
       label: label,
       description: description,
       value: value,
@@ -84,6 +85,7 @@ class _SteamOptionsGrid extends StatelessWidget {
           14,
       children: [
         option(
+          Icons.pin_outlined,
           'AppID',
           result == null ? 'Save Steam AppID' : 'Save AppID ${result.appId}',
           options.applyAppId,
@@ -91,6 +93,7 @@ class _SteamOptionsGrid extends StatelessWidget {
         ),
         if (result == null || result.tags.isNotEmpty)
           option(
+            Icons.label_outline,
             'Tags',
             result == null
                 ? 'Add Steam tags'
@@ -99,6 +102,7 @@ class _SteamOptionsGrid extends StatelessWidget {
             (v) => options.copyWith(applyTags: v),
           ),
         option(
+          Icons.image_outlined,
           'Cover Image',
           result == null
               ? 'Download Steam header image'
@@ -107,6 +111,7 @@ class _SteamOptionsGrid extends StatelessWidget {
           (v) => options.copyWith(applyImage: v),
         ),
         option(
+          Icons.business_outlined,
           'Developer',
           result == null
               ? 'Add game developer name'
@@ -118,6 +123,7 @@ class _SteamOptionsGrid extends StatelessWidget {
         ),
         if (result == null || reviews.isNotEmpty)
           option(
+            Icons.thumb_up_outlined,
             'Reviews',
             result == null ? 'Score and review count' : reviews,
             options.applyReviews,
@@ -221,40 +227,39 @@ Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
           theme: theme,
         ),
         content: SizedBox(
-          width: 400,
+          width: 440,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 16,
             children: [
-              if (cached != null) ...[
-                Text('Cached data found for "$title"'),
-                const SizedBox(height: kElementVSpacing),
-                Text(
-                  'Cached at: ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'Unknown'}',
-                  style: TextStyle(color: theme.textSecondary),
+              cached != null
+                  ? TintedStatusCard(
+                      theme: theme,
+                      icon: Icons.history,
+                      title: 'Cached data found',
+                      subtitle:
+                          '"$title"  ·  Cached ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'at an unknown time'}',
+                    )
+                  : TintedStatusCard(
+                      theme: theme,
+                      icon: Icons.cloud_download_outlined,
+                      title: 'Fetch from Steam',
+                      subtitle: 'No cached data for "$title"',
+                    ),
+              if (showApplyOptions)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 8,
+                  children: [
+                    TintedHeading(theme: theme, title: 'Apply'),
+                    _SteamOptionsGrid(
+                      theme: theme,
+                      options: options,
+                      onChanged: (value) => setState2(() => options = value),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'Choose whether to use cached data or fetch fresh data from Steam.',
-                ),
-              ] else ...[
-                Text('No cached data found for "$title"'),
-                const SizedBox(height: 12),
-                Text('Configure options for fetching fresh data from Steam.'),
-              ],
-              if (showApplyOptions) ...[
-                const SizedBox(height: kDialogSpacing),
-                SectionGroupBox(
-                  title: 'Apply Options',
-                  theme: theme,
-                  titleIcon: Icons.tune,
-                  child: _SteamOptionsGrid(
-                    theme: theme,
-                    options: options,
-                    onChanged: (value) => setState2(() => options = value),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -677,60 +682,23 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  Widget _buildSearchingState(AppThemeData theme) => SectionGroupBox(
-    title: 'Searching Steam...',
+  Widget _buildSearchingState(AppThemeData theme) => TintedStatusCard(
     theme: theme,
-    titleIcon: FontAwesomeIcons.steam.data,
-    titleLocation: SectionTitleLocation.top,
-    alternateBackground: true,
-    child: Padding(
-      padding: EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Center(child: AppCircularProgressIndicator()),
-          const SizedBox(height: kDialogSpacing),
-          Text(
-            widget.game.title,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: theme.textSecondary),
-          ),
-        ],
-      ),
-    ),
+    leading: AppCircularProgressIndicator(size: 24, color: theme.accent),
+    title: 'Searching Steam',
+    subtitle: widget.game.title,
   );
 
-  Widget _buildErrorState(AppThemeData theme) => SectionGroupBox(
-    title: 'Search Failed',
+  Widget _buildErrorState(AppThemeData theme) => TintedStatusCard(
     theme: theme,
-    titleIcon: Icons.error,
-    titleLocation: SectionTitleLocation.top,
-    alternateBackground: true,
-    child: Column(
-      children: [
-        Icon(Icons.error, color: theme.error, size: 48),
-        const SizedBox(height: kDialogSpacing),
-        Text(
-          widget.game.title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: theme.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: kDialogSpacing),
-        Text(
-          _error!,
-          style: TextStyle(color: theme.textSecondary),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: kDialogSpacing),
-        TextButton.icon(
-          onPressed: _searchSteam,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Try Again'),
-        ),
-      ],
+    color: theme.error,
+    icon: Icons.error_outline,
+    title: 'Search failed',
+    subtitle: '${widget.game.title}  ·  $_error',
+    trailing: IconButton(
+      tooltip: 'Try Again',
+      onPressed: _searchSteam,
+      icon: const Icon(Icons.refresh),
     ),
   );
 
@@ -739,143 +707,139 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 16,
       children: [
-        SectionGroupBox(
-          title: 'Found on Steam',
-          theme: theme,
-          titleIcon: FontAwesomeIcons.steam.data,
-          titleLocation: SectionTitleLocation.top,
-          groupPosition: SectionGroupPosition.first,
-          headerCrossAxisAlignment: CrossAxisAlignment.center,
-          trailing: SteamLookupInfoMenu(
-            theme: theme,
-            searchedTitle: widget.game.title,
-            result: result,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        _buildGameSummary(theme, result),
+        if (result.tags.isNotEmpty)
+          Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
             children: [
-              _buildGameSummary(theme, result),
-              if (result.tags.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Steam tags (${result.tags.length})',
-                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                TagList(
-                  tags: _steamPreviewTags(result.tags),
-                  theme: theme,
-                  allSelected: true,
-                  maxHeight: 96,
-                ),
-              ],
+              TintedHeading(
+                theme: theme,
+                title: 'Steam Tags',
+                trailing: '${result.tags.length}',
+              ),
+              TagList(
+                tags: _steamPreviewTags(result.tags),
+                theme: theme,
+                allSelected: true,
+                maxHeight: 96,
+              ),
             ],
           ),
-        ),
-        SectionGroupBox(
-          title: 'Apply Options',
-          theme: theme,
-          titleIcon: Icons.tune,
-          titleLocation: SectionTitleLocation.top,
-          groupPosition: SectionGroupPosition.last,
-          alternateBackground: true,
-          child: _SteamOptionsGrid(
-            theme: theme,
-            options: _options,
-            result: result,
-            onChanged: (value) => setState(() => _options = value),
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            TintedHeading(theme: theme, title: 'Apply'),
+            _SteamOptionsGrid(
+              theme: theme,
+              options: _options,
+              result: result,
+              onChanged: (value) => setState(() => _options = value),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildGameSummary(
-    AppThemeData theme,
-    SteamSearchResult result,
-  ) => LayoutBuilder(
-    builder: (context, constraints) {
-      final imageWidth = (constraints.maxWidth * 0.3).clamp(64.0, 148.0);
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            child: SizedBox(
-              width: imageWidth,
-              height: imageWidth * 215 / 460,
-              child: AppDialogPreviewScope.maybeOf(context) != null
-                  ? GameCoverImage(theme: theme, coverImage: result.imageUrl)
-                  : FutureBuilder<String?>(
-                      future: _coverDownloads.putIfAbsent(
-                        result.appId,
-                        () => ref
-                            .read(steamServiceProvider)
-                            .downloadImage(
-                              result.appId,
-                              imageUrl: result.imageUrl,
-                            ),
-                      ),
-                      builder: (context, snapshot) => GameCoverImage(
-                        theme: theme,
-                        coverImage: snapshot.data,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+  /// The match in an accent card: its cover, name, developer and chips, with
+  /// the lookup details menu in the corner.
+  Widget _buildGameSummary(AppThemeData theme, SteamSearchResult result) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final imageWidth = (constraints.maxWidth * 0.3).clamp(64.0, 148.0);
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 12,
               children: [
-                Text(
-                  result.name,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
+                  child: SizedBox(
+                    width: imageWidth,
+                    height: imageWidth * 215 / 460,
+                    child: AppDialogPreviewScope.maybeOf(context) != null
+                        ? GameCoverImage(
+                            theme: theme,
+                            coverImage: result.imageUrl,
+                          )
+                        : FutureBuilder<String?>(
+                            future: _coverDownloads.putIfAbsent(
+                              result.appId,
+                              () => ref
+                                  .read(steamServiceProvider)
+                                  .downloadImage(
+                                    result.appId,
+                                    imageUrl: result.imageUrl,
+                                  ),
+                            ),
+                            builder: (context, snapshot) => GameCoverImage(
+                              theme: theme,
+                              coverImage: snapshot.data,
+                            ),
+                          ),
                   ),
                 ),
-                if (result.developer?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    result.developer!,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        result.name,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (result.developer?.trim().isNotEmpty == true)
+                        Text(
+                          result.developer!,
+                          style: TextStyle(
+                            color: theme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          TintedChip(
+                            theme: theme,
+                            color: theme.accent,
+                            label: 'AppID',
+                            value: result.appId,
+                          ),
+                          if (result.isDlc)
+                            TintedChip(
+                              theme: theme,
+                              color: theme.secondary,
+                              label: 'DLC',
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _detailBadge(theme, 'AppID ${result.appId}'),
-                    if (result.isDlc) _detailBadge(theme, 'DLC'),
-                  ],
+                ),
+                SteamLookupInfoMenu(
+                  theme: theme,
+                  searchedTitle: widget.game.title,
+                  result: result,
                 ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       );
-    },
-  );
-
-  Widget _detailBadge(AppThemeData theme, String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: theme.accent.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: theme.accent,
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-      ),
-    ),
-  );
 }

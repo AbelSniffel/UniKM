@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import '../../core/constants/app_constants.dart';
 import '../../core/services/legacy_db_converter.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/tinted_tiles.dart';
 
 /// Reports legacy migration details without owning database initialization.
 Future<void> showLegacyConversionDialog(
@@ -25,55 +25,63 @@ Future<void> showLegacyConversionDialog(
         title: 'Legacy Database Converted',
         theme: theme,
       ),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'The imported games were adapted to the current schema. Your source file was not changed.',
-              style: TextStyle(color: theme.textPrimary),
-            ),
-            const SizedBox(height: kElementVSpacing),
-            Text(
-              'File: ${p.basename(dbPath)}',
-              style: TextStyle(color: theme.textSecondary, fontSize: 12),
-            ),
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Changes applied:',
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontWeight: FontWeight.w600,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
+        children: [
+          Text(
+            'The imported games were adapted to the current schema.',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          TintedOptionTile(
+            theme: theme,
+            icon: Icons.description_outlined,
+            title: p.basename(dbPath),
+            subtitle: 'Source file, left unchanged',
+          ),
+          if (actions.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 8,
+              children: [
+                TintedHeading(
+                  theme: theme,
+                  title: 'Changes Applied',
+                  trailing: '${actions.length}',
                 ),
-              ),
-              const SizedBox(height: kElementVSpacing),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: SizedBox(
-                  width: double.infinity,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220),
                   child: SingleChildScrollView(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      spacing: 6,
                       children: [
                         for (final action in actions)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '• $action',
-                              style: TextStyle(color: theme.textPrimary),
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 8,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: theme.accent,
+                                size: 18,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  action,
+                                  style: TextStyle(color: theme.textPrimary),
+                                ),
+                              ),
+                            ],
                           ),
                       ],
                     ),
                   ),
                 ),
-              ),
-            ],
-          ],
-        ),
+              ],
+            ),
+        ],
       ),
       actions: [
         ElevatedButton(

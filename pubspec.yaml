@@ -59,6 +59,8 @@ dependencies:
   file_selector: ^1.1.0
   share_plus: ^13.3.1
   collection: ^1.19.1
+  # Wall-clock reads that tests can fast-forward (idle lock, clipboard expiry).
+  clock: ^1.1.2
   pub_semver: ^2.2.1
   device_info_plus: ^13.3.0
   desktop_drop: ^0.8.4
@@ -66,6 +68,9 @@ dependencies:
   # Icons
   font_awesome_flutter: ^11.0.0
   csv: ^8.0.0
+  local_auth: ^3.0.2
+  flutter_secure_storage: ^11.2.0
+  flutter_displaymode: ^0.7.0
 
 hooks:
   user_defines:

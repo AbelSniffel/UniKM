@@ -30,13 +30,12 @@ class UpdatesSection extends ConsumerStatefulWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec includePrereleaseSpec = SettingTextSpec(
-    label: 'Include pre-release versions',
-    description: 'Get beta updates before stable release',
+    label: 'Pre-releases',
+    icon: Icons.science_outlined,
   );
   static const SettingTextSpec autoCheckSpec = SettingTextSpec(
-    label: 'Automatic Update Check',
-    description:
-        'Control background update checks and view the next scheduled run',
+    label: 'Automatic',
+    icon: Icons.update,
   );
   static const SettingTextSpec repositorySpec = SettingTextSpec(
     label: 'Repository',
@@ -49,14 +48,16 @@ class UpdatesSection extends ConsumerStatefulWidget {
 
   static const List<SettingsSearchGroup> searchGroups = [
     SettingsSearchGroup(
-      title: 'Update Preferences',
+      title: 'Update Checks',
       settings: [autoCheckSpec, includePrereleaseSpec],
       extraTexts: [
         'Next check in',
-        'Automatic update check is disabled',
         'Enable',
         'Disable',
+        'Update Preferences',
+        'beta',
       ],
+      info: 'Pre-releases are beta versions.',
     ),
     SettingsSearchGroup(
       title: 'GitHub Repository & API',
@@ -113,11 +114,12 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     return 'In $hours hour${hours > 1 ? 's' : ''} $minutes min';
   }
 
-  String _automaticUpdateCheckDescription({
+  /// When the next check runs; nothing while checks are off.
+  String? _automaticUpdateCheckDescription({
     required bool autoCheckEnabled,
     required DateTime? nextUpdateCheck,
   }) {
-    if (!autoCheckEnabled) return 'Automatic update check is disabled';
+    if (!autoCheckEnabled) return null;
     if (nextUpdateCheck == null) return 'Next check is being scheduled';
 
     final relativeLabel = _formatNextUpdateTime(nextUpdateCheck);
@@ -150,6 +152,7 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               SettingsToggleCard(
                 theme: widget.theme,
                 label: UpdatesSection.autoCheckSpec.label,
+                icon: UpdatesSection.autoCheckSpec.icon,
                 description: _automaticUpdateCheckDescription(
                   autoCheckEnabled: updates.autoCheckEnabled,
                   nextUpdateCheck: nextUpdateCheck,
@@ -162,7 +165,7 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               SettingsToggleCard(
                 theme: widget.theme,
                 label: UpdatesSection.includePrereleaseSpec.label,
-                description: UpdatesSection.includePrereleaseSpec.description,
+                icon: UpdatesSection.includePrereleaseSpec.icon,
                 value: updates.includePrerelease,
                 onChanged: settingsNotifier.setter(
                   SettingsKeys.includePreReleases,

@@ -2,14 +2,16 @@ import '../../../models/game.dart';
 import '../../../shared/time/calendar_date.dart';
 
 /// Calendar-date reminders, grouped to keep the native schedule bounded by
-/// dates rather than games. Android resolves each date to 09:00 local time.
+/// dates rather than games. Used keys are skipped. Android resolves each date to 09:00 local time.
 List<Map<String, Object>> buildDeadlineSchedule(
   List<Game> games,
   DateTime now,
 ) {
   final groups = <(DateTime, int), _DeadlineGroup>{};
   for (final game in games) {
-    if (!game.hasDeadline || game.deadlineDate == null) continue;
+    if (game.isUsed || !game.hasDeadline || game.deadlineDate == null) {
+      continue;
+    }
     final deadline = calendarDay(game.deadlineDate!);
     for (final (offset, kind) in const [(-7, 1003), (0, 1002), (1, 1001)]) {
       final day = deadline.add(Duration(days: offset));

@@ -11,12 +11,17 @@ class SettingsHeaderActions extends StatelessWidget {
     required this.children,
     this.encapsulated = true,
     this.expanded = false,
+    this.inset = false,
   });
 
   final AppThemeData theme;
   final List<Widget> children;
   final bool encapsulated;
   final bool expanded;
+
+  /// On a tinted settings header the group takes the tint of the header's
+  /// icon square, since its own tint would blend into the header's.
+  final bool inset;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +38,9 @@ class SettingsHeaderActions extends StatelessWidget {
     if (!encapsulated) return actions;
     return Container(
       decoration: BoxDecoration(
-        color: theme.buttonGroupBackground,
+        color: inset
+            ? theme.accent.withValues(alpha: 0.18)
+            : theme.buttonGroupBackground,
         borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
       ),
       child: actions,

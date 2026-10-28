@@ -63,6 +63,14 @@ class AppPopupMenuButton<T> extends PopupMenuButton<T> {
   }) : super(clipBehavior: Clip.antiAlias, menuPadding: EdgeInsets.zero);
 }
 
+/// A popup menu position for [rect], given in global coordinates.
+RelativeRect overlayMenuPosition(BuildContext context, Rect rect) =>
+    RelativeRect.fromRect(
+      rect,
+      Offset.zero &
+          (Overlay.of(context).context.findRenderObject()! as RenderBox).size,
+    );
+
 Future<T?> showAppMenu<T>({
   required BuildContext context,
   required RelativeRect position,

@@ -294,6 +294,8 @@ class SettingsKeys {
   static const String encryptionEnabled = 'encryption_enabled';
   static const String maskKeys = 'mask_keys';
   static const String autoHideKeys = 'auto_hide_keys';
+  static const String autoLockMinutes = 'auto_lock_minutes';
+  static const String hideInRecents = 'hide_in_recents';
 
   // Debug
   static const String developerMode = 'developer_mode';
@@ -539,6 +541,10 @@ UpdatesSettings updatesSettingsFromMap(Map<String, dynamic> settings) => (
 typedef SecuritySettings = ({
   bool maskKeys,
   bool autoHideKeys,
+
+  /// Minutes without input before an encrypted database locks; 0 never.
+  int autoLockMinutes,
+  bool hideInRecents,
   bool encryptionEnabled,
   List<String> recentDatabasePaths,
 });
@@ -546,6 +552,8 @@ typedef SecuritySettings = ({
 SecuritySettings securitySettingsFromMap(Map<String, dynamic> settings) => (
   maskKeys: _settingOr(settings, SettingsKeys.maskKeys, true),
   autoHideKeys: _settingOr(settings, SettingsKeys.autoHideKeys, true),
+  autoLockMinutes: _settingOr(settings, SettingsKeys.autoLockMinutes, 0),
+  hideInRecents: _settingOr(settings, SettingsKeys.hideInRecents, false),
   encryptionEnabled: _settingOr(
     settings,
     SettingsKeys.encryptionEnabled,

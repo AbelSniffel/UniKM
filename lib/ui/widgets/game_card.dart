@@ -583,6 +583,7 @@ class _GameCardState extends ConsumerState<GameCard>
               padding: const EdgeInsets.all(8.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: kElementHSpacing,
                 children: [
                   Expanded(
                     child: Column(
@@ -611,8 +612,7 @@ class _GameCardState extends ConsumerState<GameCard>
                       ],
                     ),
                   ),
-                  if (showSideChips) ...[
-                    const SizedBox(width: kElementHSpacing),
+                  if (showSideChips)
                     GameCardBadges.topRightChips(
                       theme,
                       widget.game,
@@ -620,7 +620,6 @@ class _GameCardState extends ConsumerState<GameCard>
                       showRatings: options.showRatingsNow,
                       padding: EdgeInsets.zero,
                     ),
-                  ],
                 ],
               ),
             ),
@@ -819,7 +818,7 @@ class _GameCardState extends ConsumerState<GameCard>
       _buildRibbonBand(
         label: 'NEW',
         color: theme.secondary,
-        textColor: theme.primaryButtonText,
+        textColor: theme.onSecondaryText,
         bandIndex: hasDlc ? 1 : 0,
         addedDate: widget.game.createdAt,
       ),

@@ -370,17 +370,16 @@ class _RibbonBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        spacing: 6,
         children: [
           Icon(Icons.more_horiz, size: 22, color: theme.textPrimary),
-          if (showLabels) ...[
-            const SizedBox(width: 6),
+          if (showLabels)
             Text(
               'More',
               style: Theme.of(
                 context,
               ).textTheme.labelLarge!.copyWith(color: theme.textPrimary),
             ),
-          ],
         ],
       ),
     ),
@@ -498,9 +497,9 @@ class _RibbonBar extends StatelessWidget {
           child: Row(
             key: const ValueKey('selection-action-groups'),
             mainAxisSize: MainAxisSize.min,
+            spacing: 8,
             children: [
-              for (final (index, group) in groups.indexed) ...[
-                if (index > 0) const SizedBox(width: 8),
+              for (final group in groups)
                 _group(
                   key: ValueKey('selection-group-${group.first.group.name}'),
                   child: Row(
@@ -523,9 +522,7 @@ class _RibbonBar extends StatelessWidget {
                     ],
                   ),
                 ),
-              ],
-              if (hasOverflow) ...[
-                if (visibleCount > 0) const SizedBox(width: 8),
+              if (hasOverflow)
                 _group(
                   key: const ValueKey('selection-group-more'),
                   child: SizedBox(
@@ -538,7 +535,6 @@ class _RibbonBar extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         );

@@ -7,8 +7,6 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/time/calendar_date.dart';
 import '../widgets/dialog_helpers.dart';
-import '../widgets/section_groupbox.dart';
-import '../../core/settings/settings_model.dart';
 
 const _deadlineExactDateFieldKey = ValueKey('deadline_exact_date_input');
 const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
@@ -209,7 +207,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final formattedDate = _dateFormat.format(_selectedDate);
+    final theme = widget.theme;
     final textScale =
         MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 3).scale(14) /
         14;
@@ -217,119 +215,101 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
     // room for larger text just as the Material calendar does.
     final calendarHeight =
         304.0 + (textScale > 1.3 ? 7 * (textScale - 1) * 8 : 0);
+    final exactDate = TextField(
+      key: _deadlineExactDateFieldKey,
+      controller: _exactDateController,
+      keyboardType: TextInputType.datetime,
+      inputFormatters: [_DeadlineDateInputFormatter()],
+      onChanged: _handleExactDateChanged,
+      style: TextStyle(color: theme.textPrimary),
+      decoration: InputDecoration(
+        labelText: 'Exact date',
+        hintText: 'dd/MM/yyyy',
+        errorText: _exactDateError,
+        errorMaxLines: 2,
+        prefixIcon: Icon(
+          Icons.edit_calendar_outlined,
+          color: theme.textHint,
+          size: 18,
+        ),
+      ),
+    );
+    final dayAmount = TextField(
+      key: _deadlineDaysFieldKey,
+      controller: _dayAmountController,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      onChanged: _handleDayAmountChanged,
+      style: TextStyle(color: theme.textPrimary),
+      decoration: InputDecoration(
+        labelText: 'Expires in',
+        hintText: 'Days',
+        errorText: _dayAmountError,
+        errorMaxLines: 2,
+        suffixText: 'days',
+        prefixIcon: Icon(
+          Icons.timelapse_outlined,
+          color: theme.textHint,
+          size: 18,
+        ),
+      ),
+    );
 
     return ThemedAlertDialog(
-      theme: widget.theme,
+      theme: theme,
       maxWidth: 460,
       title: DialogHeader(
         icon: Icons.schedule,
         title: 'Select Deadline',
-        theme: widget.theme,
+        theme: theme,
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
         children: [
-          SectionGroupBox(
-            title: 'Calendar',
-            titleIcon: Icons.calendar_month_outlined,
-            titleLocation: SectionTitleLocation.top,
-            theme: widget.theme,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
-            stackTrailingWhenCompact: textScale > 1.3,
-            headerBottomPadding: 0,
-            trailing: Semantics(
-              label: 'Selected deadline: $formattedDate',
-              child: Container(
-                key: const ValueKey('deadline-selected-date'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.theme.accent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(
-                    widget.theme.cornerRadius,
-                  ),
-                ),
-                child: Text(
-                  formattedDate,
-                  style: TextStyle(
-                    color: widget.theme.accent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+          _SelectedDateCard(
+            theme: theme,
+            date: _selectedDate,
+            daysLeft: calendarDaysUntil(_selectedDate, _currentDateOnly),
+          ),
+          Container(
+            key: const ValueKey('deadline-calendar-panel'),
+            height: calendarHeight,
+            decoration: BoxDecoration(
+              color: theme.surface,
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+              border: Border.all(color: theme.border),
             ),
-            child: SizedBox(
-              height: calendarHeight,
-              child: DatePickerTheme(
-                data: DatePickerTheme.of(
-                  context,
-                ).copyWith(todayBorder: BorderSide.none),
-                child: CalendarDatePicker(
-                  key: ValueKey(
-                    'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
-                  ),
-                  initialDate: _selectedDate,
-                  firstDate: widget.firstDate,
-                  lastDate: widget.lastDate,
-                  currentDate: widget.currentDate,
-                  onDateChanged: _setSelectedDate,
+            child: DatePickerTheme(
+              data: DatePickerTheme.of(
+                context,
+              ).copyWith(todayBorder: BorderSide.none),
+              child: CalendarDatePicker(
+                key: ValueKey(
+                  'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
                 ),
+                initialDate: _selectedDate,
+                firstDate: widget.firstDate,
+                lastDate: widget.lastDate,
+                currentDate: widget.currentDate,
+                onDateChanged: _setSelectedDate,
               ),
             ),
           ),
-          const SizedBox(height: kDialogSpacing),
-          SectionGroupBox(
-            title: 'Quick Entry',
-            titleIcon: Icons.edit_calendar_outlined,
-            titleLocation: SectionTitleLocation.top,
-            theme: widget.theme,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  key: _deadlineExactDateFieldKey,
-                  controller: _exactDateController,
-                  keyboardType: TextInputType.datetime,
-                  inputFormatters: [_DeadlineDateInputFormatter()],
-                  onChanged: _handleExactDateChanged,
-                  style: TextStyle(color: widget.theme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'Exact date',
-                    hintText: 'dd/MM/yyyy',
-                    errorText: _exactDateError,
-                    prefixIcon: Icon(
-                      Icons.edit_calendar_outlined,
-                      color: widget.theme.textHint,
-                      size: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: _deadlineDaysFieldKey,
-                  controller: _dayAmountController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: _handleDayAmountChanged,
-                  style: TextStyle(color: widget.theme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'Expires in days',
-                    hintText: 'Enter day amount',
-                    errorText: _dayAmountError,
-                    suffixText: 'days',
-                    prefixIcon: Icon(
-                      Icons.timelapse_outlined,
-                      color: widget.theme.textHint,
-                      size: 18,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          // Side by side when both fit, stacked on narrow screens.
+          LayoutBuilder(
+            builder: (context, constraints) =>
+                constraints.maxWidth / textScale >= 360
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
+                    children: [
+                      Expanded(child: exactDate),
+                      Expanded(child: dayAmount),
+                    ],
+                  )
+                : Column(spacing: 12, children: [exactDate, dayAmount]),
           ),
         ],
       ),
@@ -343,6 +323,97 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
           child: const Text('Set deadline'),
         ),
       ],
+    );
+  }
+}
+
+/// The chosen date, tinted by how soon it is due like the game card badges,
+/// with the days left as large as the stats tiles' numbers.
+class _SelectedDateCard extends StatelessWidget {
+  const _SelectedDateCard({
+    required this.theme,
+    required this.date,
+    required this.daysLeft,
+  });
+
+  final AppThemeData theme;
+  final DateTime date;
+  final int daysLeft;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (daysLeft) {
+      < 0 => theme.secondary,
+      <= 7 => theme.deadlineSoon,
+      _ => theme.deadlineNormal,
+    };
+    final formatted = _dateFormat.format(date);
+    return Semantics(
+      label: 'Selected deadline: $formatted',
+      liveRegion: true,
+      child: Container(
+        key: const ValueKey('deadline-selected-date'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        ),
+        child: Row(
+          spacing: 14,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(theme.cornerRadius),
+              ),
+              child: Icon(Icons.event, color: color, size: 26),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  Text(
+                    formatted,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    DateFormat.EEEE().format(date),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${daysLeft.abs()}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                Text(switch (daysLeft) {
+                  0 => 'today',
+                  1 => 'day left',
+                  -1 => 'day ago',
+                  < 0 => 'days ago',
+                  _ => 'days left',
+                }, style: TextStyle(color: theme.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

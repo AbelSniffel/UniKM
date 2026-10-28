@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/biometric_unlock.dart';
 import '../../core/services/database_switching.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/settings/settings_model.dart';
@@ -45,17 +46,56 @@ class DatabaseEncryptionController {
     );
   }
 
-  Future<void> disable(String password) => _transition(
-    verifyPassword: password,
-    operation: () => manager.disable(password),
-  );
+  Future<void> disable(String password) async {
+    await _transition(
+      verifyPassword: password,
+      operation: () => manager.disable(password),
+    );
+    // A plain database has no password left to unlock with.
+    await _biometric.forget(manager.dbPath);
+  }
 
-  Future<void> changePassword(String currentPassword, String newPassword) =>
-      _transition(
-        verifyPassword: currentPassword,
-        reopenPassword: newPassword,
-        operation: () => manager.changePassword(currentPassword, newPassword),
-      );
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    await _transition(
+      verifyPassword: currentPassword,
+      reopenPassword: newPassword,
+      operation: () => manager.changePassword(currentPassword, newPassword),
+    );
+    if (!await _biometric.isPaired(manager.dbPath)) return;
+    // Keep the pairing with the new password; the phone asks to confirm.
+    try {
+      await _biometric.pair(manager.dbPath, newPassword);
+    } catch (_) {
+      await _biometric.forget(manager.dbPath);
+    }
+  }
+
+  BiometricUnlock get _biometric => container.read(biometricUnlockProvider);
+
+  /// The biometric pairing of this database, or null where this phone
+  /// cannot unlock with biometrics (always null on desktop).
+  Future<BiometricPairing?> biometricPairing() async {
+    if (!await _biometric.isAvailable()) return null;
+    return (
+      paired: await _biometric.isPaired(manager.dbPath),
+      pair: _pairBiometric,
+      unpair: () => _biometric.forget(manager.dbPath),
+    );
+  }
+
+  /// Pairs this database after checking [password], which the phone then
+  /// stores behind a biometric check.
+  Future<void> _pairBiometric(String password) async {
+    final session = container.read(encryptedDbSessionProvider);
+    final valid = session != null && session.baseDbPath == manager.dbPath
+        ? session.password == password
+        : await manager.verifyPassword(password);
+    if (!valid) throw InvalidPasswordException();
+    await _biometric.pair(manager.dbPath, password);
+  }
 
   Future<void> _transition({
     required Future<void> Function() operation,
@@ -107,9 +147,7 @@ class DatabaseEncryptionController {
       await container
           .read(settingsProvider.notifier)
           .setSetting(SettingsKeys.encryptionEnabled, manager.isEncrypted);
-      container
-          .read(encryptionStateProvider.notifier)
-          .set(manager.state);
+      container.read(encryptionStateProvider.notifier).set(manager.state);
     } catch (_) {
       // A failed file operation keeps the existing file and password usable.
       if (closed) {

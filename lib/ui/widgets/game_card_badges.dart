@@ -11,6 +11,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/color_utils.dart';
 import '../../models/game.dart';
 import '../../shared/time/calendar_date.dart';
 import '../../providers/app_providers.dart';
@@ -102,7 +103,7 @@ abstract final class GameCardBadges {
     GameFetchStatus.error => (
       color: theme.secondary,
       tooltip: 'Fetch failed',
-      icon: Icon(Icons.error, color: theme.primaryButtonText, size: iconSize),
+      icon: Icon(Icons.error, color: theme.onSecondaryText, size: iconSize),
     ),
   };
 
@@ -141,7 +142,7 @@ abstract final class GameCardBadges {
       icon: PlatformIcon(
         platform: platform,
         size: platformIconSizeFor(platform, minHeight: size),
-        color: theme.primaryButtonText,
+        color: theme.onSecondaryText,
       ),
     );
   }
@@ -157,6 +158,7 @@ abstract final class GameCardBadges {
     final ratingText = reviewCount == 0
         ? 'No Reviews'
         : '${game.reviewScore}% · ${game.reviewRating} · ${_compactNumber.format(reviewCount)}';
+    final fill = game.reviewColorFor(negativeColor: theme.secondary);
 
     return Tooltip(
       message: ratingText,
@@ -167,16 +169,14 @@ abstract final class GameCardBadges {
             ? BoxConstraints.tightFor(height: minHeight)
             : null,
         decoration: BoxDecoration(
-          color: game
-              .reviewColorFor(negativeColor: theme.secondary)
-              .withValues(alpha: 0.95),
+          color: fill.withValues(alpha: 0.95),
           borderRadius:
               borderRadius ??
               chipBorderRadius(theme, minHeight ?? kBadgeHeight),
         ),
         child: Icon(
           _ratingIconFor(game.reviewScore, reviewCount),
-          color: Colors.white,
+          color: contrastColor(fill),
           size: 18.0,
         ),
       ),
@@ -209,6 +209,7 @@ abstract final class GameCardBadges {
       _ => (theme.deadlineNormal, date ?? 'Deadline'),
     };
     final badgeColor = color.withValues(alpha: kGameCardChipBackgroundAlpha);
+    final foreground = contrastColor(color);
     final tooltipMessage = date == null
         ? text
         : isExpired
@@ -218,7 +219,7 @@ abstract final class GameCardBadges {
         : 'Due in $daysLeft days · $date';
     final icon = Icon(
       isExpired ? Icons.event_busy : Icons.schedule,
-      color: Colors.white,
+      color: foreground,
       size: 18.0,
     );
 
@@ -250,8 +251,8 @@ abstract final class GameCardBadges {
               const SizedBox(width: 6),
               Text(
                 text,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: foreground,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -372,12 +373,8 @@ abstract final class GameCardBadges {
                 ? RepaintBoundary(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (int i = 0; i < extraChips.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 6),
-                          extraChips[i],
-                        ],
-                      ],
+                      spacing: 6,
+                      children: extraChips,
                     ),
                   )
                 : const SizedBox.shrink(),

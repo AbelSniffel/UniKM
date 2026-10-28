@@ -45,8 +45,12 @@ enum NavItem {
   final IconData unselectedIcon;
 }
 
-/// Current navigation state
+/// Current navigation state. [NavItem.updates] opens a dialog instead of a
+/// page, so it is never current.
 final currentNavProvider = sessionValueProvider(NavItem.home);
+
+/// Whether the update dialog is shown; setting it opens the dialog.
+final updateDialogOpenProvider = sessionValueProvider(false);
 
 // =============================================================================
 // PAGE NAVIGATION

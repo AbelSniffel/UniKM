@@ -22,7 +22,6 @@ import '../../../providers/app_providers.dart';
 import '../../dialogs/backup_dialogs.dart';
 import '../../dialogs/encryption_dialogs.dart';
 import '../../widgets/app_progress_indicator.dart';
-import '../../widgets/app_radio_list_tile.dart';
 import '../../widgets/file_drop_field.dart';
 import '../../dialogs/import_export_dialog.dart';
 import '../../dialogs/device_sync_dialog.dart';
@@ -31,6 +30,7 @@ import '../../widgets/database_file_row.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../widgets/tinted_tiles.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
@@ -74,56 +74,51 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
             children: [
-              SectionGroupBox(
-                title: 'Database Type',
-                titleIcon: Icons.storage,
-                theme: theme,
-                child: RadioGroup<String>(
-                  groupValue: selectedType,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => selectedType = value);
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AppRadioListTile<String>(
-                        theme: theme,
-                        value: 'unencrypted',
-                        title: 'Unencrypted database',
-                        subtitle: 'Creates a standard SQLite database file.',
-                      ),
-                      AppRadioListTile<String>(
-                        theme: theme,
-                        value: 'encrypted',
-                        title: 'Encrypted database',
-                        subtitle:
-                            'Creates an encrypted database that requires a password.',
-                      ),
-                    ],
+              TintedHeading(theme: theme, title: 'Database Type'),
+              for (final (type, icon, title, subtitle) in [
+                (
+                  'unencrypted',
+                  Icons.lock_open,
+                  'Unencrypted database',
+                  'Creates a standard SQLite database file.',
+                ),
+                (
+                  'encrypted',
+                  Icons.lock,
+                  'Encrypted database',
+                  'Creates an encrypted database that requires a password.',
+                ),
+              ])
+                TintedOptionTile(
+                  theme: theme,
+                  icon: icon,
+                  title: title,
+                  subtitle: subtitle,
+                  selected: selectedType == type,
+                  onTap: () => setState(() => selectedType = type),
+                ),
+              if (useMobileLayout)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextField(
+                    controller: fileNameController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Database file name',
+                      hintText: selectedType == 'encrypted'
+                          ? 'UniKM_keys.enc'
+                          : 'UniKM_keys.db',
+                      errorText: fileNameError,
+                    ),
+                    onChanged: (_) {
+                      if (fileNameError != null) {
+                        setState(() => fileNameError = null);
+                      }
+                    },
                   ),
                 ),
-              ),
-              if (useMobileLayout) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: fileNameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Database file name',
-                    hintText: selectedType == 'encrypted'
-                        ? 'UniKM_keys.enc'
-                        : 'UniKM_keys.db',
-                    errorText: fileNameError,
-                  ),
-                  onChanged: (_) {
-                    if (fileNameError != null) {
-                      setState(() => fileNameError = null);
-                    }
-                  },
-                ),
-              ],
             ],
           ),
           actions: [
@@ -190,33 +185,28 @@ class DatabaseHeaderActions extends ConsumerWidget {
     return SettingsHeaderActions(
       theme: theme,
       expanded: expanded,
+      inset: true,
       children: [
-        SettingsHeaderAction(
-          theme: theme,
-          icon: Icons.download,
-          tooltip: 'Import DB',
-          onTap: () => showImportDialog(context),
-        ),
-        SettingsHeaderAction(
-          theme: theme,
-          icon: Icons.upload,
-          tooltip: 'Export DB',
-          onTap: () => showExportDialog(context),
-        ),
-        SettingsHeaderAction(
-          theme: theme,
-          icon: Icons.note_add,
-          tooltip: 'New DB',
-          onTap: switching ? null : () => _createDatabase(context, ref),
-        ),
-        SettingsHeaderAction(
-          theme: theme,
-          icon: Icons.swap_horiz,
-          tooltip: 'Change DB',
-          onTap: switching
-              ? null
-              : () => showChangeDatabaseDialog(context, theme),
-        ),
+        for (final (icon, tooltip, onTap) in [
+          (Icons.download, 'Import DB', () => showImportDialog(context)),
+          (Icons.upload, 'Export DB', () => showExportDialog(context)),
+          (
+            Icons.note_add,
+            'New DB',
+            switching ? null : () => _createDatabase(context, ref),
+          ),
+          (
+            Icons.swap_horiz,
+            'Change DB',
+            switching ? null : () => showChangeDatabaseDialog(context, theme),
+          ),
+        ])
+          SettingsHeaderAction(
+            theme: theme,
+            icon: icon,
+            tooltip: tooltip,
+            onTap: onTap,
+          ),
       ],
     );
   }
@@ -268,11 +258,14 @@ class _DatabaseEncryptionButtonState
       final manager = container.read(encryptionManagerProvider(path));
       final controller = DatabaseEncryptionController(container, manager);
       if (manager.isEncrypted) {
+        final biometric = await controller.biometricPairing();
+        if (!mounted) return;
         await EncryptionManagementDialog.show(
           context,
           theme,
           onDisable: controller.disable,
           onChangePassword: controller.changePassword,
+          biometric: biometric,
         );
       } else {
         final password = await EnableEncryptionDialog.show(
@@ -338,20 +331,28 @@ class DatabaseSection extends ConsumerStatefulWidget {
     label: 'Active database file',
   );
   static const SettingTextSpec maskKeysSpec = SettingTextSpec(
-    label: 'Mask keys by default',
-    description: 'Hide game keys until revealed',
+    label: 'Mask keys',
+    icon: Icons.visibility_off_outlined,
   );
   static const SettingTextSpec autoHideKeysSpec = SettingTextSpec(
-    label: 'Auto-hide keys',
-    description: 'Automatically hide keys after copying',
+    label: 'Hide after copy',
+    icon: Icons.timer_outlined,
+  );
+  static const SettingTextSpec autoLockSpec = SettingTextSpec(
+    label: 'Auto-lock',
+    icon: Icons.lock_clock_outlined,
+  );
+  static const SettingTextSpec hideInRecentsSpec = SettingTextSpec(
+    label: 'Hide in recents',
+    icon: Icons.privacy_tip_outlined,
   );
   static const SettingTextSpec enableLocalDeviceSyncSpec = SettingTextSpec(
-    label: 'Enable Local Device Sync',
-    description: 'Allows LAN discovery between devices.',
+    label: 'Local sync',
+    icon: Icons.lan_outlined,
   );
   static const SettingTextSpec autoSyncOnStartupSpec = SettingTextSpec(
-    label: 'Auto-sync on Startup',
-    description: 'Try syncing trusted devices when the app opens.',
+    label: 'Sync on startup',
+    icon: Icons.sync,
   );
 
   static const SettingsSearchGroup dataManagementSearchGroup =
@@ -363,6 +364,8 @@ class DatabaseSection extends ConsumerStatefulWidget {
           'Enable Encryption',
           'Disable Encryption',
           'Change Password',
+          'Fingerprint Unlock',
+          'Biometric',
           'Import DB',
           'Export DB',
           'Change DB',
@@ -376,15 +379,33 @@ class DatabaseSection extends ConsumerStatefulWidget {
 
   static const SettingsSearchGroup keyVisibilitySearchGroup =
       SettingsSearchGroup(
-        title: 'Key Visibility',
-        settings: [maskKeysSpec, autoHideKeysSpec],
+        title: 'Key Security',
+        settings: [
+          maskKeysSpec,
+          autoHideKeysSpec,
+          autoLockSpec,
+          hideInRecentsSpec,
+        ],
+        extraTexts: [
+          'Key Visibility',
+          'Mask keys by default',
+          'Auto-hide keys',
+          'Hide in recent apps',
+          'Clipboard',
+          'Lock',
+          'Screenshots',
+        ],
+        info:
+            'Copied keys clear from the clipboard after a minute. Auto-lock '
+            'only affects encrypted databases.',
       );
 
   static const SettingsSearchGroup databaseSyncSearchGroup =
       SettingsSearchGroup(
         title: 'Database Sync',
         settings: [enableLocalDeviceSyncSpec, autoSyncOnStartupSpec],
-        extraTexts: ['Device Sync'],
+        extraTexts: ['Device Sync', 'Enable Local Device Sync', 'LAN'],
+        info: 'Sync with trusted devices on your network.',
       );
 
   @override
@@ -442,49 +463,63 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     required String label,
     String? description,
     required Widget trailing,
-  }) => LayoutBuilder(
-    builder: (context, constraints) {
-      final stacked = constraints.maxWidth < 220;
-      final labelWidget = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: widget.theme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
+  }) {
+    // Built outside the layout callback, so a width change does not rebuild it.
+    final labelWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      spacing: 2,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: widget.theme.textPrimary,
+            fontWeight: FontWeight.w500,
           ),
-          if (description != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              description,
-              style: TextStyle(color: widget.theme.textSecondary, fontSize: 12),
-            ),
-          ],
-        ],
-      );
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: stacked
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  labelWidget,
-                  const SizedBox(height: kElementVSpacing),
-                  Align(alignment: Alignment.centerRight, child: trailing),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(child: labelWidget),
-                  const SizedBox(width: kElementHSpacing),
-                  trailing,
-                ],
-              ),
-      );
-    },
+        ),
+        if (description != null)
+          Text(
+            description,
+            style: TextStyle(color: widget.theme.textSecondary, fontSize: 12),
+          ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = constraints.maxWidth < 220;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    labelWidget,
+                    const SizedBox(height: kElementVSpacing),
+                    Align(alignment: Alignment.centerRight, child: trailing),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: labelWidget),
+                    const SizedBox(width: kElementHSpacing),
+                    trailing,
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  /// A header info icon whose tooltip also opens on tap.
+  Widget _infoButton(GlobalKey<TooltipState> key, String message) => Tooltip(
+    key: key,
+    message: message,
+    child: IconButton(
+      style: widget.theme.compactIconButtonStyle,
+      icon: const Icon(Icons.info_outline, size: 26),
+      color: widget.theme.accent,
+      onPressed: () => key.currentState?.ensureTooltipVisible(),
+    ),
   );
 
   String _formatNextBackupTime(DateTime nextTime) {
@@ -524,66 +559,107 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
       matchesSearch: widget.matchesSearch,
       group: group,
     );
-    final showDataManagement = shows(DatabaseSection.dataManagementSearchGroup);
-    final showKeyVisibility = shows(DatabaseSection.keyVisibilitySearchGroup);
-    final showDatabaseSync = shows(DatabaseSection.databaseSyncSearchGroup);
-
-    if (isSearching &&
-        !showDataManagement &&
-        !showDatabaseSync &&
-        !showKeyVisibility) {
-      return const SizedBox.shrink();
-    }
 
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
         // Data Management (Backup/Restore)
         SectionGroupEntry(
-          visible: showDataManagement,
-          builder: (position, isAlternate) => _buildDataManagementSection(
-            nextBackupTime: nextBackupTime,
-            databaseSwitching: databaseSwitching,
+          visible: shows(DatabaseSection.dataManagementSearchGroup),
+          builder: (position, isAlternate) => SectionGroupBox(
+            title: DatabaseSection.dataManagementSearchGroup.title,
+            theme: widget.theme,
+            titleIcon: Icons.backup,
+            headerBottomPadding: 0,
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
+            headerCrossAxisAlignment: CrossAxisAlignment.center,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: kElementHSpacing,
+              children: [
+                IconButton(
+                  tooltip: 'Backup Manager',
+                  style: widget.theme.compactIconButtonStyle,
+                  color: widget.theme.accent,
+                  icon: const Icon(Icons.backup, size: 26),
+                  onPressed: databaseSwitching
+                      ? null
+                      : () => showBackupDialog(context),
+                ),
+                if (nextBackupTime != null)
+                  _infoButton(
+                    _backupInfoKey,
+                    'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
+                  ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Divider(
+                  key: const ValueKey('data-management-separator'),
+                  height: 8,
+                  color: widget.theme.border,
+                ),
+                _buildResponsiveSettingRow(
+                  label: DatabaseSection.activeDatabaseSpec.label,
+                  description: _activeDbPath,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: kElementHSpacing,
+                    children: [
+                      if (_isLoading)
+                        const AppCircularProgressIndicator(size: 20),
+                      _DatabaseEncryptionButton(theme: widget.theme),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         // Database Sync
         SectionGroupEntry(
-          visible: showDatabaseSync,
+          visible: shows(DatabaseSection.databaseSyncSearchGroup),
           builder: (position, isAlternate) => SectionGroupBox(
             title: DatabaseSection.databaseSyncSearchGroup.title,
             theme: widget.theme,
             titleIcon: Icons.sync,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: IconButton(
-              tooltip: 'Device Sync',
-              style: widget.theme.compactIconButtonStyle,
-              icon: const Icon(Icons.sync, size: 26),
-              color: widget.theme.accent,
-              onPressed: () => showDeviceSyncDialog(context),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: kElementHSpacing,
+              children: [
+                IconButton(
+                  tooltip: 'Device Sync',
+                  style: widget.theme.compactIconButtonStyle,
+                  icon: const Icon(Icons.sync, size: 26),
+                  color: widget.theme.accent,
+                  onPressed: () => showDeviceSyncDialog(context),
+                ),
+                SettingsInfoButton(
+                  theme: widget.theme,
+                  message: DatabaseSection.databaseSyncSearchGroup.info!,
+                ),
+              ],
             ),
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
-            child: SettingsControlWrap(
-              children: [
-                SettingsToggleCard(
-                  theme: widget.theme,
-                  label: DatabaseSection.enableLocalDeviceSyncSpec.label,
-                  description:
-                      DatabaseSection.enableLocalDeviceSyncSpec.description,
+            child: buildSpecToggleSettingList(
+              theme: widget.theme,
+              entries: [
+                (
+                  spec: DatabaseSection.enableLocalDeviceSyncSpec,
                   value: syncEnabled,
                   onChanged: syncNotifier.setEnabled,
                 ),
-                SettingsToggleCard(
-                  theme: widget.theme,
-                  label: DatabaseSection.autoSyncOnStartupSpec.label,
-                  description:
-                      DatabaseSection.autoSyncOnStartupSpec.description,
+                (
+                  spec: DatabaseSection.autoSyncOnStartupSpec,
                   value: syncAutoOnStartup,
                   onChanged: syncEnabled ? syncNotifier.setAutoOnStartup : null,
                 ),
@@ -591,33 +667,62 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             ),
           ),
         ),
-        // Key Visibility
+        // Key Security
         SectionGroupEntry(
-          visible: showKeyVisibility,
+          visible: shows(DatabaseSection.keyVisibilitySearchGroup),
           builder: (position, isAlternate) => SectionGroupBox(
             title: DatabaseSection.keyVisibilitySearchGroup.title,
             theme: widget.theme,
-            titleIcon: Icons.visibility,
+            titleIcon: Icons.security,
+            headerCrossAxisAlignment: CrossAxisAlignment.center,
+            trailing: SettingsInfoButton(
+              theme: widget.theme,
+              message: DatabaseSection.keyVisibilitySearchGroup.info!,
+            ),
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
             child: SettingsControlWrap(
               children: [
-                SettingsToggleCard(
+                for (final (spec, value, key) in [
+                  (
+                    DatabaseSection.maskKeysSpec,
+                    security.maskKeys,
+                    SettingsKeys.maskKeys,
+                  ),
+                  (
+                    DatabaseSection.autoHideKeysSpec,
+                    security.autoHideKeys,
+                    SettingsKeys.autoHideKeys,
+                  ),
+                  if (PlatformFileActions.isMobilePlatform)
+                    (
+                      DatabaseSection.hideInRecentsSpec,
+                      security.hideInRecents,
+                      SettingsKeys.hideInRecents,
+                    ),
+                ])
+                  SettingsToggleCard(
+                    theme: widget.theme,
+                    label: spec.label,
+                    icon: spec.icon,
+                    value: value,
+                    onChanged: settingsNotifier.setter(key),
+                  ),
+                SettingsChoiceCard<int>(
                   theme: widget.theme,
-                  label: DatabaseSection.maskKeysSpec.label,
-                  description: DatabaseSection.maskKeysSpec.description,
-                  value: security.maskKeys,
-                  onChanged: (value) =>
-                      settingsNotifier.setSetting(SettingsKeys.maskKeys, value),
-                ),
-                SettingsToggleCard(
-                  theme: widget.theme,
-                  label: DatabaseSection.autoHideKeysSpec.label,
-                  description: DatabaseSection.autoHideKeysSpec.description,
-                  value: security.autoHideKeys,
-                  onChanged: settingsNotifier.setter(SettingsKeys.autoHideKeys),
+                  label: DatabaseSection.autoLockSpec.label,
+                  icon: DatabaseSection.autoLockSpec.icon,
+                  value: security.autoLockMinutes,
+                  choices: const [
+                    SettingsChoice(5, '5 minutes'),
+                    SettingsChoice(15, '15 minutes'),
+                    SettingsChoice(0, 'No limit'),
+                  ],
+                  onChanged: settingsNotifier.setter(
+                    SettingsKeys.autoLockMinutes,
+                  ),
                 ),
               ],
             ),
@@ -626,73 +731,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
       ],
     );
   }
-
-  Widget _buildDataManagementSection({
-    required String searchQuery,
-    required DateTime? nextBackupTime,
-    required bool databaseSwitching,
-    required bool isSearchMatch,
-    SectionGroupPosition groupPosition = SectionGroupPosition.only,
-    bool alternateBackground = false,
-  }) => SectionGroupBox(
-    title: DatabaseSection.dataManagementSearchGroup.title,
-    theme: widget.theme,
-    titleIcon: Icons.backup,
-    headerBottomPadding: 0,
-    searchQuery: searchQuery,
-    isSearchMatch: isSearchMatch,
-    groupPosition: groupPosition,
-    alternateBackground: alternateBackground,
-    headerCrossAxisAlignment: CrossAxisAlignment.center,
-    trailing: Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: kElementHSpacing,
-      children: [
-        IconButton(
-          tooltip: 'Backup Manager',
-          style: widget.theme.compactIconButtonStyle,
-          color: widget.theme.accent,
-          icon: const Icon(Icons.backup, size: 26),
-          onPressed: databaseSwitching ? null : () => showBackupDialog(context),
-        ),
-        if (nextBackupTime != null)
-          Tooltip(
-            key: _backupInfoKey,
-            message:
-                'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
-            child: IconButton(
-              style: widget.theme.compactIconButtonStyle,
-              icon: const Icon(Icons.info_outline, size: 26),
-              color: widget.theme.accent,
-              onPressed: () =>
-                  _backupInfoKey.currentState?.ensureTooltipVisible(),
-            ),
-          ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Divider(
-          key: const ValueKey('data-management-separator'),
-          height: 8,
-          color: widget.theme.border,
-        ),
-        _buildResponsiveSettingRow(
-          label: DatabaseSection.activeDatabaseSpec.label,
-          description: _activeDbPath,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            spacing: kElementHSpacing,
-            children: [
-              if (_isLoading) const AppCircularProgressIndicator(size: 20),
-              _DatabaseEncryptionButton(theme: widget.theme),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
 class _ChangeDatabaseDialog extends ConsumerStatefulWidget {
@@ -941,120 +979,108 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
               },
               invalidDropMessage: 'Drop one .db or .enc database file.',
             ),
-            const SizedBox(height: 12),
-            SectionGroupBox(
-              title: 'Current',
-              titleIcon: Icons.storage,
-              titleLocation: SectionTitleLocation.top,
-              theme: widget.theme,
-              child: _isLoading
-                  ? const AppCircularProgressIndicator(size: 20)
-                  : DatabaseFileRow(
-                      theme: widget.theme,
-                      title: p.basename(_activeFilePath),
-                      subtitle: _activeFilePath,
-                      isEncrypted:
-                          _databaseFiles[_activeDbPath]?.isEncrypted ?? false,
-                      available: _databaseFiles[_activeDbPath]?.exists ?? false,
-                      highlighted: true,
-                      margin: EdgeInsets.zero,
-                      actions: [
-                        IconButton(
-                          onPressed: _activeFilePath.isEmpty
-                              ? null
-                              : _openCurrentFolder,
-                          tooltip: 'Open database folder',
-                          icon: const Icon(Icons.folder_open),
-                        ),
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: SectionGroupBox(
-                title: 'Recent',
-                titleIcon: Icons.history,
-                titleLocation: SectionTitleLocation.top,
+            const SizedBox(height: 16),
+            TintedHeading(theme: widget.theme, title: 'Current'),
+            const SizedBox(height: 8),
+            if (_isLoading)
+              const Center(child: AppCircularProgressIndicator(size: 20))
+            else
+              DatabaseFileRow(
                 theme: widget.theme,
-                child: recents.isEmpty
-                    ? Text(
-                        'No other recent databases.',
-                        style: TextStyle(color: widget.theme.textSecondary),
-                      )
-                    : Scrollbar(
+                title: p.basename(_activeFilePath),
+                subtitle: _activeFilePath,
+                isEncrypted:
+                    _databaseFiles[_activeDbPath]?.isEncrypted ?? false,
+                available: _databaseFiles[_activeDbPath]?.exists ?? false,
+                highlighted: true,
+                margin: EdgeInsets.zero,
+                actions: [
+                  IconButton(
+                    onPressed: _activeFilePath.isEmpty
+                        ? null
+                        : _openCurrentFolder,
+                    tooltip: 'Open database folder',
+                    icon: const Icon(Icons.folder_open),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 16),
+            TintedHeading(
+              theme: widget.theme,
+              title: 'Recent',
+              trailing: '${recents.length}',
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: recents.isEmpty
+                  ? Text(
+                      'No other recent databases.',
+                      style: TextStyle(color: widget.theme.textSecondary),
+                    )
+                  : Scrollbar(
+                      controller: _scrollController,
+                      child: ListView.builder(
                         controller: _scrollController,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          primary: false,
-                          itemCount: recents.length,
-                          itemBuilder: (context, index) {
-                            final basePath = recents[index];
-                            final file = _databaseFiles[basePath];
-                            final resolvedPath = file?.path ?? basePath;
-                            final sizeBytes = file?.sizeBytes;
+                        primary: false,
+                        itemCount: recents.length,
+                        itemBuilder: (context, index) {
+                          final basePath = recents[index];
+                          final file = _databaseFiles[basePath];
+                          final resolvedPath = file?.path ?? basePath;
+                          final sizeBytes = file?.sizeBytes;
 
-                            return GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onSecondaryTapDown: (details) async {
-                                final overlay =
-                                    Overlay.of(
-                                          context,
-                                        ).context.findRenderObject()
-                                        as RenderBox;
-                                final position = RelativeRect.fromRect(
-                                  Rect.fromPoints(
-                                    details.globalPosition,
-                                    details.globalPosition,
-                                  ),
-                                  Offset.zero & overlay.size,
-                                );
-                                final selected = await showAppMenu<String>(
-                                  context: context,
-                                  position: position,
-                                  items: const [
-                                    PopupMenuItem(
-                                      value: 'remove',
-                                      child: Text('Remove from recents'),
-                                    ),
-                                  ],
-                                );
-
-                                if (selected == 'remove') {
-                                  await _removeRecentDatabasePath(basePath);
-                                }
-                              },
-                              child: DatabaseFileRow(
-                                key: ValueKey(basePath),
-                                theme: widget.theme,
-                                title: p.basename(resolvedPath),
-                                subtitle: sizeBytes == null
-                                    ? resolvedPath
-                                    : '${_formatBytes(sizeBytes)} • $resolvedPath',
-                                isEncrypted: file?.isEncrypted ?? false,
-                                available: file?.exists ?? false,
-                                onTap: file?.exists == true
-                                    ? () async {
-                                        Navigator.pop(context);
-                                        await _switchTo(resolvedPath);
-                                      }
-                                    : null,
-                                actions: [
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.delete_outline,
-                                      color: widget.theme.secondary,
-                                    ),
-                                    tooltip: 'Remove from recents',
-                                    onPressed: () =>
-                                        _removeRecentDatabasePath(basePath),
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onSecondaryTapDown: (details) async {
+                              final selected = await showAppMenu<String>(
+                                context: context,
+                                position: overlayMenuPosition(
+                                  context,
+                                  details.globalPosition & Size.zero,
+                                ),
+                                items: const [
+                                  PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('Remove from recents'),
                                   ),
                                 ],
-                              ),
-                            );
-                          },
-                        ),
+                              );
+
+                              if (selected == 'remove') {
+                                await _removeRecentDatabasePath(basePath);
+                              }
+                            },
+                            child: DatabaseFileRow(
+                              key: ValueKey(basePath),
+                              theme: widget.theme,
+                              title: p.basename(resolvedPath),
+                              subtitle: sizeBytes == null
+                                  ? resolvedPath
+                                  : '${_formatBytes(sizeBytes)} • $resolvedPath',
+                              isEncrypted: file?.isEncrypted ?? false,
+                              available: file?.exists ?? false,
+                              onTap: file?.exists == true
+                                  ? () async {
+                                      Navigator.pop(context);
+                                      await _switchTo(resolvedPath);
+                                    }
+                                  : null,
+                              actions: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: widget.theme.secondary,
+                                  ),
+                                  tooltip: 'Remove from recents',
+                                  onPressed: () =>
+                                      _removeRecentDatabasePath(basePath),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-              ),
+                    ),
             ),
           ],
         ),

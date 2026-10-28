@@ -12,6 +12,7 @@ import '../../widgets/settings_card_inset.dart';
 import '../../widgets/settings_card_indicator.dart';
 import '../../widgets/settings_card_layout.dart';
 import '../../widgets/popup_menu_helpers.dart';
+import '../../widgets/search_highlight.dart';
 import '../../widgets/toggle_switch.dart';
 
 /// Responsive settings cards with shared widths across each row.
@@ -69,12 +70,16 @@ class SettingsToggleCard extends ConsumerWidget {
     required this.value,
     required this.onChanged,
     this.description,
+    this.icon,
     this.indicatorStyle,
   });
 
   final AppThemeData theme;
   final String label;
   final String? description;
+
+  /// Shown in a tinted square before the label: the accent while on.
+  final IconData? icon;
   final bool value;
   final ValueChanged<bool>? onChanged;
 
@@ -99,6 +104,7 @@ class SettingsToggleCard extends ConsumerWidget {
         theme: theme,
         label: label,
         description: description,
+        icon: icon,
         active: value,
         isToggle: true,
         indicatorStyle: style,
@@ -146,50 +152,45 @@ class SettingsActionCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    enabled: onTap != null,
-    label: '$label, $actionLabel',
-    child: _SettingsControlCard(
-      theme: theme,
-      label: label,
-      description: description,
-      active: false,
-      enabled: onTap != null,
-      onTap: onTap,
-      trailing: LayoutBuilder(
-        builder: (context, constraints) {
-          final showIcons = constraints.maxWidth >= 120;
-          return Row(
-            children: [
-              if (showIcons && actionIcon != null) ...[
-                Icon(actionIcon, color: theme.accent, size: 18),
-                const SizedBox(width: 6),
-              ],
-              Expanded(
-                child: Text(
-                  actionLabel,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.accent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (showIcons) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  color: theme.textPrimary,
-                  size: 18,
-                ),
-              ],
-            ],
-          );
-        },
+  Widget build(BuildContext context) {
+    final text = Expanded(
+      child: Text(
+        actionLabel,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: theme.accent, fontWeight: FontWeight.w600),
       ),
-    ),
-  );
+    );
+    // Both layouts are built here, so a width change only picks one.
+    final withIcons = Row(
+      children: [
+        if (actionIcon != null) ...[
+          Icon(actionIcon, color: theme.accent, size: 18),
+          const SizedBox(width: 6),
+        ],
+        text,
+        const SizedBox(width: 4),
+        Icon(Icons.arrow_forward_rounded, color: theme.textPrimary, size: 18),
+      ],
+    );
+    final textOnly = Row(children: [text]);
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: '$label, $actionLabel',
+      child: _SettingsControlCard(
+        theme: theme,
+        label: label,
+        description: description,
+        active: false,
+        enabled: onTap != null,
+        onTap: onTap,
+        trailing: LayoutBuilder(
+          builder: (context, constraints) =>
+              constraints.maxWidth >= 120 ? withIcons : textOnly,
+        ),
+      ),
+    );
+  }
 }
 
 class SettingsChoiceCard<T> extends StatelessWidget {
@@ -201,11 +202,15 @@ class SettingsChoiceCard<T> extends StatelessWidget {
     required this.choices,
     required this.onChanged,
     this.description,
+    this.icon,
   });
 
   final AppThemeData theme;
   final String label;
   final String? description;
+
+  /// Shown in a tinted square before the label.
+  final IconData? icon;
 
   final T value;
   final List<SettingsChoice<T>> choices;
@@ -249,6 +254,7 @@ class SettingsChoiceCard<T> extends StatelessWidget {
           theme: theme,
           label: label,
           description: description,
+          icon: icon,
           active: selected != null,
           enabled: onChanged != null,
           onTap: onChanged == null ? null : () => _openMenu(cardContext),
@@ -260,19 +266,13 @@ class SettingsChoiceCard<T> extends StatelessWidget {
 
   Future<void> _openMenu(BuildContext context) async {
     final card = context.findRenderObject() as RenderBox;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final origin = card.localToGlobal(Offset.zero);
     final menuWidth = card.size.width;
     final selected = await showAppMenu<T>(
       context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(
-          origin.dx + card.size.width - menuWidth,
-          origin.dy + card.size.height,
-          menuWidth,
-          1,
-        ),
-        Offset.zero & overlay.size,
+      position: overlayMenuPosition(
+        context,
+        Rect.fromLTWH(origin.dx, origin.dy + card.size.height, menuWidth, 1),
       ),
       color: theme.surface,
       shape: RoundedRectangleBorder(
@@ -303,6 +303,7 @@ class _SettingsControlCard extends StatefulWidget {
     required this.active,
     required this.enabled,
     required this.trailing,
+    this.icon,
     this.onTap,
     this.isToggle = false,
     this.indicatorStyle = SettingsCardIndicatorStyle.switchControl,
@@ -314,6 +315,7 @@ class _SettingsControlCard extends StatefulWidget {
   final bool active;
   final bool enabled;
   final Widget trailing;
+  final IconData? icon;
   final bool isToggle;
   final SettingsCardIndicatorStyle indicatorStyle;
   final VoidCallback? onTap;
@@ -337,15 +339,63 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         ? SettingsCardIndicator.size
         : null;
     final highlighted = widget.enabled && (_hovered || _pressed || _focused);
-    final borderColor = highlighted ? theme.accent : theme.border;
+    // A settings search lights the card whose label it matches.
+    final query = SettingsSearchScope.queryOf(context);
+    final matched =
+        query.isNotEmpty && settingsSearchMatches(query, widget.label);
+    final borderColor = highlighted || matched ? theme.accent : theme.border;
+    final icon = widget.icon;
+    final description = widget.description?.trim().isNotEmpty == true
+        ? widget.description!
+        : null;
+    final descriptionStyle = TextStyle(
+      color: theme.textSecondary,
+      fontSize: 12,
+    );
+    // Built outside the layout callback, so a width change does not rebuild it.
+    final label = Expanded(
+      child: Text.rich(
+        searchHighlightSpan(
+          widget.label,
+          matched ? query : '',
+          TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w600),
+          searchMarkStyle(theme.accent),
+        ),
+      ),
+    );
+    final iconSquare = icon == null
+        ? null
+        : Container(
+            width: 28,
+            height: 28,
+            margin: const EdgeInsetsDirectional.only(end: 10),
+            decoration: BoxDecoration(
+              color: (widget.active ? theme.accent : theme.textSecondary)
+                  .withValues(alpha: 0.18),
+              borderRadius: radius,
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: widget.active ? theme.accent : theme.textSecondary,
+            ),
+          );
+    final background = theme.background.withValues(
+      alpha: widget.enabled ? 0.65 : 0.45,
+    );
     final material = Material(
       animationDuration: const Duration(milliseconds: 140),
-      color: theme.background.withValues(alpha: widget.enabled ? 0.65 : 0.45),
+      color: matched
+          ? Color.alphaBlend(theme.accent.withValues(alpha: 0.12), background)
+          : background,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: !widget.enabled || indicatorSize != null
             ? BorderSide.none
-            : BorderSide(color: borderColor, width: highlighted ? 1.5 : 1),
+            : BorderSide(
+                color: borderColor,
+                width: highlighted || matched ? 1.5 : 1,
+              ),
       ),
       child: InkWell(
         borderRadius: radius,
@@ -364,70 +414,46 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Opacity(
-                opacity: widget.enabled ? 1 : 0.42,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) => ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: widget.isToggle ? kElementHeight : 0,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      widget.label,
-                                      overflow: TextOverflow.visible,
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (indicatorSize != null)
-                              SizedBox(width: indicatorSize.width)
-                            else ...[
-                              const SizedBox(width: 12),
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: constraints.maxWidth * 0.65,
-                                ),
-                                child: widget.trailing,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+          child: Opacity(
+            opacity: widget.enabled ? 1 : 0.42,
+            // The icon and control sit on the label's row, and the
+            // description spans the whole card below them, so neither takes
+            // width from it. Only the label row is built in the layout
+            // callback.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) => ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: widget.isToggle && description == null
+                          ? kElementHeight
+                          : 0,
                     ),
-                    if (widget.description?.trim().isNotEmpty == true) ...[
-                      Divider(height: 16, color: theme.border),
-                      Text(
-                        widget.description!,
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
+                    child: Row(
+                      children: [
+                        ?iconSquare,
+                        label,
+                        if (indicatorSize != null)
+                          SizedBox(width: indicatorSize.width)
+                        else ...[
+                          const SizedBox(width: 12),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth * 0.65,
+                            ),
+                            child: widget.trailing,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                if (description != null)
+                  Text(description, style: descriptionStyle),
+              ],
+            ),
           ),
         ),
       ),

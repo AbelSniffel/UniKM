@@ -15,8 +15,7 @@ import '../../core/services/backup_service.dart';
 import '../../core/services/database_switching.dart';
 import '../../core/services/database_file_info.dart';
 import '../widgets/database_file_row.dart';
-import '../widgets/section_groupbox.dart';
-import '../../core/settings/settings_model.dart';
+import '../widgets/tinted_tiles.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../providers/app_providers.dart';
 import '../pages/settings_sections/settings_control_cards.dart';
@@ -323,77 +322,86 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
             child: AppTabView(
               controller: _tabController,
               children: [
-                SectionGroupBox(
-                  title: 'Backups',
-                  titleIcon: Icons.backup_outlined,
-                  titleLocation: SectionTitleLocation.top,
-                  theme: theme,
-                  headerCrossAxisAlignment: CrossAxisAlignment.center,
-                  trailing: Tooltip(
-                    key: _backupInfoKey,
-                    message:
-                        'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted.',
-                    child: IconButton(
-                      style: theme.compactIconButtonStyle,
-                      icon: const Icon(Icons.info_outline, size: 26),
-                      color: theme.accent,
-                      onPressed: () =>
-                          _backupInfoKey.currentState?.ensureTooltipVisible(),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const Center(child: AppCircularProgressIndicator())
-                      : _backups.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.backup_outlined,
-                                size: 48,
-                                color: theme.textSecondary.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No backups yet',
-                                style: TextStyle(color: theme.textSecondary),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: _backups.length,
-                          itemBuilder: (listContext, index) {
-                            final backup = _backups[index];
-                            return DatabaseFileRow(
-                              key: ValueKey(backup.filePath),
-                              theme: theme,
-                              title: backup.displayName,
-                              subtitle: backup.details,
-                              isEncrypted: backup.isEncrypted,
-                              actions: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.restore,
-                                    color: theme.accent,
-                                  ),
-                                  tooltip: 'Restore this backup',
-                                  onPressed: () => _restoreListedBackup(backup),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: theme.secondary,
-                                  ),
-                                  tooltip: 'Delete this backup',
-                                  onPressed: () => _deleteBackup(backup),
-                                ),
-                              ],
-                            );
-                          },
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 8,
+                  children: [
+                    TintedHeading(
+                      theme: theme,
+                      title: 'Backups',
+                      trailing: '${_backups.length} of $maxBackups',
+                      action: Tooltip(
+                        key: _backupInfoKey,
+                        message:
+                            'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted.',
+                        child: IconButton(
+                          style: theme.compactIconButtonStyle,
+                          icon: const Icon(Icons.info_outline, size: 20),
+                          color: theme.textSecondary,
+                          onPressed: () => _backupInfoKey.currentState
+                              ?.ensureTooltipVisible(),
                         ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: AppCircularProgressIndicator())
+                          : _backups.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.backup_outlined,
+                                    size: 48,
+                                    color: theme.textSecondary.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No backups yet',
+                                    style: TextStyle(
+                                      color: theme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _backups.length,
+                              itemBuilder: (listContext, index) {
+                                final backup = _backups[index];
+                                return DatabaseFileRow(
+                                  key: ValueKey(backup.filePath),
+                                  theme: theme,
+                                  title: backup.displayName,
+                                  subtitle: backup.details,
+                                  isEncrypted: backup.isEncrypted,
+                                  actions: [
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.restore,
+                                        color: theme.accent,
+                                      ),
+                                      tooltip: 'Restore this backup',
+                                      onPressed: () =>
+                                          _restoreListedBackup(backup),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete_outline,
+                                        color: theme.secondary,
+                                      ),
+                                      tooltip: 'Delete this backup',
+                                      onPressed: () => _deleteBackup(backup),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -401,8 +409,10 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            TintedHeading(theme: theme, title: 'Backup File'),
+                            const SizedBox(height: 8),
                             FileDropField(
                               theme: theme,
                               description:
@@ -429,6 +439,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                             const SizedBox(height: kElementVSpacing),
                             SettingsToggleCard(
                               theme: theme,
+                              icon: Icons.backup_outlined,
                               label: 'Backup current database',
                               value: _createBackupFirst,
                               onChanged: (value) =>
@@ -525,21 +536,20 @@ Future<bool> showRestoreConfirmDialog(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Backup to restore:',
-              style: TextStyle(color: theme.textSecondary),
+            TintedHeading(theme: theme, title: 'Backup to Restore'),
+            const SizedBox(height: 8),
+            DatabaseFileRow(
+              theme: theme,
+              title: backup.displayName,
+              subtitle: backup.details,
+              isEncrypted: backup.isEncrypted,
+              highlighted: true,
+              margin: EdgeInsets.zero,
             ),
-            const SizedBox(height: 4),
-            Text(
-              backup.displayName,
-              style: TextStyle(
-                color: theme.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: kDialogSpacing),
+            const SizedBox(height: 16),
             SettingsToggleCard(
               theme: theme,
+              icon: Icons.backup_outlined,
               label: 'Backup current database',
               value: createBackupFirst,
               onChanged: (value) => setState(() => createBackupFirst = value),

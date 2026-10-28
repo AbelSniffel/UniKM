@@ -56,6 +56,98 @@ class AppTabBar extends StatelessWidget {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : kTabTransition;
+    Widget buildRow(bool showIcons) => FocusTraversalGroup(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var index = 0; index < tabs.length; index++)
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  selected: index == selected,
+                  label: tabs[index].label,
+                  excludeSemantics: true,
+                  onTap: () => _select(context, index),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(
+                      begin: index == selected ? 1 : 0,
+                      end: index == selected ? 1 : 0,
+                    ),
+                    duration: duration,
+                    curve: kTabTransitionCurve,
+                    builder: (context, amount, _) {
+                      final tabRadius = _radiusFor(index, radius, context);
+                      final background = Color.lerp(
+                        restColor,
+                        theme.tabSelected,
+                        amount,
+                      )!;
+                      return Material(
+                        color: background,
+                        animationDuration: Duration.zero,
+                        borderRadius: tabRadius,
+                        clipBehavior: Clip.antiAlias,
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            gradient: SurfaceDepth.gradient(background),
+                          ),
+                          child: InkWell(
+                            borderRadius: tabRadius,
+                            hoverColor: theme.navItemHover,
+                            splashColor: theme.navItemHover,
+                            highlightColor: theme.tabSelected,
+                            onTap: () => _select(context, index),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (showIcons &&
+                                      tabs[index].icon != null) ...[
+                                    Icon(
+                                      tabs[index].icon,
+                                      size: 16,
+                                      color: Color.lerp(
+                                        theme.textSecondary,
+                                        theme.primaryButtonText,
+                                        amount,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      tabs[index].label,
+                                      textAlign: TextAlign.center,
+                                      style: labelStyle.copyWith(
+                                        color: Color.lerp(
+                                          theme.textSecondary,
+                                          theme.primaryButtonText,
+                                          amount,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    // Each variant is built once, so a width change only picks one.
+    final rows = <bool, Widget>{};
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.all(radius),
@@ -70,101 +162,7 @@ class AppTabBar extends StatelessWidget {
             final showIcons =
                 constraints.maxWidth / tabs.length >= 105 &&
                 MediaQuery.textScalerOf(context).scale(14) <= 17;
-            return FocusTraversalGroup(
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var index = 0; index < tabs.length; index++)
-                      Expanded(
-                        child: Semantics(
-                          button: true,
-                          selected: index == selected,
-                          label: tabs[index].label,
-                          excludeSemantics: true,
-                          onTap: () => _select(context, index),
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(
-                              begin: index == selected ? 1 : 0,
-                              end: index == selected ? 1 : 0,
-                            ),
-                            duration: duration,
-                            curve: kTabTransitionCurve,
-                            builder: (context, amount, _) {
-                              final tabRadius = _radiusFor(
-                                index,
-                                radius,
-                                context,
-                              );
-                              final background = Color.lerp(
-                                restColor,
-                                theme.tabSelected,
-                                amount,
-                              )!;
-                              return Material(
-                                color: background,
-                                animationDuration: Duration.zero,
-                                borderRadius: tabRadius,
-                                clipBehavior: Clip.antiAlias,
-                                child: Ink(
-                                  decoration: BoxDecoration(
-                                    gradient: SurfaceDepth.gradient(background),
-                                  ),
-                                  child: InkWell(
-                                    borderRadius: tabRadius,
-                                    hoverColor: theme.navItemHover,
-                                    splashColor: theme.navItemHover,
-                                    highlightColor: theme.tabSelected,
-                                    onTap: () => _select(context, index),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 10,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          if (showIcons &&
-                                              tabs[index].icon != null) ...[
-                                            Icon(
-                                              tabs[index].icon,
-                                              size: 16,
-                                              color: Color.lerp(
-                                                theme.textSecondary,
-                                                theme.accent,
-                                                amount,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                          ],
-                                          Flexible(
-                                            child: Text(
-                                              tabs[index].label,
-                                              textAlign: TextAlign.center,
-                                              style: labelStyle.copyWith(
-                                                color: Color.lerp(
-                                                  theme.textSecondary,
-                                                  theme.textPrimary,
-                                                  amount,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
+            return rows[showIcons] ??= buildRow(showIcons);
           },
         ),
       ),

@@ -17,6 +17,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
+import '../widgets/tinted_tiles.dart';
 import '../widgets/platform_menu_button.dart';
 import '../widgets/batch_games_editor.dart';
 import '../widgets/deadline_chip.dart';
@@ -52,51 +53,90 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
       title: 'Duplicate Keys Found',
       theme: theme,
     ),
-    content: SectionGroupBox(
-      title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
-      titleIcon: Icons.key,
-      titleLocation: SectionTitleLocation.top,
-      theme: theme,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: (MediaQuery.sizeOf(ctx).height * 0.45).clamp(100, 320),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 16,
+      children: [
+        Text(
+          duplicates.length == 1
+              ? 'This key is already in your library. Skip it, or add it '
+                    'again as a separate game.'
+              : 'These keys are already in your library. Skip them, or add '
+                    'them again as separate games.',
+          style: TextStyle(color: theme.textSecondary),
         ),
-        child: ListView.separated(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          itemCount: duplicates.length,
-          separatorBuilder: (_, _) => Divider(height: 1, color: theme.border),
-          itemBuilder: (_, index) {
-            final entry = duplicates[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.value.title,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      height: 1.15,
-                    ),
-                  ),
-                  Text(
-                    entry.key,
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      height: 1.15,
-                    ),
-                  ),
-                ],
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            TintedHeading(
+              theme: theme,
+              title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
+              trailing: '${duplicates.length}',
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: (MediaQuery.sizeOf(ctx).height * 0.45).clamp(
+                  100,
+                  320,
+                ),
               ),
-            );
-          },
+              child: ListView.separated(
+                key: const ValueKey('duplicate-keys-list'),
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: duplicates.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 4),
+                itemBuilder: (_, index) {
+                  final MapEntry(key: key, value: game) = duplicates[index];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(theme.cornerRadius),
+                    ),
+                    child: Row(
+                      spacing: 10,
+                      children: [
+                        Icon(Icons.key, color: theme.error, size: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                game.title,
+                                style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  height: 1.15,
+                                ),
+                              ),
+                              Text(
+                                key,
+                                style: TextStyle(
+                                  color: theme.textSecondary,
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  height: 1.15,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-      ),
+      ],
     ),
     actions: [
       OutlinedButton(
@@ -501,9 +541,8 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   controller: _fields.coverImage,
                   onChanged: _saveDraft,
                 ),
-                informationBuilder: (position) => GameEditorInformation(
+                information: GameEditorInformation(
                   theme: theme,
-                  groupPosition: position,
                   platformSelector: PlatformMenuButton(
                     theme: theme,
                     value: _platform,
@@ -528,32 +567,21 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   },
                   onKeyChanged: _handleKeyChanged,
                 ),
-                optionsBuilder: (position) => _buildOptions(theme, position),
+                options: _buildOptions(theme),
                 wideDetails: _isSteamPlatform
                     ? SingleChildScrollView(
                         padding: const EdgeInsets.only(top: 16),
-                        child: _buildSteamMetadata(
-                          theme,
-                          groupPosition: SectionGroupPosition.only,
-                        ),
+                        child: _buildSteamMetadata(theme),
                       )
                     : null,
                 detailsBuilder: (information) => SingleChildScrollView(
                   padding: const EdgeInsets.only(top: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: kDialogSpacing,
                     children: [
                       ?information,
-                      _buildOptions(
-                        theme,
-                        information == null
-                            ? (_isSteamPlatform
-                                  ? SectionGroupPosition.first
-                                  : SectionGroupPosition.only)
-                            : (_isSteamPlatform
-                                  ? SectionGroupPosition.middle
-                                  : SectionGroupPosition.last),
-                      ),
+                      _buildOptions(theme),
                       if (_isSteamPlatform) _buildSteamMetadata(theme),
                     ],
                   ),
@@ -620,39 +648,33 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     );
   }
 
-  Widget _buildOptions(AppThemeData theme, SectionGroupPosition position) =>
-      SectionGroupBox(
-        title: 'Options',
+  Widget _buildOptions(AppThemeData theme) => SectionGroupBox(
+    title: 'Options',
+    theme: theme,
+    titleIcon: Icons.tune,
+    alternateBackground: true,
+    child: SingleChildScrollView(
+      child: GameOptionsRow(
         theme: theme,
-        titleIcon: Icons.tune,
-        groupPosition: position,
-        alternateBackground: true,
-        child: SingleChildScrollView(
-          child: GameOptionsRow(
-            theme: theme,
-            isDlc: _isDlc,
-            onDlcChanged: (value) => _update(() => _isDlc = value),
-            deadline: DeadlineChip(
-              theme: theme,
-              hasDeadline: _hasDeadline,
-              date: _deadlineDate,
-              onEnabledChanged: (value) => _update(() => _hasDeadline = value),
-              onDateChanged: (value) => _update(() => _deadlineDate = value),
-            ),
-            isUsed: _isUsed,
-            onUsedChanged: (value) => _update(() => _isUsed = value),
-          ),
+        isDlc: _isDlc,
+        onDlcChanged: (value) => _update(() => _isDlc = value),
+        deadline: DeadlineChip(
+          theme: theme,
+          hasDeadline: _hasDeadline,
+          date: _deadlineDate,
+          onEnabledChanged: (value) => _update(() => _hasDeadline = value),
+          onDateChanged: (value) => _update(() => _deadlineDate = value),
         ),
-      );
+        isUsed: _isUsed,
+        onUsedChanged: (value) => _update(() => _isUsed = value),
+      ),
+    ),
+  );
 
-  Widget _buildSteamMetadata(
-    AppThemeData theme, {
-    SectionGroupPosition groupPosition = SectionGroupPosition.last,
-  }) => SectionGroupBox(
+  Widget _buildSteamMetadata(AppThemeData theme) => SectionGroupBox(
     title: 'Metadata',
     theme: theme,
     titleIcon: Icons.schedule,
-    groupPosition: groupPosition,
     child: Column(
       children: [
         if (_steamPreview != null)
@@ -782,6 +804,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                   title: g.title,
                   key: g.key,
                   platform: _platform,
+                  deadline: g.deadline,
                 ),
               )
               .toList();
@@ -876,8 +899,10 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
               title: game.title,
               gameKey: game.key,
               platform: game.platform,
-              hasDeadline: _hasDeadline,
-              deadlineDate: _hasDeadline ? _deadlineDate : null,
+              // A date written on the line overrides the shared deadline.
+              hasDeadline: game.deadline != null || _hasDeadline,
+              deadlineDate:
+                  game.deadline ?? (_hasDeadline ? _deadlineDate : null),
             );
         if (result != null) {
           imported++;

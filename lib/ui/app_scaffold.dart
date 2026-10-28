@@ -17,15 +17,16 @@ import '../core/services/logging.dart';
 import '../core/services/update_service.dart';
 import '../core/settings/settings_model.dart';
 import '../core/theme/app_theme.dart';
+import '../app/application/update_controller.dart';
 import '../providers/app_providers.dart';
 import '../core/models/device_sync_models.dart';
 import 'dialogs/incoming_pair_dialog.dart';
+import 'dialogs/update_dialog.dart';
 import 'dialogs/dialog_gallery.dart' show DialogGalleryHost;
 import 'pages/add_games_page.dart';
 import 'pages/home_page.dart';
 import 'pages/home_sections/selection_ribbon_host.dart';
 import 'pages/settings_page.dart';
-import 'pages/update_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
 import 'widgets/app_progress_indicator.dart';
 import 'widgets/app_page_stack.dart';
@@ -292,16 +293,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         final size = await windowManager.getSize();
         final pos = await windowManager.getPosition();
         final maximized = await windowManager.isMaximized();
-        final settingsNotifier = ref.read(settingsProvider.notifier);
-        for (final (key, value) in <(String, Object)>[
-          (SettingsKeys.windowWidth, size.width),
-          (SettingsKeys.windowHeight, size.height),
-          (SettingsKeys.windowX, pos.dx),
-          (SettingsKeys.windowY, pos.dy),
-          (SettingsKeys.windowMaximized, maximized),
-        ]) {
-          await settingsNotifier.setSetting(key, value);
-        }
+        await ref.read(settingsProvider.notifier).setMany({
+          SettingsKeys.windowWidth: size.width,
+          SettingsKeys.windowHeight: size.height,
+          SettingsKeys.windowX: pos.dx,
+          SettingsKeys.windowY: pos.dy,
+          SettingsKeys.windowMaximized: maximized,
+        });
       } catch (_) {
         // Best effort only
       }
@@ -401,7 +399,18 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
     );
     final showSelectionRibbon = currentNav == NavItem.home && hasSelectedGames;
-    final shellSettings = ref.watch(appShellSettingsProvider);
+    // Only the navigation settings shape the shell; saving the window size or
+    // collapsing the settings rail must not rebuild it.
+    final shellSettings = ref.watch(
+      appShellSettingsProvider.select(
+        (s) => (
+          navBarPosition: s.navBarPosition,
+          navBarAppearance: s.navBarAppearance,
+          navExpansionMode: s.navExpansionMode,
+          gradientAnimation: s.gradientAnimation,
+        ),
+      ),
+    );
     final hideNavForSelection =
         showSelectionRibbon &&
         shellSettings.navBarPosition == NavBarPosition.bottom;
@@ -419,6 +428,14 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           previous.autoCheckEnabled != next.autoCheckEnabled) {
         _scheduleNextAutoUpdateCheck();
       }
+    });
+
+    // The Updates button and update notifications open the dialog.
+    ref.listen(updateDialogOpenProvider, (_, open) async {
+      if (!open) return;
+      final dialogOpen = ref.read(updateDialogOpenProvider.notifier);
+      await showUpdateDialog(context);
+      dialogOpen.set(false);
     });
 
     ref.listen<bool>(
@@ -558,25 +575,27 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     // Shared item-selection handler for all four persistent nav panel instances.
     void onNavItemSelected(int index) {
       final targetNav = NavItem.values[index];
-      final syncReceiveInFlight = ref
-          .read(deviceSyncServiceProvider)
-          .isReceiverSyncInFlight;
-      // Block navigation to Add Games page during batch fetch
-      if (syncReceiveInFlight && targetNav == NavItem.addGames) {
+      // Adding games waits for incoming sync data and Steam fetches.
+      final addBlockedBy = targetNav != NavItem.addGames
+          ? null
+          : ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight
+          ? 'device sync'
+          : batchFetchActive
+          ? 'Steam data fetch'
+          : null;
+      if (addBlockedBy != null) {
         NotificationManager.instance.warning(
-          'Cannot add games while device sync is in progress',
-        );
-        return;
-      }
-      if (batchFetchActive && targetNav == NavItem.addGames) {
-        NotificationManager.instance.warning(
-          'Cannot add games while Steam data fetch is in progress',
+          'Cannot add games while $addBlockedBy is in progress',
         );
         return;
       }
       // Visiting a page acknowledges its pending nav notification state.
       ref.read(pageNotificationsProvider.notifier).remove(targetNav);
-      ref.read(currentNavProvider.notifier).set(targetNav);
+      if (targetNav == NavItem.updates) {
+        ref.read(updateDialogOpenProvider.notifier).set(true);
+      } else {
+        ref.read(currentNavProvider.notifier).set(targetNav);
+      }
     }
 
     // Returns a NavigationPanel fixed to [pos]. All four instances share the
@@ -664,7 +683,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           children: [
             Column(
               children: [
-                if (_hasDesktopWindowControls) ...[AppTitleBar(theme: theme)],
+                if (_hasDesktopWindowControls) AppTitleBar(theme: theme),
 
                 // Main content with configurable navigation
                 Expanded(
@@ -716,7 +735,12 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     bool isVeryNarrowLayout,
   ) => AppPageStack(
     key: ValueKey(databaseRevision),
-    index: currentNav.index,
+    // Updates is a dialog, so it has no page.
+    index: [
+      NavItem.home,
+      NavItem.addGames,
+      NavItem.settings,
+    ].indexOf(currentNav),
     children: [
       // Const page configurations keep unrelated shell rebuilds from
       // rebuilding the retained page trees. Providers still update normally.
@@ -725,7 +749,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       else
         const HomePage(),
       const AddGamesPage(),
-      const UpdatePage(),
       const SettingsPage(),
     ],
   );
@@ -782,10 +805,7 @@ class _UpdateNavIcon extends StatelessWidget {
         switchOutCurve: Curves.easeOut,
         layoutBuilder: (currentChild, previousChildren) => Stack(
           alignment: Alignment.center,
-          children: [
-            ...previousChildren,
-            ...?currentChild == null ? null : [currentChild],
-          ],
+          children: [...previousChildren, ?currentChild],
         ),
         transitionBuilder: (child, animation) =>
             FadeTransition(opacity: animation, child: child),
@@ -943,18 +963,7 @@ class _LinuxResizeFrame extends StatelessWidget {
   static const double _edge = 6.0;
   static const double _corner = 12.0;
 
-  // Edges first, then corners. Edges stop short of the corner squares.
-  static const _edges = [
-    ResizeEdge.left,
-    ResizeEdge.right,
-    ResizeEdge.top,
-    ResizeEdge.bottom,
-    ResizeEdge.topLeft,
-    ResizeEdge.topRight,
-    ResizeEdge.bottomLeft,
-    ResizeEdge.bottomRight,
-  ];
-
+  // Edges stop short of the corner squares, so no two handles overlap.
   Widget _handle(ResizeEdge edge) {
     final name = edge.name.toLowerCase();
     final left = name.contains('left'), right = name.contains('right');
@@ -986,5 +995,5 @@ class _LinuxResizeFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Stack(children: [for (final edge in _edges) _handle(edge)]);
+      Stack(children: [for (final edge in ResizeEdge.values) _handle(edge)]);
 }

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/application/update_controller.dart';
 import '../../core/models/device_sync_models.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/database_file_info.dart';
 import '../../core/services/device_sync_service.dart';
 import '../../core/services/legacy_db_converter.dart';
 import '../../core/services/steam_service.dart';
+import '../../core/services/update_service.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
@@ -16,12 +18,12 @@ import '../../providers/app_providers.dart';
 import '../pages/add_games_page.dart';
 import '../pages/settings_sections/database_section.dart';
 import '../pages/settings_sections/settings_theme_editor.dart';
-import '../pages/update_page.dart';
 import '../widgets/cover_image_card.dart';
 import '../widgets/dialog_helpers.dart';
 import 'add_tags_dialog.dart';
 import 'backup_dialogs.dart';
 import 'copy_actions_dialog.dart';
+import 'library_stats_dialog.dart';
 import 'database_unlock_dialog.dart';
 import 'deadline_picker_dialog.dart';
 import 'delete_games_dialog.dart';
@@ -32,6 +34,7 @@ import 'import_export_dialog.dart';
 import 'incoming_pair_dialog.dart';
 import 'legacy_conversion_dialog.dart';
 import 'steam_lookup_dialog.dart';
+import 'update_dialog.dart';
 
 /// Add new dialog families here using their real opener or widget. Closures are
 /// recreated after hot reload, including dialogs implemented with inline builders.
@@ -182,6 +185,14 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     'copy-actions',
     'Copy options',
     (c) => showCopyActionsDialog(c, [galleryGame]),
+  ),
+  DialogGalleryEntry(
+    'library-stats',
+    'Library stats',
+    (c) => showLibraryStatsDialog(c, [
+      galleryGame,
+      galleryGame.copyWith(id: 2, platform: 'GOG', isUsed: true),
+    ]),
   ),
   DialogGalleryEntry(
     'steam-lookup',
@@ -360,6 +371,12 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
         existingTheme: _theme(c).copyWith(name: 'Sample theme'),
       ),
     ),
+    viewport: const Size(780, 950),
+  ),
+  DialogGalleryEntry(
+    'updates',
+    'Updates',
+    showUpdateDialog,
     viewport: const Size(780, 950),
   ),
   DialogGalleryEntry(
@@ -585,7 +602,31 @@ class _GalleryBackups extends BackupService {
 
 class _GalleryUpdates extends UpdateNotifier {
   @override
-  UpdateState build() => const UpdateState();
+  UpdateState build() {
+    final release = GitHubRelease(
+      tagName: 'v9.9.9',
+      version: '9.9.9',
+      name: 'UniKM 9.9.9',
+      body:
+          '## Highlights\n\n- Sample release notes for the gallery\n'
+          '- Downloads and installs stay in this dialog',
+      htmlUrl: 'https://example.invalid/releases/v9.9.9',
+      publishedAt: DateTime(2026, 10, 1),
+      isPrerelease: false,
+      downloadUrl: 'https://example.invalid/unikm-9.9.9.exe',
+      downloadSize: 48234496,
+    );
+    return UpdateState(
+      hasChecked: true,
+      hasUpdate: true,
+      release: release,
+      allReleases: [release],
+    );
+  }
+
+  @override
+  int compareVersions(String a, String b) =>
+      UpdateService().compareVersions(a, b);
 }
 
 class _GallerySyncService extends DeviceSyncService {

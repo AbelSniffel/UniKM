@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/color_utils.dart';
 import '../../models/game.dart';
 import 'game_card_badges.dart';
 import 'game_card_painters.dart';
@@ -126,22 +127,25 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
   );
 
   Widget _row(BuildContext context, double width) {
-    final style = DefaultTextStyle.of(context).style.copyWith(
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-      color: Colors.white,
-    );
-    _fit(
-      width,
-      style,
-      MediaQuery.textScalerOf(context),
-      Directionality.of(context),
-      Localizations.maybeLocaleOf(context),
-    );
     final firstTag = widget.game.tags.first;
     final color = firstTag.isSteamTag
         ? widget.theme.accent
         : widget.theme.secondary;
+    // Measured with a fixed colour, so a colour-only theme change keeps the
+    // cached layout; drawn in whichever of black or white reads on the fill.
+    final measureStyle = DefaultTextStyle.of(context).style.copyWith(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    );
+    final style = measureStyle.copyWith(color: contrastColor(color));
+    _fit(
+      width,
+      measureStyle,
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+      Localizations.maybeLocaleOf(context),
+    );
     return Tooltip(
       message: _tooltip,
       // Mouse hover can reveal the full list; leave touch long-press to the card.

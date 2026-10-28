@@ -113,6 +113,12 @@ final showSyncDeviceIdProvider = _setting<bool>(
   DefaultSettings.showSyncDeviceId,
 );
 
+/// Frame Rate choice: 'auto' or a refresh rate in Hz.
+final frameRatePreferenceProvider = _setting<String>(
+  SettingsKeys.frameRatePreference,
+  DefaultSettings.frameRatePreference,
+);
+
 // Retained for saved-setting compatibility; the UI always uses cards.
 final experimentalInteractionCardsProvider = _setting<bool>(
   SettingsKeys.experimentalInteractionCards,

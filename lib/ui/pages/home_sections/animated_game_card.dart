@@ -172,9 +172,7 @@ class _RevealOnPaint extends SingleChildRenderObjectWidget {
   void updateRenderObject(
     BuildContext context,
     _RenderRevealOnPaint renderObject,
-  ) {
-    renderObject.onPaint = onPaint;
-  }
+  ) => renderObject.onPaint = onPaint;
 }
 
 class _RenderRevealOnPaint extends RenderProxyBox {

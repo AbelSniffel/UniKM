@@ -3,9 +3,8 @@
 /// Consolidates duplicate copy methods from game_card.dart and home_page.dart.
 library;
 
-import 'package:flutter/services.dart';
-
 import '../../core/constants/app_constants.dart';
+import '../../core/services/key_privacy.dart';
 import '../../models/game.dart';
 import '../../ui/widgets/notification_system.dart';
 
@@ -41,24 +40,23 @@ class GameClipboard {
         .map(format)
         .join('\n');
     if (text.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: text));
+    KeyPrivacy.copy(text);
     _notifyCopy(targets.length, type);
   }
 
-  /// Copy Steam redemption links for Steam-platform games.
-  static void copySteamLink(List<Game> targets, {bool includeTitle = false}) {
-    final steamTargets = targets
-        .where((g) => g.platform == 'Steam' && g.gameKey.isNotEmpty)
-        .toList();
-    if (steamTargets.isEmpty) {
-      NotificationManager.instance.info('No Steam games with keys selected');
+  /// Copy redeem links for Steam and GOG keys.
+  static void copyRedeemLink(List<Game> targets, {bool includeTitle = false}) {
+    final links = [
+      for (final game in targets)
+        if (redeemPageUrl(game.platform, game.gameKey) case final url?)
+          includeTitle ? '${game.title}: $url' : url,
+    ];
+    if (links.isEmpty) {
+      NotificationManager.instance.info('No Steam or GOG keys selected');
       return;
     }
-
-    _copy(steamTargets, (game) {
-      final url = steamRegisterKeyPageUrl(game.gameKey);
-      return includeTitle ? '${game.title}: $url' : url;
-    }, 'Steam redemption link');
+    KeyPrivacy.copy(links.join('\n'));
+    _notifyCopy(links.length, 'redeem link');
   }
 
   static void _notifyCopy(int count, String type) {

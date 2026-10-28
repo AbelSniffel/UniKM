@@ -242,9 +242,7 @@ class _RetainedPageLayout extends SingleChildRenderObjectWidget {
   void updateRenderObject(
     BuildContext context,
     _RenderRetainedPageLayout renderObject,
-  ) {
-    renderObject.visible = visible;
-  }
+  ) => renderObject.visible = visible;
 }
 
 class _RenderRetainedPageLayout extends RenderProxyBox {

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/database/sqlite_file.dart';
+import '../../core/services/biometric_unlock.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
@@ -45,6 +46,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
         'This database is encrypted. Enter the password to continue.',
     this.currentDatabasePath,
     this.allowChangeDatabase = false,
+    this.onBiometricUnlock,
   });
 
   final AppThemeData theme;
@@ -53,6 +55,10 @@ class DatabaseUnlockDialog extends StatefulWidget {
   final String? currentDatabasePath;
   final bool allowChangeDatabase;
 
+  /// Reads the password with a biometric check, for a database paired on
+  /// this phone. It is tried once when the dialog opens and from a button.
+  final Future<String?> Function()? onBiometricUnlock;
+
   static Future<String?> show(
     BuildContext context,
     AppThemeData theme, {
@@ -60,17 +66,23 @@ class DatabaseUnlockDialog extends StatefulWidget {
     String message =
         'This database is encrypted. Enter the password to continue.',
     bool barrierDismissible = false,
+    Future<String?> Function()? onBiometricUnlock,
   }) => showAppDialog<String?>(
     context: context,
     barrierDismissible: barrierDismissible,
-    builder: (_) =>
-        DatabaseUnlockDialog(theme: theme, title: title, message: message),
+    builder: (_) => DatabaseUnlockDialog(
+      theme: theme,
+      title: title,
+      message: message,
+      onBiometricUnlock: onBiometricUnlock,
+    ),
   );
 
   static Future<StartupDatabaseUnlockResult> showForStartup(
     BuildContext context,
     AppThemeData theme, {
     required String currentDatabasePath,
+    Future<String?> Function()? onBiometricUnlock,
   }) async {
     final result = await showAppDialog<Object?>(
       context: context,
@@ -79,6 +91,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
         theme: theme,
         currentDatabasePath: currentDatabasePath,
         allowChangeDatabase: true,
+        onBiometricUnlock: onBiometricUnlock,
       ),
     );
 
@@ -97,6 +110,26 @@ class DatabaseUnlockDialog extends StatefulWidget {
 class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
+  bool _checkingBiometrics = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.onBiometricUnlock != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _unlockBiometric());
+    }
+  }
+
+  Future<void> _unlockBiometric() async {
+    final unlock = widget.onBiometricUnlock;
+    if (unlock == null || _checkingBiometrics || !mounted) return;
+    setState(() => _checkingBiometrics = true);
+    final password = await unlock();
+    if (!mounted) return;
+    setState(() => _checkingBiometrics = false);
+    // A cancelled check leaves the password field to fall back on.
+    if (password != null) Navigator.of(context).pop(password);
+  }
 
   @override
   void dispose() {
@@ -170,10 +203,20 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
           PasswordField(
             controller: _passwordController,
             labelText: 'Password',
-            autofocus: true,
+            // The biometric prompt opens first; typing stays one tap away.
+            autofocus: widget.onBiometricUnlock == null,
             onFieldSubmitted: (_) => _submit(),
             validator: requiredPassword(message: 'Enter your password'),
           ),
+          if (widget.onBiometricUnlock != null) ...[
+            const SizedBox(height: kDialogSpacing),
+            OutlinedButton.icon(
+              key: const ValueKey('database-unlock-biometric'),
+              onPressed: _checkingBiometrics ? null : _unlockBiometric,
+              icon: const Icon(Icons.fingerprint),
+              label: Text('Unlock with ${BiometricUnlock.label}'),
+            ),
+          ],
         ],
       ),
     ),

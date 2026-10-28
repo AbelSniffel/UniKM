@@ -25,17 +25,19 @@ class NotificationsSection extends ConsumerWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec deadlineRemindersSpec = SettingTextSpec(
-    label: 'Deadline reminders',
-    description: 'Notify when keys are about to expire',
+    label: 'Deadlines',
+    icon: Icons.notifications_active_outlined,
   );
   static const SettingTextSpec updateNotificationsSpec = SettingTextSpec(
-    label: 'Update notifications',
-    description: 'Notify when app updates are available',
+    label: 'Updates',
+    icon: Icons.system_update_alt,
   );
 
   static const SettingsSearchGroup typesSearchGroup = SettingsSearchGroup(
-    title: 'Notification Types',
+    title: 'Notify Me About',
     settings: [deadlineRemindersSpec, updateNotificationsSpec],
+    extraTexts: ['Notification Types', 'reminders', 'expire'],
+    info: 'Keys about to expire and new app versions.',
   );
 
   @override
