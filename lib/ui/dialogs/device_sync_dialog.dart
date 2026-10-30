@@ -66,7 +66,6 @@ Future<bool?> showChooseSyncDirectionDialog({
               message:
                   'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
             ),
-          const SizedBox(height: 8),
           // Each direction merges its changes into the other library.
           TintedOptionTile(
             theme: theme,
@@ -217,6 +216,15 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
             defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.fuchsia);
     final notifier = ref.read(deviceSyncProvider.notifier);
+    final snapshot = syncAsync.asData?.value;
+    final isRefreshing =
+        _refreshing || snapshot?.status == DeviceSyncStatus.discovering;
+    final canRefresh =
+        snapshot != null &&
+        snapshot.enabled &&
+        !isRefreshing &&
+        snapshot.status != DeviceSyncStatus.syncing &&
+        snapshot.status != DeviceSyncStatus.connecting;
 
     Future<void> grantFirewallAccess() async {
       final granted = await notifier.grantFirewallAccess();
@@ -262,17 +270,16 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
           child: Center(child: AppCircularProgressIndicator(size: 24)),
         ),
         error: (error, _) => _ErrorView(error: error.toString(), theme: theme),
-        data: (sync) => _SyncContent(
-          sync: sync,
-          theme: theme,
-          refreshing: _refreshing,
-          onRefresh: _refreshDiscovery,
-        ),
+        data: (sync) =>
+            _SyncContent(sync: sync, theme: theme, refreshing: _refreshing),
       ),
       actions: [
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+        ElevatedButton.icon(
+          onPressed: canRefresh ? _refreshDiscovery : null,
+          icon: isRefreshing
+              ? const AppCircularProgressIndicator(size: 18)
+              : const Icon(Icons.refresh),
+          label: const Text('Refresh'),
         ),
       ],
     );
@@ -284,13 +291,11 @@ class _SyncContent extends ConsumerWidget {
     required this.sync,
     required this.theme,
     required this.refreshing,
-    required this.onRefresh,
   });
 
   final DeviceSyncSnapshot sync;
   final AppThemeData theme;
   final bool refreshing;
-  final VoidCallback onRefresh;
 
   IconData _statusIcon(DeviceSyncStatus status) => switch (status) {
     DeviceSyncStatus.discovering => Icons.radar,
@@ -477,14 +482,6 @@ class _SyncContent extends ConsumerWidget {
           theme: theme,
           title: 'Devices',
           trailing: '${unifiedRows.length}',
-          action: IconButton(
-            style: theme.compactIconButtonStyle,
-            tooltip: 'Refresh device discovery',
-            icon: isRefreshing
-                ? const AppCircularProgressIndicator(size: 18)
-                : const Icon(Icons.refresh),
-            onPressed: sync.enabled && !isBusy ? onRefresh : null,
-          ),
         ),
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 260),

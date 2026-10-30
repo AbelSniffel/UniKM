@@ -399,6 +399,22 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             DefaultSettings.showGameDetailsSkmId,
       ),
     );
+    // Information and Options join the Details tab only when they do not fit
+    // beside the cover, as on the Add page.
+    Widget buildDetails({Widget? information, Widget? options}) => _DetailsTab(
+      information: information,
+      options: options,
+      theme: theme,
+      game: _currentGame,
+      showGameDetailsSkmId: showGameDetailsSkmId,
+      platform: _platform,
+      steamAppId: _steamAppId,
+      steamDeveloper: _steamDeveloper,
+      steamCacheAt: _steamCacheAt,
+      lastUpdatedAt: _lastUpdatedAt,
+      steamReviewScore: _fetchedReviewScore,
+      steamReviewCount: _fetchedReviewCount,
+    );
     return DialogInteractionScope(
       onPrimaryAction: _hasChanges && !_isSaving ? _save : null,
       onDismiss: _dismissDialog,
@@ -431,19 +447,11 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             onTitleChanged: (_) => _markChanged(),
             onKeyChanged: (_) => _markChanged(),
           ),
-          detailsBuilder: (information) => _DetailsTab(
+          options: _buildOptions(theme),
+          wideDetails: buildDetails(),
+          detailsBuilder: (information) => buildDetails(
             information: information,
-            theme: theme,
-            game: _currentGame,
-            showGameDetailsSkmId: showGameDetailsSkmId,
-            platform: _platform,
-            steamAppId: _steamAppId,
-            steamDeveloper: _steamDeveloper,
-            steamCacheAt: _steamCacheAt,
-            lastUpdatedAt: _lastUpdatedAt,
-            steamReviewScore: _fetchedReviewScore,
-            steamReviewCount: _fetchedReviewCount,
-            status: _buildStatus(theme),
+            options: _buildOptions(theme),
           ),
           tags: GameEditorTags(
             theme: theme,
@@ -488,20 +496,23 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   });
 
-  Widget _buildStatus(AppThemeData theme) => GameOptionsRow(
+  Widget _buildOptions(AppThemeData theme) => GameEditorOptions(
     theme: theme,
-    isDlc: _isDlc,
-    onDlcChanged: (value) => _edit(() => _isDlc = value),
-    deadline: DeadlineChip(
+    child: GameOptionsRow(
       theme: theme,
-      hasDeadline: _hasDeadline,
-      date: _deadlineDate,
-      firstDate: DateTime(2020),
-      onEnabledChanged: (value) => _edit(() => _hasDeadline = value),
-      onDateChanged: (value) => _edit(() => _deadlineDate = value),
+      isDlc: _isDlc,
+      onDlcChanged: (value) => _edit(() => _isDlc = value),
+      deadline: DeadlineChip(
+        theme: theme,
+        hasDeadline: _hasDeadline,
+        date: _deadlineDate,
+        firstDate: DateTime(2020),
+        onEnabledChanged: (value) => _edit(() => _hasDeadline = value),
+        onDateChanged: (value) => _edit(() => _deadlineDate = value),
+      ),
+      isUsed: _isUsed,
+      onUsedChanged: (value) => _edit(() => _isUsed = value),
     ),
-    isUsed: _isUsed,
-    onUsedChanged: (value) => _edit(() => _isUsed = value),
   );
 
   Future<void> _openSteamPage() async {
@@ -632,11 +643,12 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   );
 }
 
-/// Details tab: Information on narrow screens, then status and metadata.
+/// Details tab: Information and Options on narrow screens, then metadata.
 class _DetailsTab extends StatelessWidget {
   const _DetailsTab({
     required this.theme,
     required this.information,
+    required this.options,
     required this.game,
     required this.showGameDetailsSkmId,
     required this.platform,
@@ -645,16 +657,15 @@ class _DetailsTab extends StatelessWidget {
     this.lastUpdatedAt,
     this.steamReviewScore,
     this.steamReviewCount,
-    required this.status,
     this.steamDeveloper,
   });
 
   final AppThemeData theme;
   final Widget? information;
+  final Widget? options;
   final Game game;
   final bool showGameDetailsSkmId;
   final String platform;
-  final Widget status;
 
   // Steam fetch props
   final String steamAppId;
@@ -686,9 +697,7 @@ class _DetailsTab extends StatelessWidget {
         spacing: 8,
         children: [
           if (information != null) ...[information!, const SizedBox(height: 8)],
-          TintedHeading(theme: theme, title: 'Status'),
-          status,
-          const SizedBox(height: 8),
+          if (options != null) ...[options!, const SizedBox(height: 8)],
           TintedHeading(
             theme: theme,
             title: 'Metadata',

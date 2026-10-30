@@ -648,26 +648,21 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     );
   }
 
-  Widget _buildOptions(AppThemeData theme) => SectionGroupBox(
-    title: 'Options',
+  Widget _buildOptions(AppThemeData theme) => GameEditorOptions(
     theme: theme,
-    titleIcon: Icons.tune,
-    alternateBackground: true,
-    child: SingleChildScrollView(
-      child: GameOptionsRow(
+    child: GameOptionsRow(
+      theme: theme,
+      isDlc: _isDlc,
+      onDlcChanged: (value) => _update(() => _isDlc = value),
+      deadline: DeadlineChip(
         theme: theme,
-        isDlc: _isDlc,
-        onDlcChanged: (value) => _update(() => _isDlc = value),
-        deadline: DeadlineChip(
-          theme: theme,
-          hasDeadline: _hasDeadline,
-          date: _deadlineDate,
-          onEnabledChanged: (value) => _update(() => _hasDeadline = value),
-          onDateChanged: (value) => _update(() => _deadlineDate = value),
-        ),
-        isUsed: _isUsed,
-        onUsedChanged: (value) => _update(() => _isUsed = value),
+        hasDeadline: _hasDeadline,
+        date: _deadlineDate,
+        onEnabledChanged: (value) => _update(() => _hasDeadline = value),
+        onDateChanged: (value) => _update(() => _deadlineDate = value),
       ),
+      isUsed: _isUsed,
+      onUsedChanged: (value) => _update(() => _isUsed = value),
     ),
   );
 

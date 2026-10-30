@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/constants/platform_patterns.dart';
 import '../core/database/database.dart';
 import '../core/settings/settings_model.dart';
 import '../models/game.dart';
@@ -760,6 +761,22 @@ final selectedGamesAllUsedProvider = Provider<bool>((ref) {
 final allGamesProvider = Provider<List<Game>>(
   (ref) => ref.watch(gamesProvider.select((s) => s.games)),
 );
+
+/// The platforms the library's games actually use, for the platform filter.
+/// Built-in platforms come first in their usual order, then any other name
+/// found in the database alphabetically, so stored platforms outside
+/// [GamePlatform] still appear.
+final libraryPlatformsProvider = Provider<List<String>>((ref) {
+  final names = <String>{
+    for (final game in ref.watch(allGamesProvider))
+      if (game.platform.trim().isNotEmpty) game.platform,
+  };
+  final known = [
+    for (final platform in GamePlatform.values)
+      if (names.remove(platform.displayName)) platform.displayName,
+  ];
+  return [...known, ...names.sorted(compareAsciiLowerCaseNatural)];
+});
 
 final gamesByIdProvider = Provider<Map<int, Game>>(
   (ref) => {for (final game in ref.watch(allGamesProvider)) game.id: game},

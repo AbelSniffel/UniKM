@@ -177,8 +177,8 @@ class _PreviewCardState extends State<PreviewCard> {
     const labelInset = 2.0;
     final scrim = theme.background.withValues(alpha: 0.6);
     final dot = Container(
-      width: 22,
-      height: 22,
+      width: 20,
+      height: 20,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: theme.background.withValues(alpha: 0.8),
@@ -187,8 +187,8 @@ class _PreviewCardState extends State<PreviewCard> {
       ),
       child: Container(
         key: const ValueKey('preview-selection-check'),
-        width: 18,
-        height: 18,
+        width: 16,
+        height: 16,
         decoration: BoxDecoration(
           color: theme.accent,
           borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(8)),

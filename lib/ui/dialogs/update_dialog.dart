@@ -105,10 +105,6 @@ class UpdateDialog extends ConsumerWidget {
         spacing: 16,
         children: [
           // Sets the notes apart from the title bar, as far as below it.
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Divider(height: 1, color: theme.border),
-          ),
           _ReleaseNotes(
             theme: theme,
             releases: state.allReleases,

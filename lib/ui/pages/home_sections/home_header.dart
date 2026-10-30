@@ -271,8 +271,22 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
     const gap = SizedBox(width: kElementHSpacing);
     final selectedPlatform = platformFilter?.isNotEmpty == true
-        ? GamePlatform.fromDisplayName(platformFilter!)
+        ? platformFilter
         : null;
+    // Only platforms in the library are offered; an active filter stays
+    // listed even when no game uses it any more, so it can still be seen.
+    final libraryPlatforms = ref.watch(libraryPlatformsProvider);
+    final platforms = [
+      ...libraryPlatforms,
+      if (selectedPlatform != null &&
+          !libraryPlatforms.contains(selectedPlatform))
+        selectedPlatform,
+    ];
+    Widget platformIcon(String name, Color color, double size) => PlatformIcon(
+      platform: GamePlatform.fromDisplayName(name),
+      color: color,
+      size: size,
+    );
     // On very narrow layouts the count spans a row of its own and holds sync
     // and the view toggle at its ends. Otherwise it leads the search row
     // as a plain label, with sync before it and the view toggle at the end.
@@ -339,8 +353,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
             _IconMenuButton<String>(
               key: const ValueKey('home-platform-button'),
               theme: theme,
-              tooltip:
-                  'Platform: ${selectedPlatform?.displayName ?? 'All Platforms'}',
+              tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
               highlighted: selectedPlatform != null,
               iconBuilder: (context, _, size) => selectedPlatform == null
                   ? Icon(
@@ -348,11 +361,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                       color: theme.accent,
                       size: size,
                     )
-                  : PlatformIcon(
-                      platform: selectedPlatform,
-                      color: theme.accent,
-                      size: size,
-                    ),
+                  : platformIcon(selectedPlatform, theme.accent, size),
               selected: platformFilter ?? '',
               entries: [
                 (
@@ -360,15 +369,11 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                   label: 'All Platforms',
                   icon: const Icon(Icons.videogame_asset_outlined, size: 18),
                 ),
-                for (final platform in GamePlatform.values)
+                for (final platform in platforms)
                   (
-                    value: platform.displayName,
-                    label: platform.displayName,
-                    icon: PlatformIcon(
-                      platform: platform,
-                      color: theme.textPrimary,
-                      size: 18,
-                    ),
+                    value: platform,
+                    label: platform,
+                    icon: platformIcon(platform, theme.textPrimary, 18),
                   ),
               ],
               onSelected: (value) =>

@@ -442,6 +442,27 @@ class GameEditorInformation extends StatelessWidget {
   );
 }
 
+/// The Options group both game editors show under Information.
+class GameEditorOptions extends StatelessWidget {
+  const GameEditorOptions({
+    super.key,
+    required this.theme,
+    required this.child,
+  });
+
+  final AppThemeData theme;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SectionGroupBox(
+    title: 'Options',
+    theme: theme,
+    titleIcon: Icons.tune,
+    alternateBackground: true,
+    child: SingleChildScrollView(child: child),
+  );
+}
+
 class GameEditorTags extends StatelessWidget {
   const GameEditorTags({
     super.key,
