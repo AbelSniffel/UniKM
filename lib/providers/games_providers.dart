@@ -453,16 +453,12 @@ class GamesNotifier extends Notifier<GamesState> {
     return true;
   }, failure: false);
 
-  /// Mark games as used/unused. Completion acknowledges persistence even for
-  /// callers using the legacy background-save option.
-  Future<bool> setGamesUsed(
-    List<int> ids,
-    bool isUsed, {
-    bool persistInBackground = false,
-  }) async => _mutate((db) async {
-    await db.setGamesUsed(ids, isUsed);
-    return true;
-  }, failure: false);
+  /// Mark games as used/unused. Completion acknowledges persistence.
+  Future<bool> setGamesUsed(List<int> ids, bool isUsed) async =>
+      _mutate((db) async {
+        await db.setGamesUsed(ids, isUsed);
+        return true;
+      }, failure: false);
 
   /// Clear Steam-derived metadata and Steam tags for the given games.
   ///

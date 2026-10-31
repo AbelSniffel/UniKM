@@ -20,8 +20,6 @@ const double kElementHSpacing =
     5.0; // General spacing between elements, used by SizedBox widgets
 const double kElementVSpacing =
     5.0; // General vertical spacing between elements, used by SizedBox widgets
-/// Shared gap below family titles and between their groupboxes.
-const double kGroupBoxSpacing = 12.0;
 const double kButtonPaddingHorizontal = 8.0;
 const double kTextButtonPaddingHorizontal = 14.0;
 const double kIconSize = 24.0;

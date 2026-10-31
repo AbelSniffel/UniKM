@@ -110,7 +110,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _nameController.dispose();
     _hexController.dispose();
     _hexFocusNode.dispose();
-    _returnEntry?.remove();
+    _clearReturnEntry();
     _previewThrottle?.cancel();
     super.dispose();
   }
@@ -486,6 +486,13 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     );
   }
 
+  void _clearReturnEntry() {
+    _returnEntry
+      ?..remove()
+      ..dispose();
+    _returnEntry = null;
+  }
+
   /// Flies a swatch released outside any tile at [releasedAt] (the feedback's
   /// global origin) back into [slot]'s tile, growing back into its shape.
   void _animateReturn(
@@ -505,12 +512,11 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     ).shift(overlayBox.globalToLocal(tileBox.localToGlobal(Offset.zero)));
 
     void finish() {
-      _returnEntry?.remove();
-      _returnEntry = null;
+      _clearReturnEntry();
       if (mounted) setState(() => _returningSlot = null);
     }
 
-    _returnEntry?.remove();
+    _clearReturnEntry();
     _returnEntry = OverlayEntry(
       builder: (_) => TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
@@ -801,17 +807,16 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 
   void _randomizeColor() {
     final rng = math.Random();
-    final hue = rng.nextDouble() * 360;
-    final saturation = 0.4 + rng.nextDouble() * 0.6;
-    final value = 0.5 + rng.nextDouble() * 0.5;
-    final hex = colorToHex(
-      HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
-    );
     setState(() {
-      _hex[_activeSlot] = hex;
-      _hue = hue;
-      _saturation = saturation;
-      _value = value;
+      _setHsv(
+        HSVColor.fromAHSV(
+          1,
+          rng.nextDouble() * 360,
+          0.4 + rng.nextDouble() * 0.6,
+          0.5 + rng.nextDouble() * 0.5,
+        ),
+      );
+      _hex[_activeSlot] = colorToHex(_hsvToColor());
     });
     _syncHexController();
     _updatePreview();
