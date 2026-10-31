@@ -1029,64 +1029,16 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         .clamp(0.0, 1.0);
   }
 
-  double _iconVisibilityT(double labelVisibilityT) =>
-      widget.hideIconWithLabel ? 1 - labelVisibilityT : 1;
-
-  Widget? _buildIcon({
-    required Color iconColor,
-    required double iconScale,
-    required double iconVisibilityT,
-  }) {
-    Widget? icon;
-    if (widget.iconBuilder != null) {
-      icon = widget.iconBuilder!(context, iconColor, widget.iconSize);
-    } else {
-      final iconData = widget.iconData;
-      if (iconData == null) return null;
-      icon = Icon(iconData, color: iconColor, size: widget.iconSize);
-    }
-    final scaled = Transform.scale(scale: iconScale, child: icon);
-    if (iconVisibilityT == 1) return scaled;
-    return ClipRect(
-      child: Align(
-        widthFactor: widget.isHorizontal ? iconVisibilityT : 1,
-        heightFactor: widget.isHorizontal ? 1 : iconVisibilityT,
-        child: Opacity(opacity: iconVisibilityT, child: scaled),
-      ),
-    );
-  }
-
-  Widget? _buildLabel({required TextStyle labelStyle}) {
-    final labelText = widget.labelText;
-    if (labelText == null) return null;
-
-    final label = Text(
-      labelText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: labelStyle,
-    );
-
-    if (widget.labelFadeDuration == Duration.zero) {
-      return widget.labelVisible ? label : null;
-    }
-
-    final clampedFactor = _labelVisibilityT();
-
-    return IgnorePointer(
-      ignoring: clampedFactor == 0,
-      child: ClipRect(
+  /// [child] grown in along the button's axis by [t], fading with it.
+  Widget _reveal(double t, Widget child, {AlignmentGeometry? alignment}) =>
+      ClipRect(
         child: Align(
-          alignment: widget.isHorizontal
-              ? Alignment.centerLeft
-              : Alignment.topCenter,
-          widthFactor: widget.isHorizontal ? clampedFactor : 1,
-          heightFactor: widget.isHorizontal ? 1 : clampedFactor,
-          child: Opacity(opacity: clampedFactor, child: label),
+          alignment: alignment ?? Alignment.center,
+          widthFactor: widget.isHorizontal ? t : 1,
+          heightFactor: widget.isHorizontal ? 1 : t,
+          child: Opacity(opacity: t, child: child),
         ),
-      ),
-    );
-  }
+      );
 
   Widget _buildContent({
     required Color iconColor,
@@ -1094,15 +1046,50 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     required double iconScale,
     required double labelVisibilityT,
   }) {
-    final iconVisibilityT = _iconVisibilityT(labelVisibilityT);
-    final icon = _buildIcon(
-      iconColor: iconColor,
-      iconScale: iconScale,
-      iconVisibilityT: iconVisibilityT,
-    );
-    final label = _buildLabel(labelStyle: labelStyle);
-    final iconChildren = icon == null ? null : <Widget>[icon];
-    final horizontalLabel = label == null
+    final iconVisibilityT = widget.hideIconWithLabel
+        ? 1 - labelVisibilityT
+        : 1.0;
+    final iconData = widget.iconData;
+    final iconWidget =
+        widget.iconBuilder?.call(context, iconColor, widget.iconSize) ??
+        (iconData == null
+            ? null
+            : Icon(iconData, color: iconColor, size: widget.iconSize));
+    final scaled = iconWidget == null
+        ? null
+        : Transform.scale(scale: iconScale, child: iconWidget);
+    final icon = scaled == null || iconVisibilityT == 1
+        ? scaled
+        : _reveal(iconVisibilityT, scaled);
+
+    final labelText = widget.labelText;
+    final text = labelText == null
+        ? null
+        : Text(
+            labelText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: labelStyle,
+          );
+    final label = text == null
+        ? null
+        : widget.labelFadeDuration == Duration.zero
+        ? (widget.labelVisible ? text : null)
+        : IgnorePointer(
+            ignoring: labelVisibilityT == 0,
+            child: _reveal(
+              labelVisibilityT,
+              text,
+              alignment: widget.isHorizontal
+                  ? Alignment.centerLeft
+                  : Alignment.topCenter,
+            ),
+          );
+
+    if (!widget.isHorizontal) {
+      return Column(mainAxisSize: MainAxisSize.min, children: [?icon, ?label]);
+    }
+    Widget? spacedLabel = label == null
         ? null
         : Padding(
             padding: EdgeInsets.only(
@@ -1114,25 +1101,15 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
             ),
             child: label,
           );
-    final horizontalLabelChildren = label == null
-        ? null
-        : widget.horizontalMainAxisSize == MainAxisSize.max
-        ? <Widget>[Flexible(fit: FlexFit.loose, child: horizontalLabel!)]
-        : <Widget>[horizontalLabel!];
-
-    if (widget.isHorizontal) {
-      return Row(
-        mainAxisSize: widget.horizontalMainAxisSize,
-        mainAxisAlignment: widget.horizontalMainAxisAlignment,
-        children: [...?iconChildren, ...?horizontalLabelChildren],
-      );
-    } else {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [...?iconChildren, ?label],
-      );
+    if (spacedLabel != null &&
+        widget.horizontalMainAxisSize == MainAxisSize.max) {
+      spacedLabel = Flexible(child: spacedLabel);
     }
+    return Row(
+      mainAxisSize: widget.horizontalMainAxisSize,
+      mainAxisAlignment: widget.horizontalMainAxisAlignment,
+      children: [?icon, ?spacedLabel],
+    );
   }
 
   @override
@@ -1151,8 +1128,8 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         _labelVisibilityController,
       ]),
       builder: (context, child) {
-        final selectionT = Curves.linear.transform(_selectionController.value);
-        final hoverT = Curves.linear.transform(_hoverController.value);
+        final selectionT = _selectionController.value;
+        final hoverT = _hoverController.value;
         final labelVisibilityT = _labelVisibilityT();
         // Animated buttons start from a padding that already fills the
         // minimum width, so collapsing never clamps and re-centers the icon.
@@ -1191,10 +1168,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
           color: _foreground(widget.theme.textPrimary, selectionT),
         );
         final iconScale = widget.isEnabled
-            ? (1 + (math.max(selectionT, hoverT) * _hoverIconBoost)).clamp(
-                1.0,
-                1.20,
-              )
+            ? 1 + math.max(selectionT, hoverT) * _hoverIconBoost
             : 1.0;
 
         return MouseRegion(

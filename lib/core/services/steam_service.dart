@@ -35,10 +35,6 @@ class SteamApi {
   static String appReviews(String appId) => steamStoreUrl('appreviews/$appId');
 }
 
-// cleanTitleForSearch and weightedSimilarity are now in
-// package:unikm/core/utils/title_similarity.dart
-// and re-exported via the import above.
-
 void _log(String message) => developer.log(message, name: 'SteamService');
 
 /// Disk cache helpers
@@ -90,14 +86,10 @@ class _DiskCache {
 
   Future<void> _loadFromDisk() async {
     try {
-      final path = await _getCacheFilePath();
-      final file = File(path);
-      if (await file.exists()) {
-        final text = await file.readAsString();
-        _cache = json.decode(text) as Map<String, dynamic>;
-        return;
-      }
-      _cache = {};
+      final file = File(await _getCacheFilePath());
+      _cache = await file.exists()
+          ? json.decode(await file.readAsString()) as Map<String, dynamic>
+          : {};
     } catch (_) {
       _cache = {};
     }
@@ -183,13 +175,10 @@ class _DiskCache {
 
   Future<Map<String, dynamic>> exportForSync() async {
     await _ensureLoaded();
-    final source = _cache ?? const <String, dynamic>{};
-    final out = <String, dynamic>{};
-    for (final entry in source.entries) {
-      final value = entry.value;
-      if (value is Map) out[entry.key] = Map<String, dynamic>.from(value);
-    }
-    return out;
+    return {
+      for (final MapEntry(:key, :value) in (_cache ?? const {}).entries)
+        if (value is Map) key: Map<String, dynamic>.from(value),
+    };
   }
 
   Future<void> mergeFromSync(Map<String, dynamic> incoming) async {
@@ -474,11 +463,9 @@ class SteamService {
   }
 
   Future<void> _throttle() async {
-    final now = DateTime.now();
     final last = _lastRequestAt;
     if (last != null) {
-      final elapsed = now.difference(last);
-      final wait = _minRequestInterval - elapsed;
+      final wait = _minRequestInterval - DateTime.now().difference(last);
       if (wait > Duration.zero) await Future.delayed(wait);
     }
     _lastRequestAt = DateTime.now();
@@ -727,8 +714,8 @@ class SteamService {
 
   /// Normalize and map Steam tag names. Returns null if tag should be ignored.
   String? _normalizeTag(String tag) {
-    if (tag.trim().isEmpty) return null;
     final trimmed = tag.trim();
+    if (trimmed.isEmpty) return null;
     final t = trimmed.toLowerCase();
     if (_ignoredTags.contains(t)) return null;
     if (_tagMapping.containsKey(t)) return _tagMapping[t];
@@ -829,48 +816,36 @@ class SteamService {
 
     final searchTitle = originalTitle.toLowerCase().trim();
     final cleanSearch = cleanTitleForSearch(originalTitle).toLowerCase();
-
-    // 1. Exact match first (case-insensitive)
-    for (final item in items) {
-      final itemName = (item['name'] as String? ?? '').toLowerCase();
-      if (itemName == searchTitle) return item;
-    }
-
-    // 2. Exact match with cleaned title. Retain these strings for later stages
-    // of this search instead of repeating edition/punctuation cleanup.
-    final cleanedNames = <String>[];
-    for (final item in items) {
-      final itemName = item['name'] as String? ?? '';
-      final itemClean = cleanTitleForSearch(itemName).toLowerCase();
-      cleanedNames.add(itemClean);
-      if (itemClean == cleanSearch) return item;
-    }
-
-    // 3. Contains match (original in item OR item in original) - avoid sequels
-    for (final item in items) {
-      final itemName = item['name'] as String? ?? '';
-      final itemLower = itemName.toLowerCase();
-      if (itemLower.contains(searchTitle) || searchTitle.contains(itemLower)) {
-        if (!_isSequelMismatch(originalTitle, itemName)) return item;
+    final names = [for (final item in items) item['name'] as String? ?? ''];
+    final lower = [for (final name in names) name.toLowerCase()];
+    final cleaned = [
+      for (final name in names) cleanTitleForSearch(name).toLowerCase(),
+    ];
+    bool overlaps(String a, String b) => a.contains(b) || b.contains(a);
+    // Exact, then exact once cleaned, then either containing the other
+    // (original, then cleaned) without being a different sequel.
+    final stages = <bool Function(int i)>[
+      (i) => lower[i] == searchTitle,
+      (i) => cleaned[i] == cleanSearch,
+      (i) =>
+          overlaps(lower[i], searchTitle) &&
+          !_isSequelMismatch(originalTitle, names[i]),
+      (i) =>
+          overlaps(cleaned[i], cleanSearch) &&
+          !_isSequelMismatch(originalTitle, names[i]),
+    ];
+    for (final stage in stages) {
+      for (var i = 0; i < items.length; i++) {
+        if (stage(i)) return items[i];
       }
     }
 
-    // 4. Contains match with cleaned versions - avoid sequels
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      final itemName = item['name'] as String? ?? '';
-      final itemClean = cleanedNames[i];
-      if (cleanSearch.contains(itemClean) || itemClean.contains(cleanSearch)) {
-        if (!_isSequelMismatch(originalTitle, itemName)) return item;
-      }
-    }
-
-    // 5. Fallback: return first result ONLY if it's not a sequel mismatch AND has reasonable similarity
+    // Fallback: the first result, only when it is not a sequel mismatch and
+    // is reasonably similar.
     final firstItem = items[0];
-    final firstName = firstItem['name'] as String? ?? '';
+    final firstName = names.first;
     if (!_isSequelMismatch(originalTitle, firstName)) {
-      final firstClean = cleanedNames.first;
-      final ratio = weightedSimilarity(cleanSearch, firstClean);
+      final ratio = weightedSimilarity(cleanSearch, cleaned.first);
       // If ratio is decent, accept it. We use a slightly stricter threshold now that
       // the token-weighted scorer gives more accurate results for numbered titles.
       if (ratio > 0.50) return firstItem;
@@ -915,9 +890,7 @@ class SteamService {
         final steamspyTags = await _fetchSteamSpyTags(appId);
         if (steamspyTags.isNotEmpty) {
           dataSources.add(SteamDataSource.steamSpy);
-          for (final t in steamspyTags) {
-            if (tags.add(t) && tags.length >= 30) break;
-          }
+          _addTags(tags, steamspyTags);
         }
       }
 
@@ -953,19 +926,15 @@ class SteamService {
 
           if (fetchTags) {
             // Add genres and categories as tags
-            final List<dynamic> genres =
-                details['genres'] as List<dynamic>? ?? [];
-            final List<dynamic> categories =
-                details['categories'] as List<dynamic>? ?? [];
-            for (final item in [...genres, ...categories]) {
-              final desc = item['description'] as String? ?? '';
-              final normalized = _normalizeTag(desc);
-              if (normalized != null &&
-                  tags.add(normalized) &&
-                  tags.length >= 30) {
-                break;
-              }
-            }
+            _addTags(
+              tags,
+              [
+                ...details['genres'] as List<dynamic>? ?? [],
+                ...details['categories'] as List<dynamic>? ?? [],
+              ].map(
+                (item) => _normalizeTag(item['description'] as String? ?? ''),
+              ),
+            );
           }
         }
       }
@@ -1042,6 +1011,13 @@ class SteamService {
     return result;
   }
 
+  /// Adds [candidates] to [tags], stopping once an addition reaches 30.
+  static void _addTags(Set<String> tags, Iterable<String?> candidates) {
+    for (final tag in candidates) {
+      if (tag != null && tags.add(tag) && tags.length >= 30) break;
+    }
+  }
+
   Future<List<String>> _fetchSteamSpyTags(String appId) async {
     try {
       final response = await _getWithRetry(
@@ -1055,16 +1031,8 @@ class SteamService {
 
         if (tagEntries.isNotEmpty) {
           tagEntries.sort((a, b) => b.score.compareTo(a.score));
-
           final tags = <String>{};
-          for (final entry in tagEntries) {
-            final normalized = _normalizeTag(entry.tag);
-            if (normalized != null &&
-                tags.add(normalized) &&
-                tags.length >= 30) {
-              break;
-            }
-          }
+          _addTags(tags, tagEntries.map((entry) => _normalizeTag(entry.tag)));
           return tags.toList();
         }
       }
@@ -1132,7 +1100,6 @@ class SteamService {
   }
 
   int _coerceTagScore(dynamic value) {
-    if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }

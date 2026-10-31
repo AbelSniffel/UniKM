@@ -469,26 +469,11 @@ class _GradientPainter extends CustomPainter {
 
     // Minimum visible alpha when "off". Set to 0.0 for fully off start.
     const double minAlpha = 0.2;
-
-    if (t >= 1.0) {
-      // idle — show the resting (off) alpha
-      final alpha = minAlpha;
-      _paint.shader = ui.Gradient.linear(
-        Offset.zero,
-        vert ? Offset(0, r.height) : Offset(r.width, 0),
-        // Flipped: ends use accent, center uses primary
-        [_alpha(accent, alpha), _alpha(primary, alpha), _alpha(accent, alpha)],
-        [0.0, 0.5, 1.0],
-      );
-      c.drawRect(r, _paint);
-      return;
-    }
-
-    // active portion (map t -> 0..1). Use (1 - cos(2πt)) / 2 to create a
-    // single symmetric hump that starts/ends at 0 and peaks at 0.5.
-    final activeT = (t / 1.0).clamp(0.0, 1.0);
-    final hump = (1.0 - math.cos(activeT * math.pi * 2)) / 2.0; // 0..1..0
-    final alpha = minAlpha + hump * (1.0 - minAlpha);
+    // Idle shows the resting (off) alpha. The active portion uses
+    // (1 - cos(2πt)) / 2: a single symmetric hump from 0 up to 1 and back.
+    final alpha = t >= 1.0
+        ? minAlpha
+        : minAlpha + (1.0 - math.cos(t * math.pi * 2)) / 2.0 * (1.0 - minAlpha);
 
     _paint.shader = ui.Gradient.linear(
       Offset.zero,
