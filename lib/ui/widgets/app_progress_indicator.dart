@@ -20,10 +20,13 @@ class AppCircularProgressIndicator extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
 
-    final indicator = CircularProgressIndicator(
-      color: color ?? theme.accent,
-      backgroundColor: theme.accent.withValues(alpha: 0.2),
-      strokeWidth: strokeWidth ?? theme.progressIndicatorStrokeWidth,
+    // Its own layer, so the spinner's animation repaints only itself.
+    final indicator = RepaintBoundary(
+      child: CircularProgressIndicator(
+        color: color ?? theme.accent,
+        backgroundColor: theme.accent.withValues(alpha: 0.2),
+        strokeWidth: strokeWidth ?? theme.progressIndicatorStrokeWidth,
+      ),
     );
     return size == null
         ? indicator

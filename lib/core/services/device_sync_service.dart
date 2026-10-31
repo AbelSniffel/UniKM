@@ -52,7 +52,9 @@ class PairingEndedException extends DeviceSyncException {
       super('Pairing request was declined.');
 
   const PairingEndedException.timedOut([
-    super.message = 'Pairing request timed out after 30 seconds.',
+    super.message =
+        'Pairing timed out. Confirm the code on both devices '
+        'within a minute.',
   ]) : status = 'Pairing request timed out.';
 
   final String status;
@@ -186,83 +188,17 @@ class _PendingPongState {
   final Completer<_PeerPingResult> completer;
 }
 
-class _PairDecisionResponse {
-  const _PairDecisionResponse({
-    required this.accepted,
-    this.remoteStaticPubB64,
-    this.encryptedCodeProof,
-    this.declineReason,
-  });
-
-  final bool accepted;
-  final String? remoteStaticPubB64;
-  final String? encryptedCodeProof;
-  final String? declineReason;
-}
-
-class _PairAckResponse {
-  const _PairAckResponse({required this.accepted, this.remoteStaticPubB64});
-
-  final bool accepted;
-  final String? remoteStaticPubB64;
-}
-
 /// UTF-8 JSON bytes of a control packet or payload.
 Uint8List _jsonBytes(Object? value) => utf8.encode(jsonEncode(value));
 
-/// Where a pairing reply is sent.
-typedef _PairReply = ({
-  RawDatagramSocket socket,
-  InternetAddress address,
-  int port,
-});
+/// An incoming pairing, held while this device's user compares codes.
+class _IncomingPairing {
+  /// Set once both devices know the code.
+  PendingPairRequest? request;
+  final decision = Completer<bool>();
 
-class _IncomingPairRequestState {
-  const _IncomingPairRequestState({
-    required this.requestId,
-    required this.peer,
-    required this.sourceAddress,
-    required this.replyPort,
-    required this.createdAt,
-    this.receiverAccepted = false,
-    this.initiatorStaticPubB64,
-    this.receiverStaticPubB64,
-    this.initiatorCommitAccepted = false,
-  });
-
-  final String requestId;
-  final DiscoveredSyncPeer peer;
-  final InternetAddress sourceAddress;
-  final int replyPort;
-  final DateTime createdAt;
-  final bool receiverAccepted;
-  final String? initiatorStaticPubB64;
-  final String? receiverStaticPubB64;
-  final bool initiatorCommitAccepted;
-
-  PendingPairRequest get pending => PendingPairRequest(
-    requestId: requestId,
-    peer: peer,
-    requestedAt: createdAt,
-  );
-
-  _IncomingPairRequestState copyWith({
-    bool? receiverAccepted,
-    String? initiatorStaticPubB64,
-    String? receiverStaticPubB64,
-    bool? initiatorCommitAccepted,
-  }) => _IncomingPairRequestState(
-    requestId: requestId,
-    peer: peer,
-    sourceAddress: sourceAddress,
-    replyPort: replyPort,
-    createdAt: createdAt,
-    receiverAccepted: receiverAccepted ?? this.receiverAccepted,
-    initiatorStaticPubB64: initiatorStaticPubB64 ?? this.initiatorStaticPubB64,
-    receiverStaticPubB64: receiverStaticPubB64 ?? this.receiverStaticPubB64,
-    initiatorCommitAccepted:
-        initiatorCommitAccepted ?? this.initiatorCommitAccepted,
-  );
+  /// This device stopped listening; the decision is then false.
+  bool canceled = false;
 }
 
 /// Which side of a session sends records: the initiator, the receiver, or
@@ -570,46 +506,35 @@ class DeviceSyncService {
 
   /// How long an announced or discovered address is preferred over the saved one.
   static const Duration _announceFreshness = Duration(minutes: 3);
-  static const Duration _pairRequestTimeout = Duration(seconds: 30);
-  static const Duration _pairCommitTimeout = Duration(seconds: 30);
-  static const Duration _pairFinalizeTimeout = Duration(seconds: 30);
-  static const Duration _pairRequestLifetime = Duration(minutes: 2);
+
+  /// How long either user has to compare the pairing codes and answer.
+  static const Duration _pairDecisionTimeout = Duration(seconds: 60);
+
+  /// How long one automatic pairing step may take.
+  static const Duration _pairStepTimeout = Duration(seconds: 10);
+
+  /// Version of the pairing exchange, separate from the sync protocol.
+  static const int _pairVersion = 1;
   static const String _discoverType = 'unikm_sync_discover';
   static const String _discoverResponseType = 'unikm_sync_discover_response';
   static const String _announceType = 'unikm_sync_announce';
   static const String _offlineType = 'unikm_sync_offline';
-  static const String _pairRequestType = 'unikm_sync_pair_request';
-  static const String _pairReceiverDecisionType =
-      'unikm_sync_pair_receiver_decision';
-  static const String _pairCommitType = 'unikm_sync_pair_commit';
-  static const String _pairCommitAckType = 'unikm_sync_pair_commit_ack';
-  static const String _pairFinalizeType = 'unikm_sync_pair_finalize';
-  static const String _pairFinalizeAckType = 'unikm_sync_pair_finalize_ack';
-  static const String _pairCancelType = 'unikm_sync_pair_cancel';
-  static const String _pairCodeRejectedType = 'unikm_sync_pair_code_rejected';
   static const String _syncPingType = 'unikm_sync_ping';
   static const String _syncPongType = 'unikm_sync_pong';
   static const String _untrustType = 'unikm_sync_untrust';
   static const String _changedType = 'unikm_sync_changed';
   static const String _controlAuthAlg = 'x25519-hmac-sha256-v1';
-  static const String _pairCodeProofAlg = 'x25519-aesgcm-v1';
   static const Duration _syncPingTimeout = Duration(milliseconds: 1500);
   static const _uuid = Uuid();
   static final X25519 _x25519 = X25519();
-  static final Hkdf _pairProofHkdf = Hkdf(
-    hmac: Hmac.sha256(),
-    outputLength: 32,
-  );
 
   RawDatagramSocket? _responderSocket;
   Future<void>? _responderStartup;
   Future<void>? _serverStartup;
   int _networkEpoch = 0;
   StreamSubscription<RawSocketEvent>? _responderSub;
-  final Map<String, _IncomingPairRequestState> _pendingPairRequests = {};
-  final Map<String, List<int>> _pairDecisions = {};
+  _IncomingPairing? _incomingPairing;
   final Map<String, Completer<void>> _outgoingPairCancellations = {};
-  final Set<String> _pairFinalizing = {};
   final Map<String, DiscoveredSyncPeer> _announcedPeers = {};
 
   /// Timestamp of the last announce received per peer, used to expire stale
@@ -836,590 +761,480 @@ class DeviceSyncService {
     return discoveredById.values.toList(growable: false);
   }
 
-  String _generatePairVerificationCode() {
-    final value = math.Random.secure().nextInt(1000000);
-    return value.toString().padLeft(6, '0');
+  // ── Pairing ──────────────────────────────────────────────────────────────
+  //
+  // Pairing runs over one TCP connection to the receiver's transfer port:
+  //   1. Initiator → receiver: its static key and a hash committing to a
+  //      random nonce it keeps secret for now.
+  //   2. Receiver → initiator: its static key and its own random nonce.
+  //   3. Initiator → receiver: the committed nonce, which the receiver checks.
+  // Both devices then show a 6-digit code derived from both keys and both
+  // nonces. Each side fixed its nonce before learning the other's, so a device
+  // in the middle that substitutes keys cannot make the two codes match except
+  // by a one-in-a-million guess. Each user confirms the codes match:
+  //   4. Receiver → initiator: its user's decision.
+  //   5. Initiator → receiver: its user's confirmation. The receiver saves
+  //      trust and answers, and the initiator saves trust on that answer.
+  // Steps 4 and 5 and the answer are MACed with the exchanged static keys.
+
+  bool get _syncEnabled =>
+      (ref.read(settingsProvider)[SettingsKeys.syncEnabled] as bool?) ??
+      DefaultSettings.syncEnabled;
+
+  static List<int> _randomBytes(int length) {
+    final random = math.Random.secure();
+    return List<int>.generate(length, (_) => random.nextInt(256));
   }
 
-  Future<SecretKey> _derivePairCodeProofKey({
-    required String requestId,
-    required String remoteStaticPubB64,
-  }) async {
-    final remote = remoteStaticPubB64.trim();
-    if (remote.isEmpty) {
-      throw const DeviceSyncException(
-        'Pair verification key is unavailable. Update UniKM on both devices and retry.',
-      );
-    }
-
-    final localStaticPair = await _getOrGenerateStaticKeyPair();
-    final remoteStaticPub = SyncCrypto.publicKeyFromBase64(remote);
-    final shared = await _x25519.sharedSecretKey(
-      keyPair: localStaticPair,
-      remotePublicKey: remoteStaticPub,
-    );
-    final sharedBytes = await shared.extractBytes();
-    return _pairProofHkdf.deriveKey(
-      secretKey: SecretKey(sharedBytes),
-      nonce: utf8.encode('pair-code-proof|$requestId'),
-      info: utf8.encode('unikm_pair_code_proof_v1'),
-    );
-  }
-
-  Future<String> _encryptPairCodeProof({
-    required String requestId,
-    required String remoteStaticPubB64,
-    required String verificationCode,
-  }) async {
-    final key = await _derivePairCodeProofKey(
-      requestId: requestId,
-      remoteStaticPubB64: remoteStaticPubB64,
-    );
-    return SyncCrypto.encrypt(verificationCode, key);
-  }
-
-  Future<String> _decryptPairCodeProof({
-    required String requestId,
-    required String remoteStaticPubB64,
-    required String encryptedCodeProof,
-  }) async {
-    final key = await _derivePairCodeProofKey(
-      requestId: requestId,
-      remoteStaticPubB64: remoteStaticPubB64,
-    );
-    return SyncCrypto.decrypt(encryptedCodeProof, key);
-  }
-
-  List<PendingPairRequest> getPendingPairRequests() {
-    _evictExpiredPairRequests();
-    return _pendingPairRequests.values
-        .where((e) => !e.receiverAccepted)
-        .map((e) => e.pending)
-        .toList(growable: false)
-      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
-  }
-
-  Future<void> _requirePairingCompatibility(
-    DiscoveredSyncPeer peer,
-    String localDeviceId,
-  ) async {
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    final supported = Completer<void>();
-    final address = InternetAddress(peer.host);
-    final subscription = socket.listen((event) {
-      if (event != RawSocketEvent.read) return;
-      final datagram = socket.receive();
-      if (datagram == null || datagram.address.address != address.address) {
-        return;
-      }
-      final packet = _decodePacket(datagram.data);
-      if (packet == null ||
-          packet['type'] != _discoverResponseType ||
-          packet['protocol'] != _protocolVersion) {
-        return;
-      }
-      final identity = packet['from'];
-      if (identity is Map &&
-          identity['id'] == peer.id &&
-          !supported.isCompleted) {
-        supported.complete();
-      }
-    });
-    void probe() => socket.send(
-      _jsonBytes({
-        'type': _discoverType,
-        'protocol': _protocolVersion,
-        'from': _localIdentityMap(localDeviceId),
-        'replyPort': socket.port,
-      }),
-      address,
-      peer.port,
-    );
-    final retry = Timer(const Duration(milliseconds: 500), probe);
+  /// [value] decoded from base64 when it is exactly 32 bytes, else null.
+  static List<int>? _decode32(Object? value) {
+    if (value is! String) return null;
     try {
-      probe();
-      await supported.future.timeout(const Duration(milliseconds: 1500));
-    } on TimeoutException {
-      throw const DeviceSyncException(_incompatibleSyncMessage);
-    } finally {
-      retry.cancel();
-      await subscription.cancel();
-      socket.close();
+      final bytes = base64.decode(value);
+      return bytes.length == 32 ? bytes : null;
+    } on FormatException {
+      return null;
     }
   }
 
+  static Future<List<int>> _pairCommitment(
+    List<int> nonce,
+    List<int> spub,
+  ) async => (await Sha256().hash([...nonce, ...spub])).bytes;
+
+  /// The code both devices show. It covers everything the exchange fixed, so
+  /// it matches only when each device received the other's real key.
+  static Future<String> _pairingCode({
+    required String requestId,
+    required List<int> initiatorSpub,
+    required List<int> receiverSpub,
+    required List<int> initiatorNonce,
+    required List<int> receiverNonce,
+  }) async {
+    final digest = await Sha256().hash([
+      ...utf8.encode('unikm-pair-code-v1|$requestId|'),
+      ...initiatorSpub,
+      ...receiverSpub,
+      ...initiatorNonce,
+      ...receiverNonce,
+    ]);
+    final b = digest.bytes;
+    final value = ((b[0] * 256 + b[1]) * 256 + b[2]) * 256 + b[3];
+    return (value % 1000000).toString().padLeft(6, '0');
+  }
+
+  static Future<void> _sendPairMessage(
+    Socket socket,
+    Map<String, dynamic> message,
+  ) {
+    socket.add(utf8.encode('${jsonEncode(message)}\n'));
+    return socket.flush();
+  }
+
+  /// The next pairing message, or null when the connection closed, went
+  /// silent for [timeout], or sent something that is not a JSON object.
+  static Future<Map<String, dynamic>?> _readPairMessage(
+    SyncByteReader reader,
+    Duration timeout,
+  ) async {
+    try {
+      final line = await reader.readLine(timeout: timeout);
+      if (line == null || line.isEmpty) return null;
+      final decoded = jsonDecode(line);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The incoming request waiting for this device's user, if any.
+  List<PendingPairRequest> getPendingPairRequests() {
+    final pairing = _incomingPairing;
+    final request = pairing?.request;
+    if (request == null || pairing!.decision.isCompleted) return const [];
+    return [request];
+  }
+
+  /// Pairs with [peer]. [confirmCode] is called with the code both devices
+  /// show and completes with whether this device's user confirmed that the
+  /// codes match. [onUserCancel] ends pairing at any point before it is done.
   Future<TrustedSyncPeer> requestPairing(
     DiscoveredSyncPeer peer, {
-    void Function(String verificationCode)? showVerificationCode,
+    required Future<bool> Function(String code) confirmCode,
     Future<void>? onUserCancel,
   }) async {
-    final enabled =
-        (ref.read(settingsProvider)[SettingsKeys.syncEnabled] as bool?) ??
-        DefaultSettings.syncEnabled;
-    if (!enabled) {
+    if (!_syncEnabled) {
       throw const DeviceSyncException('Enable device sync before pairing.');
     }
-
+    if (!peer.isSyncCompatible) {
+      throw const DeviceSyncException(_incompatibleSyncMessage);
+    }
     final localDeviceId = await _ensureDeviceId();
     await ensureDiscoveryResponder(deviceId: localDeviceId);
 
-    await _requirePairingCompatibility(peer, localDeviceId);
-
     final requestId = _uuid.v4();
-    final localStaticPubB64 = await _localStaticPubB64();
-    final verificationCode = _generatePairVerificationCode();
-    if (!_foreground ||
-        !ref.mounted ||
-        ref.read(settingsProvider)[SettingsKeys.syncEnabled] != true) {
-      throw const PairingEndedException.canceled();
-    }
-
-    final socket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      0,
-      reuseAddress: true,
-      reusePort: false,
+    final canceled = Completer<void>();
+    _outgoingPairCancellations[requestId] = canceled;
+    unawaited(
+      onUserCancel?.then((_) {
+        if (!canceled.isCompleted) canceled.complete();
+      }),
     );
-    if (!_foreground || !ref.mounted) {
-      socket.close();
-      throw const PairingEndedException.canceled();
-    }
-    final lifecycleCancellation = Completer<void>();
-    _outgoingPairCancellations[requestId] = lifecycleCancellation;
-    void requirePairingActive() {
-      if (!_foreground ||
+    void requireActive() {
+      if (canceled.isCompleted ||
+          !_foreground ||
           !ref.mounted ||
-          lifecycleCancellation.isCompleted ||
-          ref.read(settingsProvider)[SettingsKeys.syncEnabled] != true) {
+          !_syncEnabled) {
         throw const PairingEndedException.canceled();
       }
     }
 
-    final pendingDecisionResponses = Queue<_PairDecisionResponse>();
-    Completer<void>? decisionAvailable;
+    /// [step], unless pairing is canceled first.
+    Future<T> orCancel<T>(Future<T> step) => Future.any([
+      step,
+      canceled.future.then<T>(
+        (_) => throw const PairingEndedException.canceled(),
+      ),
+    ]);
 
-    Future<_PairDecisionResponse> waitForReceiverDecision() async {
-      if (pendingDecisionResponses.isNotEmpty) {
-        return pendingDecisionResponses.removeFirst();
-      }
-
-      final signal = Completer<void>();
-      decisionAvailable = signal;
-
-      if (pendingDecisionResponses.isNotEmpty) {
-        decisionAvailable = null;
-        return pendingDecisionResponses.removeFirst();
-      }
-
-      await signal.future;
-      decisionAvailable = null;
-
-      if (pendingDecisionResponses.isEmpty) return waitForReceiverDecision();
-      return pendingDecisionResponses.removeFirst();
-    }
-
-    var remoteDecisionSpub = '';
-    Timer? retryTimer;
-    List<int>? retryPacket;
-    void sendStage(List<int> packet) {
-      requirePairingActive();
-      retryPacket = packet;
-      socket.send(packet, InternetAddress(peer.host), peer.port);
-      retryTimer ??= Timer.periodic(const Duration(milliseconds: 800), (_) {
-        if (retryPacket != null &&
-            _foreground &&
-            ref.mounted &&
-            !lifecycleCancellation.isCompleted) {
-          socket.send(retryPacket!, InternetAddress(peer.host), peer.port);
-        }
-      });
-    }
-
-    final commitAckCompleter = Completer<_PairAckResponse>();
-    final finalizeAckCompleter = Completer<_PairAckResponse>();
-
-    StreamSubscription<RawSocketEvent>? sub;
-    sub = socket.listen((event) {
-      final packet = _receivePacket(socket, event);
-      if (packet == null) return;
-      final (:datagram, :payload) = packet;
-
-      final incomingRequestId = (payload['requestId'] as String?)?.trim();
-      if (incomingRequestId != requestId) return;
-
-      final fromId = _senderId(payload);
-      if (fromId == null) return;
-      if (fromId != peer.id) return;
-      if (datagram.address.address != peer.host) return;
-
-      final type = payload['type'];
-      if (type == _pairReceiverDecisionType) {
-        pendingDecisionResponses.add(
-          _PairDecisionResponse(
-            accepted: payload['accepted'] == true,
-            remoteStaticPubB64: (payload['spub'] as String?)?.trim(),
-            encryptedCodeProof: (payload['proof'] as String?)?.trim(),
-            declineReason: (payload['reason'] as String?)?.trim(),
-          ),
-        );
-        if (decisionAvailable != null && !decisionAvailable!.isCompleted) {
-          decisionAvailable!.complete();
-        }
-        decisionAvailable = null;
-        return;
-      }
-      if (type == _pairCommitAckType || type == _pairFinalizeAckType) {
-        unawaited(() async {
-          if (!await _verifyControlAuthForFingerprint(
-            payload: payload,
-            expectedFingerprint: remoteDecisionSpub,
-            pairingId: requestId,
-          )) {
-            return;
-          }
-          final completer = type == _pairCommitAckType
-              ? commitAckCompleter
-              : finalizeAckCompleter;
-          if (!completer.isCompleted) {
-            completer.complete(
-              _PairAckResponse(
-                accepted: payload['accepted'] == true,
-                remoteStaticPubB64: payload['spub'] as String?,
-              ),
-            );
-          }
-        }());
-      }
-    });
+    Socket? socket;
+    SyncByteReader? reader;
+    var remoteSpub = '';
+    var confirmSent = false;
     try {
-      final pairRequestPacket = _jsonBytes({
-        'type': _pairRequestType,
-        'protocol': _protocolVersion,
-        'requestId': requestId,
-        'replyPort': socket.port,
-        'spub': localStaticPubB64,
-        'proofAlg': _pairCodeProofAlg,
-        'from': _localIdentityMap(localDeviceId),
-      });
-      sendStage(pairRequestPacket);
-
-      // Show code to sender now that request has been sent
-      showVerificationCode?.call(verificationCode);
-
-      // Keep waiting for receiver decisions until code verification succeeds,
-      // the sender cancels, or the request is declined/times out.
-      final Future<Object?> cancelFuture = onUserCancel == null
-          ? lifecycleCancellation.future
-          : Future.any<void>([onUserCancel, lifecycleCancellation.future]);
-      var userCanceled = false;
-      final stageCancellation = cancelFuture.then((_) {
-        userCanceled = true;
-        return const _PairAckResponse(accepted: false);
-      });
-
-      // Each failure below tells the receiver to drop the request first.
-      Future<void> sendCancel() => _sendPairNotice(
-        peer: peer,
-        requestId: requestId,
-        localDeviceId: localDeviceId,
+      requireActive();
+      final connection = await orCancel<Socket>(
+        _connectSyncSocket(
+          peer.host,
+          peer.transferPort ?? transferPort,
+        ).catchError(
+          (Object _) => throw DeviceSyncException(
+            'Could not reach ${peer.name}. Make sure UniKM is open there '
+            'with device sync enabled.',
+          ),
+        ),
       );
-      Future<Never> abort(String message) async {
-        await sendCancel();
-        throw DeviceSyncException(message);
-      }
+      socket = connection;
+      reader = SyncByteReader(connection);
 
-      while (true) {
-        final decision =
-            (await Future.any<Object?>([
-                  waitForReceiverDecision().timeout(
-                    _pairRequestTimeout,
-                    onTimeout: () => const _PairDecisionResponse(
-                      accepted: false,
-                      declineReason: 'timeout',
-                    ),
-                  ),
-                  cancelFuture.then(
-                    (_) => const _PairDecisionResponse(
-                      accepted: false,
-                      declineReason: 'user_cancel',
-                    ),
-                  ),
-                ]))
-                as _PairDecisionResponse;
-
-        if (!decision.accepted) {
-          requirePairingActive();
-          await sendCancel();
-          final reason = (decision.declineReason ?? '').toLowerCase();
-          if (reason.contains('user_cancel') || reason.contains('cancel')) {
-            throw const PairingEndedException.canceled();
-          }
-          if (reason.contains('timeout')) {
-            throw const PairingEndedException.timedOut();
-          }
-          throw const PairingEndedException.declined();
-        }
-
-        final incomingRemoteSpub = (decision.remoteStaticPubB64 ?? '').trim();
-        if (incomingRemoteSpub.isEmpty) {
-          await abort(
-            'Remote device did not provide a pairing verification key. Update UniKM on both devices and retry.',
-          );
-        }
-
-        if (remoteDecisionSpub.isEmpty) {
-          remoteDecisionSpub = incomingRemoteSpub;
-        } else if (incomingRemoteSpub != remoteDecisionSpub) {
-          await abort(
-            'Remote pairing identity changed during code verification. Retry pairing.',
-          );
-        }
-
-        final encryptedProof = (decision.encryptedCodeProof ?? '').trim();
-        if (encryptedProof.isEmpty) {
-          await abort(
-            'Remote device did not return a pairing verification proof.',
-          );
-        }
-
-        final enteredCode = await _decryptPairCodeProof(
-          requestId: requestId,
-          remoteStaticPubB64: remoteDecisionSpub,
-          encryptedCodeProof: encryptedProof,
+      final localSpub = base64.decode(await _localStaticPubB64());
+      final nonce = _randomBytes(32);
+      await _sendPairMessage(connection, {
+        't': 'pair',
+        'pair': _pairVersion,
+        'syncProtocol': _protocolVersion,
+        'requestId': requestId,
+        'from': _localIdentityMap(localDeviceId),
+        'spub': base64.encode(localSpub),
+        'commit': base64.encode(await _pairCommitment(nonce, localSpub)),
+      });
+      final keys = await orCancel(_readPairMessage(reader, _pairStepTimeout));
+      requireActive();
+      if (keys?['t'] == 'pair_refused' && keys?['reason'] == 'busy') {
+        throw DeviceSyncException(
+          '${peer.name} is already pairing with another device. '
+          'Try again in a minute.',
         );
-        if (enteredCode.trim() != verificationCode) {
-          // Let the receiver submit the code again without tearing down the
-          // entire pairing session, and explicitly notify them to clear/retry.
-          await _sendPairNotice(
-            peer: peer,
-            requestId: requestId,
-            localDeviceId: localDeviceId,
-            type: _pairCodeRejectedType,
-            reason: 'code_mismatch',
-          );
-          continue;
-        }
-
-        break;
       }
+      final receiverSpub = _decode32(keys?['spub']);
+      final receiverNonce = _decode32(keys?['nonce']);
+      if (keys?['t'] != 'pair_keys' ||
+          receiverSpub == null ||
+          receiverNonce == null) {
+        // Older versions close the connection on a pairing hello.
+        throw const DeviceSyncException(_incompatibleSyncMessage);
+      }
+      if (_senderId(keys!) != peer.id) {
+        throw DeviceSyncException(
+          'A different device answered at ${peer.host}. Scan again and retry.',
+        );
+      }
+      remoteSpub = base64.encode(receiverSpub);
 
-      // Sends one authenticated confirmation stage and waits for its ACK.
-      // False means it was not confirmed in time (or the user canceled).
-      Future<bool> confirmStage(
-        String type,
-        Completer<_PairAckResponse> ack,
-        Duration timeout, {
-        required String identityChangedMessage,
-      }) async {
-        sendStage(
-          _jsonBytes(
-            await _attachControlAuthForFingerprint(
-              payload: {
-                'type': type,
-                'protocol': _protocolVersion,
-                'requestId': requestId,
-                'replyPort': socket.port,
-                'spub': localStaticPubB64,
-                'ok': true,
-                'from': _localIdentityMap(localDeviceId),
-              },
-              remoteStaticPubB64: remoteDecisionSpub,
+      await _sendPairMessage(connection, {
+        't': 'pair_reveal',
+        'nonce': base64.encode(nonce),
+      });
+      final code = await _pairingCode(
+        requestId: requestId,
+        initiatorSpub: localSpub,
+        receiverSpub: receiverSpub,
+        initiatorNonce: nonce,
+        receiverNonce: receiverNonce,
+      );
+      requireActive();
+
+      final remoteDecision = _readPairMessage(reader, _pairDecisionTimeout)
+          .then((decision) async {
+            if (decision == null || decision['t'] != 'pair_decision') {
+              throw PairingEndedException.timedOut(
+                '${peer.name} did not answer the pairing request.',
+              );
+            }
+            if (decision['accepted'] != true) {
+              throw const PairingEndedException.declined();
+            }
+            if (!await _verifyControlAuthForFingerprint(
+              payload: decision,
+              expectedFingerprint: remoteSpub,
               pairingId: requestId,
-            ),
-          ),
-        );
-        final response = await Future.any([
-          ack.future.timeout(
-            timeout,
-            onTimeout: () => const _PairAckResponse(accepted: false),
-          ),
-          stageCancellation,
-        ]);
-        if (!response.accepted) {
-          requirePairingActive();
-          await sendCancel();
-          return false;
-        }
-        final remoteSpub = (response.remoteStaticPubB64 ?? '').trim();
-        if (remoteSpub.isNotEmpty && remoteSpub != remoteDecisionSpub) {
-          await abort(identityChangedMessage);
-        }
-        return true;
-      }
+            )) {
+              throw const DeviceSyncException(
+                'The pairing answer could not be verified. Retry pairing.',
+              );
+            }
+          });
+      final localDecision = confirmCode(code).then((confirmed) {
+        if (!confirmed) throw const PairingEndedException.canceled();
+      });
+      await orCancel(
+        Future.wait([localDecision, remoteDecision], eagerError: true).timeout(
+          _pairDecisionTimeout,
+          onTimeout: () => throw const PairingEndedException.timedOut(),
+        ),
+      );
+      requireActive();
 
-      // A durable rejection of this pairing. The finalize stage prepares it
-      // first so reconnection can undo a receiver that committed while this
-      // device stopped, and keeps it if the final ACK never arrives.
-      Future<void> recordRevocation() => _setSetting(
+      // Recorded first so that, if the receiver saves trust but its answer
+      // is lost, it is told to unpair the next time it is reached. Saving
+      // trust below clears the record.
+      await _setSetting(
         SettingsKeys.syncRevokedPeersJson,
         _revocationLedger
             .record(
               SyncRevocationRecord(
                 peerId: peer.id,
-                fingerprint: remoteDecisionSpub,
+                fingerprint: remoteSpub,
                 pairingId: requestId,
                 revokedAtMillis: DateTime.now().millisecondsSinceEpoch,
               ),
             )
             .encode(),
       );
-
-      if (!await confirmStage(
-        _pairCommitType,
-        commitAckCompleter,
-        _pairCommitTimeout,
-        identityChangedMessage:
-            'Remote pairing identity changed during confirmation. Retry pairing.',
-      )) {
-        throw userCanceled
-            ? const PairingEndedException.canceled()
-            : const PairingEndedException.timedOut(
-                'Pairing handshake timed out before receiver confirmation.',
-              );
-      }
-
-      requirePairingActive();
-      await recordRevocation();
-      requirePairingActive();
-      if (!await confirmStage(
-        _pairFinalizeType,
-        finalizeAckCompleter,
-        _pairFinalizeTimeout,
-        identityChangedMessage:
-            'Remote pairing identity changed during final confirmation. Retry pairing.',
-      )) {
-        // The receiver may have committed while its final ACK was lost. Keep
-        // the authenticated rejection even though we never established trust.
-        await recordRevocation();
-        await _sendUntrustPacket(
-          TrustedSyncPeer(
-            id: peer.id,
-            name: peer.name,
-            host: peer.host,
-            port: peer.port,
-            transferPort: peer.transferPort,
-            deviceType: peer.deviceType,
-            fingerprint: remoteDecisionSpub,
+      requireActive();
+      confirmSent = true;
+      await _sendPairMessage(
+        connection,
+        await _attachControlAuthForFingerprint(
+          payload: {'t': 'pair_confirm'},
+          remoteStaticPubB64: remoteSpub,
+          pairingId: requestId,
+        ),
+      );
+      final done = await orCancel(_readPairMessage(reader, _pairStepTimeout));
+      if (done == null ||
+          done['t'] != 'pair_done' ||
+          !await _verifyControlAuthForFingerprint(
+            payload: done,
+            expectedFingerprint: remoteSpub,
             pairingId: requestId,
-          ),
-          remoteFingerprint: remoteDecisionSpub,
+          )) {
+        throw PairingEndedException.timedOut(
+          '${peer.name} did not finish pairing. Retry pairing.',
         );
-        throw userCanceled
-            ? const PairingEndedException.canceled()
-            : const PairingEndedException.timedOut(
-                'Pairing handshake timed out waiting for final receiver OK.',
-              );
       }
-
-      requirePairingActive();
+      requireActive();
       return await _upsertTrustedPeer(
         peer,
-        fingerprint: remoteDecisionSpub,
+        fingerprint: remoteSpub,
         pairingId: requestId,
       );
+    } catch (_) {
+      if (confirmSent) {
+        try {
+          await _sendUntrustPacket(
+            TrustedSyncPeer(
+              id: peer.id,
+              name: peer.name,
+              host: peer.host,
+              port: peer.port,
+              transferPort: peer.transferPort,
+              deviceType: peer.deviceType,
+              fingerprint: remoteSpub,
+              pairingId: requestId,
+            ),
+            remoteFingerprint: remoteSpub,
+          );
+        } catch (_) {
+          // The recorded rejection is delivered on the next contact.
+        }
+      }
+      rethrow;
     } finally {
       _outgoingPairCancellations.remove(requestId);
-      retryTimer?.cancel();
-      await sub.cancel();
-      socket.close();
+      await reader?.cancel();
+      socket?.destroy();
     }
   }
 
+  /// Answers a pairing request that arrived on the transfer port.
+  Future<void> _servePairing(
+    Socket socket,
+    SyncByteReader reader,
+    Map<String, dynamic> hello,
+  ) async {
+    if (hello['pair'] != _pairVersion ||
+        hello['syncProtocol'] != _protocolVersion) {
+      await _sendPairMessage(socket, {
+        't': 'pair_refused',
+        'reason': 'version',
+      });
+      return;
+    }
+    final localDeviceId = await _ensureDeviceId();
+    final from = _sender(hello);
+    final fromId = _senderId(hello) ?? '';
+    final requestId = (hello['requestId'] as String?)?.trim() ?? '';
+    final initiatorSpub = _decode32(hello['spub']);
+    final commit = _decode32(hello['commit']);
+    if (from == null ||
+        fromId.isEmpty ||
+        fromId == localDeviceId ||
+        requestId.isEmpty ||
+        requestId.length > 64 ||
+        initiatorSpub == null ||
+        commit == null) {
+      return;
+    }
+    // One prompt at a time.
+    if (_incomingPairing != null) {
+      await _sendPairMessage(socket, {'t': 'pair_refused', 'reason': 'busy'});
+      return;
+    }
+    final pairing = _incomingPairing = _IncomingPairing();
+    try {
+      final initiatorSpubB64 = base64.encode(initiatorSpub);
+      final localSpub = base64.decode(await _localStaticPubB64());
+      final nonce = _randomBytes(32);
+      await _sendPairMessage(socket, {
+        't': 'pair_keys',
+        'from': _localIdentityMap(localDeviceId),
+        'spub': base64.encode(localSpub),
+        'nonce': base64.encode(nonce),
+      });
+      final reveal = await _readPairMessage(reader, _pairStepTimeout);
+      final initiatorNonce = _decode32(reveal?['nonce']);
+      if (reveal?['t'] != 'pair_reveal' ||
+          initiatorNonce == null ||
+          !_constantTimeBytesEqual(
+            await _pairCommitment(initiatorNonce, initiatorSpub),
+            commit,
+          )) {
+        return;
+      }
+
+      final type = syncDeviceTypeFromWire(from['deviceType'] as String?);
+      final peer = DiscoveredSyncPeer(
+        id: fromId,
+        name: _normalizeDeviceName(
+          (from['name'] as String?)?.trim(),
+          fallbackType: type,
+        ),
+        host: socket.remoteAddress.address,
+        port: (from['port'] as num?)?.toInt() ?? defaultLanPort,
+        transferPort: (from['transferPort'] as num?)?.toInt(),
+        deviceType: type,
+      );
+      final request = pairing.request = PendingPairRequest(
+        requestId: requestId,
+        peer: peer,
+        requestedAt: DateTime.now(),
+        code: await _pairingCode(
+          requestId: requestId,
+          initiatorSpub: initiatorSpub,
+          receiverSpub: localSpub,
+          initiatorNonce: initiatorNonce,
+          receiverNonce: nonce,
+        ),
+      );
+      // The initiator sends nothing more until it has our answer, so anything
+      // arriving first, including the connection closing, is a cancellation.
+      final next = _readPairMessage(
+        reader,
+        _pairDecisionTimeout + _pairStepTimeout,
+      );
+      _emitSyncEvent(PairRequestReceivedEvent(request));
+      final bool? accepted;
+      try {
+        accepted = await Future.any<bool?>([
+          pairing.decision.future,
+          next.then((_) => null),
+        ]).timeout(_pairDecisionTimeout);
+      } on TimeoutException {
+        _emitSyncEvent(PairRequestTimedOutEvent(request));
+        return;
+      }
+      if (accepted == null || pairing.canceled) {
+        _emitSyncEvent(PairRequestCanceledEvent(request));
+        return;
+      }
+      if (!accepted) {
+        await _sendPairMessage(socket, {
+          't': 'pair_decision',
+          'accepted': false,
+        });
+        return;
+      }
+      await _sendPairMessage(
+        socket,
+        await _attachControlAuthForFingerprint(
+          payload: {'t': 'pair_decision', 'accepted': true},
+          remoteStaticPubB64: initiatorSpubB64,
+          pairingId: requestId,
+        ),
+      );
+
+      final confirm = await next;
+      if (confirm == null ||
+          confirm['t'] != 'pair_confirm' ||
+          !await _verifyControlAuthForFingerprint(
+            payload: confirm,
+            expectedFingerprint: initiatorSpubB64,
+            pairingId: requestId,
+          ) ||
+          !_foreground ||
+          !_syncEnabled) {
+        _emitSyncEvent(PairRequestCanceledEvent(request));
+        return;
+      }
+      final trusted = await _upsertTrustedPeer(
+        peer,
+        fingerprint: initiatorSpubB64,
+        pairingId: requestId,
+      );
+      _emitSyncEvent(PeerTrustedEvent(trusted));
+      await _sendPairMessage(
+        socket,
+        await _attachControlAuthForFingerprint(
+          payload: {'t': 'pair_done'},
+          remoteStaticPubB64: initiatorSpubB64,
+          pairingId: requestId,
+        ),
+      );
+    } finally {
+      if (!pairing.decision.isCompleted) pairing.decision.complete(false);
+      if (identical(_incomingPairing, pairing)) _incomingPairing = null;
+    }
+  }
+
+  /// Records this device's user's answer to the pending request.
   Future<void> respondToPairRequest({
     required String requestId,
     required bool accept,
-    String? enteredVerificationCode,
   }) async {
-    _evictExpiredPairRequests();
-    final request = _pendingPairRequests[requestId];
-    if (request == null) {
+    final pairing = _incomingPairing;
+    if (pairing == null ||
+        pairing.request?.requestId != requestId ||
+        pairing.decision.isCompleted) {
       throw const DeviceSyncException('Pair request no longer available.');
     }
-
-    String? localStaticPubB64;
-    String? encryptedCodeProof;
-    if (accept) {
-      final providedCode = (enteredVerificationCode ?? '').trim();
-      if (providedCode.isEmpty) {
-        throw const DeviceSyncException(
-          'Enter the 6-digit verification code shown on the sending device.',
-        );
-      }
-      if (!RegExp(r'^\d{6}$').hasMatch(providedCode)) {
-        throw const DeviceSyncException(
-          'Verification code must be a 6-digit number.',
-        );
-      }
-
-      final initiatorSpub = (request.initiatorStaticPubB64 ?? '').trim();
-      if (initiatorSpub.isEmpty) {
-        throw const DeviceSyncException(
-          'Remote pairing verification key is unavailable. Update UniKM on both devices and retry.',
-        );
-      }
-
-      localStaticPubB64 = (request.receiverStaticPubB64 ?? '').trim();
-      if (localStaticPubB64.isEmpty) {
-        localStaticPubB64 = await _localStaticPubB64();
-      }
-
-      encryptedCodeProof = await _encryptPairCodeProof(
-        requestId: requestId,
-        remoteStaticPubB64: initiatorSpub,
-        verificationCode: providedCode,
-      );
-    }
-
-    final localDeviceId = await _ensureDeviceId();
-    final socket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      0,
-      reuseAddress: true,
-      reusePort: false,
-    );
-
-    try {
-      final decisionPacket = _jsonBytes({
-        'type': _pairReceiverDecisionType,
-        'protocol': _protocolVersion,
-        'requestId': requestId,
-        'accepted': accept,
-        if (accept && localStaticPubB64 != null) 'spub': localStaticPubB64,
-        if (accept && encryptedCodeProof != null) 'proof': encryptedCodeProof,
-        if (accept) 'proofAlg': _pairCodeProofAlg,
-        if (!accept) 'reason': 'declined',
-        'from': _localIdentityMap(localDeviceId),
-      });
-
-      _pairDecisions[requestId] = decisionPacket;
-      socket.send(decisionPacket, request.sourceAddress, request.replyPort);
-    } finally {
-      socket.close();
-    }
-
-    if (accept) {
-      _pendingPairRequests[requestId] = request.copyWith(
-        receiverAccepted: true,
-        receiverStaticPubB64: localStaticPubB64,
-      );
-      return;
-    }
-
-    _pendingPairRequests.remove(requestId);
+    pairing.decision.complete(accept);
   }
 
   Future<void> removeTrustedPeer(
     String peerId, {
     bool notifyRemote = true,
   }) async {
-    final canceledRequests = _pendingPairRequests.values
-        .where((request) => request.peer.id == peerId)
-        .map((request) => request.requestId)
-        .toList();
-    for (final requestId in canceledRequests) {
-      _pendingPairRequests.remove(requestId);
-      _pairDecisions.remove(requestId);
-    }
     final trusted = _trustedPeers;
 
     // Look up peer info before removing so we can notify them.
@@ -2425,6 +2240,7 @@ class DeviceSyncService {
     _trackSyncSocket(socket);
     // Counted before any await so a competing initiator sync sees it at once.
     _incomingSyncCount++;
+    var countedAsSync = true;
     final reader = SyncByteReader(socket);
     // Shown once the peer asks for it, or once the transfer proves large.
     final progress = _ProgressReporter(
@@ -2433,7 +2249,6 @@ class DeviceSyncService {
       visible: false,
     );
     try {
-      _reportTransfer('Incoming sync: waiting for data...');
       final Map<String, dynamic> hello;
       try {
         final line = await reader.readLine();
@@ -2442,6 +2257,13 @@ class DeviceSyncService {
       } catch (_) {
         return;
       }
+      if (hello['t'] == 'pair') {
+        _incomingSyncCount--;
+        countedAsSync = false;
+        await _servePairing(socket, reader, hello);
+        return;
+      }
+      _reportTransfer('Incoming sync: waiting for data...');
       if (hello['v'] != 2) {
         debugPrint('Sync: rejected non-v2 connection on encrypted channel.');
         return;
@@ -2493,9 +2315,11 @@ class DeviceSyncService {
     } finally {
       await reader.cancel();
       socket.destroy();
-      _incomingSyncCount--;
-      if (!_receiverSyncInFlight) {
-        _emitSyncEvent(const SyncTransferActivityEvent(active: false));
+      if (countedAsSync) {
+        _incomingSyncCount--;
+        if (!_receiverSyncInFlight) {
+          _emitSyncEvent(const SyncTransferActivityEvent(active: false));
+        }
       }
     }
   }
@@ -2690,6 +2514,11 @@ class DeviceSyncService {
     _networkEpoch++;
     for (final cancellation in _outgoingPairCancellations.values) {
       if (!cancellation.isCompleted) cancellation.complete();
+    }
+    final incoming = _incomingPairing;
+    if (incoming != null && !incoming.decision.isCompleted) {
+      incoming.canceled = true;
+      incoming.decision.complete(false);
     }
     _changeSignalTimer?.cancel();
     _changeSignalTimer = null;
@@ -3065,16 +2894,6 @@ class DeviceSyncService {
         await _handleSyncPing(socket, datagram, payload, deviceId);
       case _untrustType:
         await _handleUntrust(datagram, payload);
-      case _pairCancelType:
-        _handlePairCancel(payload);
-      case _pairCodeRejectedType:
-        _handlePairCodeRejected(datagram, payload);
-      case _pairRequestType:
-        await _handlePairRequest(datagram, payload, deviceId);
-      case _pairCommitType:
-        await _handlePairCommit(socket, datagram, payload, deviceId);
-      case _pairFinalizeType:
-        await _handlePairFinalize(socket, datagram, payload, deviceId);
     }
   }
 
@@ -3146,371 +2965,6 @@ class DeviceSyncService {
 
     await removeTrustedPeer(fromId, notifyRemote: false);
     _emitSyncEvent(PeerRemovedEvent(fromId));
-  }
-
-  Future<void> _handlePairRequest(
-    Datagram datagram,
-    Map<String, dynamic> payload,
-    String deviceId,
-  ) async {
-    final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) return;
-    final fromMap = _sender(payload);
-    if (fromMap == null) return;
-    final fromId = (fromMap['id'] as String?)?.trim() ?? '';
-    if (fromId.isEmpty || fromId == deviceId) return;
-    if (_trustedPeerById(fromId)?.pairingId == requestId) return;
-
-    final existing = _pendingPairRequests[requestId];
-    if (existing != null) {
-      if (existing.peer.id == fromId &&
-          existing.sourceAddress.address == datagram.address.address &&
-          existing.initiatorStaticPubB64 == payload['spub']) {
-        final decision = _pairDecisions[requestId];
-        if (decision != null) {
-          _responderSocket?.send(
-            decision,
-            existing.sourceAddress,
-            existing.replyPort,
-          );
-        }
-      }
-      return;
-    }
-    final fromType = syncDeviceTypeFromWire(
-      fromMap['deviceType'] as String? ?? fromMap['device_type'] as String?,
-    );
-
-    final initiatorStaticPubB64 = (payload['spub'] as String?)?.trim();
-    final receiverStaticPubB64 =
-        initiatorStaticPubB64 != null && initiatorStaticPubB64.isNotEmpty
-        ? await _localStaticPubB64()
-        : null;
-
-    final replyPort = (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
-    final request = _pendingPairRequests[requestId] = _IncomingPairRequestState(
-      requestId: requestId,
-      peer: DiscoveredSyncPeer(
-        id: fromId,
-        name: _normalizeDeviceName(
-          (fromMap['name'] as String?)?.trim(),
-          fallbackType: fromType,
-        ),
-        host: datagram.address.address,
-        port: (fromMap['port'] as num?)?.toInt() ?? defaultLanPort,
-        transferPort: (fromMap['transferPort'] as num?)?.toInt(),
-        deviceType: fromType,
-      ),
-      sourceAddress: datagram.address,
-      replyPort: replyPort,
-      createdAt: DateTime.now(),
-      initiatorStaticPubB64: initiatorStaticPubB64,
-      receiverStaticPubB64: receiverStaticPubB64,
-    );
-    _emitSyncEvent(PairRequestReceivedEvent(request.pending));
-    _evictExpiredPairRequests();
-  }
-
-  /// Accept control packets only from the peer/address that opened this request.
-  _IncomingPairRequestState? _acceptedPairRequest(
-    Datagram datagram,
-    Map<String, dynamic> payload,
-  ) {
-    final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) return null;
-
-    final request = _pendingPairRequests[requestId];
-    if (request == null || !request.receiverAccepted) return null;
-
-    final fromId = _senderId(payload);
-    if (fromId == null) return null;
-    if (fromId.isEmpty || fromId != request.peer.id) return null;
-    if (datagram.address.address != request.sourceAddress.address) return null;
-
-    return request;
-  }
-
-  Future<void> _handlePairCommit(
-    RawDatagramSocket socket,
-    Datagram datagram,
-    Map<String, dynamic> payload,
-    String deviceId,
-  ) async {
-    final request = _acceptedPairRequest(datagram, payload);
-    if (request == null) return;
-    final requestId = request.requestId;
-
-    final initiatorSpub = (payload['spub'] as String?)?.trim() ?? '';
-    final expectedInitiatorSpub = (request.initiatorStaticPubB64 ?? '').trim();
-    final replyPort = (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
-    if (!await _verifyControlAuthForFingerprint(
-      payload: payload,
-      expectedFingerprint: expectedInitiatorSpub,
-      pairingId: requestId,
-    )) {
-      return;
-    }
-    final reply = (socket: socket, address: datagram.address, port: replyPort);
-    if (!_validPairStep(payload, initiatorSpub, expectedInitiatorSpub)) {
-      _rejectPairStep(reply, _pairCommitAckType, requestId, deviceId);
-      return;
-    }
-
-    _pendingPairRequests[requestId] = request.copyWith(
-      initiatorCommitAccepted: true,
-      initiatorStaticPubB64: initiatorSpub,
-    );
-    await _acceptPairStep(
-      reply,
-      _pairCommitAckType,
-      request,
-      initiatorSpub,
-      deviceId,
-    );
-  }
-
-  /// The initiator confirmed the step and presented the expected key.
-  static bool _validPairStep(
-    Map<String, dynamic> payload,
-    String initiatorSpub,
-    String expectedInitiatorSpub,
-  ) =>
-      payload['ok'] == true &&
-      initiatorSpub.isNotEmpty &&
-      (expectedInitiatorSpub.isEmpty || initiatorSpub == expectedInitiatorSpub);
-
-  /// Declines a commit or finalize step and forgets the request.
-  void _rejectPairStep(
-    _PairReply reply,
-    String type,
-    String requestId,
-    String deviceId,
-  ) {
-    reply.socket.send(
-      _jsonBytes({
-        'type': type,
-        'protocol': _protocolVersion,
-        'requestId': requestId,
-        'accepted': false,
-        'reason': type == _pairCommitAckType
-            ? 'invalid_commit'
-            : 'invalid_finalize',
-        'from': _localIdentityMap(deviceId),
-      }),
-      reply.address,
-      reply.port,
-    );
-    _pendingPairRequests.remove(requestId);
-  }
-
-  /// Accepts a commit or finalize step. The ack carries our static public
-  /// key so the initiator can pin us.
-  Future<void> _acceptPairStep(
-    _PairReply reply,
-    String type,
-    _IncomingPairRequestState request,
-    String initiatorSpub,
-    String deviceId,
-  ) async {
-    var localStaticPubB64 = (request.receiverStaticPubB64 ?? '').trim();
-    if (localStaticPubB64.isEmpty) {
-      localStaticPubB64 = await _localStaticPubB64();
-    }
-    final ack = await _attachControlAuthForFingerprint(
-      payload: {
-        'type': type,
-        'protocol': _protocolVersion,
-        'requestId': request.requestId,
-        'accepted': true,
-        'spub': localStaticPubB64,
-        'ok': true,
-        'from': _localIdentityMap(deviceId),
-      },
-      remoteStaticPubB64: initiatorSpub,
-      pairingId: request.requestId,
-    );
-    reply.socket.send(_jsonBytes(ack), reply.address, reply.port);
-  }
-
-  Future<void> _handlePairFinalize(
-    RawDatagramSocket socket,
-    Datagram datagram,
-    Map<String, dynamic> payload,
-    String deviceId,
-  ) async {
-    final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) return;
-
-    final from = payload['from'];
-    final fromId = from is Map ? from['id'] as String? ?? '' : '';
-    final paired = _trustedPeerById(fromId);
-    if (paired != null &&
-        paired.pairingId == requestId &&
-        await _verifyTrustedControlPacketAuth(
-          payload: payload,
-          fromPeerId: fromId,
-        )) {
-      final ack = await _attachControlAuthIfTrusted(
-        payload: {
-          'type': _pairFinalizeAckType,
-          'protocol': _protocolVersion,
-          'requestId': requestId,
-          'accepted': true,
-          'ok': true,
-          'spub': await _localStaticPubB64(),
-          'from': _localIdentityMap(deviceId),
-        },
-        peerId: fromId,
-      );
-      socket.send(
-        _jsonBytes(ack),
-        datagram.address,
-        (payload['replyPort'] as num?)?.toInt() ?? datagram.port,
-      );
-      return;
-    }
-    final request = _pendingPairRequests[requestId];
-    if (request == null ||
-        !request.receiverAccepted ||
-        !request.initiatorCommitAccepted) {
-      return;
-    }
-
-    if (from is! Map) return;
-    final fromMap = Map<String, dynamic>.from(from);
-    if (fromId.isEmpty || fromId != request.peer.id) return;
-    if (datagram.address.address != request.sourceAddress.address) return;
-
-    final initiatorSpub = (payload['spub'] as String?)?.trim() ?? '';
-    final expectedInitiatorSpub = (request.initiatorStaticPubB64 ?? '').trim();
-    final replyPort = (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
-    if (!await _verifyControlAuthForFingerprint(
-      payload: payload,
-      expectedFingerprint: expectedInitiatorSpub,
-      pairingId: requestId,
-    )) {
-      return;
-    }
-
-    final reply = (socket: socket, address: datagram.address, port: replyPort);
-    if (!_validPairStep(payload, initiatorSpub, expectedInitiatorSpub)) {
-      _rejectPairStep(reply, _pairFinalizeAckType, requestId, deviceId);
-      return;
-    }
-
-    if (_pendingPairRequests[requestId] != request ||
-        !_pairFinalizing.add(requestId)) {
-      return;
-    }
-    try {
-      final fromName = (fromMap['name'] as String?)?.trim();
-      final fromType = syncDeviceTypeFromWire(
-        fromMap['deviceType'] as String? ?? fromMap['device_type'] as String?,
-      );
-      final trusted = await _upsertTrustedPeer(
-        DiscoveredSyncPeer(
-          id: fromId,
-          name: _normalizeDeviceName(
-            (fromName == null || fromName.isEmpty)
-                ? request.peer.name
-                : fromName,
-            fallbackType: fromType,
-          ),
-          host: datagram.address.address,
-          port: (fromMap['port'] as num?)?.toInt() ?? defaultLanPort,
-          transferPort: (fromMap['transferPort'] as num?)?.toInt(),
-          deviceType: fromType == SyncDeviceType.unknown
-              ? request.peer.deviceType
-              : fromType,
-        ),
-        fingerprint: initiatorSpub,
-        pairingId: requestId,
-      );
-      _emitSyncEvent(PeerTrustedEvent(trusted));
-      await _acceptPairStep(
-        reply,
-        _pairFinalizeAckType,
-        request,
-        initiatorSpub,
-        deviceId,
-      );
-      _pendingPairRequests.remove(requestId);
-      _pairDecisions.remove(requestId);
-    } finally {
-      _pairFinalizing.remove(requestId);
-    }
-  }
-
-  void _handlePairCancel(Map<String, dynamic> payload) {
-    final requestId = (payload['requestId'] as String?)?.trim() ?? '';
-    if (requestId.isEmpty) return;
-    final request = _pendingPairRequests.remove(requestId);
-    _pairDecisions.remove(requestId);
-    if (request != null) {
-      _emitSyncEvent(PairRequestCanceledEvent(request.pending));
-    }
-  }
-
-  void _handlePairCodeRejected(
-    Datagram datagram,
-    Map<String, dynamic> payload,
-  ) {
-    final request = _acceptedPairRequest(datagram, payload);
-    if (request == null) return;
-    _pairDecisions.remove(request.requestId);
-    _emitSyncEvent(
-      PairRequestCodeRejectedEvent(
-        request.pending,
-        reason: (payload['reason'] as String?)?.trim(),
-      ),
-    );
-  }
-
-  Future<void> _sendPairNotice({
-    required DiscoveredSyncPeer peer,
-    required String requestId,
-    required String localDeviceId,
-    String type = _pairCancelType,
-    String? reason,
-  }) async {
-    if (kIsWeb) return;
-    await _sendOnce(
-      {
-        'type': type,
-        'protocol': _protocolVersion,
-        'requestId': requestId,
-        'reason': ?reason,
-        'from': _localIdentityMap(localDeviceId),
-      },
-      InternetAddress(peer.host),
-      peer.port,
-    );
-  }
-
-  /// Notifies the initiator that a pending pair request expired on our side.
-  /// Sends a decision-rejection packet for requests that were never accepted
-  /// (so the initiator's decision loop can resolve immediately) and a cancel
-  /// packet for requests already accepted (where the initiator is waiting on
-  /// a commit/finalize ack instead).
-  Future<void> _notifyInitiatorOfTimeout(
-    _IncomingPairRequestState request,
-  ) async {
-    if (kIsWeb) return;
-    final localDeviceId = await _ensureDeviceId();
-    await _sendOnce(
-      {
-        'type': request.receiverAccepted
-            ? _pairCancelType
-            : _pairReceiverDecisionType,
-        'protocol': _protocolVersion,
-        'requestId': request.requestId,
-        if (!request.receiverAccepted) 'accepted': false,
-        'reason': 'timeout',
-        'from': _localIdentityMap(localDeviceId),
-      },
-      request.sourceAddress,
-      request.replyPort,
-    );
   }
 
   bool _isTrustedPeer(String peerId) => _trustedPeerById(peerId) != null;
@@ -3712,20 +3166,6 @@ class DeviceSyncService {
       );
     }
     return upsert;
-  }
-
-  void _evictExpiredPairRequests() {
-    final now = DateTime.now();
-    final expired = _pendingPairRequests.values
-        .where((r) => now.difference(r.createdAt) > _pairRequestLifetime)
-        .toList(growable: false);
-
-    for (final request in expired) {
-      _pendingPairRequests.remove(request.requestId);
-      _pairDecisions.remove(request.requestId);
-      _emitSyncEvent(PairRequestTimedOutEvent(request.pending));
-      unawaited(_notifyInitiatorOfTimeout(request));
-    }
   }
 
   Future<void> _sendAnnounce(String deviceId) async {

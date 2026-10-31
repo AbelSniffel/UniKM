@@ -10,11 +10,10 @@ enum IncomingPairDialogResult { declined, resolved }
 
 /// Dialog shown on the receiver side when an incoming pair request arrives.
 ///
-/// Closes automatically when the pairing session is resolved — trusted,
-/// canceled, or timed out — via the service event stream.  MITM protection
-/// is preserved: the entered code is encrypted with a key derived from an
-/// x25519 DH exchange between the two devices' static key-pairs (HKDF +
-/// AES-GCM), so a network-level attacker cannot intercept or forge it.
+/// Both devices show the same code, derived from both devices' keys, only
+/// when nothing between them swapped those keys. The user checks that the
+/// codes match and pairs, or declines. Closes on its own when pairing
+/// completes, is canceled on the other device, or times out.
 class IncomingPairDialog extends ConsumerStatefulWidget {
   const IncomingPairDialog({super.key, required this.request});
   final PendingPairRequest request;
@@ -24,34 +23,14 @@ class IncomingPairDialog extends ConsumerStatefulWidget {
 }
 
 class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
-  final _codeController = TextEditingController();
-  final _focusNode = FocusNode();
-  bool _submitting = false;
+  bool _accepted = false;
   String? _error;
   StreamSubscription<SyncEvent>? _eventSub;
 
   @override
   void initState() {
     super.initState();
-    // Request focus after the first frame so DialogInteractionScope's
-    // autofocus has settled and the PairCodeInput TextField gets it.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNode.requestFocus();
-    });
     _eventSub = ref.read(deviceSyncServiceProvider).syncEvents.listen((event) {
-      if (!mounted) return;
-
-      if (event is PairRequestCodeRejectedEvent &&
-          event.request.requestId == widget.request.requestId) {
-        _codeController.clear();
-        _focusNode.requestFocus();
-        setState(() {
-          _submitting = false;
-          _error = 'Incorrect code. Please try again.';
-        });
-        return;
-      }
-
       final shouldClose = switch (event) {
         PairRequestCanceledEvent(:final request) ||
         PairRequestTimedOutEvent(
@@ -60,13 +39,8 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
         PeerTrustedEvent(:final peer) => peer.id == widget.request.peer.id,
         _ => false,
       };
-
-      if (shouldClose) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            Navigator.of(context).maybePop(IncomingPairDialogResult.resolved);
-          }
-        });
+      if (shouldClose && mounted) {
+        Navigator.of(context).maybePop(IncomingPairDialogResult.resolved);
       }
     });
   }
@@ -74,17 +48,16 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
   @override
   void dispose() {
     _eventSub?.cancel();
-    _codeController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
+    final peer = widget.request.peer;
     return DialogInteractionScope(
-      onPrimaryAction: _submitting ? null : _sendCode,
-      onDismiss: _submitting ? null : _decline,
+      onPrimaryAction: _accepted ? null : _accept,
+      onDismiss: _accepted ? null : _decline,
       child: ThemedAlertDialog(
         theme: theme,
         title: DialogHeader(
@@ -97,38 +70,38 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Allow ${widget.request.peer.name} (${widget.request.peer.host})'
-              ' to pair with this device?',
+              '${peer.name} (${peer.host}) wants to pair with this device.',
               style: TextStyle(color: theme.textSecondary),
             ),
             const SizedBox(height: 12),
-            PairCodeInput(
-              controller: _codeController,
-              focusNode: _focusNode,
-              theme: theme,
-              error: _error,
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-              onSubmitted: (_) {
-                if (!_submitting) _sendCode();
-              },
-            ),
+            PairCodeDisplay(code: widget.request.code, theme: theme),
             const SizedBox(height: 8),
             Text(
-              'Enter the 6-digit code shown on the sending device.',
+              _accepted
+                  ? 'Waiting for ${peer.name} to confirm...'
+                  : 'Pair only if ${peer.name} shows the same code.',
               style: TextStyle(color: theme.textSecondary, fontSize: 12),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
           OutlinedButton(
-            onPressed: _submitting ? null : _decline,
+            onPressed: _accepted ? null : _decline,
             child: const Text('Decline'),
           ),
           ElevatedButton(
-            onPressed: _submitting ? null : _sendCode,
-            child: const Text('Send Code'),
+            onPressed: _accepted ? null : _accept,
+            child: const Text('Codes Match'),
           ),
         ],
       ),
@@ -149,34 +122,24 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
     }
   }
 
-  Future<void> _sendCode() async {
-    final code = _codeController.text.trim();
-    if (code.isEmpty) {
-      setState(() => _error = 'Enter the 6-digit pairing code.');
-      return;
-    }
-
+  Future<void> _accept() async {
     setState(() {
-      _submitting = true;
+      _accepted = true;
       _error = null;
     });
-
     try {
       await ref
           .read(deviceSyncProvider.notifier)
           .respondToPairRequest(
             requestId: widget.request.requestId,
             accept: true,
-            enteredVerificationCode: code,
           );
-      // Stay in submitting state — the event subscription above will close
-      // the dialog on PeerTrustedEvent (success) or close/error on
-      // PairRequestCanceled/TimedOut.  Code rejections reset _submitting.
+      // The event subscription closes the dialog once pairing resolves.
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _submitting = false;
-        _error = error.toString().replaceFirst('DeviceSyncException: ', '');
+        _accepted = false;
+        _error = error.toString();
       });
     }
   }

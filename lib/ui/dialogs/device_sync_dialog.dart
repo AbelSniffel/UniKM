@@ -90,77 +90,130 @@ Future<bool?> showChooseSyncDirectionDialog({
 String _formatLastSync(DateTime? value) =>
     value == null ? 'Never' : formatDateTimeMinutes(value.toLocal());
 
-void showOutgoingPairCodeDialog({
+/// Shows the code this device shows while pairing with [peerName]. Completes
+/// with whether the user confirmed that [peerName] shows the same code.
+/// [onCancel] runs if the user cancels; the dialog closes on its own once
+/// [pairingResult] completes.
+Future<bool> showOutgoingPairCodeDialog({
   required BuildContext context,
   required AppThemeData theme,
   required String peerName,
-  required String verificationCode,
+  required String code,
   required void Function() onCancel,
   required Future<void> pairingResult,
 }) {
-  if (!context.mounted) return;
-
-  // Captured on the first builder call so we can close from outside.
-  BuildContext? dialogCtx;
-  bool cancelTriggered = false;
-
-  void maybeClose() {
-    final ctx = dialogCtx;
-    if (ctx != null && ctx.mounted) Navigator.of(ctx).maybePop();
-  }
-
-  void cancel() {
-    if (cancelTriggered) return;
-    cancelTriggered = true;
-    maybeClose();
-    onCancel();
-  }
-
+  if (!context.mounted) return Future.value(false);
+  final confirmed = Completer<bool>();
   showAppDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) {
-      dialogCtx ??= ctx;
-      return DialogInteractionScope(
-        enableEnterToPrimary: false,
-        onDismiss: cancel,
-        child: ThemedAlertDialog(
+    builder: (_) => _OutgoingPairDialog(
+      theme: theme,
+      peerName: peerName,
+      code: code,
+      confirmed: confirmed,
+      onCancel: onCancel,
+      pairingResult: pairingResult,
+    ),
+  );
+  return confirmed.future;
+}
+
+class _OutgoingPairDialog extends StatefulWidget {
+  const _OutgoingPairDialog({
+    required this.theme,
+    required this.peerName,
+    required this.code,
+    required this.confirmed,
+    required this.onCancel,
+    required this.pairingResult,
+  });
+
+  final AppThemeData theme;
+  final String peerName;
+  final String code;
+  final Completer<bool> confirmed;
+  final void Function() onCancel;
+  final Future<void> pairingResult;
+
+  @override
+  State<_OutgoingPairDialog> createState() => _OutgoingPairDialogState();
+}
+
+class _OutgoingPairDialogState extends State<_OutgoingPairDialog> {
+  @override
+  void initState() {
+    super.initState();
+    // The caller reports the outcome; errors are swallowed here only.
+    widget.pairingResult.then<void>((_) => _close(), onError: (_) => _close());
+  }
+
+  @override
+  void dispose() {
+    if (!widget.confirmed.isCompleted) widget.confirmed.complete(false);
+    super.dispose();
+  }
+
+  void _close() {
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
+  void _confirm() {
+    if (widget.confirmed.isCompleted) return;
+    setState(() => widget.confirmed.complete(true));
+  }
+
+  void _cancel() {
+    if (!widget.confirmed.isCompleted) widget.confirmed.complete(false);
+    widget.onCancel();
+    _close();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final waiting = widget.confirmed.isCompleted;
+    return DialogInteractionScope(
+      onPrimaryAction: waiting ? null : _confirm,
+      onDismiss: _cancel,
+      child: ThemedAlertDialog(
+        theme: theme,
+        title: DialogHeader(
+          icon: Icons.verified_user,
+          title: 'Pairing Code',
           theme: theme,
-          title: DialogHeader(
-            icon: Icons.verified_user,
-            title: 'Pairing Code',
-            theme: theme,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Enter this code on $peerName to complete pairing.',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              PairCodeDisplay(code: verificationCode, theme: theme),
-              const SizedBox(height: 8),
-              Text(
-                'This dialog will close automatically when pairing completes.',
-                style: TextStyle(color: theme.textSecondary, fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(onPressed: cancel, child: const Text('Cancel')),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Check that ${widget.peerName} shows the same code, then '
+              'confirm on both devices.',
+              style: TextStyle(color: theme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            PairCodeDisplay(code: widget.code, theme: theme),
+            const SizedBox(height: 8),
+            Text(
+              waiting
+                  ? 'Waiting for ${widget.peerName} to confirm...'
+                  : 'If the codes differ, cancel: another device may be '
+                        'intercepting the connection.',
+              style: TextStyle(color: theme.textSecondary, fontSize: 12),
+            ),
           ],
         ),
-      );
-    },
-  );
-
-  // Auto-close when pairing either succeeds or fails.
-  // Use then/onError instead of whenComplete so the error is swallowed here
-  // (it is already handled by the caller's catch block), preventing an
-  // unhandled-future-error crash when the user cancels.
-  pairingResult.then<void>((_) => maybeClose(), onError: (_) => maybeClose());
+        actions: [
+          OutlinedButton(onPressed: _cancel, child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: waiting ? null : _confirm,
+            child: const Text('Codes Match'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DeviceSyncDialog extends ConsumerStatefulWidget {
@@ -670,20 +723,18 @@ class _SyncContent extends ConsumerWidget {
                 .read(deviceSyncProvider.notifier)
                 .requestPairing(
                   discovered,
-                  showVerificationCode: (verificationCode) {
-                    showOutgoingPairCodeDialog(
-                      context: context,
-                      theme: theme,
-                      peerName: discovered.name,
-                      verificationCode: verificationCode,
-                      onCancel: () {
-                        if (!cancelCompleter.isCompleted) {
-                          cancelCompleter.complete();
-                        }
-                      },
-                      pairingResult: pairingCompleter.future,
-                    );
-                  },
+                  confirmCode: (code) => showOutgoingPairCodeDialog(
+                    context: context,
+                    theme: theme,
+                    peerName: discovered.name,
+                    code: code,
+                    onCancel: () {
+                      if (!cancelCompleter.isCompleted) {
+                        cancelCompleter.complete();
+                      }
+                    },
+                    pairingResult: pairingCompleter.future,
+                  ),
                   onUserCancel: cancelCompleter.future,
                 );
 

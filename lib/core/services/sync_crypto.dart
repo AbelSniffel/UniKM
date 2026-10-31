@@ -24,7 +24,6 @@ class SyncCrypto {
   SyncCrypto._();
 
   static final _x25519 = X25519();
-  static final _aesgcm = AesGcm.with256bits();
   static final _hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
 
   static const _hkdfInfo = 'unikm_sync_v2';
@@ -115,60 +114,5 @@ class SyncCrypto {
       nonce: salt,
       info: utf8.encode(_hkdfInfo),
     );
-  }
-
-  // ── Encrypt / Decrypt ────────────────────────────────────────────────────
-
-  /// Encrypts a short [plaintext] (the pairing code proof) with AES-256-GCM
-  /// as a JSON envelope: `{"n":"<nonce_b64>","c":"<ciphertext+mac_b64>"}`.
-  /// Sync sessions use the framed channel in `sync_frames.dart` instead.
-  static Future<String> encrypt(String plaintext, SecretKey key) =>
-      _encryptNow(plaintext, key);
-
-  /// Decrypts an envelope produced by [encrypt].
-  ///
-  /// Throws [ArgumentError] if the envelope is malformed, or
-  /// [SecretBoxAuthenticationError] if it was tampered with or the key is
-  /// wrong.
-  static Future<String> decrypt(String envelope, SecretKey key) =>
-      _decryptNow(envelope, key);
-
-  static Future<String> _encryptNow(String plaintext, SecretKey key) async {
-    final clear = utf8.encode(plaintext);
-    final nonce = _aesgcm.newNonce();
-    final box = await _aesgcm.encrypt(clear, secretKey: key, nonce: nonce);
-    final combined = Uint8List(box.cipherText.length + box.mac.bytes.length)
-      ..setAll(0, box.cipherText)
-      ..setAll(box.cipherText.length, box.mac.bytes);
-    return jsonEncode({
-      'n': base64.encode(nonce),
-      'c': base64.encode(combined),
-    });
-  }
-
-  static Future<String> _decryptNow(String envelope, SecretKey key) async {
-    final Map<String, dynamic> map;
-    try {
-      map = jsonDecode(envelope) as Map<String, dynamic>;
-    } catch (_) {
-      throw ArgumentError('Encrypted envelope is not valid JSON.');
-    }
-    final nonce = base64.decode(map['n'] as String);
-    final combined = base64.decode(map['c'] as String);
-    const macLen = 16;
-    if (combined.length < macLen) {
-      throw ArgumentError('Encrypted envelope is too short.');
-    }
-    final cipherText = Uint8List.sublistView(
-      combined,
-      0,
-      combined.length - macLen,
-    );
-    final mac = Mac(Uint8List.sublistView(combined, combined.length - macLen));
-    final clearBytes = await _aesgcm.decrypt(
-      SecretBox(cipherText, nonce: nonce, mac: mac),
-      secretKey: key,
-    );
-    return utf8.decode(clearBytes);
   }
 }

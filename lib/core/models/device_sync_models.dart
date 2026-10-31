@@ -197,12 +197,6 @@ class PairRequestCanceledEvent extends SyncEvent {
   final PendingPairRequest request;
 }
 
-class PairRequestCodeRejectedEvent extends SyncEvent {
-  const PairRequestCodeRejectedEvent(this.request, {this.reason});
-  final PendingPairRequest request;
-  final String? reason;
-}
-
 class DbMismatchDetectedEvent extends SyncEvent {
   const DbMismatchDetectedEvent({
     required this.peerId,
@@ -349,11 +343,15 @@ class PendingPairRequest {
     required this.requestId,
     required this.peer,
     required this.requestedAt,
+    required this.code,
   });
 
   final String requestId;
   final DiscoveredSyncPeer peer;
   final DateTime requestedAt;
+
+  /// The 6-digit code both devices show; the user checks that they match.
+  final String code;
 }
 
 List<TrustedSyncPeer> decodeTrustedPeers(String raw) {

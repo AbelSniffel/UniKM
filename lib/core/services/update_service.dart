@@ -573,7 +573,8 @@ class UpdateService {
     }
 
     if (Platform.isAndroid) {
-      const channel = MethodChannel('com.example.unikm/installer');
+      // Matches the other host channels in MainActivity.kt.
+      const channel = MethodChannel('unikm/installer');
       await channel.invokeMethod<void>('installApk', {'filePath': filePath});
       return false;
     }

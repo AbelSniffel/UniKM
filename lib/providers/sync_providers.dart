@@ -169,7 +169,9 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     final latest = state.value;
     if (latest == null) return;
     // Every event may follow a pairing change, so pending requests refresh.
-    final current = latest.copyWith();
+    final current = latest.copyWith(
+      pendingPairRequests: _service.getPendingPairRequests(),
+    );
     void emit(DeviceSyncSnapshot next) => state = AsyncData(next);
     void setStatus(DeviceSyncStatus status, String message) =>
         emit(current.copyWith(status: status, statusMessage: message));
@@ -264,11 +266,6 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
         setStatus(
           DeviceSyncStatus.idle,
           'Pairing request from ${request.peer.name} was canceled.',
-        );
-      case PairRequestCodeRejectedEvent(:final request):
-        setStatus(
-          DeviceSyncStatus.connecting,
-          'Code was rejected by ${request.peer.name}. Try sending it again.',
         );
       case DbMismatchDetectedEvent(
         :final peerId,
@@ -763,7 +760,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
 
   Future<void> requestPairing(
     DiscoveredSyncPeer peer, {
-    void Function(String verificationCode)? showVerificationCode,
+    required Future<bool> Function(String code) confirmCode,
     Future<void>? onUserCancel,
   }) async {
     final current = state.value;
@@ -771,7 +768,7 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
     try {
       final trusted = await _service.requestPairing(
         peer,
-        showVerificationCode: showVerificationCode,
+        confirmCode: confirmCode,
         onUserCancel: onUserCancel,
       );
 
@@ -803,26 +800,19 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
   Future<void> respondToPairRequest({
     required String requestId,
     required bool accept,
-    String? enteredVerificationCode,
   }) async {
-    await _service.respondToPairRequest(
-      requestId: requestId,
-      accept: accept,
-      enteredVerificationCode: enteredVerificationCode,
-    );
+    await _service.respondToPairRequest(requestId: requestId, accept: accept);
     final current = state.value;
     if (current == null) return;
-    final latestSnapshot = await _service.loadSnapshot();
     state = AsyncData(
-      latestSnapshot.copyWith(
+      current.copyWith(
         status: accept ? DeviceSyncStatus.connecting : DeviceSyncStatus.idle,
+        pendingPairRequests: _service.getPendingPairRequests(),
         statusMessage: accept
-            ? 'Pair confirmation sent. Waiting for handshake completion...'
+            ? 'Waiting for the other device to confirm...'
             : 'Pair request declined.',
-        discoveredPeers: current.discoveredPeers,
       ),
     );
-    _ensureBackgroundTimer(state.value ?? current);
   }
 
   Future<void> removeTrustedPeer(String peerId) async {

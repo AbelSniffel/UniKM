@@ -275,20 +275,6 @@ class _StatusCard extends StatelessWidget {
                       Text.rich(
                         TextSpan(
                           children: [
-                            TextSpan(text: 'v$kAppVersion'),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                child: Icon(
-                                  Icons.arrow_forward_rounded,
-                                  color: color,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
                             TextSpan(text: 'v$target'),
                             if (size != null)
                               TextSpan(text: '  ·  $size', style: detail),
@@ -587,6 +573,9 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                     ? 'Installer file not found'
                     : 'Download',
                 style: theme.compactIconButtonStyle,
+                // On the button rather than the icon, so it dims when there
+                // is nothing to download.
+                color: theme.accent,
                 onPressed: canDownload
                     ? () => notifier.switchToVersion(release)
                     : null,
@@ -598,7 +587,6 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                             : isSkipped
                             ? Icons.block
                             : Icons.download,
-                        color: theme.accent,
                       ),
               ),
             ],

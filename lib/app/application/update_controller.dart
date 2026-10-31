@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -213,9 +214,14 @@ class UpdateNotifier extends Notifier<UpdateState> {
   /// [progress] the download is complete and the bar is cleared.
   void _showDownloadNotification(String message, {double? progress}) {
     final done = progress == null;
-    final type = done ? NotificationType.success : NotificationType.download;
+    // One type throughout, so finishing keeps the toast's own colours and
+    // icon rather than switching to the success tint.
+    const type = NotificationType.download;
     final title = done ? 'Download Complete' : 'Update Download';
     final actionLabel = done ? 'Install' : 'Cancel';
+    final actionStyle = done
+        ? NotificationActionStyle.elevated
+        : NotificationActionStyle.outlined;
     final VoidCallback onAction = done
         ? () => launchInstaller()
         : cancelDownload;
@@ -228,6 +234,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         progress: progress,
         actionLabel: actionLabel,
         onAction: onAction,
+        actionStyle: actionStyle,
         persistent: true,
         dedupe: false,
       );
@@ -240,6 +247,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         clearProgress: done,
         actionLabel: actionLabel,
         onAction: onAction,
+        actionStyle: actionStyle,
       );
     }
     ref.read(pageNotificationsProvider.notifier).add(NavItem.updates);
@@ -513,6 +521,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
       // Give time for the installer to start, then exit
       await Future.delayed(const Duration(seconds: 2));
       exit(0);
+    } on PlatformException catch (e) {
+      NotificationManager.instance.error(
+        'Failed to launch installer: ${e.message ?? e.code}',
+      );
     } catch (e) {
       NotificationManager.instance.error('Failed to launch installer: $e');
     }

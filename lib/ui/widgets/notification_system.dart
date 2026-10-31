@@ -14,6 +14,10 @@ import '../../core/constants/app_constants.dart';
 /// Notification types
 enum NotificationType { success, error, warning, info, update, download, steam }
 
+/// How a notification's main action is drawn. [text] sits beside the
+/// progress or under the message; the others fill the toast's width.
+enum NotificationActionStyle { text, outlined, elevated }
+
 /// Notification positions
 enum NotificationPosition {
   topLeft,
@@ -35,6 +39,7 @@ class AppNotification {
     this.onTap,
     this.actionLabel,
     this.onAction,
+    this.actionStyle = NotificationActionStyle.text,
     this.secondaryActionLabel,
     this.onSecondaryAction,
     this.isDismissing = false,
@@ -50,6 +55,7 @@ class AppNotification {
   final VoidCallback? onTap;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final NotificationActionStyle actionStyle;
   final String? secondaryActionLabel;
   final VoidCallback? onSecondaryAction;
   final bool isDismissing;
@@ -70,6 +76,7 @@ class AppNotification {
     VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onAction,
+    NotificationActionStyle? actionStyle,
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
     bool clearProgress = false,
@@ -89,6 +96,9 @@ class AppNotification {
     onTap: clearOnTap ? null : (onTap ?? this.onTap),
     actionLabel: clearAction ? null : (actionLabel ?? this.actionLabel),
     onAction: clearAction ? null : (onAction ?? this.onAction),
+    actionStyle: clearAction
+        ? NotificationActionStyle.text
+        : (actionStyle ?? this.actionStyle),
     secondaryActionLabel: clearSecondaryAction
         ? null
         : (secondaryActionLabel ?? this.secondaryActionLabel),
@@ -115,6 +125,7 @@ class NotificationHandle {
     double? progress,
     String? actionLabel,
     VoidCallback? onAction,
+    NotificationActionStyle? actionStyle,
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
     bool clearProgress = false,
@@ -131,6 +142,7 @@ class NotificationHandle {
       progress: progress,
       actionLabel: actionLabel,
       onAction: onAction,
+      actionStyle: actionStyle,
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
       clearProgress: clearProgress,
@@ -217,6 +229,7 @@ class NotificationManager {
     VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onAction,
+    NotificationActionStyle? actionStyle,
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
     bool persistent = false,
@@ -244,6 +257,7 @@ class NotificationManager {
       onTap: onTap,
       actionLabel: actionLabel,
       onAction: onAction,
+      actionStyle: actionStyle ?? NotificationActionStyle.text,
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
       isDismissing: false,
@@ -296,6 +310,7 @@ class NotificationManager {
     double? progress,
     String? actionLabel,
     VoidCallback? onAction,
+    NotificationActionStyle? actionStyle,
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
     bool clearProgress = false,
@@ -319,6 +334,7 @@ class NotificationManager {
       progress: progress,
       actionLabel: actionLabel,
       onAction: onAction,
+      actionStyle: actionStyle,
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
       clearProgress: clearProgress,
@@ -742,6 +758,7 @@ class _NotificationToastState extends State<NotificationToast>
                   padding: const EdgeInsetsDirectional.only(start: 40),
                   child: _buildFooter(),
                 ),
+                _buildWideAction(),
               ],
             ),
           ),
@@ -780,14 +797,18 @@ class _NotificationToastState extends State<NotificationToast>
     final notification = widget.notification;
     final actions = [
       for (final (label, onPressed) in [
-        (notification.actionLabel, notification.onAction),
+        if (notification.actionStyle == NotificationActionStyle.text)
+          (notification.actionLabel, notification.onAction),
         if (notification.progress == null)
           (notification.secondaryActionLabel, notification.onSecondaryAction),
       ])
         if (label != null && onPressed != null)
           TextButton(onPressed: onPressed, child: Text(label)),
     ];
-    final progress = notification.progress;
+    // A wide action's row carries the progress instead.
+    final progress = notification.actionStyle == NotificationActionStyle.text
+        ? notification.progress
+        : null;
     if (progress == null && actions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -798,15 +819,51 @@ class _NotificationToastState extends State<NotificationToast>
             )
           : Row(
               children: [
-                Expanded(
-                  child: AppLinearProgressBar(
-                    theme: widget.theme,
-                    value: progress,
-                    label: '${(progress.clamp(0.0, 1.0) * 100).round()}%',
-                  ),
-                ),
+                Expanded(child: _buildProgressBar(progress)),
                 if (actions.isNotEmpty) const SizedBox(width: kElementHSpacing),
                 ...actions,
+              ],
+            ),
+    );
+  }
+
+  Widget _buildProgressBar(double progress) => AppLinearProgressBar(
+    theme: widget.theme,
+    value: progress,
+    label: '${(progress.clamp(0.0, 1.0) * 100).round()}%',
+  );
+
+  /// Across the toast under the text: any progress filling the row with the
+  /// main action as an outlined or elevated button at its end, or that
+  /// button alone at full width.
+  Widget _buildWideAction() {
+    final notification = widget.notification;
+    if (notification.actionStyle == NotificationActionStyle.text) {
+      return const SizedBox.shrink();
+    }
+    final label = notification.actionLabel;
+    final onPressed = notification.onAction;
+    final progress = notification.progress;
+    final button = label == null || onPressed == null
+        ? null
+        : switch (notification.actionStyle) {
+            NotificationActionStyle.outlined => OutlinedButton(
+              onPressed: onPressed,
+              child: Text(label),
+            ),
+            _ => ElevatedButton(onPressed: onPressed, child: Text(label)),
+          };
+    if (button == null && progress == null) return const SizedBox.shrink();
+    return Padding(
+      // Evens out the card's narrower end padding.
+      padding: const EdgeInsetsDirectional.only(top: 10, end: 6),
+      child: progress == null
+          ? button
+          : Row(
+              spacing: kElementHSpacing,
+              children: [
+                Expanded(child: _buildProgressBar(progress)),
+                ?button,
               ],
             ),
     );

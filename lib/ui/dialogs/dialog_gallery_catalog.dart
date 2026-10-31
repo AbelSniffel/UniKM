@@ -325,7 +325,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
       context: c,
       theme: _theme(c),
       peerName: galleryPeer.name,
-      verificationCode: '123456',
+      code: '123456',
       onCancel: () {},
       pairingResult: Completer<void>().future,
     );
@@ -341,6 +341,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
           requestId: 'preview-request',
           peer: galleryPeer,
           requestedAt: galleryDate,
+          code: '123456',
         ),
       ),
     ),
