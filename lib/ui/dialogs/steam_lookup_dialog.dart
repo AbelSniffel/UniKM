@@ -33,12 +33,14 @@ Future<bool?> showSteamLookupDialog(
   Game game, {
   bool forceRefresh = false,
   SteamSearchResult? initialResult,
+  SteamApplyOptions initialOptions = SteamApplyOptions.defaults,
 }) => showAppDialog<bool>(
   context: context,
   builder: (ctx) => SteamLookupDialog(
     game: game,
     forceRefresh: forceRefresh,
     initialResult: initialResult,
+    initialOptions: initialOptions,
   ),
 );
 
@@ -186,11 +188,12 @@ typedef SteamFetchChoice = ({
 });
 
 /// Show Steam fetch options, including a cache choice when cached data exists.
-/// Returns null when cancelled.
+/// With [onlyWhenCached] nothing is asked unless there is cached data to
+/// choose. Returns null when cancelled.
 Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
   BuildContext context, {
   required String title,
-  bool showApplyOptions = true,
+  bool onlyWhenCached = false,
 }) async {
   final container = ProviderScope.containerOf(context);
 
@@ -203,8 +206,7 @@ Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
       ? preview.steamCachedAt
       : await getCachedAtForTitle(title);
 
-  // Without a cache or apply options there is nothing to ask.
-  if ((cached == null && !showApplyOptions) || !context.mounted) {
+  if ((cached == null && onlyWhenCached) || !context.mounted) {
     return (
       cached: null,
       cachedAt: cachedAt,
@@ -247,19 +249,18 @@ Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
                       title: 'Fetch from Steam',
                       subtitle: 'No cached data for "$title"',
                     ),
-              if (showApplyOptions)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 8,
-                  children: [
-                    TintedHeading(theme: theme, title: 'Apply'),
-                    _SteamOptionsGrid(
-                      theme: theme,
-                      options: options,
-                      onChanged: (value) => setState2(() => options = value),
-                    ),
-                  ],
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 8,
+                children: [
+                  TintedHeading(theme: theme, title: 'Apply'),
+                  _SteamOptionsGrid(
+                    theme: theme,
+                    options: options,
+                    onChanged: (value) => setState2(() => options = value),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -292,10 +293,11 @@ typedef SteamFetchResolution = ({
   SteamSearchResult? result,
   bool usedCache,
   DateTime? cachedAt,
+  SteamApplyOptions options,
 });
 
-/// Asks whether to use cached data, then resolves the result.
-/// Returns null when cancelled.
+/// Asks whether to use cached data and what to apply, when there is cached
+/// data, then resolves the result. Returns null when cancelled.
 Future<SteamFetchResolution?> resolveSteamResultForTitle(
   BuildContext context, {
   required String title,
@@ -304,7 +306,7 @@ Future<SteamFetchResolution?> resolveSteamResultForTitle(
   final choice = await showSteamFetchOptionsDialog(
     context,
     title: title,
-    showApplyOptions: false,
+    onlyWhenCached: true,
   );
   if (choice == null) return null;
   final cached = choice.cached;
@@ -312,6 +314,7 @@ Future<SteamFetchResolution?> resolveSteamResultForTitle(
     result: cached ?? await steamService.searchGame(title, forceRefresh: true),
     usedCache: cached != null,
     cachedAt: choice.cachedAt,
+    options: choice.options,
   );
 }
 
@@ -346,7 +349,33 @@ Future<void> performSingleSteamLookup(
       return;
     }
 
-    await showSteamLookupDialog(context, game, initialResult: result);
+    // Chosen cached data is applied as picked; only fresh data is previewed.
+    if (resolution.usedCache) {
+      final error = await applySteamResultToGame(
+        ProviderScope.containerOf(context, listen: false),
+        game,
+        result,
+        resolution.options,
+        expectedRevision: sessionRevision,
+      );
+      if (error == null) {
+        NotificationManager.instance.success(
+          'Updated "${game.title}" with Steam data',
+        );
+      } else {
+        NotificationManager.instance.error(
+          'Failed to apply Steam data: $error',
+        );
+      }
+      return;
+    }
+
+    await showSteamLookupDialog(
+      context,
+      game,
+      initialResult: result,
+      initialOptions: resolution.options,
+    );
   } finally {
     batchNotifier.endBatch();
   }
@@ -550,11 +579,13 @@ class SteamLookupDialog extends ConsumerStatefulWidget {
     required this.game,
     this.forceRefresh = false,
     this.initialResult,
+    this.initialOptions = SteamApplyOptions.defaults,
   });
 
   final Game game;
   final bool forceRefresh;
   final SteamSearchResult? initialResult;
+  final SteamApplyOptions initialOptions;
 
   @override
   ConsumerState<SteamLookupDialog> createState() => _SteamLookupDialogState();
@@ -568,7 +599,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   final _coverDownloads = <String, Future<String?>>{};
   String? _error;
 
-  var _options = SteamApplyOptions.defaults;
+  late var _options = widget.initialOptions;
 
   @override
   void initState() {

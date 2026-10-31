@@ -69,6 +69,15 @@ class DeadlineChip extends StatelessWidget {
                     EdgeInsets.fromLTRB(10, 4, 10, 4),
                   ),
                   splashFactory: LiveSizeInkRipple.splashFactory,
+                  foregroundBuilder: (context, states, label) =>
+                      AppActionButton.withStatus(
+                        context,
+                        states,
+                        label!,
+                        theme: theme,
+                        selected: hasDeadline,
+                        gap: 6,
+                      ),
                 ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -130,11 +139,6 @@ class DeadlineChip extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                AppButtonSelectionIndicator(
-                  selected: hasDeadline,
-                  theme: theme,
                 ),
               ],
             ),

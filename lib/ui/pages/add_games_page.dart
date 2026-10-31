@@ -479,22 +479,30 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
         return;
       }
 
-      final imagePath = await steamService.downloadImage(
-        result.appId,
-        imageUrl: result.imageUrl,
-      );
-      // Create/get steam tags for preview
-      final created = await SteamTagUtils.ensureSteamTags(
-        db: db,
-        tagNames: result.tags,
-      );
+      // Only what was chosen to apply reaches the form.
+      final options = resolution.options;
+      final imagePath = options.applyImage
+          ? await steamService.downloadImage(
+              result.appId,
+              imageUrl: result.imageUrl,
+            )
+          : null;
+      final created = options.applyTags
+          ? await SteamTagUtils.ensureSteamTags(db: db, tagNames: result.tags)
+          : <Tag>[];
 
       await ref.read(tagsProvider.notifier).refresh();
       await persistEncryptedDbIfNeeded(ref);
 
       if (!mounted) return;
       _applySteamPreview(
-        result: result,
+        result: SteamSearchResult(
+          appId: options.applyAppId ? result.appId : '',
+          name: result.name,
+          isDlc: result.isDlc,
+          reviewScore: options.applyReviews ? result.reviewScore : null,
+          reviewCount: options.applyReviews ? result.reviewCount : null,
+        ),
         steamTags: created,
         coverImage: imagePath,
         cacheAt: resolution.usedCache ? resolution.cachedAt : null,

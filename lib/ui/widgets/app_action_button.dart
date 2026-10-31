@@ -8,6 +8,11 @@ import 'settings_card_inset.dart';
 import 'button_theme_sync.dart';
 
 /// The outlined action style shared by Dev Tools and game option toggles.
+Duration _statusDuration(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context)
+    ? Duration.zero
+    : const Duration(milliseconds: 120);
+
 class AppActionButton extends StatelessWidget {
   const AppActionButton({
     super.key,
@@ -48,6 +53,57 @@ class AppActionButton extends StatelessWidget {
   static const toggleHorizontalPadding = 10.0;
   static const statusSize = 14.0;
   static const statusSpacing = 4.0;
+
+  /// Puts a toggle's status mark after its [label], for a `foregroundBuilder`.
+  /// While the toggle is off and idle the mark is hidden and the label sits
+  /// centred over the empty slot. Being on, hovered, pressed or focused moves
+  /// the label back to its place and grows the mark in. The label moves by
+  /// paint only, so the button keeps its size and never re-lays out.
+  static Widget withStatus(
+    BuildContext context,
+    Set<WidgetState> states,
+    Widget label, {
+    required AppThemeData theme,
+    required bool selected,
+    Color? accentColor,
+    bool deleteOnHover = false,
+    bool expand = false,
+    double gap = statusSpacing,
+  }) {
+    final hovered = states.contains(WidgetState.hovered);
+    final shown =
+        selected ||
+        hovered ||
+        states.contains(WidgetState.pressed) ||
+        states.contains(WidgetState.focused);
+    return Row(
+      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        // An expanded label keeps its place; others centre while idle.
+        if (expand)
+          Expanded(child: label)
+        else
+          Flexible(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: shown ? 0 : (gap + statusSize) / 2),
+              duration: _statusDuration(context),
+              curve: Curves.easeInOutCubic,
+              child: label,
+              builder: (_, dx, child) =>
+                  Transform.translate(offset: Offset(dx, 0), child: child),
+            ),
+          ),
+        SizedBox(width: gap),
+        AppButtonSelectionIndicator(
+          selected: selected,
+          deleteHovered: deleteOnHover && hovered,
+          visible: shown,
+          theme: theme,
+          accentColor: accentColor,
+        ),
+      ],
+    );
+  }
 
   static ButtonStyle styleFor(
     AppThemeData theme, {
@@ -133,6 +189,7 @@ class AppActionButton extends StatelessWidget {
                   borderRadius: theme.cornerRadius,
                   surfaceColor: theme.background,
                   depthStrength: depthStrength,
+                  cacheRaster: true,
                   child: child!,
                 ),
               );
@@ -198,11 +255,17 @@ class AppActionButton extends StatelessWidget {
                       ))
                 .copyWith(
                   animationDuration: snapTheme ? Duration.zero : null,
-                  foregroundBuilder: !deleteOnHover
+                  foregroundBuilder: selected == null || !showStatus
                       ? null
-                      : (context, states, child) => _ButtonHoverState(
-                          hovered: states.contains(WidgetState.hovered),
-                          child: child!,
+                      : (context, states, label) => withStatus(
+                          context,
+                          states,
+                          label!,
+                          theme: theme,
+                          selected: selected!,
+                          accentColor: accentColor,
+                          deleteOnHover: deleteOnHover,
+                          expand: expandLabel,
                         ),
                 ),
         child: Row(
@@ -222,26 +285,6 @@ class AppActionButton extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            if (showStatus && selected != null) ...[
-              const SizedBox(width: statusSpacing),
-              Builder(
-                builder: (context) {
-                  final hovered =
-                      context
-                          .dependOnInheritedWidgetOfExactType<
-                            _ButtonHoverState
-                          >()
-                          ?.hovered ??
-                      false;
-                  return AppButtonSelectionIndicator(
-                    selected: selected!,
-                    deleteHovered: deleteOnHover && hovered,
-                    theme: theme,
-                    accentColor: accentColor,
-                  );
-                },
-              ),
-            ],
           ],
         ),
       ),
@@ -262,15 +305,6 @@ class AppActionButton extends StatelessWidget {
   }
 }
 
-class _ButtonHoverState extends InheritedWidget {
-  const _ButtonHoverState({required this.hovered, required super.child});
-  final bool hovered;
-
-  @override
-  bool updateShouldNotify(_ButtonHoverState oldWidget) =>
-      oldWidget.hovered != hovered;
-}
-
 /// A fixed-size status slot, shared by ordinary and compound toggle buttons.
 class AppButtonSelectionIndicator extends StatelessWidget {
   const AppButtonSelectionIndicator({
@@ -279,33 +313,40 @@ class AppButtonSelectionIndicator extends StatelessWidget {
     required this.theme,
     this.accentColor,
     this.deleteHovered = false,
+    this.visible = true,
   });
 
   final Color? accentColor;
   final bool selected;
   final bool deleteHovered;
+
+  /// Whether the mark is shown; hiding it shrinks it away to nothing.
+  final bool visible;
   final AppThemeData theme;
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: AppActionButton.statusSize,
-    child: ExcludeSemantics(
-      child: TweenAnimationBuilder<Offset>(
-        tween: Tween(end: Offset(selected ? 1 : 0, deleteHovered ? 1 : 0)),
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 200),
-        curve: Curves.easeInOutCubic,
-        builder: (context, progress, child) => RepaintBoundary(
-          child: CustomPaint(
-            painter: _ToggleIndicatorPainter(
-              progress: progress.dx,
-              deleteProgress: progress.dy,
-              color: Color.lerp(
-                theme.textHint,
-                accentColor ?? theme.accent,
-                math.max(progress.dx, progress.dy),
-              )!,
+    child: AnimatedScale(
+      scale: visible ? 1 : 0,
+      duration: _statusDuration(context),
+      curve: Curves.easeInOutCubic,
+      child: ExcludeSemantics(
+        child: TweenAnimationBuilder<Offset>(
+          tween: Tween(end: Offset(selected ? 1 : 0, deleteHovered ? 1 : 0)),
+          duration: _statusDuration(context),
+          curve: Curves.easeInOutCubic,
+          builder: (context, progress, child) => RepaintBoundary(
+            child: CustomPaint(
+              painter: _ToggleIndicatorPainter(
+                progress: progress.dx,
+                deleteProgress: progress.dy,
+                color: Color.lerp(
+                  theme.textHint,
+                  accentColor ?? theme.accent,
+                  math.max(progress.dx, progress.dy),
+                )!,
+              ),
             ),
           ),
         ),

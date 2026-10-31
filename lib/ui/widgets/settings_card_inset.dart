@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 /// Recessed lighting for active settings cards, with an optional raised rest
@@ -17,6 +19,7 @@ class SettingsCardInset extends StatelessWidget {
     this.overlay,
     this.shadeOverlay = true,
     this.depthStrength = defaultDepthStrength,
+    this.cacheRaster = false,
   }) : assert(depthStrength >= 0 && depthStrength <= 1);
 
   final bool active;
@@ -34,6 +37,11 @@ class SettingsCardInset extends StatelessWidget {
   /// Scales the depth lighting while preserving its shape and blur.
   final double depthStrength;
 
+  /// Draws the settled lighting from a shared image instead of blurring it
+  /// per paint. For small, numerous surfaces such as tag chips, where a
+  /// scrolling list would otherwise blur every newly mounted chip.
+  final bool cacheRaster;
+
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(
@@ -49,13 +57,21 @@ class SettingsCardInset extends StatelessWidget {
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, depth, child) {
-      final painter = depth != 0 && depthStrength > 0
-          ? _SettingsCardInsetPainter(
+      // Only the settled lighting is cached; animating depths paint directly.
+      final painter = depth == 0 || depthStrength <= 0
+          ? null
+          : cacheRaster && depth.abs() == 1
+          ? _CachedInsetPainter(
               radius: borderRadius,
               depth: depth * depthStrength,
               surfaceColor: surfaceColor,
+              devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
             )
-          : null;
+          : _SettingsCardInsetPainter(
+              radius: borderRadius,
+              depth: depth * depthStrength,
+              surfaceColor: surfaceColor,
+            );
       if (overlay == null) {
         return CustomPaint(foregroundPainter: painter, child: child);
       }
@@ -243,4 +259,93 @@ class _SettingsCardInsetPainter extends CustomPainter {
       oldDelegate.radius != radius ||
       oldDelegate.depth != depth ||
       oldDelegate.surfaceColor != surfaceColor;
+}
+
+/// Paints [_SettingsCardInsetPainter] from one small image per lighting, cut
+/// into nine slices so it fits any width. The lighting only varies within
+/// [_slice] of the sides, so the middle stretches without a visible seam.
+class _CachedInsetPainter extends CustomPainter {
+  const _CachedInsetPainter({
+    required this.radius,
+    required this.depth,
+    required this.surfaceColor,
+    required this.devicePixelRatio,
+  });
+
+  final double radius;
+  final double depth;
+  final Color surfaceColor;
+  final double devicePixelRatio;
+
+  /// Logical width of each side slice, past the blur of the side lighting.
+  static const _slice = 20.0;
+  static const _stretch = 8.0;
+  static const _maxImages = 24;
+  static final _images = <(double, double, double, int, double), ui.Image>{};
+
+  ui.Image _image(double height) {
+    final key = (
+      height,
+      radius,
+      depth,
+      surfaceColor.toARGB32(),
+      devicePixelRatio,
+    );
+    final cached = _images.remove(key);
+    if (cached != null) return _images[key] = cached;
+    const width = _slice * 2 + _stretch;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(devicePixelRatio);
+    _SettingsCardInsetPainter(
+      radius: radius,
+      depth: depth,
+      surfaceColor: surfaceColor,
+    ).paint(canvas, Size(width, height));
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(
+      (width * devicePixelRatio).ceil(),
+      (height * devicePixelRatio).ceil(),
+    );
+    picture.dispose();
+    if (_images.length >= _maxImages) {
+      _images.remove(_images.keys.first)?.dispose();
+    }
+    return _images[key] = image;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    if (size.width < _slice * 2 + 1) {
+      return _SettingsCardInsetPainter(
+        radius: radius,
+        depth: depth,
+        surfaceColor: surfaceColor,
+      ).paint(canvas, size);
+    }
+    final image = _image(size.height);
+    final scale = devicePixelRatio;
+    canvas
+      ..save()
+      ..scale(1 / scale);
+    canvas.drawImageNine(
+      image,
+      Rect.fromLTRB(
+        _slice * scale,
+        image.height / 2 - 1,
+        (_slice + _stretch) * scale,
+        image.height / 2 + 1,
+      ),
+      Rect.fromLTWH(0, 0, size.width * scale, size.height * scale),
+      Paint()..filterQuality = FilterQuality.low,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_CachedInsetPainter oldDelegate) =>
+      oldDelegate.radius != radius ||
+      oldDelegate.depth != depth ||
+      oldDelegate.surfaceColor != surfaceColor ||
+      oldDelegate.devicePixelRatio != devicePixelRatio;
 }

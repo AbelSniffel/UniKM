@@ -295,7 +295,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         return;
       }
 
-      await _applySteamResult(result);
+      await _applySteamResult(result, resolution.options);
     } catch (e) {
       NotificationManager.instance.error('Failed to fetch Steam data: $e');
     } finally {
@@ -304,13 +304,16 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   /// Apply a SteamSearchResult to this game (tags, image, appId, reviews)
-  Future<void> _applySteamResult(SteamSearchResult result) async {
+  Future<void> _applySteamResult(
+    SteamSearchResult result,
+    SteamApplyOptions options,
+  ) async {
     try {
       final applyError = await applySteamResultToGame(
         ProviderScope.containerOf(context, listen: false),
         _currentGame,
         result,
-        SteamApplyOptions.defaults,
+        options,
         expectedRevision: _sessionRevision,
       );
 

@@ -43,7 +43,7 @@ class CornerRibbon extends StatelessWidget {
                     label,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: 13.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.6,
                       decoration: TextDecoration.none,

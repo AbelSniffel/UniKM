@@ -36,7 +36,6 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
   static const _gap = 4.0;
 
   List<String> _names = const [];
-  String _tooltip = '';
   (double, TextStyle, TextScaler, TextDirection, Locale?)? _layoutKey;
   String _label = '';
   String _count = '';
@@ -61,7 +60,6 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
 
   void _updateTags() {
     _names = widget.game.tags.map((tag) => tag.name).toList(growable: false);
-    _tooltip = _names.join('\n');
     _layoutKey = null;
   }
 
@@ -146,26 +144,20 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
       Directionality.of(context),
       Localizations.maybeLocaleOf(context),
     );
-    return Tooltip(
-      message: _tooltip,
-      // Mouse hover can reveal the full list; leave touch long-press to the card.
-      triggerMode: TooltipTriggerMode.manual,
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_label.isNotEmpty) Flexible(child: _badge(_label, style, color)),
+          if (_count.isNotEmpty) ...[
+            if (_label.isNotEmpty) const SizedBox(width: _gap),
             if (_label.isNotEmpty)
-              Flexible(child: _badge(_label, style, color)),
-            if (_count.isNotEmpty) ...[
-              if (_label.isNotEmpty) const SizedBox(width: _gap),
-              if (_label.isNotEmpty)
-                _badge(_count, style, color)
-              else
-                Flexible(child: _badge(_count, style, color)),
-            ],
+              _badge(_count, style, color)
+            else
+              Flexible(child: _badge(_count, style, color)),
           ],
-        ),
+        ],
       ),
     );
   }
