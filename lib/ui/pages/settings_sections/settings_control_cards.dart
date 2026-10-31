@@ -498,6 +498,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
             ? null
             : RepaintBoundary(child: indicatorOverlay),
         shadeOverlay: !(widget.active && widget.enabled),
+        cacheRaster: true,
         child: RepaintBoundary(child: material),
       ),
     );

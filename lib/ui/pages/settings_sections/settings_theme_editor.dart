@@ -2,6 +2,7 @@
 library;
 
 import '../../../core/theme/theme_icons.dart';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -52,7 +53,18 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   int? _selectedIconCodePoint;
   bool _isEditing = false;
   bool _saved = false;
+  Timer? _previewThrottle;
   final _circleHovered = <String, bool>{};
+
+  // The drag in progress: where its tile was grabbed, the tile's size and
+  // how far the feedback has shrunk into a puck (0 → 1).
+  Offset _grabOffset = Offset.zero;
+  Size _grabSize = Size.zero;
+  double _dragT = 0;
+
+  // A swatch dropped outside any tile flying back into [_returningSlot].
+  OverlayEntry? _returnEntry;
+  _ColorSlot? _returningSlot;
 
   // Which slot is being edited
   _ColorSlot _activeSlot = 'background';
@@ -98,6 +110,8 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _nameController.dispose();
     _hexController.dispose();
     _hexFocusNode.dispose();
+    _returnEntry?.remove();
+    _previewThrottle?.cancel();
     super.dispose();
   }
 
@@ -145,7 +159,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       _hex[_activeSlot] = colorToHex(_hsvToColor());
     });
     if (!_hexFocusNode.hasFocus) _syncHexController();
-    _updatePreview();
+    _throttledPreview();
   }
 
   void _applyHexInput(String raw) {
@@ -178,6 +192,14 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         ? themeIconFromCodePoint(_selectedIconCodePoint!)
         : null,
   );
+
+  /// Previews at most every 60ms while a slider is dragged: a preview
+  /// rebuilds the whole app's theme, so doing it on every slider event lags.
+  void _throttledPreview() =>
+      _previewThrottle ??= Timer(const Duration(milliseconds: 60), () {
+        _previewThrottle = null;
+        _updatePreview();
+      });
 
   void _updatePreview() {
     if (!mounted) return;
@@ -259,19 +281,20 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 _section(
                   previewTheme,
                   '${_slotLabel(_activeSlot)} Color',
-                  _buildActiveColorEditor(previewTheme),
+                  _panel(previewTheme, _buildActiveColorEditor(previewTheme)),
                 ),
                 _section(
                   previewTheme,
                   'Style',
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: 8,
-                    children: [
-                      _buildCornerRadiusSlider(previewTheme),
-                      // Nav panel overlay
-                      _buildOverlayStylePicker(previewTheme),
-                    ],
+                  _panel(
+                    previewTheme,
+                    Column(
+                      spacing: 4,
+                      children: [
+                        _buildCornerRadiusSlider(previewTheme),
+                        _buildOverlayStylePicker(previewTheme),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -324,146 +347,219 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   );
 
   Widget _buildColorCircle(AppThemeData theme, _ColorSlot slot) {
+    final hex = '#${_hex[slot]!.replaceFirst('#', '').toUpperCase()}';
     final isActive = _activeSlot == slot;
-    final color = parseHexColor(_hex[slot]!);
-    final label = _slotLabel(slot);
     final isHovered = _circleHovered[slot] ?? false;
-
-    // Border shown when circle is active/drop-target
-    final highlightBorderColor = slot == 'accent'
+    // The accent tile is ringed in the secondary color so the ring stands
+    // out against its own swatch.
+    final ringColor = slot == 'accent'
         ? parseHexColor(_hex['secondary']!)
         : theme.accent;
-    // Glow color on hover (background circle's own color is invisible against dialog)
-    final glowColor = slot == 'background' ? theme.accent : color;
+    final tileRadius = BorderRadius.circular(
+      theme.cornerRadius + _ColorSwatch.inset,
+    );
+    Widget swatch({
+      double lift = 0,
+      double textOpacity = 1,
+      double? radius,
+      IconData? badge,
+      Duration duration = kFastAnimation,
+    }) => _ColorSwatch(
+      theme: theme,
+      color: parseHexColor(hex),
+      label: _slotLabel(slot),
+      hex: hex,
+      radius: radius ?? theme.cornerRadius,
+      lift: lift,
+      textOpacity: textOpacity,
+      badge: badge,
+      duration: duration,
+    );
 
-    Widget circle({
-      bool isActive = false,
-      bool isDropTarget = false,
-      bool isHovered = false,
-      double? width,
-    }) => _circleWidget(
-      theme,
-      color,
-      label,
-      _hex[slot]!,
-      highlightBorderColor: highlightBorderColor,
-      glowColor: glowColor,
-      isActive: isActive,
-      isDropTarget: isDropTarget,
-      isHovered: isHovered,
-      width: width,
+    // The swatch and its rect (in tile coordinates) part-way (t) from the
+    // tile's shape to the puck centred on the grab point.
+    Widget dragSwatch(double t) => swatch(
+      radius: theme.cornerRadius + (28 - theme.cornerRadius) * t,
+      lift: 1 + t,
+      textOpacity: (1 - t * 2.5).clamp(0.0, 1.0),
+      duration: Duration.zero,
+    );
+    Rect dragRect(double t) => Rect.lerp(
+      (Offset.zero & _grabSize).deflate(_ColorSwatch.inset),
+      Rect.fromCircle(center: _grabOffset, radius: 28),
+      t,
+    )!;
+
+    final placeholder = Container(
+      height: _ColorSwatch.tileHeight,
+      decoration: BoxDecoration(
+        color: theme.textHint.withValues(alpha: 0.06),
+        borderRadius: tileRadius,
+        border: Border.all(
+          color: theme.textHint.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+      ),
     );
 
     return DragTarget<_ColorSlot>(
       onWillAcceptWithDetails: (details) => details.data != slot,
       onAcceptWithDetails: (details) => _swapSlots(slot, details.data),
-      builder: (context, candidateData, _) => Draggable<_ColorSlot>(
-        data: slot,
-        feedback: Material(
-          color: Colors.transparent,
-          child: Opacity(opacity: 0.85, child: circle(width: 110)),
-        ),
-        childWhenDragging: Opacity(opacity: 0.3, child: circle()),
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _circleHovered[slot] = true),
-          onExit: (_) => setState(() => _circleHovered[slot] = false),
-          child: GestureDetector(
-            onTap: () => setState(() {
-              _activeSlot = slot;
-              _syncHsvFromActiveSlot();
-            }),
-            child: circle(
-              isActive: isActive,
-              isDropTarget: candidateData.isNotEmpty,
-              isHovered: isHovered,
+      builder: (context, candidateData, _) {
+        final isDropTarget = candidateData.isNotEmpty;
+        return Draggable<_ColorSlot>(
+          data: slot,
+          dragAnchorStrategy: (draggable, context, position) {
+            final box = context.findRenderObject()! as RenderBox;
+            _grabSize = box.size;
+            return _grabOffset = box.globalToLocal(position);
+          },
+          // The tile is rebuilt elsewhere in the tree, so it never gets the
+          // pointer's exit event.
+          onDragStarted: () => setState(() => _circleHovered[slot] = false),
+          onDraggableCanceled: (_, releasedAt) =>
+              _animateReturn(context, slot, releasedAt, dragRect, dragSwatch),
+          // Starts on the tile and shrinks into a puck centred on the pointer.
+          feedback: Material(
+            type: MaterialType.transparency,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              builder: (context, t, _) {
+                final rect = dragRect(_dragT = t);
+                return Transform.translate(
+                  offset: rect.topLeft,
+                  child: SizedBox.fromSize(
+                    size: rect.size,
+                    child: dragSwatch(t),
+                  ),
+                );
+              },
             ),
           ),
-        ),
-      ),
+          childWhenDragging: placeholder,
+          child: _returningSlot == slot
+              ? placeholder
+              : MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _circleHovered[slot] = true),
+                  onExit: (_) => setState(() => _circleHovered[slot] = false),
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _activeSlot = slot;
+                      _syncHsvFromActiveSlot();
+                    }),
+                    child: AnimatedScale(
+                      scale: isDropTarget ? 1.04 : 1,
+                      duration: kFastAnimation,
+                      curve: Curves.easeOutBack,
+                      child: AnimatedContainer(
+                        duration: kFastAnimation,
+                        height: _ColorSwatch.tileHeight,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          borderRadius: tileRadius,
+                          border: Border.all(
+                            color: isActive || isDropTarget
+                                ? ringColor
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                        child: swatch(
+                          lift: isHovered || isDropTarget ? 1 : 0,
+                          badge: isDropTarget
+                              ? Icons.swap_horiz
+                              : isActive
+                              ? Icons.edit
+                              : isHovered
+                              ? Icons.open_with
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
     );
   }
 
-  /// A tile with the slot's swatch, name and hex code, tinted more strongly
-  /// and outlined while the slot is being edited or a swatch hovers over it.
-  Widget _circleWidget(
-    AppThemeData theme,
-    Color color,
-    String label,
-    String hex, {
-    required Color highlightBorderColor,
-    required Color glowColor,
-    required bool isActive,
-    required bool isDropTarget,
-    required bool isHovered,
-    double? width,
-  }) {
-    final highlight = isActive || isDropTarget;
-    final radius = BorderRadius.circular(theme.cornerRadius);
-    final Widget? centerIcon = highlight
-        ? Icon(
-            isDropTarget ? Icons.swap_horiz : Icons.edit,
-            size: 20,
-            color: contrastColor(color).withValues(alpha: 0.8),
-          )
-        : null;
+  /// Flies a swatch released outside any tile at [releasedAt] (the feedback's
+  /// global origin) back into [slot]'s tile, growing back into its shape.
+  void _animateReturn(
+    BuildContext tileContext,
+    _ColorSlot slot,
+    Offset releasedAt,
+    Rect Function(double t) dragRect,
+    Widget Function(double t) dragSwatch,
+  ) {
+    final overlay = Overlay.of(tileContext);
+    final overlayBox = overlay.context.findRenderObject()! as RenderBox;
+    final tileBox = tileContext.findRenderObject()! as RenderBox;
+    final startT = _dragT;
+    final from = dragRect(startT).shift(overlayBox.globalToLocal(releasedAt));
+    final to = dragRect(
+      0,
+    ).shift(overlayBox.globalToLocal(tileBox.localToGlobal(Offset.zero)));
 
-    return AnimatedContainer(
-      duration: kFastAnimation,
-      width: width,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: (highlight ? highlightBorderColor : glowColor).withValues(
-          alpha: highlight ? 0.16 : (isHovered ? 0.12 : 0.08),
-        ),
-        borderRadius: radius,
-        border: Border.all(
-          color: highlight ? highlightBorderColor : Colors.transparent,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 6,
-        children: [
-          Container(
-            height: 48,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(
-                math.min(theme.cornerRadius, 24),
-              ),
-              border: Border.all(color: theme.border),
-            ),
-            child: Center(child: centerIcon),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? theme.textPrimary : theme.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+    void finish() {
+      _returnEntry?.remove();
+      _returnEntry = null;
+      if (mounted) setState(() => _returningSlot = null);
+    }
+
+    _returnEntry?.remove();
+    _returnEntry = OverlayEntry(
+      builder: (_) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOutCubic,
+        onEnd: finish,
+        builder: (_, s, _) => Positioned.fromRect(
+          rect: Rect.lerp(from, to, s)!,
+          child: IgnorePointer(
+            child: Material(
+              type: MaterialType.transparency,
+              child: dragSwatch(startT * (1 - s)),
             ),
           ),
-          Text(
-            '#${hex.replaceFirst('#', '').toUpperCase()}',
-            style: TextStyle(color: theme.textHint, fontSize: 11),
-          ),
-        ],
+        ),
       ),
     );
+    overlay.insert(_returnEntry!);
+    setState(() => _returningSlot = slot);
   }
 
   // ---------------------------------------------------------------------------
   // Active color editor (shared picker)
   // ---------------------------------------------------------------------------
 
+  /// A softly tinted, outlined panel grouping a section's controls.
+  static Widget _panel(AppThemeData theme, Widget child) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    decoration: BoxDecoration(
+      color: theme.textPrimary.withValues(alpha: 0.035),
+      borderRadius: BorderRadius.circular(
+        theme.cornerRadius + _ColorSwatch.inset,
+      ),
+      border: Border.all(color: theme.divider),
+    ),
+    child: child,
+  );
+
   Widget _buildActiveColorEditor(AppThemeData theme) {
     final activeColor = _hsvToColor();
+    Color hsv(double h, double s, double v) =>
+        HSVColor.fromAHSV(1, h, s, v).toColor();
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 4,
       children: [
-        // Hex input and randomize button
+        // Hex input, led by a dot of the color, and randomize button
         Row(
+          spacing: 8,
           children: [
             Expanded(
               child: TextField(
@@ -472,16 +568,29 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 style: TextStyle(
                   color: theme.textPrimary,
                   fontFamily: 'monospace',
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'Hex Color',
-                  labelStyle: TextStyle(color: theme.textSecondary),
-                  prefixText: '# ',
-                  prefixStyle: TextStyle(color: theme.textSecondary),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
+                  isDense: true,
+                  hintText: 'RRGGBB',
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: AnimatedContainer(
+                      duration: kFastAnimation,
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: theme.border),
+                      ),
+                    ),
                   ),
+                  prefixIconConstraints: const BoxConstraints(),
+                  prefixText: '# ',
+                  prefixStyle: TextStyle(color: theme.textHint),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
                 maxLength: 6,
                 buildCounter:
@@ -494,79 +603,49 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 onChanged: _applyHexInput,
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
+            IconButton.filledTonal(
               tooltip: 'Randomize color',
-              icon: Icon(Icons.casino, color: theme.textSecondary),
+              style: IconButton.styleFrom(
+                backgroundColor: theme.accent.withValues(alpha: 0.14),
+                foregroundColor: theme.accent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
+                ),
+              ),
+              icon: const Icon(Icons.casino_outlined),
               onPressed: _randomizeColor,
             ),
           ],
         ),
-        const SizedBox(height: 12),
-
-        // Hue slider with rainbow gradient track
+        const SizedBox(height: 4),
         _buildGradientSlider(
           theme: theme,
           label: 'Hue',
           value: _hue,
-          min: 0,
           max: 360,
           displayText: '${_hue.round()}\u00b0',
-          thumbColor: HSVColor.fromAHSV(1, _hue, 1, 1).toColor(),
-          trackShape: AppSliderTrackShape(
-            cornerRadius: theme.cornerRadius,
-            colors: const [
-              Color(0xffff0000),
-              Color(0xffffff00),
-              Color(0xff00ff00),
-              Color(0xff00ffff),
-              Color(0xff0000ff),
-              Color(0xffff00ff),
-              Color(0xffff0000),
-            ],
-          ),
+          thumbColor: hsv(_hue, 1, 1),
+          colors: [for (var h = 0; h <= 360; h += 60) hsv(h.toDouble(), 1, 1)],
           onChanged: (v) => _applyHsvChange(() => _hue = v),
         ),
-        const SizedBox(height: 10),
-
-        // Saturation slider
         _buildGradientSlider(
           theme: theme,
           label: 'Saturation',
           ensureHandleContrast: true,
           value: _saturation,
-          min: 0,
-          max: 1,
           displayText: '${(_saturation * 100).round()}%',
           thumbColor: activeColor,
-          trackShape: AppSliderTrackShape(
-            colors: [
-              HSVColor.fromAHSV(1, _hue, 0, _value).toColor(),
-              HSVColor.fromAHSV(1, _hue, 1, _value).toColor(),
-            ],
-            cornerRadius: theme.cornerRadius,
-          ),
+          colors: [hsv(_hue, 0, _value), hsv(_hue, 1, _value)],
           onChanged: (v) => _applyHsvChange(() => _saturation = v),
         ),
-        const SizedBox(height: 10),
-
-        // Brightness slider
         _buildGradientSlider(
           theme: theme,
           label: 'Brightness',
           ensureHandleContrast: true,
           value: _value,
-          min: 0,
-          max: 1,
           displayText: '${(_value * 100).round()}%',
           thumbColor: activeColor,
-          trackShape: AppSliderTrackShape(
-            colors: [
-              Colors.black,
-              HSVColor.fromAHSV(1, _hue, _saturation, 1).toColor(),
-            ],
-            cornerRadius: theme.cornerRadius,
-          ),
+          colors: [Colors.black, hsv(_hue, _saturation, 1)],
           onChanged: (v) => _applyHsvChange(() => _value = v),
         ),
       ],
@@ -577,21 +656,23 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     required AppThemeData theme,
     required String label,
     required double value,
-    required double min,
-    required double max,
+    double max = 1,
     required String displayText,
     required Color thumbColor,
-    required SliderTrackShape trackShape,
+    required List<Color> colors,
     required ValueChanged<double> onChanged,
     bool ensureHandleContrast = false,
-  }) => _sliderRow(
+  }) => _labeledRow(
     theme,
     label,
-    displayText,
+    value: displayText,
     SliderTheme(
       data: _sliderTheme(theme).copyWith(
         showValueIndicator: ShowValueIndicator.onDrag,
-        trackShape: trackShape,
+        trackShape: AppSliderTrackShape(
+          cornerRadius: theme.cornerRadius,
+          colors: colors,
+        ),
         thumbShape: AppSliderThumbShape(
           cornerRadius: theme.cornerRadius,
           outlineColor: ensureHandleContrast
@@ -605,7 +686,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       ),
       child: Slider(
         value: value,
-        min: min,
         max: max,
         label: displayText,
         onChanged: onChanged,
@@ -621,80 +701,83 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         cornerRadius: theme.cornerRadius,
       );
 
-  /// Label, slider and value readout, aligned across the editor's sliders.
-  Widget _sliderRow(
+  /// A label, its control and an optional [value] pill, aligned across the
+  /// editor's panels.
+  Widget _labeledRow(
     AppThemeData theme,
     String label,
-    String displayText,
-    Widget slider,
-  ) => Row(
+    Widget control, {
+    String? value,
+  }) => Row(
+    spacing: 8,
     children: [
       SizedBox(
         width: 76,
         child: Text(
           label,
-          style: TextStyle(color: theme.textSecondary, fontSize: 12),
-        ),
-      ),
-      Expanded(child: slider),
-      SizedBox(
-        width: 44,
-        child: Text(
-          displayText,
           style: TextStyle(
-            color: theme.textPrimary,
-            fontSize: 11,
-            fontFamily: 'monospace',
+            color: theme.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
-          textAlign: TextAlign.right,
         ),
       ),
+      Expanded(child: control),
+      if (value != null)
+        Container(
+          width: 46,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.textPrimary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+          ),
+          child: Text(
+            value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
     ],
   );
 
   // ---------------------------------------------------------------------------
-  // Overlay style picker
+  // Style
   // ---------------------------------------------------------------------------
 
-  Widget _buildOverlayStylePicker(AppThemeData theme) => Row(
-    children: [
-      Text(
-        'Nav Overlay',
-        style: TextStyle(color: theme.textSecondary, fontSize: 12),
+  Widget _buildOverlayStylePicker(AppThemeData theme) => _labeledRow(
+    theme,
+    'Nav Overlay',
+    AppComboBox<NavPanelOverlayStyle>(
+      initialValue: _navPanelOverlayStyle,
+      theme: theme,
+      style: TextStyle(color: theme.textPrimary, fontSize: 13),
+      decoration: const InputDecoration(
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: AppComboBox<NavPanelOverlayStyle>(
-          initialValue: _navPanelOverlayStyle,
-          theme: theme,
-          style: TextStyle(color: theme.textPrimary, fontSize: 13),
-          decoration: const InputDecoration(
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          items: NavPanelOverlayStyle.values
-              .map(
-                (style) => DropdownMenuItem(
-                  value: style,
-                  child: Text(style.displayName),
-                ),
-              )
-              .toList(),
-          onChanged: (style) {
-            if (style == null) return;
-            setState(() => _navPanelOverlayStyle = style);
-            _updatePreview();
-          },
-        ),
-      ),
-    ],
+      items: [
+        for (final style in NavPanelOverlayStyle.values)
+          DropdownMenuItem(value: style, child: Text(style.displayName)),
+      ],
+      onChanged: (style) {
+        if (style == null) return;
+        setState(() => _navPanelOverlayStyle = style);
+        _updatePreview();
+      },
+    ),
   );
 
   Widget _buildCornerRadiusSlider(AppThemeData theme) {
     final roundedRadius = _cornerRadius.roundToDouble();
-    return _sliderRow(
+    return _labeledRow(
       theme,
       'Roundness',
-      roundedRadius.toStringAsFixed(0),
+      value: roundedRadius.toStringAsFixed(0),
       SliderTheme(
         data: _sliderTheme(theme),
         child: Slider(
@@ -705,7 +788,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
           label: roundedRadius.toStringAsFixed(0),
           onChanged: (value) {
             setState(() => _cornerRadius = value);
-            _updatePreview();
+            _throttledPreview();
           },
         ),
       ),
@@ -756,5 +839,119 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     if (!mounted) return;
     _saved = true;
     Navigator.pop(context);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Color swatch
+// ---------------------------------------------------------------------------
+
+/// A color slot's swatch with its name and hex code; also the drag feedback.
+class _ColorSwatch extends StatelessWidget {
+  const _ColorSwatch({
+    required this.theme,
+    required this.color,
+    required this.label,
+    required this.hex,
+    required this.radius,
+    required this.lift,
+    required this.textOpacity,
+    required this.badge,
+    required this.duration,
+  });
+
+  /// Gap plus ring width between a tile's edge and its swatch.
+  static const double inset = 5;
+  static const double tileHeight = 94;
+
+  final AppThemeData theme;
+  final Color color;
+  final String label;
+  final String hex;
+  final double radius;
+
+  /// 0 at rest, 1 hovered, up to 2 while dragged; deepens the shadow.
+  final double lift;
+  final double textOpacity;
+  final IconData? badge;
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final onColor = contrastColor(color);
+
+    return AnimatedContainer(
+      duration: duration,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: theme.border),
+        // A soft sheen so flat colors read as a physical chip.
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(color, Colors.white, 0.14)!,
+            color,
+            Color.lerp(color, Colors.black, 0.08)!,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08 + 0.1 * lift),
+            blurRadius: 3 + 9 * lift,
+            offset: Offset(0, 1 + 3 * lift),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: 8,
+            child: Opacity(
+              opacity: textOpacity,
+              child: Text.rich(
+                maxLines: 2,
+                TextSpan(
+                  text: '$label\n',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: hex,
+                      style: TextStyle(
+                        color: onColor.withValues(alpha: 0.7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+                style: TextStyle(color: onColor),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: AnimatedSwitcher(
+              duration: kFastAnimation,
+              child: badge == null
+                  ? const SizedBox.shrink()
+                  : CircleAvatar(
+                      key: ValueKey(badge),
+                      radius: 12,
+                      backgroundColor: onColor.withValues(alpha: 0.16),
+                      child: Icon(badge, size: 14, color: onColor),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

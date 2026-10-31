@@ -8,7 +8,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 import 'package:unikm/providers/app_providers.dart';
 
 import 'preview_card.dart';
@@ -60,13 +59,14 @@ class AnimatedGradientBar extends ConsumerStatefulWidget {
 class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final Ticker _ticker;
-  late final Key _visibilityKey;
   final _elapsed = ValueNotifier<double>(0);
   bool _foreground = true;
   Duration _lastTime = Duration.zero;
   double _frameBudgetAccumulator = 0.0;
   double _unpublishedTime = 0.0;
-  double _visibleFraction = 1.0;
+  bool _onScreen = true;
+  bool _visibilityCheckQueued = false;
+  ScrollPosition? _scrollPosition;
   double _speedMultiplier = 1.0;
   _SpiralMesh? _spiralMesh;
   _HelixMesh? _helixMesh;
@@ -90,13 +90,61 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    _visibilityKey = ValueKey<int>(identityHashCode(this));
     _ticker = createTicker(_onTick);
   }
+
+  // Auto-pause checks the bar against the screen and its scroll view after
+  // layout, whenever that view scrolls or the window changes size. It does
+  // not use VisibilityDetector: that never reports a bar mounted offscreen,
+  // and inside the clipped preview cards it never reported them visible
+  // either, so the eight previews in Settings > All animated unseen.
+  void _watchScrollPosition() {
+    final position = widget.autoPauseWhenNotVisible
+        ? Scrollable.maybeOf(context)?.position
+        : null;
+    if (identical(position, _scrollPosition)) return;
+    _scrollPosition?.removeListener(_queueVisibilityCheck);
+    _scrollPosition = position?..addListener(_queueVisibilityCheck);
+  }
+
+  void _queueVisibilityCheck() {
+    if (!widget.autoPauseWhenNotVisible || _visibilityCheckQueued) return;
+    _visibilityCheckQueued = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _visibilityCheckQueued = false;
+      _checkVisibility();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  void _checkVisibility() {
+    if (!mounted || !widget.autoPauseWhenNotVisible) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    Rect globalRect(RenderBox box) => MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
+    var visibleArea = Offset.zero & MediaQuery.sizeOf(context);
+    final scrollBox = _scrollPosition?.context.notificationContext
+        ?.findRenderObject();
+    if (scrollBox is RenderBox && scrollBox.attached && scrollBox.hasSize) {
+      visibleArea = visibleArea.intersect(globalRect(scrollBox));
+    }
+    final onScreen = globalRect(box).overlaps(visibleArea);
+    if (onScreen == _onScreen) return;
+    _onScreen = onScreen;
+    _syncTickerState();
+  }
+
+  @override
+  void didChangeMetrics() => _queueVisibilityCheck();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _watchScrollPosition();
+    _queueVisibilityCheck();
     _syncTickerState();
   }
 
@@ -115,6 +163,10 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
       _lastTime = Duration.zero;
       _frameBudgetAccumulator = 0.0;
       _unpublishedTime = 0.0;
+    }
+    if (oldWidget.autoPauseWhenNotVisible != widget.autoPauseWhenNotVisible) {
+      _watchScrollPosition();
+      _queueVisibilityCheck();
     }
     if (oldWidget.isPlaying != widget.isPlaying ||
         oldWidget.autoPauseWhenNotVisible != widget.autoPauseWhenNotVisible ||
@@ -160,7 +212,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
 
   bool get _canAnimate {
     final speed = _speeds[widget.animationStyle] ?? 0.0;
-    final visible = !widget.autoPauseWhenNotVisible || _visibleFraction > 0.02;
+    final visible = !widget.autoPauseWhenNotVisible || _onScreen;
     final tickerMode = TickerMode.valuesOf(context);
     return _foreground &&
         speed > 0.0 &&
@@ -193,6 +245,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scrollPosition?.removeListener(_queueVisibilityCheck);
     _ticker.dispose();
     _elapsed.dispose();
     _spiralMesh?.dispose();
@@ -213,7 +266,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
     final accent = colors.length > 1 ? colors[1] : primary;
     final bg = widget.theme?.surface ?? Colors.black;
 
-    final painted = RepaintBoundary(
+    return RepaintBoundary(
       child: widget.isVertical
           ? LayoutBuilder(
               builder: (_, c) => SizedBox(
@@ -233,19 +286,6 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
                 child: _painter(primary, accent, bg, false),
               ),
             ),
-    );
-
-    if (!widget.autoPauseWhenNotVisible) return painted;
-
-    return VisibilityDetector(
-      key: _visibilityKey,
-      onVisibilityChanged: (info) {
-        final nextVisibleFraction = info.visibleFraction;
-        if ((nextVisibleFraction - _visibleFraction).abs() < 0.01) return;
-        _visibleFraction = nextVisibleFraction;
-        _syncTickerState();
-      },
-      child: painted,
     );
   }
 

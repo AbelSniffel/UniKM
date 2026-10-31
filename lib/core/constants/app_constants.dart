@@ -35,9 +35,9 @@ const double kInteractionCardMaxWidth = 360.0;
 
 /// Available settings content width for full-width cards and stacked header actions.
 const double kSettingsCompactLayoutBreakpoint = 420.0;
-const double kSliderTrackHeight = 22.0;
-const double kSliderHandleSize = 30.0;
-const double kSliderHandleGap = 6.0;
+const double kSliderTrackHeight = 18.0;
+const double kSliderHandleSize = 28.0;
+const double kSliderHandleGap = 3.0;
 
 // =============================================================================
 // DIMENSIONS - GAME CARDS

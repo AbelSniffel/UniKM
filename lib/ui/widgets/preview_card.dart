@@ -242,11 +242,12 @@ class _PreviewCardState extends State<PreviewCard> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Compose the whole painted preview before clipping it. A
-            // full-size background also covers the border's inner AA edge.
+            // A full-size background also covers the border's inner AA
+            // edge. No saveLayer: every card would need its own offscreen
+            // pass each frame, and the border already hides the clip's edge.
             ClipRRect(
               borderRadius: outerRadius,
-              clipBehavior: Clip.antiAliasWithSaveLayer,
+              clipBehavior: Clip.antiAlias,
               child: background,
             ),
             Padding(

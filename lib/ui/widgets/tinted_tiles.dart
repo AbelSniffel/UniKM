@@ -180,6 +180,7 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
               raisedWhenInactive: true,
               borderRadius: theme.cornerRadius,
               surfaceColor: Color.alphaBlend(fill, theme.surface),
+              cacheRaster: true,
               child: tile,
             )
           : tile,

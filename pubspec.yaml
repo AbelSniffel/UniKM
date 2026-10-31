@@ -33,9 +33,6 @@ dependencies:
   window_manager: ^0.5.2
   screen_retriever: ^0.2.2
   
-  # UI & Animations
-  visibility_detector: ^0.4.0+2
-  
   # Image Handling
   # 4.x needs material_ui, whose available releases require Dart 3.13+.
   cached_network_image: ^3.4.1

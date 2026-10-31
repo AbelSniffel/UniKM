@@ -75,23 +75,32 @@ class AppSliderThumbShape extends SliderComponentShape {
       enableAnimation.value,
     )!;
     final handle = _handleRect(center, cornerRadius);
-    context.canvas.drawRRect(handle, Paint()..color = color);
-    final glow = Color.lerp(color, Colors.black, 0.35)!;
-    // A bounded set of narrow inset strokes gives a smooth inner glow
-    // without a blur, offscreen layer, or painting outside the handle.
-    const steps = 10;
-    const depth = kSliderHandleSize / 4;
-    const stepWidth = depth / steps;
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stepWidth;
-    for (var i = 0; i < steps; i++) {
-      final fade = 1 - (i + 0.5) / steps;
-      paint.color = glow.withValues(
-        alpha: glow.a * 0.65 * fade * fade * enableAnimation.value,
+    final enabled = enableAnimation.value;
+    // Raised like the elevated buttons: a small shadow, then light along the
+    // top and shade along the bottom.
+    context.canvas
+      ..drawShadow(
+        Path()..addRRect(handle),
+        Colors.black.withValues(alpha: 0.18 * enabled),
+        1,
+        true,
+      )
+      ..drawRRect(handle, Paint()..color = color)
+      ..drawRRect(
+        handle,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: 0.10 * enabled),
+              Colors.white.withValues(alpha: 0),
+              Colors.black.withValues(alpha: 0),
+              Colors.black.withValues(alpha: 0.12 * enabled),
+            ],
+            stops: const [0, 0.28, 0.70, 1],
+          ).createShader(handle.outerRect),
       );
-      context.canvas.drawRRect(handle.deflate((i + 0.5) * stepWidth), paint);
-    }
     if (outlineColor case final outline?) {
       // Keep the selected color visible even when it matches the surface.
       // This edge stays inside the handle and follows its corner geometry.
@@ -281,7 +290,8 @@ class AppSliderTickMarkShape extends SliderTickMarkShape {
   }
 }
 
-/// A wide transparent cutout makes the handle clear on solid and HSV tracks.
+/// A transparent cutout makes the handle clear on solid and HSV tracks, and
+/// the track looks pressed into the surface.
 class AppSliderTrackShape extends SliderTrackShape {
   const AppSliderTrackShape({required this.cornerRadius, this.colors});
 
@@ -371,6 +381,24 @@ class AppSliderTrackShape extends SliderTrackShape {
         Paint()..color = active,
       );
     }
+    // Pressed into the surface: shaded under its top edge, lit along its
+    // bottom one.
+    final enabled = enableAnimation.value;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.11 * enabled),
+            Colors.black.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0.07 * enabled),
+          ],
+          stops: const [0, 0.35, 0.8, 1],
+        ).createShader(rect),
+    );
     canvas.restore();
   }
 }

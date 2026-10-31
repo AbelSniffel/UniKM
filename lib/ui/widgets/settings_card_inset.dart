@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -38,8 +39,9 @@ class SettingsCardInset extends StatelessWidget {
   final double depthStrength;
 
   /// Draws the settled lighting from a shared image instead of blurring it
-  /// per paint. For small, numerous surfaces such as tag chips, where a
-  /// scrolling list would otherwise blur every newly mounted chip.
+  /// per paint. For numerous surfaces such as tag chips and settings cards:
+  /// Impeller redraws every visible surface each frame, so live blurs and
+  /// their layer made scrolling the settings page stutter on phones.
   final bool cacheRaster;
 
   @override
@@ -277,10 +279,11 @@ class _CachedInsetPainter extends CustomPainter {
   final Color surfaceColor;
   final double devicePixelRatio;
 
-  /// Logical width of each side slice, past the blur of the side lighting.
-  static const _slice = 20.0;
+  /// Logical width of each side slice, past the corner and the blur of the
+  /// side lighting.
+  double get _slice => math.max(20.0, radius + 12);
   static const _stretch = 8.0;
-  static const _maxImages = 24;
+  static const _maxImages = 64;
   static final _images = <(double, double, double, int, double), ui.Image>{};
 
   ui.Image _image(double height) {
@@ -293,7 +296,7 @@ class _CachedInsetPainter extends CustomPainter {
     );
     final cached = _images.remove(key);
     if (cached != null) return _images[key] = cached;
-    const width = _slice * 2 + _stretch;
+    final width = _slice * 2 + _stretch;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder)..scale(devicePixelRatio);
     _SettingsCardInsetPainter(

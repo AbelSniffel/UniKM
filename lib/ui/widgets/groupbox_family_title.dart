@@ -31,10 +31,10 @@ class GroupBoxFamilyTitle extends StatelessWidget {
     padding: const EdgeInsets.all(8),
     decoration: BoxDecoration(
       gradient: SurfaceDepth.gradient(
-        Color.alphaBlend(theme.accent.withValues(alpha: 0.12), theme.surface),
-        highlight: 0.085,
+        Color.alphaBlend(theme.accent.withValues(alpha: 0.25), theme.surface),
+        highlight: 0.05,
       ),
-      border: Border(bottom: BorderSide(color: theme.border)),
+      border: Border(bottom: BorderSide(color: theme.border.withValues(alpha: 0.05))),
     ),
     child: _buildTitle(),
   );

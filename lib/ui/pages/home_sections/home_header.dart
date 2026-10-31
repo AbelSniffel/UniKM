@@ -101,7 +101,9 @@ class HomeHeader extends ConsumerStatefulWidget {
 
 class _HomeHeaderState extends ConsumerState<HomeHeader>
     with SingleTickerProviderStateMixin {
-  bool _showFiltersPanel = false;
+  // Only the filters button and the panel's pointer guard listen, so
+  // toggling does not rebuild the toolbar and the whole filter panel.
+  final _showFiltersPanel = ValueNotifier(false);
   final ScrollController _filtersScrollController = ScrollController();
   late final AnimationController _filterPanelController;
   String _tagSearchQuery = '';
@@ -118,6 +120,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
 
   @override
   void dispose() {
+    _showFiltersPanel.dispose();
     _tagSearchController.dispose();
     _filtersScrollController.dispose();
     _filterPanelController.dispose();
@@ -127,11 +130,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   GamesNotifier get _notifier => ref.read(gamesProvider.notifier);
 
   void _toggleFilterPanel() {
-    setState(() => _showFiltersPanel = !_showFiltersPanel);
-    final target = _showFiltersPanel ? 1.0 : 0.0;
-    final duration = _showFiltersPanel
-        ? kFilterExpandAnimation
-        : kFilterCollapseAnimation;
+    final show = _showFiltersPanel.value = !_showFiltersPanel.value;
+    final target = show ? 1.0 : 0.0;
+    final duration = show ? kFilterExpandAnimation : kFilterCollapseAnimation;
     _filterPanelController.animateTo(
       target,
       duration: MediaQuery.disableAnimationsOf(context)
@@ -230,8 +231,13 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                             alignment: Alignment.topCenter,
                             child: FadeTransition(
                               opacity: _filterPanelController,
-                              child: IgnorePointer(
-                                ignoring: !_showFiltersPanel,
+                              child: ValueListenableBuilder(
+                                valueListenable: _showFiltersPanel,
+                                builder: (context, show, panel) =>
+                                    IgnorePointer(
+                                      ignoring: !show,
+                                      child: panel,
+                                    ),
                                 child: _buildFiltersPanel(
                                   theme,
                                   filters,
@@ -420,22 +426,25 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     return GestureDetector(
       onSecondaryTapUp: (details) =>
           _showFiltersContextMenu(details.globalPosition, theme, filters),
-      child: AppNavigationButton(
-        theme: theme,
-        isSelected: _showFiltersPanel || hasActiveFilters,
-        isEnabled: true,
-        isHorizontal: true,
-        hasNotification: hasActiveFilters,
-        onTap: _toggleFilterPanel,
-        iconBuilder: (context, _, size) => Icon(
-          _showFiltersPanel ? Icons.expand_less : Icons.tune,
-          color: theme.accent,
-          size: size,
+      child: ValueListenableBuilder(
+        valueListenable: _showFiltersPanel,
+        builder: (context, show, _) => AppNavigationButton(
+          theme: theme,
+          isSelected: show || hasActiveFilters,
+          isEnabled: true,
+          isHorizontal: true,
+          hasNotification: hasActiveFilters,
+          onTap: _toggleFilterPanel,
+          iconBuilder: (context, _, size) => Icon(
+            show ? Icons.expand_less : Icons.tune,
+            color: theme.accent,
+            size: size,
+          ),
+          tooltipMessage: hasActiveFilters
+              ? 'Filters ($filterCount active)'
+              : 'Filters',
+          selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
         ),
-        tooltipMessage: hasActiveFilters
-            ? 'Filters ($filterCount active)'
-            : 'Filters',
-        selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
       ),
     );
   }
