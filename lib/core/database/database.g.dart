@@ -2319,18 +2319,19 @@ class $$GamesTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (gameTagsRefs)
-                    await $_getPrefetchedData<
+                    await $_getPrefetchedDataByColumns<
                       GameEntry,
                       $GamesTable,
-                      GameTagEntry
+                      GameTagEntry,
+                      $GameTagsTable
                     >(
                       currentTable: table,
                       referencedTable: $$GamesTableReferences
                           ._gameTagsRefsTable(db),
                       managerFromTypedResult: (p0) =>
                           $$GamesTableReferences(db, table, p0).gameTagsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.gameId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'game_id',
                       typedResults: items,
                     ),
                 ];
@@ -2591,10 +2592,11 @@ class $$TagsTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (gameTagsRefs)
-                    await $_getPrefetchedData<
+                    await $_getPrefetchedDataByColumns<
                       TagEntry,
                       $TagsTable,
-                      GameTagEntry
+                      GameTagEntry,
+                      $GameTagsTable
                     >(
                       currentTable: table,
                       referencedTable: $$TagsTableReferences._gameTagsRefsTable(
@@ -2602,8 +2604,8 @@ class $$TagsTableTableManager
                       ),
                       managerFromTypedResult: (p0) =>
                           $$TagsTableReferences(db, table, p0).gameTagsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.tagId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'tag_id',
                       typedResults: items,
                     ),
                 ];
