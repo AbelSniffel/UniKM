@@ -25,7 +25,6 @@ class SelectionRibbonHost extends StatefulWidget {
 
 class _SelectionRibbonHostState extends State<SelectionRibbonHost>
     with SingleTickerProviderStateMixin {
-  bool _expanded = false;
   late final _controller = AnimationController(
     vsync: this,
     duration: kNavPanelMotionAnimation,
@@ -43,7 +42,6 @@ class _SelectionRibbonHostState extends State<SelectionRibbonHost>
     if (widget.visible) {
       _controller.forward();
     } else {
-      _expanded = false;
       _controller.reverse();
     }
   }
@@ -67,10 +65,8 @@ class _SelectionRibbonHostState extends State<SelectionRibbonHost>
               : Alignment.bottomCenter,
           child: LayoutBuilder(
             builder: (context, constraints) => SelectionRibbon(
-              isExpanded: _expanded,
               isVeryNarrowLayout:
                   widget.isVeryNarrowLayout || constraints.maxWidth < 700,
-              onToggleExpand: () => setState(() => _expanded = !_expanded),
             ),
           ),
         ),
@@ -79,34 +75,7 @@ class _SelectionRibbonHostState extends State<SelectionRibbonHost>
     return Column(
       children: [
         if (widget.atTop) ribbon,
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              widget.child,
-              Align(
-                alignment: widget.atTop
-                    ? Alignment.topCenter
-                    : Alignment.bottomCenter,
-                child: IgnorePointer(
-                  ignoring: !widget.visible || !_expanded,
-                  child: ClipRect(
-                    child: AnimatedSize(
-                      duration: kNavPanelMotionAnimation,
-                      curve: kNavPanelMotionCurve,
-                      alignment: widget.atTop
-                          ? Alignment.topCenter
-                          : Alignment.bottomCenter,
-                      child: widget.visible && _expanded
-                          ? const SelectionRibbonExpandedPanel()
-                          : const SizedBox(width: double.infinity, height: 0),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: widget.child),
         if (!widget.atTop) ribbon,
       ],
     );

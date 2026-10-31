@@ -126,7 +126,10 @@ class _DiskCache {
               .toList() ??
           [],
       reviewScore: entry['review_score'] as int?,
-      reviewCount: entry['review_count'] as int?,
+      // Entries cached before the fix hold a count with no score.
+      reviewCount: entry['review_score'] == null
+          ? null
+          : entry['review_count'] as int?,
       isDlc: entry['is_dlc'] as bool? ?? false,
       developer: entry['developer']?.toString(),
       searchSource: SteamSearchSource.values
@@ -948,10 +951,6 @@ class SteamService {
               ? developers.join(', ')
               : null;
 
-          reviewCount = (details['recommendations'] != null)
-              ? (details['recommendations']['total'] as int?)
-              : null;
-
           if (fetchTags) {
             // Add genres and categories as tags
             final List<dynamic> genres =
@@ -1001,6 +1000,16 @@ class SteamService {
           }
         } catch (e) {
           // Ignore review fetch errors - reviews are optional
+        }
+        // The store's summary can be unavailable (it may answer with a
+        // redirect instead of JSON); SteamSpy carries the same counts.
+        if (reviewScore == null) {
+          final spy = await _fetchSteamSpyReviews(appId);
+          if (spy != null) {
+            dataSources.add(SteamDataSource.reviews);
+            reviewCount = spy.count;
+            reviewScore = spy.score;
+          }
         }
       }
 
@@ -1063,6 +1072,27 @@ class SteamService {
       _log('SteamSpy tags fetch failed for AppID $appId: $e');
     }
     return [];
+  }
+
+  Future<({int score, int count})?> _fetchSteamSpyReviews(String appId) async {
+    try {
+      final response = await _getWithRetry(
+        SteamApi.steamSpy,
+        queryParameters: {'request': 'appdetails', 'appid': appId},
+      );
+      final data = response.data;
+      if (response.statusCode != 200 || data is! Map<String, dynamic>) {
+        return null;
+      }
+      final positive = (data['positive'] as num?)?.toInt() ?? 0;
+      final negative = (data['negative'] as num?)?.toInt() ?? 0;
+      final total = positive + negative;
+      if (total <= 0) return null;
+      return (score: (positive / total * 100).round(), count: total);
+    } catch (e) {
+      _log('SteamSpy reviews fetch failed for AppID $appId: $e');
+      return null;
+    }
   }
 
   List<({String tag, int score})> _parseSteamSpyTags(dynamic rawTags) {

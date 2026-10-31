@@ -4,9 +4,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
@@ -15,16 +13,15 @@ import '../../models/game.dart';
 import '../controllers/game_editor_fields.dart';
 import '../../providers/app_providers.dart';
 import 'delete_games_dialog.dart';
-import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/cover_image_card.dart';
 import '../widgets/deadline_chip.dart';
 import '../widgets/game_options_row.dart';
 import '../widgets/game_editor_layout.dart';
+import '../widgets/game_metadata_panel.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/platform_menu_button.dart';
-import '../widgets/tinted_tiles.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/key_privacy.dart';
 import '../../core/services/steam_service.dart';
@@ -680,15 +677,6 @@ class _DetailsTab extends StatelessWidget {
   final int? steamReviewScore;
   final int? steamReviewCount;
 
-  Widget _tile(IconData icon, String label, String value, [Widget? trailing]) =>
-      TintedOptionTile(
-        theme: theme,
-        icon: icon,
-        title: value,
-        subtitle: label,
-        trailing: trailing,
-      );
-
   @override
   Widget build(BuildContext context) {
     final steam = platform == 'Steam';
@@ -701,163 +689,19 @@ class _DetailsTab extends StatelessWidget {
         children: [
           if (information != null) ...[information!, const SizedBox(height: 8)],
           if (options != null) ...[options!, const SizedBox(height: 8)],
-          TintedHeading(
+          GameMetadataPanel(
             theme: theme,
-            title: 'Metadata',
-            trailing: showGameDetailsSkmId ? 'SKM-ID ${game.id}' : null,
-          ),
-          _DatesTile(
-            theme: theme,
+            steam: steam,
+            headingTrailing: showGameDetailsSkmId ? 'SKM-ID ${game.id}' : null,
             added: game.createdAt,
             updated: lastUpdatedAt ?? game.updatedAt,
-            steam: steam,
             cachedAt: steamCacheAt,
-          ),
-          SettingsControlWrap(
-            minimumCardWidth: 220,
-            children: [
-              if (steamDeveloper?.isNotEmpty == true)
-                _tile(Icons.business_outlined, 'Developer', steamDeveloper!),
-              if (steam)
-                steamReviewCount == null || steamReviewCount == 0
-                    ? _tile(Icons.thumb_up_outlined, 'Reviews', 'No reviews')
-                    : _tile(
-                        Icons.thumb_up_outlined,
-                        '${NumberFormat.compact().format(steamReviewCount)} reviews',
-                        '$score% · ${Game.reviewRatingFor(score)}',
-                      ),
-              if (steam)
-                _tile(
-                  Icons.pin_outlined,
-                  'Steam AppID',
-                  steamAppId.isEmpty ? 'Not set' : steamAppId,
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    color: theme.textSecondary,
-                    tooltip: 'Copy AppID',
-                    onPressed: steamAppId.isEmpty
-                        ? null
-                        : () {
-                            Clipboard.setData(ClipboardData(text: steamAppId));
-                            NotificationManager.instance.success(
-                              'Steam AppID copied to clipboard',
-                            );
-                          },
-                  ),
-                ),
-            ],
+            developer: steamDeveloper,
+            reviewScore: score,
+            reviewCount: steamReviewCount,
+            steamAppId: steamAppId,
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The game's dates side by side, each as how long ago it was over the
-/// date itself; hovering one shows its exact time. An update no later than
-/// the add says Unchanged, and a game without Steam data says Not cached.
-class _DatesTile extends StatelessWidget {
-  const _DatesTile({
-    required this.theme,
-    required this.added,
-    required this.updated,
-    required this.steam,
-    this.cachedAt,
-  });
-
-  final AppThemeData theme;
-  final DateTime added;
-  final DateTime updated;
-  final bool steam;
-  final DateTime? cachedAt;
-
-  static final _day = DateFormat('d MMM yyyy');
-  static final _exact = DateFormat('dd/MM/yyyy HH:mm');
-
-  static String _ago(DateTime date) {
-    final days = DateUtils.dateOnly(
-      DateTime.now(),
-    ).difference(DateUtils.dateOnly(date)).inDays;
-    String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'} ago';
-    return switch (days) {
-      <= 0 => 'Today',
-      1 => 'Yesterday',
-      < 30 => plural(days, 'day'),
-      < 365 => plural(days ~/ 30, 'month'),
-      _ => plural(days ~/ 365, 'year'),
-    };
-  }
-
-  Widget _entry(IconData icon, String label, DateTime? date, String fallback) {
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 2,
-      children: [
-        Row(
-          spacing: 6,
-          children: [
-            Icon(icon, color: theme.accent, size: 16),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(color: theme.textSecondary, fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-        Text(
-          date == null ? fallback : _ago(date),
-          style: TextStyle(
-            color: date == null ? theme.textSecondary : theme.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        if (date != null)
-          Text(
-            _day.format(date),
-            style: TextStyle(color: theme.textHint, fontSize: 12),
-          ),
-      ],
-    );
-    return Expanded(
-      child: date == null
-          ? column
-          : Tooltip(message: _exact.format(date), child: column),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final divider = VerticalDivider(
-      width: 20,
-      color: theme.accent.withValues(alpha: 0.2),
-    );
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _entry(Icons.add_circle_outline, 'Added', added, ''),
-            divider,
-            _entry(
-              Icons.edit_outlined,
-              'Updated',
-              updated.isAfter(added.add(const Duration(minutes: 1)))
-                  ? updated
-                  : null,
-              'Unchanged',
-            ),
-            if (steam) ...[
-              divider,
-              _entry(Icons.history, 'Cached', cachedAt, 'Not cached'),
-            ],
-          ],
-        ),
       ),
     );
   }

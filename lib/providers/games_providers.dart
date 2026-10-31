@@ -334,6 +334,7 @@ class GamesNotifier extends Notifier<GamesState> {
     bool isDlc = false,
     bool isUsed = false,
     String steamAppId = '',
+    String developer = '',
     int reviewScore = 0,
     int reviewCount = 0,
     List<int> tagIds = const [],
@@ -355,6 +356,7 @@ class GamesNotifier extends Notifier<GamesState> {
           isDlc: Value(isDlc),
           isUsed: Value(isUsed),
           steamAppId: Value(steamAppId),
+          developer: Value(developer),
           reviewScore: Value(reviewScore),
           reviewCount: Value(reviewCount),
           updatedAt: Value(DateTime.now()),
@@ -711,12 +713,15 @@ final activeFiltersProvider = Provider<ActiveFiltersState>(
   ),
 );
 
+/// Selected games in selection order. Filters never hide a selected game, so
+/// the list always matches the selection count.
 final selectedGamesProvider = Provider<List<Game>>((ref) {
   final (games, selectedIds) = ref.watch(
-    gamesProvider.select((s) => (s.filteredGames, s.selectedGameIds)),
+    gamesProvider.select((s) => (s.games, s.selectedGameIds)),
   );
   if (selectedIds.isEmpty) return const [];
-  return games.where((game) => selectedIds.contains(game.id)).toList();
+  final byId = {for (final game in games) game.id: game};
+  return [for (final id in selectedIds) ?byId[id]];
 });
 
 /// Metadata edits only update the affected cards. The scrollable view needs

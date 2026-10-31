@@ -114,6 +114,8 @@ class TintedChip extends StatelessWidget {
     required this.label,
     this.value,
     this.faded = false,
+    this.maxLines,
+    this.onTap,
   });
 
   final AppThemeData theme;
@@ -122,10 +124,16 @@ class TintedChip extends StatelessWidget {
   final String? value;
   final bool faded;
 
+  /// Truncates the label with an ellipsis instead of wrapping it.
+  final int? maxLines;
+
+  /// Makes the chip tappable.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final radius = theme.cornerRadius;
-    return Opacity(
+    final chip = Opacity(
       opacity: faded ? 0.5 : 1,
       child: Container(
         padding: const EdgeInsetsDirectional.fromSTEB(6, 4, 8, 4),
@@ -136,6 +144,8 @@ class TintedChip extends StatelessWidget {
         ),
         // Rich text, so a long label wraps instead of overflowing.
         child: Text.rich(
+          maxLines: maxLines,
+          overflow: maxLines == null ? null : TextOverflow.ellipsis,
           TextSpan(
             style: TextStyle(color: theme.textSecondary, fontSize: 12),
             children: [
@@ -163,6 +173,15 @@ class TintedChip extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+    if (onTap == null) return chip;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: chip,
       ),
     );
   }

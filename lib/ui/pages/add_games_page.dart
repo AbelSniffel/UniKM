@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/constants/platform_patterns.dart';
 import '../../core/settings/settings_model.dart';
@@ -23,6 +22,7 @@ import '../widgets/batch_games_editor.dart';
 import '../widgets/deadline_chip.dart';
 import '../widgets/footer_wrap.dart';
 import '../widgets/game_editor_layout.dart';
+import '../widgets/game_metadata_panel.dart';
 import '../widgets/cover_image_card.dart';
 import '../widgets/game_options_row.dart';
 import '../../core/services/steam_service.dart';
@@ -377,6 +377,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
             notes: _fields.notes.text.trim(),
             coverImage: _fields.coverImage.text.trim(),
             steamAppId: isSteam ? (_steamPreview?.appId ?? '') : '',
+            developer: isSteam ? (_steamPreview?.developer ?? '') : '',
             reviewScore: isSteam ? (_steamPreview?.reviewScore ?? 0) : 0,
             reviewCount: isSteam ? (_steamPreview?.reviewCount ?? 0) : 0,
             hasDeadline: _hasDeadline,
@@ -500,6 +501,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
           appId: options.applyAppId ? result.appId : '',
           name: result.name,
           isDlc: result.isDlc,
+          developer: options.applyDeveloper ? result.developer : null,
           reviewScore: options.applyReviews ? result.reviewScore : null,
           reviewCount: options.applyReviews ? result.reviewCount : null,
         ),
@@ -674,39 +676,15 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     ),
   );
 
-  Widget _buildSteamMetadata(AppThemeData theme) => SectionGroupBox(
-    title: 'Metadata',
+  Widget _buildSteamMetadata(AppThemeData theme) => GameMetadataPanel(
     theme: theme,
-    titleIcon: Icons.schedule,
-    child: Column(
-      children: [
-        if (_steamPreview != null)
-          _steamMetadataRow(theme, 'Steam Title', _steamPreview!.name),
-        _steamMetadataRow(
-          theme,
-          'Steam AppID',
-          _steamPreview?.appId ?? 'Not set',
-        ),
-        _steamMetadataRow(
-          theme,
-          'Reviews',
-          _steamPreview?.reviewScore == null
-              ? 'No reviews'
-              : '${_steamPreview?.reviewScore}% · ${NumberFormat.compact().format(_steamPreview?.reviewCount ?? 0)} reviews',
-        ),
-        _steamMetadataRow(
-          theme,
-          'Cache',
-          _singleSteamCacheAt == null
-              ? 'No cached data'
-              : DateFormat('dd/MM/yyyy HH:mm').format(_singleSteamCacheAt!),
-        ),
-      ],
-    ),
+    steam: true,
+    cachedAt: _singleSteamCacheAt,
+    developer: _steamPreview?.developer,
+    reviewScore: _steamPreview?.reviewScore,
+    reviewCount: _steamPreview?.reviewCount,
+    steamAppId: _steamPreview?.appId ?? '',
   );
-
-  Widget _steamMetadataRow(AppThemeData theme, String label, String value) =>
-      GameMetadataRow(theme: theme, label: label, value: value, labelWidth: 95);
 }
 
 /// Batch add tab
