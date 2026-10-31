@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/application/database_encryption_controller.dart';
+import '../../widgets/app_scrollbar.dart';
 import '../../../app/application/database_session_loader.dart';
 import '../../../core/database/sqlite_file.dart';
 import '../../../core/database/database.dart';
@@ -1017,7 +1018,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                       'No other recent databases.',
                       style: TextStyle(color: widget.theme.textSecondary),
                     )
-                  : Scrollbar(
+                  : AppScrollbar(
                       controller: _scrollController,
                       child: ListView.builder(
                         controller: _scrollController,

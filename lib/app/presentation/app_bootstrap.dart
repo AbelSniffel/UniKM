@@ -20,6 +20,7 @@ import '../../ui/dialogs/database_unlock_dialog.dart';
 import '../../ui/dialogs/encryption_dialogs.dart';
 import '../../ui/widgets/app_privacy_guard.dart';
 import '../../ui/widgets/app_progress_indicator.dart';
+import '../../ui/widgets/app_scrollbar.dart';
 import '../../ui/widgets/notification_system.dart';
 import '../application/database_session_loader.dart';
 import '../unikm_app.dart';
@@ -489,6 +490,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       theme: materialTheme,
       themeAnimationDuration: Duration.zero,
       themeAnimationCurve: Curves.linear,
+      scrollBehavior: const AppScrollBehavior(),
       builder: (context, child) => AppPrivacyGuard(
         lockAfter: _booting || _encryptedSession == null || autoLockMinutes <= 0
             ? null

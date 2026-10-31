@@ -19,6 +19,7 @@ import '../../dialogs/device_sync_dialog.dart';
 import '../../dialogs/library_stats_dialog.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_progress_indicator.dart';
+import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/popup_menu_helpers.dart';
@@ -218,7 +219,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                   ),
                 ),
                 Flexible(
-                  child: Scrollbar(
+                  child: AppScrollbar(
                     controller: _filtersScrollController,
                     child: SingleChildScrollView(
                       controller: _filtersScrollController,
@@ -466,14 +467,32 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         .toList();
     final hasOptions = _filterOptions.any((option) => option.isOn(filters));
 
+    // Both clear buttons share the elevated button style.
+    Widget clearButton({
+      required String id,
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback? onClear,
+    }) => Tooltip(
+      message: tooltip,
+      child: ElevatedButton(
+        key: ValueKey('home-filter-clear-$id'),
+        onPressed: onClear,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          minimumSize: const Size(40, 40),
+        ),
+        child: Icon(icon, size: 20),
+      ),
+    );
+
     Widget group({
       required String id,
       required String title,
       required IconData icon,
-      required IconData clearIcon,
-      required String clearTooltip,
-      required VoidCallback? onClear,
       required Widget child,
+      Widget? trailing,
+      bool showTitle = true,
     }) => SectionGroupBox(
       key: ValueKey('home-filter-group-$id'),
       title: title,
@@ -482,14 +501,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       titleLocation: SectionTitleLocation.top,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
       headerBottomPadding: 8,
-      trailing: IconButton(
-        key: ValueKey('home-filter-clear-$id'),
-        tooltip: clearTooltip,
-        onPressed: onClear,
-        icon: Icon(clearIcon, size: 20),
-        color: theme.accent,
-        visualDensity: VisualDensity.compact,
-      ),
+      showTitle: showTitle,
+      trailing: trailing,
       child: child,
     );
 
@@ -497,9 +510,12 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       id: 'options',
       title: 'Show only',
       icon: Icons.filter_alt_outlined,
-      clearIcon: Icons.filter_alt_off_outlined,
-      clearTooltip: 'Clear options',
-      onClear: hasOptions ? _clearBoolFilters : null,
+      trailing: clearButton(
+        id: 'options',
+        icon: Icons.filter_alt_off_outlined,
+        tooltip: 'Clear options',
+        onClear: hasOptions ? _clearBoolFilters : null,
+      ),
       child: _scrollIf(
         fill,
         Wrap(
@@ -530,28 +546,41 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
     Widget tagsGroup({required bool fill}) => group(
       id: 'tags',
-      title: selectedTagIds.isEmpty
-          ? 'Tags'
-          : 'Tags (${selectedTagIds.length})',
+      title: 'Tags',
       icon: Icons.label_outline,
-      clearIcon: Icons.label_off_outlined,
-      clearTooltip: 'Clear tags',
-      onClear: selectedTagIds.isEmpty
-          ? null
-          : () => _notifier.setTagFilters([]),
+      showTitle: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppSearchField(
-            theme: theme,
-            backgroundColor: Color.lerp(theme.surface, theme.background, 0.6),
-            hintText: 'Search tags...',
-            controller: _tagSearchController,
-            onChanged: (value) => setState(() => _tagSearchQuery = value),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
+          Row(
+            spacing: kElementHSpacing,
+            children: [
+              Expanded(
+                child: AppSearchField(
+                  theme: theme,
+                  backgroundColor: Color.lerp(
+                    theme.surface,
+                    theme.background,
+                    0.6,
+                  ),
+                  hintText: 'Search tags...',
+                  controller: _tagSearchController,
+                  onChanged: (value) => setState(() => _tagSearchQuery = value),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              clearButton(
+                id: 'tags',
+                icon: Icons.label_off_outlined,
+                tooltip: 'Clear tags',
+                onClear: selectedTagIds.isEmpty
+                    ? null
+                    : () => _notifier.setTagFilters([]),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           if (fill)

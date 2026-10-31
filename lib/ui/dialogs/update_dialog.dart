@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/application/update_controller.dart';
 import '../../core/constants/app_constants.dart';
+import '../widgets/app_scrollbar.dart';
 import '../../core/services/update_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/format_utils.dart';
@@ -606,7 +607,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
               borderRadius: BorderRadius.circular(theme.cornerRadius),
               border: Border.all(color: theme.border),
             ),
-            child: Scrollbar(
+            child: AppScrollbar(
               controller: _scrollController,
               thumbVisibility: true,
               child: SingleChildScrollView(

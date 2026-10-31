@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
+import 'app_scrollbar.dart';
 import '../../providers/app_providers.dart';
 import '../pages/settings_sections/settings_theme_editor.dart';
 import 'app_dialog.dart';
@@ -265,7 +266,7 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                                       )
                                     : PageStorage(
                                         bucket: _scrollStorage,
-                                        child: Scrollbar(
+                                        child: AppScrollbar(
                                           controller: scrollController,
                                           child: GridView.builder(
                                             key: PageStorageKey(

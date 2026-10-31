@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'app_scrollbar.dart';
 import '../../core/utils/batch_parser.dart';
 import '../../core/constants/platform_patterns.dart';
 import 'platform_icon.dart';
@@ -425,7 +426,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
               return SizedBox(
                 key: _viewportKey,
                 width: constraints.maxWidth,
-                child: Scrollbar(
+                child: AppScrollbar(
                   controller: _horizontalScroll,
                   child: SingleChildScrollView(
                     key: const ValueKey('batch-games-horizontal-scroll'),
