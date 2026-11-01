@@ -416,6 +416,143 @@ class DefaultSettings {
   static const double windowHeight = 800;
 }
 
+/// Each ordinary preference's stored type and fallback, kept together.
+/// Fresh empty lists preserve independent defaults for each load.
+Map<String, Object> get settingDefaults => {
+  SettingsKeys.autoUpdateCheck: DefaultSettings.autoUpdateCheck,
+  SettingsKeys.updateRepo: DefaultSettings.updateRepo,
+  SettingsKeys.includePreReleases: DefaultSettings.includePreReleases,
+  SettingsKeys.skippedVersions: <String>[],
+  SettingsKeys.githubApiToken: DefaultSettings.githubApiToken,
+  SettingsKeys.activeTheme: DefaultSettings.activeTheme,
+  SettingsKeys.customThemes: <String>[],
+  SettingsKeys.settingsSectionPanelCollapsed:
+      DefaultSettings.settingsSectionPanelCollapsed,
+  SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
+  SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
+  SettingsKeys.viewedNewGameIds: const <String>[],
+  SettingsKeys.showTitleChip: DefaultSettings.showTitleChip,
+  SettingsKeys.showTitleOnNoPicture: DefaultSettings.showTitleOnNoPicture,
+  SettingsKeys.showPlatformChip: DefaultSettings.showPlatformChip,
+  SettingsKeys.showTagsChip: DefaultSettings.showTagsChip,
+  SettingsKeys.showPlatformOnHoverOnly: DefaultSettings.showPlatformOnHoverOnly,
+  SettingsKeys.showTagsOnHoverOnly: DefaultSettings.showTagsOnHoverOnly,
+  SettingsKeys.showDeadlineChip: DefaultSettings.showDeadlineChip,
+  SettingsKeys.slimListView: DefaultSettings.slimListView,
+  SettingsKeys.showPlatformBadges: true,
+  SettingsKeys.showTagChips: true,
+  SettingsKeys.showRatings: DefaultSettings.showRatings,
+  SettingsKeys.useThemeToggleRadius: DefaultSettings.useThemeToggleRadius,
+  SettingsKeys.experimentalInteractionCards:
+      DefaultSettings.experimentalInteractionCards,
+  SettingsKeys.autoBackupEnabled: DefaultSettings.autoBackupEnabled,
+  SettingsKeys.autoBackupIntervalMinutes:
+      DefaultSettings.autoBackupIntervalMinutes,
+  SettingsKeys.backupMaxCount: DefaultSettings.backupMaxCount,
+  SettingsKeys.databasePath: '',
+  SettingsKeys.isEncrypted: false,
+  SettingsKeys.recentDatabasePaths: const <String>[],
+  SettingsKeys.syncEnabled: DefaultSettings.syncEnabled,
+  SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
+  SettingsKeys.syncDeviceId: DefaultSettings.syncDeviceId,
+  SettingsKeys.syncTrustedPeersJson: DefaultSettings.syncTrustedPeersJson,
+  SettingsKeys.syncRevokedPeersJson: DefaultSettings.syncRevokedPeersJson,
+  SettingsKeys.syncLastTrustedPeerId: DefaultSettings.syncLastTrustedPeerId,
+  SettingsKeys.syncLastSyncAtIso: DefaultSettings.syncLastSyncAtIso,
+  SettingsKeys.syncDbRevisionId: DefaultSettings.syncDbRevisionId,
+  SettingsKeys.syncDbTimestampMillis: DefaultSettings.syncDbTimestampMillis,
+  SettingsKeys.syncStaticPrivateKey: DefaultSettings.syncStaticPrivateKey,
+  SettingsKeys.syncStaticPublicKey: DefaultSettings.syncStaticPublicKey,
+  SettingsKeys.deadlineReminders: true,
+  SettingsKeys.updateNotifications: true,
+  SettingsKeys.encryptionEnabled: false,
+  SettingsKeys.maskKeys: true,
+  SettingsKeys.autoHideKeys: true,
+  SettingsKeys.autoLockMinutes: 0,
+  SettingsKeys.hideInRecents: false,
+  SettingsKeys.developerMode: DefaultSettings.developerMode,
+  SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
+  SettingsKeys.showFpsCounter: DefaultSettings.showFpsCounter,
+  SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
+  SettingsKeys.showSyncDeviceId: DefaultSettings.showSyncDeviceId,
+  SettingsKeys.frameRatePreference: DefaultSettings.frameRatePreference,
+  SettingsKeys.windowWidth: DefaultSettings.windowWidth,
+  SettingsKeys.windowHeight: DefaultSettings.windowHeight,
+  SettingsKeys.windowMaximized: false,
+  SettingsKeys.legacyDefaultTagsCleanupDone:
+      DefaultSettings.legacyDefaultTagsCleanupDone,
+};
+
+/// Enum preferences, stored by name: their values and fallback.
+const enumSettingDefaults = <String, (List<Enum>, Enum)>{
+  SettingsKeys.navBarPosition: (
+    NavBarPosition.values,
+    DefaultSettings.navBarPosition,
+  ),
+  SettingsKeys.navBarAppearance: (
+    NavBarAppearance.values,
+    DefaultSettings.navBarAppearance,
+  ),
+  SettingsKeys.navExpansionMode: (
+    NavExpansionMode.values,
+    DefaultSettings.navExpansionMode,
+  ),
+  SettingsKeys.navButtonArrangementH: (
+    NavButtonArrangement.values,
+    DefaultSettings.navButtonArrangementH,
+  ),
+  SettingsKeys.navButtonArrangementV: (
+    NavButtonArrangement.values,
+    DefaultSettings.navButtonArrangementV,
+  ),
+  SettingsKeys.navPanelOverlayStyle: (
+    NavPanelOverlayStyle.values,
+    DefaultSettings.navPanelOverlayStyle,
+  ),
+  SettingsKeys.gradientAnimation: (
+    GradientAnimation.values,
+    DefaultSettings.gradientAnimation,
+  ),
+  SettingsKeys.gradientAnimationSpeed: (
+    GradientAnimationSpeed.values,
+    DefaultSettings.gradientAnimationSpeed,
+  ),
+  SettingsKeys.tooltipAnimation: (
+    TooltipAnimation.values,
+    DefaultSettings.tooltipAnimation,
+  ),
+  SettingsKeys.gameListViewMode: (
+    GameListViewMode.values,
+    DefaultSettings.gameListViewMode,
+  ),
+  SettingsKeys.gameSortMode: (
+    GameSortMode.values,
+    DefaultSettings.gameSortMode,
+  ),
+  SettingsKeys.toggleStyle: (ToggleStyle.values, DefaultSettings.toggleStyle),
+  SettingsKeys.settingsCardIndicatorStyle: (
+    SettingsCardIndicatorStyle.values,
+    DefaultSettings.settingsCardIndicatorStyle,
+  ),
+  SettingsKeys.sectionTitleLocation: (
+    SectionTitleLocation.values,
+    DefaultSettings.sectionTitleLocation,
+  ),
+};
+
+// Built once: slices read it on every settings change.
+final Map<String, Object> _fallbacks = {
+  ...settingDefaults,
+  for (final MapEntry(:key, value: (_, fallback))
+      in enumSettingDefaults.entries)
+    key: fallback,
+};
+
+/// The value stored under [key], or its fallback from [settingDefaults] or
+/// [enumSettingDefaults].
+T readSetting<T>(Map<String, dynamic> settings, String key) =>
+    (settings[key] as T?) ?? _fallbacks[key] as T;
+
 // Typed settings slices. Records give each slice value equality, so a slice
 // provider notifies only when one of its own fields changes. List fields
 // compare by identity; saving a list with equal contents keeps its instance.
@@ -433,55 +570,22 @@ typedef GameCardSettings = ({
   bool slimListView,
 });
 
-T _settingOr<T>(Map<String, dynamic> settings, String key, T fallback) =>
-    (settings[key] as T?) ?? fallback;
-
 GameCardSettings gameCardSettingsFromMap(Map<String, dynamic> settings) => (
-  showTitle: _settingOr(
-    settings,
-    SettingsKeys.showTitleChip,
-    DefaultSettings.showTitleChip,
-  ),
-  showTitleOnNoPicture: _settingOr(
+  showTitle: readSetting(settings, SettingsKeys.showTitleChip),
+  showTitleOnNoPicture: readSetting(
     settings,
     SettingsKeys.showTitleOnNoPicture,
-    DefaultSettings.showTitleOnNoPicture,
   ),
-  showPlatform: _settingOr(
-    settings,
-    SettingsKeys.showPlatformChip,
-    DefaultSettings.showPlatformChip,
-  ),
-  showTags: _settingOr(
-    settings,
-    SettingsKeys.showTagsChip,
-    DefaultSettings.showTagsChip,
-  ),
-  showTagsOnHoverOnly: _settingOr(
-    settings,
-    SettingsKeys.showTagsOnHoverOnly,
-    DefaultSettings.showTagsOnHoverOnly,
-  ),
-  showPlatformOnHoverOnly: _settingOr(
+  showPlatform: readSetting(settings, SettingsKeys.showPlatformChip),
+  showTags: readSetting(settings, SettingsKeys.showTagsChip),
+  showTagsOnHoverOnly: readSetting(settings, SettingsKeys.showTagsOnHoverOnly),
+  showPlatformOnHoverOnly: readSetting(
     settings,
     SettingsKeys.showPlatformOnHoverOnly,
-    DefaultSettings.showPlatformOnHoverOnly,
   ),
-  showDeadline: _settingOr(
-    settings,
-    SettingsKeys.showDeadlineChip,
-    DefaultSettings.showDeadlineChip,
-  ),
-  showRatings: _settingOr(
-    settings,
-    SettingsKeys.showRatings,
-    DefaultSettings.showRatings,
-  ),
-  slimListView: _settingOr(
-    settings,
-    SettingsKeys.slimListView,
-    DefaultSettings.slimListView,
-  ),
+  showDeadline: readSetting(settings, SettingsKeys.showDeadlineChip),
+  showRatings: readSetting(settings, SettingsKeys.showRatings),
+  slimListView: readSetting(settings, SettingsKeys.slimListView),
 );
 
 typedef NotificationsSettings = ({
@@ -492,12 +596,8 @@ typedef NotificationsSettings = ({
 NotificationsSettings notificationsSettingsFromMap(
   Map<String, dynamic> settings,
 ) => (
-  deadlineReminders: _settingOr(settings, SettingsKeys.deadlineReminders, true),
-  updateNotifications: _settingOr(
-    settings,
-    SettingsKeys.updateNotifications,
-    true,
-  ),
+  deadlineReminders: readSetting(settings, SettingsKeys.deadlineReminders),
+  updateNotifications: readSetting(settings, SettingsKeys.updateNotifications),
 );
 
 typedef UpdatesSettings = ({
@@ -510,32 +610,12 @@ typedef UpdatesSettings = ({
 });
 
 UpdatesSettings updatesSettingsFromMap(Map<String, dynamic> settings) => (
-  autoCheckEnabled: _settingOr(
-    settings,
-    SettingsKeys.autoUpdateCheck,
-    DefaultSettings.autoUpdateCheck,
-  ),
+  autoCheckEnabled: readSetting(settings, SettingsKeys.autoUpdateCheck),
   autoCheckIntervalMinutes: DefaultSettings.autoCheckIntervalMinutes,
-  includePrerelease: _settingOr(
-    settings,
-    SettingsKeys.includePreReleases,
-    DefaultSettings.includePreReleases,
-  ),
-  skippedVersions: _settingOr(
-    settings,
-    SettingsKeys.skippedVersions,
-    const <String>[],
-  ),
-  updateRepo: _settingOr(
-    settings,
-    SettingsKeys.updateRepo,
-    DefaultSettings.updateRepo,
-  ),
-  githubApiToken: _settingOr(
-    settings,
-    SettingsKeys.githubApiToken,
-    DefaultSettings.githubApiToken,
-  ),
+  includePrerelease: readSetting(settings, SettingsKeys.includePreReleases),
+  skippedVersions: readSetting(settings, SettingsKeys.skippedVersions),
+  updateRepo: readSetting(settings, SettingsKeys.updateRepo),
+  githubApiToken: readSetting(settings, SettingsKeys.githubApiToken),
 );
 
 typedef SecuritySettings = ({
@@ -550,20 +630,12 @@ typedef SecuritySettings = ({
 });
 
 SecuritySettings securitySettingsFromMap(Map<String, dynamic> settings) => (
-  maskKeys: _settingOr(settings, SettingsKeys.maskKeys, true),
-  autoHideKeys: _settingOr(settings, SettingsKeys.autoHideKeys, true),
-  autoLockMinutes: _settingOr(settings, SettingsKeys.autoLockMinutes, 0),
-  hideInRecents: _settingOr(settings, SettingsKeys.hideInRecents, false),
-  encryptionEnabled: _settingOr(
-    settings,
-    SettingsKeys.encryptionEnabled,
-    false,
-  ),
-  recentDatabasePaths: _settingOr(
-    settings,
-    SettingsKeys.recentDatabasePaths,
-    const <String>[],
-  ),
+  maskKeys: readSetting(settings, SettingsKeys.maskKeys),
+  autoHideKeys: readSetting(settings, SettingsKeys.autoHideKeys),
+  autoLockMinutes: readSetting(settings, SettingsKeys.autoLockMinutes),
+  hideInRecents: readSetting(settings, SettingsKeys.hideInRecents),
+  encryptionEnabled: readSetting(settings, SettingsKeys.encryptionEnabled),
+  recentDatabasePaths: readSetting(settings, SettingsKeys.recentDatabasePaths),
 );
 
 typedef AppShellSettings = ({
@@ -583,67 +655,28 @@ typedef AppShellSettings = ({
 });
 
 AppShellSettings appShellSettingsFromMap(Map<String, dynamic> settings) => (
-  navBarPosition: _settingOr(
-    settings,
-    SettingsKeys.navBarPosition,
-    DefaultSettings.navBarPosition,
-  ),
-  navBarAppearance: _settingOr(
-    settings,
-    SettingsKeys.navBarAppearance,
-    DefaultSettings.navBarAppearance,
-  ),
-  navExpansionMode: _settingOr(
-    settings,
-    SettingsKeys.navExpansionMode,
-    DefaultSettings.navExpansionMode,
-  ),
-  gradientAnimation: _settingOr(
-    settings,
-    SettingsKeys.gradientAnimation,
-    DefaultSettings.gradientAnimation,
-  ),
-  settingsSectionPanelCollapsed: _settingOr(
+  navBarPosition: readSetting(settings, SettingsKeys.navBarPosition),
+  navBarAppearance: readSetting(settings, SettingsKeys.navBarAppearance),
+  navExpansionMode: readSetting(settings, SettingsKeys.navExpansionMode),
+  gradientAnimation: readSetting(settings, SettingsKeys.gradientAnimation),
+  settingsSectionPanelCollapsed: readSetting(
     settings,
     SettingsKeys.settingsSectionPanelCollapsed,
-    DefaultSettings.settingsSectionPanelCollapsed,
   ),
-  autoBackupEnabled: _settingOr(
-    settings,
-    SettingsKeys.autoBackupEnabled,
-    DefaultSettings.autoBackupEnabled,
-  ),
-  autoBackupIntervalMinutes: _settingOr(
+  autoBackupEnabled: readSetting(settings, SettingsKeys.autoBackupEnabled),
+  autoBackupIntervalMinutes: readSetting(
     settings,
     SettingsKeys.autoBackupIntervalMinutes,
-    DefaultSettings.autoBackupIntervalMinutes,
   ),
-  developerMode: _settingOr(
-    settings,
-    SettingsKeys.developerMode,
-    DefaultSettings.developerMode,
-  ),
-  windowWidth: _settingOr(
-    settings,
-    SettingsKeys.windowWidth,
-    DefaultSettings.windowWidth,
-  ),
-  windowHeight: _settingOr(
-    settings,
-    SettingsKeys.windowHeight,
-    DefaultSettings.windowHeight,
-  ),
+  developerMode: readSetting(settings, SettingsKeys.developerMode),
+  windowWidth: readSetting(settings, SettingsKeys.windowWidth),
+  windowHeight: readSetting(settings, SettingsKeys.windowHeight),
   windowX: settings[SettingsKeys.windowX] as double?,
   windowY: settings[SettingsKeys.windowY] as double?,
-  windowMaximized: _settingOr(settings, SettingsKeys.windowMaximized, false),
+  windowMaximized: readSetting(settings, SettingsKeys.windowMaximized),
 );
 
 typedef BackupSettings = ({int maxCount});
 
-BackupSettings backupSettingsFromMap(Map<String, dynamic> settings) => (
-  maxCount: _settingOr(
-    settings,
-    SettingsKeys.backupMaxCount,
-    DefaultSettings.backupMaxCount,
-  ),
-);
+BackupSettings backupSettingsFromMap(Map<String, dynamic> settings) =>
+    (maxCount: readSetting(settings, SettingsKeys.backupMaxCount));

@@ -351,10 +351,9 @@ class _GradientAnimationSection extends ConsumerWidget {
               SettingsKeys.swapGradientColors,
               !swapGradientColors,
             ),
-            icon: Icon(
-              Icons.swap_horiz,
-              color: swapGradientColors ? theme.accent : theme.textSecondary,
-              size: 26,
+            icon: _GradientOrderIcon(
+              leading: swapGradientColors ? theme.secondary : theme.accent,
+              trailing: swapGradientColors ? theme.accent : theme.secondary,
             ),
           ),
           _GradientSpeedButton(theme: theme),
@@ -383,6 +382,27 @@ class _GradientAnimationSection extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The swap icon in the gradient's colours: its top arrow in the colour the
+/// bar leads with (and solid bars use), its bottom arrow in the other.
+class _GradientOrderIcon extends StatelessWidget {
+  const _GradientOrderIcon({required this.leading, required this.trailing});
+
+  final Color leading;
+  final Color trailing;
+
+  @override
+  Widget build(BuildContext context) => ShaderMask(
+    blendMode: BlendMode.srcIn,
+    shaderCallback: (bounds) => LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [leading, leading, trailing, trailing],
+      stops: const [0, 0.5, 0.5, 1],
+    ).createShader(bounds),
+    child: const Icon(Icons.swap_horiz, size: 26),
+  );
 }
 
 class _GradientSpeedButton extends ConsumerWidget {

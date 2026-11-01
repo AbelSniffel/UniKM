@@ -104,25 +104,20 @@ final settingsProvider =
 Provider<T> _settingsSlice<T>(T Function(Map<String, dynamic>) select) =>
     Provider<T>((ref) => ref.watch(settingsProvider.select(select)));
 
-Provider<T> _setting<T>(String key, T fallback) =>
-    _settingsSlice((settings) => (settings[key] as T?) ?? fallback);
+Provider<T> _setting<T>(String key) =>
+    _settingsSlice((settings) => readSetting<T>(settings, key));
 
 /// Developer-only identity display; the sync identity itself is always retained.
-final showSyncDeviceIdProvider = _setting<bool>(
-  SettingsKeys.showSyncDeviceId,
-  DefaultSettings.showSyncDeviceId,
-);
+final showSyncDeviceIdProvider = _setting<bool>(SettingsKeys.showSyncDeviceId);
 
 /// Frame Rate choice: 'auto' or a refresh rate in Hz.
 final frameRatePreferenceProvider = _setting<String>(
   SettingsKeys.frameRatePreference,
-  DefaultSettings.frameRatePreference,
 );
 
 // Retained for saved-setting compatibility; the UI always uses cards.
 final experimentalInteractionCardsProvider = _setting<bool>(
   SettingsKeys.experimentalInteractionCards,
-  DefaultSettings.experimentalInteractionCards,
 );
 
 /// Typed settings slice used by `GameCard`.
@@ -143,45 +138,35 @@ final appShellSettingsProvider = _settingsSlice(appShellSettingsFromMap);
 
 final backupSettingsProvider = _settingsSlice(backupSettingsFromMap);
 
-final toggleStyleProvider = _setting<ToggleStyle>(
-  SettingsKeys.toggleStyle,
-  DefaultSettings.toggleStyle,
-);
+final toggleStyleProvider = _setting<ToggleStyle>(SettingsKeys.toggleStyle);
 
 final settingsCardIndicatorStyleProvider = _setting<SettingsCardIndicatorStyle>(
   SettingsKeys.settingsCardIndicatorStyle,
-  DefaultSettings.settingsCardIndicatorStyle,
 );
 
 final sectionTitleLocationProvider = _setting<SectionTitleLocation>(
   SettingsKeys.sectionTitleLocation,
-  DefaultSettings.sectionTitleLocation,
 );
 
 final navButtonArrangementHProvider = _setting<NavButtonArrangement>(
   SettingsKeys.navButtonArrangementH,
-  DefaultSettings.navButtonArrangementH,
 );
 
 /// Arrangement for vertical nav panel (left/right position).
 final navButtonArrangementVProvider = _setting<NavButtonArrangement>(
   SettingsKeys.navButtonArrangementV,
-  DefaultSettings.navButtonArrangementV,
 );
 
 final navPanelOverlayStyleSettingProvider = _setting<NavPanelOverlayStyle>(
   SettingsKeys.navPanelOverlayStyle,
-  DefaultSettings.navPanelOverlayStyle,
 );
 
 final gradientAnimationSpeedProvider = _setting<GradientAnimationSpeed>(
   SettingsKeys.gradientAnimationSpeed,
-  DefaultSettings.gradientAnimationSpeed,
 );
 
 final swapGradientColorsProvider = _setting<bool>(
   SettingsKeys.swapGradientColors,
-  DefaultSettings.swapGradientColors,
 );
 
 final viewedNewGameIdsProvider = Provider<Set<int>>((ref) {
@@ -219,27 +204,20 @@ Future<void> markGamesAsViewed(WidgetRef ref, Iterable<int> gameIds) async {
 
 final legacyDefaultTagsCleanupDoneProvider = _setting<bool>(
   SettingsKeys.legacyDefaultTagsCleanupDone,
-  DefaultSettings.legacyDefaultTagsCleanupDone,
 );
 
-final activeThemeNameProvider = _setting<String>(
-  SettingsKeys.activeTheme,
-  DefaultSettings.activeTheme,
-);
+final activeThemeNameProvider = _setting<String>(SettingsKeys.activeTheme);
 
 final customThemesJsonProvider = _setting<List<String>>(
   SettingsKeys.customThemes,
-  const [],
 );
 
 final gameListViewModeSettingProvider = _setting<GameListViewMode>(
   SettingsKeys.gameListViewMode,
-  DefaultSettings.gameListViewMode,
 );
 
 final gameSortModeSettingProvider = _setting<GameSortMode>(
   SettingsKeys.gameSortMode,
-  DefaultSettings.gameSortMode,
 );
 
 // =============================================================================
@@ -248,7 +226,4 @@ final gameSortModeSettingProvider = _setting<GameSortMode>(
 
 /// Provider that exposes the current database path.
 /// This reads from SharedPreferences and updates when the path changes.
-final currentDatabasePathProvider = _setting<String>(
-  SettingsKeys.databasePath,
-  '',
-);
+final currentDatabasePathProvider = _setting<String>(SettingsKeys.databasePath);

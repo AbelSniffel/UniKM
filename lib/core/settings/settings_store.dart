@@ -21,25 +21,9 @@ class SettingsStore {
             ? NavButtonArrangement.start
             : NavButtonArrangement.split,
     };
-    final navButtonArrangementH = _readEnum(
-      SettingsKeys.navButtonArrangementH,
-      NavButtonArrangement.values,
-      legacyArrangementH,
-    );
-    final navButtonArrangementV = _readEnum(
-      SettingsKeys.navButtonArrangementV,
-      NavButtonArrangement.values,
-      DefaultSettings.navButtonArrangementV,
-    );
-    final gradientAnimation = _readEnum(
-      SettingsKeys.gradientAnimation,
-      GradientAnimation.values,
-      DefaultSettings.gradientAnimation,
-    );
-
     return {
-      for (final entry in _defaults.entries)
-        entry.key: _readPreference(entry.key, entry.value),
+      for (final MapEntry(:key, :value) in settingDefaults.entries)
+        key: _readPreference(key, value),
       SettingsKeys.autoCheckIntervalMinutes:
           DefaultSettings.autoCheckIntervalMinutes,
       // The current-theme alias falls back to the legacy active-theme key.
@@ -47,143 +31,19 @@ class SettingsStore {
           _prefs.getString(SettingsKeys.currentTheme) ??
           _prefs.getString(SettingsKeys.activeTheme) ??
           DefaultSettings.activeTheme,
-      // Navigation
-      SettingsKeys.navBarPosition: _readEnum(
-        SettingsKeys.navBarPosition,
-        NavBarPosition.values,
-        DefaultSettings.navBarPosition,
-      ),
-      SettingsKeys.navBarAppearance: _readEnum(
-        SettingsKeys.navBarAppearance,
-        NavBarAppearance.values,
-        DefaultSettings.navBarAppearance,
-      ),
-      SettingsKeys.navExpansionMode: _readEnum(
-        SettingsKeys.navExpansionMode,
-        NavExpansionMode.values,
-        DefaultSettings.navExpansionMode,
-      ),
-      SettingsKeys.navButtonArrangementH: navButtonArrangementH,
-      SettingsKeys.navButtonArrangementV: navButtonArrangementV,
-      SettingsKeys.navPanelOverlayStyle: _readEnum(
-        SettingsKeys.navPanelOverlayStyle,
-        NavPanelOverlayStyle.values,
-        DefaultSettings.navPanelOverlayStyle,
-      ),
-
-      // Animations
-      SettingsKeys.gradientAnimation: gradientAnimation,
-      SettingsKeys.gradientAnimationSpeed: _readEnum(
-        SettingsKeys.gradientAnimationSpeed,
-        GradientAnimationSpeed.values,
-        DefaultSettings.gradientAnimationSpeed,
-      ),
-      SettingsKeys.tooltipAnimation: _readEnum(
-        SettingsKeys.tooltipAnimation,
-        TooltipAnimation.values,
-        DefaultSettings.tooltipAnimation,
-      ),
-
-      // Game List
-      SettingsKeys.gameListViewMode: _readEnum(
-        SettingsKeys.gameListViewMode,
-        GameListViewMode.values,
-        DefaultSettings.gameListViewMode,
-      ),
-      SettingsKeys.gameSortMode: _readEnum(
-        SettingsKeys.gameSortMode,
-        GameSortMode.values,
-        DefaultSettings.gameSortMode,
-      ),
-
-      // Toggle & Section Style
-      SettingsKeys.toggleStyle: _readEnum(
-        SettingsKeys.toggleStyle,
-        ToggleStyle.values,
-        DefaultSettings.toggleStyle,
-      ),
-      SettingsKeys.settingsCardIndicatorStyle: _readEnum(
-        SettingsKeys.settingsCardIndicatorStyle,
-        SettingsCardIndicatorStyle.values,
-        DefaultSettings.settingsCardIndicatorStyle,
-      ),
-      SettingsKeys.sectionTitleLocation: _readEnum(
-        SettingsKeys.sectionTitleLocation,
-        SectionTitleLocation.values,
-        DefaultSettings.sectionTitleLocation,
-      ),
+      for (final MapEntry(:key, value: (values, fallback))
+          in enumSettingDefaults.entries)
+        key: _readEnum(
+          key,
+          values,
+          key == SettingsKeys.navButtonArrangementH
+              ? legacyArrangementH
+              : fallback,
+        ),
       SettingsKeys.windowX: _prefs.getDouble(SettingsKeys.windowX),
       SettingsKeys.windowY: _prefs.getDouble(SettingsKeys.windowY),
     };
   }
-
-  // Keep each ordinary preference's key, type and fallback together.
-  // Fresh empty lists preserve independent defaults for each load.
-  static Map<String, Object> get _defaults => {
-    SettingsKeys.autoUpdateCheck: DefaultSettings.autoUpdateCheck,
-    SettingsKeys.updateRepo: DefaultSettings.updateRepo,
-    SettingsKeys.includePreReleases: DefaultSettings.includePreReleases,
-    SettingsKeys.skippedVersions: <String>[],
-    SettingsKeys.githubApiToken: DefaultSettings.githubApiToken,
-    SettingsKeys.activeTheme: DefaultSettings.activeTheme,
-    SettingsKeys.customThemes: <String>[],
-    SettingsKeys.settingsSectionPanelCollapsed:
-        DefaultSettings.settingsSectionPanelCollapsed,
-    SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
-    SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
-    SettingsKeys.viewedNewGameIds: const <String>[],
-    SettingsKeys.showTitleChip: DefaultSettings.showTitleChip,
-    SettingsKeys.showTitleOnNoPicture: DefaultSettings.showTitleOnNoPicture,
-    SettingsKeys.showPlatformChip: DefaultSettings.showPlatformChip,
-    SettingsKeys.showTagsChip: DefaultSettings.showTagsChip,
-    SettingsKeys.showPlatformOnHoverOnly:
-        DefaultSettings.showPlatformOnHoverOnly,
-    SettingsKeys.showTagsOnHoverOnly: DefaultSettings.showTagsOnHoverOnly,
-    SettingsKeys.showDeadlineChip: DefaultSettings.showDeadlineChip,
-    SettingsKeys.slimListView: DefaultSettings.slimListView,
-    SettingsKeys.showPlatformBadges: true,
-    SettingsKeys.showTagChips: true,
-    SettingsKeys.showRatings: DefaultSettings.showRatings,
-    SettingsKeys.useThemeToggleRadius: DefaultSettings.useThemeToggleRadius,
-    SettingsKeys.experimentalInteractionCards:
-        DefaultSettings.experimentalInteractionCards,
-    SettingsKeys.autoBackupEnabled: DefaultSettings.autoBackupEnabled,
-    SettingsKeys.autoBackupIntervalMinutes:
-        DefaultSettings.autoBackupIntervalMinutes,
-    SettingsKeys.backupMaxCount: DefaultSettings.backupMaxCount,
-    SettingsKeys.databasePath: '',
-    SettingsKeys.isEncrypted: false,
-    SettingsKeys.recentDatabasePaths: const <String>[],
-    SettingsKeys.syncEnabled: DefaultSettings.syncEnabled,
-    SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
-    SettingsKeys.syncDeviceId: DefaultSettings.syncDeviceId,
-    SettingsKeys.syncTrustedPeersJson: DefaultSettings.syncTrustedPeersJson,
-    SettingsKeys.syncRevokedPeersJson: DefaultSettings.syncRevokedPeersJson,
-    SettingsKeys.syncLastTrustedPeerId: DefaultSettings.syncLastTrustedPeerId,
-    SettingsKeys.syncLastSyncAtIso: DefaultSettings.syncLastSyncAtIso,
-    SettingsKeys.syncDbRevisionId: DefaultSettings.syncDbRevisionId,
-    SettingsKeys.syncDbTimestampMillis: DefaultSettings.syncDbTimestampMillis,
-    SettingsKeys.syncStaticPrivateKey: DefaultSettings.syncStaticPrivateKey,
-    SettingsKeys.syncStaticPublicKey: DefaultSettings.syncStaticPublicKey,
-    SettingsKeys.deadlineReminders: true,
-    SettingsKeys.updateNotifications: true,
-    SettingsKeys.encryptionEnabled: false,
-    SettingsKeys.maskKeys: true,
-    SettingsKeys.autoHideKeys: true,
-    SettingsKeys.autoLockMinutes: 0,
-    SettingsKeys.hideInRecents: false,
-    SettingsKeys.developerMode: DefaultSettings.developerMode,
-    SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
-    SettingsKeys.showFpsCounter: DefaultSettings.showFpsCounter,
-    SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
-    SettingsKeys.showSyncDeviceId: DefaultSettings.showSyncDeviceId,
-    SettingsKeys.frameRatePreference: DefaultSettings.frameRatePreference,
-    SettingsKeys.windowWidth: DefaultSettings.windowWidth,
-    SettingsKeys.windowHeight: DefaultSettings.windowHeight,
-    SettingsKeys.windowMaximized: false,
-    SettingsKeys.legacyDefaultTagsCleanupDone:
-        DefaultSettings.legacyDefaultTagsCleanupDone,
-  };
 
   Object _readPreference(String key, Object fallback) => switch (fallback) {
     bool() => _prefs.getBool(key) ?? fallback,
@@ -198,12 +58,10 @@ class SettingsStore {
     ),
   };
 
-  T _readEnum<T extends Enum>(String key, List<T> values, T fallback) {
+  Enum _readEnum(String key, List<Enum> values, Enum fallback) {
     final stored = _prefs.getString(key);
-    return values.firstWhere(
-      (value) => value.name == stored,
-      orElse: () => fallback,
-    );
+    return values.where((value) => value.name == stored).firstOrNull ??
+        fallback;
   }
 
   Future<void> save(String key, Object? value) async {

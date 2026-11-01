@@ -66,12 +66,16 @@ class SettingsHeaderAction extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.badgeCount,
   });
 
   final AppThemeData theme;
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
+
+  /// A count on the icon, such as how many versions are skipped.
+  final int? badgeCount;
 
   @override
   Widget build(BuildContext context) => AppNavigationButton(
@@ -81,6 +85,16 @@ class SettingsHeaderAction extends StatelessWidget {
     isHorizontal: true,
     onTap: onTap,
     iconData: icon,
+    iconBuilder: badgeCount == null
+        ? null
+        : (context, color, size) => Badge.count(
+            count: badgeCount!,
+            backgroundColor: theme.accent,
+            textColor: theme.accent.computeLuminance() > 0.3
+                ? Colors.black
+                : Colors.white,
+            child: Icon(icon, color: color, size: size),
+          ),
     iconSize: 20,
     tooltipMessage: tooltip,
     minWidth: 40,

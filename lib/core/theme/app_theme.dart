@@ -1225,50 +1225,28 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   }
 }
 
+/// A progress bar as tall as a slider track: an accent fill over a faint
+/// accent track, like the update dialog's download bar.
 class AppLinearProgressBar extends StatelessWidget {
   const AppLinearProgressBar({
     super.key,
     required this.theme,
     required this.value,
-    this.label,
   });
 
   final AppThemeData theme;
   final double? value;
-  final String? label;
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(theme.cornerRadius),
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        LinearProgressIndicator(
-          value: value,
-          minHeight: 26,
-          backgroundColor: theme.accent.withValues(alpha: 0.35),
-          valueColor: AlwaysStoppedAnimation(theme.accent),
-        ),
-        if (label != null)
-          IgnorePointer(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                label!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  // The centred label sits over the fill from halfway on.
-                  color: (value ?? 0) >= 0.5
-                      ? contrastColor(theme.accent)
-                      : theme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
-      ],
+    borderRadius: BorderRadius.circular(
+      math.min(theme.cornerRadius, kSliderTrackHeight / 2),
+    ),
+    child: LinearProgressIndicator(
+      value: value,
+      minHeight: kSliderTrackHeight,
+      backgroundColor: theme.accent.withValues(alpha: 0.25),
+      valueColor: AlwaysStoppedAnimation(theme.accent),
     ),
   );
 }

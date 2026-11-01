@@ -18,10 +18,12 @@ import '../../core/services/update_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/format_utils.dart';
 import '../../providers/app_providers.dart';
-import '../widgets/app_combo_box.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
+import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/segmented_bar.dart';
+import '../widgets/settings_header_actions.dart';
+import '../widgets/status_card.dart';
 import '../widgets/update_status_icons.dart';
 
 Future<void> showUpdateDialog(BuildContext context) =>
@@ -63,41 +65,43 @@ class UpdateDialog extends ConsumerWidget {
         theme: theme,
       ),
       titleActions: [
-        // A check would replace the release being downloaded or installed.
-        if (!state.isDownloading && state.downloadedFilePath == null)
-          IconButton(
-            key: const ValueKey('update-check-button'),
-            tooltip: state.isChecking
-                ? 'Checking for updates'
-                : state.hasChecked
-                ? 'Recheck Updates'
-                : 'Check for Updates',
-            onPressed: state.isChecking ? null : notifier.checkForUpdates,
-            icon: const Icon(Icons.refresh),
-          ),
-        if (skipped > 0)
-          IconButton(
-            tooltip: 'Skipped Versions',
-            onPressed: () => showAppDialog<void>(
-              context: context,
-              builder: (_) => SkippedVersionsDialog(theme: theme),
+        SettingsHeaderActions(
+          theme: theme,
+          children: [
+            // A check would replace the release being downloaded or installed.
+            if (!state.isDownloading && state.downloadedFilePath == null)
+              SettingsHeaderAction(
+                key: const ValueKey('update-check-button'),
+                theme: theme,
+                icon: Icons.refresh,
+                tooltip: state.isChecking
+                    ? 'Checking for updates'
+                    : state.hasChecked
+                    ? 'Recheck Updates'
+                    : 'Check for Updates',
+                onTap: state.isChecking ? null : notifier.checkForUpdates,
+              ),
+            if (skipped > 0)
+              SettingsHeaderAction(
+                theme: theme,
+                icon: Icons.block,
+                tooltip: 'Skipped Versions',
+                badgeCount: skipped,
+                onTap: () => showAppDialog<void>(
+                  context: context,
+                  builder: (_) => SkippedVersionsDialog(theme: theme),
+                ),
+              ),
+            SettingsHeaderAction(
+              theme: theme,
+              icon: Icons.open_in_new,
+              tooltip: 'GitHub Releases',
+              onTap: () => launchUrl(
+                Uri.parse('https://github.com/$repo/releases'),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
-            icon: Badge.count(
-              count: skipped,
-              backgroundColor: theme.accent,
-              textColor: theme.accent.computeLuminance() > 0.3
-                  ? Colors.black
-                  : Colors.white,
-              child: const Icon(Icons.block),
-            ),
-          ),
-        IconButton(
-          tooltip: 'GitHub Releases',
-          icon: const Icon(Icons.open_in_new),
-          onPressed: () => launchUrl(
-            Uri.parse('https://github.com/$repo/releases'),
-            mode: LaunchMode.externalApplication,
-          ),
+          ],
         ),
       ],
       content: Column(
@@ -213,129 +217,66 @@ class _StatusCard extends StatelessWidget {
         }.contains(stage)
         ? state.switchingToVersion ?? state.latestVersion
         : null;
-    final detail = TextStyle(
-      color: theme.textSecondary,
-      fontWeight: FontWeight.w400,
-    );
+    final detail = StatusCard.detailStyle(theme);
     final progress = state.downloadProgress.clamp(0.0, 1.0);
     // The bar's bubbles give the sizes while downloading.
     final size = stage == UpdatePreviewState.updateAvailable
         ? state.downloadSize
         : null;
 
-    return Container(
+    return StatusCard(
       key: const ValueKey('update-status-card'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 14,
-        children: [
-          Row(
-            spacing: 14,
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(theme.cornerRadius),
-                ),
-                child: Center(
-                  child: downloading || stage == UpdatePreviewState.checking
-                      ? AppCircularProgressIndicator(size: 24, color: color)
-                      : Icon(icon, color: color, size: 28),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 2,
-                  children: [
-                    Semantics(
-                      liveRegion: true,
-                      header: true,
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: theme.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+      theme: theme,
+      color: color,
+      icon: icon,
+      busy: downloading || stage == UpdatePreviewState.checking,
+      title: title,
+      subtitle: failed
+          ? SelectableText(
+              state.error!,
+              style: TextStyle(color: color, fontSize: 12),
+            )
+          : target != null
+          ? Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: 'v$target'),
+                  if (size != null) TextSpan(text: '  ·  $size', style: detail),
+                  if (state.isPrerelease)
+                    TextSpan(
+                      text: '  ·  Pre-release',
+                      style: detail.copyWith(color: theme.secondary),
                     ),
-                    if (failed)
-                      SelectableText(
-                        state.error!,
-                        style: TextStyle(color: color, fontSize: 12),
-                      )
-                    else if (target != null)
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(text: 'v$target'),
-                            if (size != null)
-                              TextSpan(text: '  ·  $size', style: detail),
-                            if (state.isPrerelease)
-                              TextSpan(
-                                text: '  ·  Pre-release',
-                                style: detail.copyWith(color: theme.secondary),
-                              ),
-                          ],
-                        ),
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      )
-                    else
-                      Text('Installed v$kAppVersion', style: detail),
-                  ],
-                ),
+                ],
               ),
-              // As large as the stats tiles' numbers.
-              if (downloading)
-                Text(
-                  '${(progress * 100).round()}%',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            )
+          : Text('Installed v$kAppVersion', style: detail),
+      figure: downloading ? '${(progress * 100).round()}%' : null,
+      children: [
+        if (downloading)
+          SegmentedBar(
+            theme: theme,
+            formatCount: formatFileSize,
+            // One fill growing over its track, like a progress bar.
+            gap: 0,
+            // Unknown sizes show an empty track.
+            segments: [
+              if (state.totalBytes > 0) ...[
+                (
+                  label: 'Downloaded',
+                  count: state.downloadedBytes,
+                  color: theme.accent,
                 ),
+                (
+                  label: 'Remaining',
+                  count: math.max(0, state.totalBytes - state.downloadedBytes),
+                  color: theme.accent.withValues(alpha: 0.25),
+                ),
+              ],
             ],
           ),
-          if (downloading)
-            SegmentedBar(
-              theme: theme,
-              formatCount: formatFileSize,
-              // One fill growing over its track, like a progress bar.
-              gap: 0,
-              // Unknown sizes show an empty track.
-              segments: [
-                if (state.totalBytes > 0) ...[
-                  (
-                    label: 'Downloaded',
-                    count: state.downloadedBytes,
-                    color: theme.accent,
-                  ),
-                  (
-                    label: 'Remaining',
-                    count: math.max(
-                      0,
-                      state.totalBytes - state.downloadedBytes,
-                    ),
-                    color: theme.accent.withValues(alpha: 0.25),
-                  ),
-                ],
-              ],
-            ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -532,30 +473,22 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
           )
         else ...[
           Row(
-            spacing: 8,
+            spacing: 5,
             children: [
               Expanded(
-                child: AppComboBox<String>(
+                child: SettingsChoiceCard<String>(
                   key: const ValueKey('changelog-version-selector'),
-                  menuMaxHeight: kDropdownMenuMaxHeight * 2,
-                  initialValue: release.tagName,
-                  decoration: const InputDecoration(labelText: 'Version'),
                   theme: theme,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium!.copyWith(color: theme.textPrimary),
-                  items: [
+                  label: 'Version',
+                  icon: Icons.history,
+                  menuMaxHeight: kDropdownMenuMaxHeight * 2,
+                  value: release.tagName,
+                  choices: [
                     for (final item in releases)
-                      DropdownMenuItem(
-                        value: item.tagName,
-                        child: Text(
-                          'v${item.version}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                      SettingsChoice(item.tagName, 'v${item.version}'),
                   ],
                   onChanged: (tag) {
-                    if (tag == null || tag == release.tagName) return;
+                    if (tag == release.tagName) return;
                     setState(() => _selectedTag = tag);
                     if (_scrollController.hasClients) {
                       _scrollController.jumpTo(0);
@@ -614,7 +547,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                 key: const ValueKey('changelog-info-scroll'),
                 controller: _scrollController,
                 primary: false,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,

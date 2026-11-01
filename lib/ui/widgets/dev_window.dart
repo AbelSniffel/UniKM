@@ -67,13 +67,15 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     final count = _fetchPreviewStates.length;
     final step = _fetchPreviewStep % count;
     final (title, progress) = _fetchPreviewStates[step];
-    final message = 'Fetching Steam data (${step + 1}/$count)';
+    const message = 'Fetching Steam data';
+    final progressLabel = '${step + 1}/$count';
     if (!_hasActiveFetchPreview) {
       _fetchPreviewHandle = NotificationManager.instance.beginTask(
         message,
         type: NotificationType.steam,
         title: title,
         progress: progress,
+        progressLabel: progressLabel,
         actionLabel: 'Cancel',
         onAction: _clearFetchPreview,
       );
@@ -82,6 +84,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         message: message,
         title: title,
         progress: progress,
+        progressLabel: progressLabel,
         actionLabel: 'Cancel',
         onAction: _clearFetchPreview,
       );

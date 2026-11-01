@@ -418,6 +418,7 @@ Future<void> performSteamBatchLookup(
     type: NotificationType.steam,
     title: 'Starting...',
     progress: 0,
+    progressLabel: '0/$total',
     actionLabel: 'Cancel',
     onAction: () {
       batchNotifier.cancelBatch();
@@ -453,9 +454,10 @@ Future<void> performSteamBatchLookup(
     }
 
     handle.update(
-      message: 'Fetching Steam data (${i + 1}/$total)',
+      message: 'Fetching Steam data',
       title: gameTitle,
       progress: (i / total).clamp(0.0, 1.0),
+      progressLabel: '${i + 1}/$total',
     );
     unawaited(
       DeadlineNotificationService.instance.showFetchProgressNotification(

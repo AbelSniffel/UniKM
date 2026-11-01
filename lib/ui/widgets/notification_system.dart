@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
+import 'status_card.dart';
 
 /// Notification types
 enum NotificationType { success, error, warning, info, update, download, steam }
@@ -36,6 +37,7 @@ class AppNotification {
     required this.type,
     this.title,
     this.progress,
+    this.progressLabel,
     this.onTap,
     this.actionLabel,
     this.onAction,
@@ -52,6 +54,10 @@ class AppNotification {
   final NotificationType type;
   final String? title;
   final double? progress;
+
+  /// The large figure beside [progress], such as a count while fetching;
+  /// without it the toast shows the percentage. Cleared with the progress.
+  final String? progressLabel;
   final VoidCallback? onTap;
   final String? actionLabel;
   final VoidCallback? onAction;
@@ -73,6 +79,7 @@ class AppNotification {
     NotificationType? type,
     String? title,
     double? progress,
+    String? progressLabel,
     VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onAction,
@@ -93,6 +100,7 @@ class AppNotification {
     type: type ?? this.type,
     title: title ?? this.title,
     progress: clearProgress ? null : (progress ?? this.progress),
+    progressLabel: clearProgress ? null : (progressLabel ?? this.progressLabel),
     onTap: clearOnTap ? null : (onTap ?? this.onTap),
     actionLabel: clearAction ? null : (actionLabel ?? this.actionLabel),
     onAction: clearAction ? null : (onAction ?? this.onAction),
@@ -123,6 +131,7 @@ class NotificationHandle {
     NotificationType? type,
     String? title,
     double? progress,
+    String? progressLabel,
     String? actionLabel,
     VoidCallback? onAction,
     NotificationActionStyle? actionStyle,
@@ -133,13 +142,14 @@ class NotificationHandle {
     bool clearSecondaryAction = false,
     Duration? autoDismissAfter,
     bool? dismissible,
-  }) {
-    _manager.update(
-      id,
+  }) => _manager._update(
+    id,
+    (notification) => notification.copyWith(
       message: message,
       type: type,
       title: title,
       progress: progress,
+      progressLabel: progressLabel,
       actionLabel: actionLabel,
       onAction: onAction,
       actionStyle: actionStyle,
@@ -148,10 +158,10 @@ class NotificationHandle {
       clearProgress: clearProgress,
       clearAction: clearAction,
       clearSecondaryAction: clearSecondaryAction,
-      autoDismissAfter: autoDismissAfter,
       dismissible: dismissible,
-    );
-  }
+    ),
+    autoDismissAfter: autoDismissAfter,
+  );
 
   void setProgress(double progress) => update(progress: progress);
 
@@ -162,8 +172,7 @@ class NotificationHandle {
       _complete(message, NotificationType.error, title: title);
 
   void _complete(String message, NotificationType type, {String? title}) {
-    _manager.update(
-      id,
+    update(
       message: message,
       type: type,
       title: title,
@@ -226,6 +235,7 @@ class NotificationManager {
     NotificationType type = NotificationType.info,
     String? title,
     double? progress,
+    String? progressLabel,
     VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onAction,
@@ -254,6 +264,7 @@ class NotificationManager {
       type: type,
       title: title,
       progress: progress,
+      progressLabel: progressLabel,
       onTap: onTap,
       actionLabel: actionLabel,
       onAction: onAction,
@@ -287,6 +298,7 @@ class NotificationManager {
     NotificationType type = NotificationType.info,
     String? title,
     double? progress,
+    String? progressLabel,
     String? actionLabel,
     VoidCallback? onAction,
     bool dismissible = true,
@@ -295,6 +307,7 @@ class NotificationManager {
     type: type,
     title: title,
     progress: progress,
+    progressLabel: progressLabel,
     actionLabel: actionLabel,
     onAction: onAction,
     persistent: true,
@@ -302,51 +315,29 @@ class NotificationManager {
     dismissible: dismissible,
   );
 
-  void update(
-    String id, {
-    String? message,
-    NotificationType? type,
-    String? title,
-    double? progress,
-    String? actionLabel,
-    VoidCallback? onAction,
-    NotificationActionStyle? actionStyle,
-    String? secondaryActionLabel,
-    VoidCallback? onSecondaryAction,
-    bool clearProgress = false,
-    bool clearAction = false,
-    bool clearSecondaryAction = false,
+  /// Applies [change] to a shown notification. A new [autoDismissAfter]
+  /// restarts its countdown once it no longer shows progress.
+  void _update(
+    String id,
+    AppNotification Function(AppNotification) change, {
     Duration? autoDismissAfter,
-    bool? dismissible,
   }) {
     final index = _notifications.indexWhere((n) => n.id == id);
     if (index == -1) return;
 
+    final changed = change(_notifications[index]);
     final reschedules =
         autoDismissAfter != null &&
         autoDismissAfter != Duration.zero &&
-        (progress == null || clearProgress) &&
-        (_notifications[index].progress == null || clearProgress);
-    final updated = _notifications[index].copyWith(
-      message: message,
-      type: type,
-      title: title,
-      progress: progress,
-      actionLabel: actionLabel,
-      onAction: onAction,
-      actionStyle: actionStyle,
-      secondaryActionLabel: secondaryActionLabel,
-      onSecondaryAction: onSecondaryAction,
-      clearProgress: clearProgress,
-      clearAction: clearAction,
-      clearSecondaryAction: clearSecondaryAction,
-      dismissible: dismissible,
-      autoDismiss: reschedules
-          ? (start: DateTime.now(), length: autoDismissAfter)
-          : null,
-      clearAutoDismiss: autoDismissAfter != null && !reschedules,
-    );
-    _notifications[index] = updated;
+        changed.progress == null;
+    _notifications[index] = autoDismissAfter == null
+        ? changed
+        : changed.copyWith(
+            autoDismiss: reschedules
+                ? (start: DateTime.now(), length: autoDismissAfter)
+                : null,
+            clearAutoDismiss: !reschedules,
+          );
     _controller.add(_notifications.toList());
 
     // Reschedule auto-dismiss if requested and it's no longer a task.
@@ -670,115 +661,62 @@ class _NotificationToastState extends State<NotificationToast>
         : child;
   }
 
-  /// A neutral card: the type's icon in its colour beside a small
-  /// uppercase label (the title, or the type) and the message, with any
-  /// actions or progress under the text and a countdown line along the
-  /// bottom while it is set to close by itself.
+  /// The update dialog's status card, floating: the type's icon (a spinner
+  /// while it shows progress) beside the title, or the type, over the
+  /// message, with the progress figure at the end. Progress and actions run
+  /// across the card under them, and a countdown line runs along the bottom
+  /// while it is set to close by itself.
   Widget _buildSurface(double maxWidth) {
     final theme = widget.theme;
     final notification = widget.notification;
     final color = _getTypeColor();
-    return Container(
+    final progress = notification.progress?.clamp(0.0, 1.0);
+    return ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: maxWidth,
         minWidth: maxWidth >= 280 ? 280 : 0,
       ),
-      decoration: BoxDecoration(
-        color: theme.surface,
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        boxShadow: [
+      child: StatusCard(
+        theme: theme,
+        color: color,
+        icon: _getTypeIcon(),
+        busy: progress != null,
+        // Filled to the progress, so a long task does not spin for minutes.
+        busyValue: progress,
+        title: notification.title ?? _typeLabel,
+        subtitle: Text(
+          notification.message,
+          style: StatusCard.detailStyle(theme),
+        ),
+        figure: progress == null
+            ? null
+            : notification.progressLabel ?? '${(progress * 100).round()}%',
+        backdrop: theme.surface,
+        shadows: [
           BoxShadow(
             color: Colors.black.withValues(alpha: theme.isDark ? 0.35 : 0.12),
             blurRadius: 18,
             offset: const Offset(0, 6),
           ),
         ],
-      ),
-      // Drawn over the content, so a border does not inset the countdown
-      // line from the bottom edge.
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        border: Border.all(color: theme.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 8, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  spacing: 12,
-                  children: [
-                    Icon(_getTypeIcon(), color: color, size: 28),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        spacing: 2,
-                        children: [
-                          Text(
-                            (notification.title ?? _typeLabel).toUpperCase(),
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          Text(
-                            notification.message,
-                            style: TextStyle(color: theme.textPrimary),
-                          ),
-                        ],
+        bottomEdge: notification.autoDismiss == null
+            ? null
+            : RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _countdown,
+                  builder: (context, _) => Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: FractionallySizedBox(
+                      widthFactor: 1 - _countdown.value,
+                      child: ColoredBox(
+                        color: color,
+                        child: const SizedBox(height: 3),
                       ),
-                    ),
-                    if (notification.dismissible)
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          size: 18,
-                          color: theme.textHint,
-                        ),
-                        onPressed: widget.onDismiss,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 28,
-                          minHeight: 28,
-                        ),
-                      ),
-                  ],
-                ),
-                // Lined up under the text, past the icon and its gap.
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 40),
-                  child: _buildFooter(),
-                ),
-                _buildWideAction(),
-              ],
-            ),
-          ),
-          if (notification.autoDismiss != null)
-            RepaintBoundary(
-              child: AnimatedBuilder(
-                animation: _countdown,
-                builder: (context, _) => Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: FractionallySizedBox(
-                    widthFactor: 1 - _countdown.value,
-                    child: ColoredBox(
-                      color: color,
-                      child: const SizedBox(height: 3),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+        children: _buildActions(progress),
       ),
     );
   }
@@ -793,50 +731,14 @@ class _NotificationToastState extends State<NotificationToast>
     NotificationType.steam => 'Steam',
   };
 
-  /// Text-style actions, which sit under the text or beside any progress.
-  List<Widget> _textActions() {
-    final notification = widget.notification;
-    return [
-      for (final (label, onPressed) in [
-        if (notification.actionStyle == NotificationActionStyle.text)
-          (notification.actionLabel, notification.onAction),
-        if (notification.progress == null)
-          (notification.secondaryActionLabel, notification.onSecondaryAction),
-      ])
-        if (label != null && onPressed != null)
-          TextButton(onPressed: onPressed, child: Text(label)),
-    ];
-  }
-
-  /// Text actions under the text when there is no progress row to hold them.
-  Widget _buildFooter() {
-    if (widget.notification.progress != null) return const SizedBox.shrink();
-    final actions = _textActions();
-    if (actions.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Wrap(spacing: 6, children: actions),
-      ),
-    );
-  }
-
-  Widget _buildProgressBar(double progress) => AppLinearProgressBar(
-    theme: widget.theme,
-    value: progress,
-    label: '${(progress.clamp(0.0, 1.0) * 100).round()}%',
-  );
-
-  /// Across the toast under the text: any progress filling the row with the
-  /// actions at its end, or an outlined or elevated main action alone at
-  /// full width.
-  Widget _buildWideAction() {
+  /// Across the card: any progress filling a row with the actions at its
+  /// end; otherwise text actions at the end and an outlined or elevated main
+  /// action at full width.
+  List<Widget> _buildActions(double? progress) {
     final notification = widget.notification;
     final text = notification.actionStyle == NotificationActionStyle.text;
     final label = notification.actionLabel;
     final onPressed = notification.onAction;
-    final progress = notification.progress;
     final button = text || label == null || onPressed == null
         ? null
         : switch (notification.actionStyle) {
@@ -846,22 +748,37 @@ class _NotificationToastState extends State<NotificationToast>
             ),
             _ => ElevatedButton(onPressed: onPressed, child: Text(label)),
           };
-    if (progress == null && button == null) return const SizedBox.shrink();
-    return Padding(
-      // Evens out the card's narrower end padding; text buttons bring their
-      // own.
-      padding: EdgeInsetsDirectional.only(top: 10, end: text ? 0 : 6),
-      child: progress == null
-          ? button
-          : Row(
-              spacing: kElementHSpacing,
-              children: [
-                Expanded(child: _buildProgressBar(progress)),
-                if (text) ..._textActions(),
-                ?button,
-              ],
+    final textActions = [
+      for (final (label, onPressed) in [
+        if (text) (label, onPressed),
+        if (progress == null)
+          (notification.secondaryActionLabel, notification.onSecondaryAction),
+      ])
+        if (label != null && onPressed != null)
+          TextButton(onPressed: onPressed, child: Text(label)),
+    ];
+    if (progress != null) {
+      return [
+        Row(
+          spacing: kElementHSpacing,
+          children: [
+            Expanded(
+              child: AppLinearProgressBar(theme: widget.theme, value: progress),
             ),
-    );
+            ...textActions,
+            ?button,
+          ],
+        ),
+      ];
+    }
+    return [
+      if (textActions.isNotEmpty)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: Wrap(spacing: 6, children: textActions),
+        ),
+      ?button,
+    ];
   }
 
   IconData _getTypeIcon() => switch (widget.notification.type) {

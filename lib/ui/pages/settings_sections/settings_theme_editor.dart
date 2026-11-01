@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import '../../widgets/app_combo_box.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
@@ -18,6 +17,7 @@ import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/theme_icon_menu.dart';
 import '../../widgets/tinted_tiles.dart';
+import 'settings_control_cards.dart';
 import '../../../core/constants/app_constants.dart';
 
 // ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                   _panel(
                     previewTheme,
                     Column(
-                      spacing: 4,
+                      spacing: 8,
                       children: [
                         _buildCornerRadiusSlider(previewTheme),
                         _buildOverlayStylePicker(previewTheme),
@@ -755,28 +755,21 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Style
   // ---------------------------------------------------------------------------
 
-  Widget _buildOverlayStylePicker(AppThemeData theme) => _labeledRow(
-    theme,
-    'Nav Overlay',
-    AppComboBox<NavPanelOverlayStyle>(
-      initialValue: _navPanelOverlayStyle,
-      theme: theme,
-      style: TextStyle(color: theme.textPrimary, fontSize: 13),
-      decoration: const InputDecoration(
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      items: [
-        for (final style in NavPanelOverlayStyle.values)
-          DropdownMenuItem(value: style, child: Text(style.displayName)),
-      ],
-      onChanged: (style) {
-        if (style == null) return;
-        setState(() => _navPanelOverlayStyle = style);
-        _updatePreview();
-      },
-    ),
-  );
+  Widget _buildOverlayStylePicker(AppThemeData theme) =>
+      SettingsChoiceCard<NavPanelOverlayStyle>(
+        theme: theme,
+        label: 'Nav Overlay',
+        icon: Icons.texture,
+        value: _navPanelOverlayStyle,
+        choices: [
+          for (final style in NavPanelOverlayStyle.values)
+            SettingsChoice(style, style.displayName),
+        ],
+        onChanged: (style) {
+          setState(() => _navPanelOverlayStyle = style);
+          _updatePreview();
+        },
+      );
 
   Widget _buildCornerRadiusSlider(AppThemeData theme) {
     final roundedRadius = _cornerRadius.roundToDouble();

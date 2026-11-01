@@ -201,6 +201,7 @@ class SettingsChoiceCard<T> extends StatefulWidget {
     required this.onChanged,
     this.description,
     this.icon,
+    this.menuMaxHeight = kDropdownMenuMaxHeight,
   });
 
   final AppThemeData theme;
@@ -213,6 +214,9 @@ class SettingsChoiceCard<T> extends StatefulWidget {
   final T value;
   final List<SettingsChoice<T>> choices;
   final ValueChanged<T>? onChanged;
+
+  /// The menu scrolls past this height, for long lists of choices.
+  final double menuMaxHeight;
 
   @override
   State<SettingsChoiceCard<T>> createState() => _SettingsChoiceCardState<T>();
@@ -267,7 +271,7 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
       controller: _menu,
       // The menu matches the card's width.
       width: _menuWidth,
-      maxHeight: kDropdownMenuMaxHeight,
+      maxHeight: widget.menuMaxHeight,
       menuChildren: [
         for (final choice in widget.choices)
           appMenuItem(
