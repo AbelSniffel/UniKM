@@ -50,7 +50,8 @@ class ApplySteamMetadata {
 
   final AppDatabase database;
   final bool Function() isCurrent;
-  final Future<String?> Function(String appId) downloadImage;
+  /// Saves [appId]'s artwork as the cover for games titled [title].
+  final Future<String?> Function(String appId, String title) downloadImage;
 
   void _checkSession() {
     if (!isCurrent()) {
@@ -67,7 +68,8 @@ class ApplySteamMetadata {
     String? imagePath;
     if (options.applyImage) {
       try {
-        imagePath = await downloadImage(result.appId);
+        final title = (await database.getGameById(gameId))?.title ?? '';
+        imagePath = await downloadImage(result.appId, title);
       } catch (_) {
         // Keep the current cover if artwork cannot be downloaded.
       }

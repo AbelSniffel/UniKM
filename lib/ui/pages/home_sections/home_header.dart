@@ -855,45 +855,18 @@ class _IconMenuButtonState<T> extends State<_IconMenuButton<T>> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    // Large text never pushes the menu or its items past a narrow screen.
-    final maxSize = Size(
-      math.max(0, MediaQuery.sizeOf(context).width - 16),
-      double.infinity,
-    );
-    return MenuAnchor(
+    return AppMenuAnchor(
+      theme: theme,
       controller: _controller,
-      animated: !MediaQuery.disableAnimationsOf(context),
       childFocusNode: _buttonFocus,
-      consumeOutsideTap: true,
-      useRootOverlay: true,
-      reservedPadding: const EdgeInsets.all(8),
-      alignmentOffset: const Offset(0, 4),
-      style: appMenuStyle(
-        theme,
-        alignment: Alignment.bottomLeft,
-      ).copyWith(maximumSize: WidgetStatePropertyAll(maxSize)),
       menuChildren: [
         for (final entry in widget.entries)
-          MenuItemButton(
-            style: MenuItemButton.styleFrom(maximumSize: maxSize),
-            leadingIcon: IconTheme.merge(
-              data: IconThemeData(color: theme.textPrimary),
-              child: entry.icon,
-            ),
-            trailingIcon: entry.value == widget.selected
-                ? Icon(Icons.check, size: 18, color: theme.accent)
-                : const SizedBox(width: 18),
+          appMenuItem(
+            theme,
+            selected: entry.value == widget.selected,
+            leading: entry.icon,
             onPressed: () => widget.onSelected(entry.value),
-            child: Text(
-              entry.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: entry.value == widget.selected
-                    ? theme.accent
-                    : theme.textPrimary,
-              ),
-            ),
+            child: Text(entry.label),
           ),
       ],
       builder: (context, controller, _) => Focus(

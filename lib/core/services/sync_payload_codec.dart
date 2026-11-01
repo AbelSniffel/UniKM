@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 
 import '../database/database.dart';
 import '../models/device_sync_models.dart';
+import 'cover_images.dart';
 import 'sync_entry_fingerprint.dart';
 import 'sync_frames.dart';
 import 'steam_service.dart';
@@ -27,8 +28,8 @@ class SyncPayloadCodec {
   final AppDatabase? Function() getDatabase;
   final Future<Map<String, dynamic>> Function() exportSteamCache;
 
-  /// Folder holding the `sync` and `steam` image folders. Defaults to the
-  /// `images` folder beside the default database.
+  /// Folder holding the cover images. Defaults to the `images` folder beside
+  /// the default database.
   final Future<Directory> Function()? imagesRoot;
 
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
@@ -111,24 +112,23 @@ class SyncPayloadCodec {
           if (i >= remote.length || local[i] != remote[i]) i,
       };
 
-  /// `sha256:<hex>` digests of the covers stored in the managed sync image
-  /// folder. Those files are content-addressed, so a peer can skip sending
-  /// any cover listed here.
+  /// `sha256:<hex>` digests of the covers stored in the images folder, so a
+  /// peer can skip sending any cover listed here.
   Future<List<String>> getLocalCoverDigests() async =>
       (await _localCoverFiles()).keys.toList();
 
+  /// Digests are cached per file size and modification time, so only new or
+  /// changed covers are read.
   Future<Map<String, String>> _localCoverFiles() async {
-    final dir = await _resolveManagedImagesDirectory();
+    final dir = await _imagesDirectory();
     final files = <String, String>{};
     await for (final entity in dir.list(followLinks: false)) {
       if (entity is! File) continue;
-      final name = p.basenameWithoutExtension(entity.path);
-      if (_sha256Hex.hasMatch(name)) files['sha256:$name'] = entity.path;
+      final digest = SyncEntryFingerprint.coverIdentity(entity.path);
+      if (digest.isNotEmpty) files[digest] = entity.path;
     }
     return files;
   }
-
-  static final RegExp _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
 
   /// Long record loops pause this often so the UI can draw frames; awaiting
   /// only completed futures never returns control to the event loop.
@@ -581,13 +581,13 @@ class SyncPayloadCodec {
     // Listed only when a record needs a cover, so cover-free payloads never
     // touch the image folder.
     Map<String, String>? localCovers;
-    Future<String?> coverForDigest(String digest) async {
+    Future<String?> coverForDigest(String digest, String title) async {
       final storedCovers = localCovers ??= await _localCoverFiles();
       final stored = storedCovers[digest];
       if (stored != null) return stored;
       final cover = covers[digest];
       if (cover == null) return null;
-      final path = await _persistIncomingCoverImage(cover);
+      final path = await _persistIncomingCoverImage(cover, title);
       if (path != null) storedCovers[digest] = path;
       return path;
     }
@@ -844,11 +844,13 @@ class SyncPayloadCodec {
                 : nextLocalId;
             if (localId >= nextLocalId) nextLocalId = localId + 1;
           }
+          final title = data['title'] as String? ?? '';
           final coverDigest = data['coverDigest'] as String? ?? '';
           final persistedCover = coverDigest.startsWith('sha256:')
-              ? await coverForDigest(coverDigest)
+              ? await coverForDigest(coverDigest, title)
               : null;
           final cover = await _resolveTranslatedCoverImagePath(
+            title: title,
             hasCoverImage:
                 data['hasCoverImage'] as bool? ??
                 (data['coverImage'] as String? ?? '').isNotEmpty,
@@ -858,7 +860,7 @@ class SyncPayloadCodec {
           );
           final companion = GamesCompanion(
             id: Value(localId),
-            title: Value(data['title'] as String? ?? ''),
+            title: Value(title),
             gameKey: Value(key),
             platform: Value(data['platform'] as String? ?? 'Steam'),
             dateAdded: Value(dateAdded),
@@ -947,24 +949,28 @@ class SyncPayloadCodec {
   // Cover image serialisation helpers
   // -------------------------------------------------------------------------
 
-  /// Stores a received cover under its content address. Bytes that do not
-  /// match the digest they were sent under are discarded.
-  Future<String?> _persistIncomingCoverImage(SyncCover cover) async {
+  /// Stores a received cover under [title]'s name. Bytes that do not match
+  /// the digest they were sent under are discarded.
+  Future<String?> _persistIncomingCoverImage(
+    SyncCover cover,
+    String title,
+  ) async {
     final bytes = cover.bytes;
     if (bytes.isEmpty ||
         SyncEntryFingerprint.coverDigest(bytes) != cover.digest) {
       return null;
     }
-    final imagesDir = await _resolveManagedImagesDirectory();
-    final ext = p.extension(p.basename(cover.fileName.trim()));
-    final safeName =
-        '${SyncEntryFingerprint.hashBytes(bytes)}${ext.isEmpty ? '.img' : ext}';
-    final target = File(p.join(imagesDir.path, safeName));
-    if (!await target.exists()) await target.writeAsBytes(bytes, flush: true);
-    return target.path;
+    final stored = await CoverImages.store(
+      await _imagesDirectory(),
+      title,
+      p.extension(p.basename(cover.fileName.trim())),
+      bytes,
+    );
+    return stored.file.path;
   }
 
   Future<String> _resolveTranslatedCoverImagePath({
+    required String title,
     required bool hasCoverImage,
     required String? syncedCoverImagePath,
     required String incomingLegacyCoverPath,
@@ -975,21 +981,26 @@ class SyncPayloadCodec {
     if (synced.isNotEmpty) return synced;
     final fromIncoming = await _translateCoverImagePathForCurrentDevice(
       incomingLegacyCoverPath,
+      title,
     );
     if (fromIncoming.isNotEmpty) return fromIncoming;
-    return _translateCoverImagePathForCurrentDevice(existingCoverImagePath);
+    return _translateCoverImagePathForCurrentDevice(
+      existingCoverImagePath,
+      title,
+    );
   }
 
   /// Returns '' when the cover cannot be found on this device.
   Future<String> _translateCoverImagePathForCurrentDevice(
     String rawPath,
+    String title,
   ) async {
     final raw = rawPath.trim();
     if (raw.isEmpty) return '';
     if (SyncEntryFingerprint.isAddressedCover(raw)) return raw;
     final sourceFile = _fileFromRawPath(raw);
     if (sourceFile != null && await sourceFile.exists()) {
-      return _copyCoverImageToManagedPath(sourceFile);
+      return _copyCoverImageToManagedPath(sourceFile, title);
     }
     return (await _findManagedImageByName(raw))?.path ?? '';
   }
@@ -1019,66 +1030,48 @@ class SyncPayloadCodec {
         : p.basename(sourcePath);
     if (fileName.trim().isEmpty) return null;
 
-    for (final folder in const ['sync', 'steam']) {
-      final file = File(
-        p.join((await _imagesDirectory(folder)).path, fileName),
-      );
-      if (await file.exists()) return file;
-    }
-    return null;
+    final file = File(p.join((await _imagesDirectory()).path, fileName));
+    return await file.exists() ? file : null;
   }
 
-  Future<String> _copyCoverImageToManagedPath(File sourceFile) async {
-    final sourceCanonical = p.normalize(sourceFile.absolute.path);
-    final syncDir = await _resolveManagedImagesDirectory();
-    final steamDir = await _resolveSteamImagesDirectory();
-
-    if (sourceCanonical.startsWith(p.normalize(syncDir.path)) ||
-        sourceCanonical.startsWith(p.normalize(steamDir.path))) {
+  Future<String> _copyCoverImageToManagedPath(
+    File sourceFile,
+    String title,
+  ) async {
+    final imagesDir = await _imagesDirectory();
+    if (p.isWithin(imagesDir.path, sourceFile.absolute.path)) {
       return sourceFile.path;
     }
-
-    final ext = p.extension(sourceFile.path);
-    final digest = SyncEntryFingerprint.hashBytes(
+    final stored = await CoverImages.store(
+      imagesDir,
+      title,
+      p.extension(sourceFile.path),
       await sourceFile.readAsBytes(),
     );
-    final fileName = '$digest${ext.isEmpty ? '.img' : ext}';
-
-    final target = File(p.join(syncDir.path, fileName));
-    if (!await target.exists()) await sourceFile.copy(target.path);
-    return target.path;
+    return stored.file.path;
   }
 
   // Resolved once: the default lookup goes through a platform channel and
   // codecs are created per sync, so it is shared. An injected root is cached
   // per codec instead, keeping separate devices in one process apart.
-  static final Map<String, Future<Directory>> _defaultImageDirectories = {};
-  final Map<String, Future<Directory>> _imageDirectories = {};
+  static Future<Directory>? _defaultImagesDirectory;
+  Future<Directory>? _injectedImagesDirectory;
 
-  Future<Directory> _resolveManagedImagesDirectory() =>
-      _imagesDirectory('sync');
-
-  Future<Directory> _resolveSteamImagesDirectory() => _imagesDirectory('steam');
-
-  Future<Directory> _imagesDirectory(String name) {
-    final cache = imagesRoot == null
-        ? _defaultImageDirectories
-        : _imageDirectories;
-    return cache[name] ??= () async {
-      try {
-        final root =
-            await imagesRoot?.call() ??
-            Directory(
-              p.join(p.dirname(await AppDatabase.getDatabasePath()), 'images'),
-            );
-        final imagesDir = Directory(p.join(root.path, name));
-        if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
-        return imagesDir;
-      } catch (_) {
+  Future<Directory> _imagesDirectory() {
+    final root = imagesRoot;
+    if (root == null) {
+      return _defaultImagesDirectory ??= CoverImages.directory().catchError((
+        Object error,
+      ) {
         // Retry on the next call instead of caching the failure.
-        cache.remove(name);
-        rethrow;
-      }
+        _defaultImagesDirectory = null;
+        throw error;
+      });
+    }
+    return _injectedImagesDirectory ??= () async {
+      final dir = await root();
+      if (!await dir.exists()) await dir.create(recursive: true);
+      return dir;
     }();
   }
 }

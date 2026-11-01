@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
@@ -48,17 +49,11 @@ class AdvancedSection extends ConsumerWidget {
         'Use compact interactive cards instead of full-width settings rows',
   );
 
-  static const SettingsSearchGroup displaySearchGroup = SettingsSearchGroup(
-    title: 'Display',
-    settings: [frameRateSpec],
-    info: 'Auto matches your display. Higher rates need display support.',
-  );
-
   static const SettingsSearchGroup systemSearchGroup = SettingsSearchGroup(
     title: 'System',
-    settings: [devWindowSpec, resetSettingsSpec],
-    extraTexts: ['FPS', 'defaults'],
-    info: 'Ctrl+Alt+D opens the Developer Window. Reset keeps your games.',
+    settings: [frameRateSpec, devWindowSpec, resetSettingsSpec],
+    extraTexts: ['Display', 'FPS', 'defaults'],
+    info: 'Ctrl+Alt+D opens the Developer Window.',
   );
   static const SettingsSearchGroup experimentalSearchGroup =
       SettingsSearchGroup(
@@ -112,11 +107,11 @@ class AdvancedSection extends ConsumerWidget {
           ),
         buildSearchableSectionEntry(
           theme: theme,
-          group: displaySearchGroup,
-          titleIcon: Icons.speed,
+          group: systemSearchGroup,
+          titleIcon: Icons.settings,
           searchQuery: searchQuery,
           matchesSearch: matchesSearch,
-          childBuilder: () => SettingsControlWrap(
+          childBuilder: () => Column(
             children: [
               SettingsChoiceCard<String>(
                 theme: theme,
@@ -131,58 +126,46 @@ class AdvancedSection extends ConsumerWidget {
                   SettingsKeys.frameRatePreference,
                 ),
               ),
-            ],
-          ),
-        ),
-        buildSearchableSectionEntry(
-          theme: theme,
-          group: systemSearchGroup,
-          titleIcon: Icons.settings,
-          searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
-          childBuilder: () => Column(
-            children: [
-              SpecSettingRow(
-                theme: theme,
-                spec: devWindowSpec,
-                child: OutlinedButton(
-                  onPressed: () => DevWindowOverlay.toggle(context),
-                  child: const Text('Open'),
-                ),
-              ),
-
-              SpecSettingRow(
-                theme: theme,
-                spec: resetSettingsSpec,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: theme.secondary,
+              const SizedBox(height: 8),
+              Row(
+                spacing: kElementHSpacing,
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => DevWindowOverlay.toggle(context),
+                      child: const Text('Open Developer Window'),
+                    ),
                   ),
-                  onPressed: () async {
-                    final confirmed = await showConfirmDialog(
-                      context: context,
-                      theme: theme,
-                      title: 'Reset Settings?',
-                      titleIcon: Icons.warning_amber_rounded,
-                      message:
-                          'This will reset all settings, library filters, and sorting to their default values. '
-                          'Your database choice, games, and data will be kept.',
-                      confirmLabel: 'Reset',
-                      destructive: true,
-                    );
-                    if (!confirmed || !context.mounted) return;
-                    final gamesNotifier = ref.read(gamesProvider.notifier);
-                    await settingsNotifier.resetToDefaults();
-                    gamesNotifier.clearAllFilters();
-                    await gamesNotifier.setSortMode(
-                      DefaultSettings.gameSortMode,
-                    );
-                    NotificationManager.instance.success(
-                      'Settings reset to defaults',
-                    );
-                  },
-                  child: const Text('Reset'),
-                ),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: themedFilledButtonStyle(theme, destructive: true),
+                      onPressed: () async {
+                        final confirmed = await showConfirmDialog(
+                          context: context,
+                          theme: theme,
+                          title: 'Reset Settings?',
+                          titleIcon: Icons.warning_amber_rounded,
+                          message:
+                              'This will reset all settings, library filters, and sorting to their default values. '
+                              'Your database choice, games, and data will be kept.',
+                          confirmLabel: 'Reset',
+                          destructive: true,
+                        );
+                        if (!confirmed || !context.mounted) return;
+                        final gamesNotifier = ref.read(gamesProvider.notifier);
+                        await settingsNotifier.resetToDefaults();
+                        gamesNotifier.clearAllFilters();
+                        await gamesNotifier.setSortMode(
+                          DefaultSettings.gameSortMode,
+                        );
+                        NotificationManager.instance.success(
+                          'Settings reset to defaults',
+                        );
+                      },
+                      child: const Text('Reset Settings'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

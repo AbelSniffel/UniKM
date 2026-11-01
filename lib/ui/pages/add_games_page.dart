@@ -485,6 +485,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
       final imagePath = options.applyImage
           ? await steamService.downloadImage(
               result.appId,
+              title: title,
               imageUrl: result.imageUrl,
             )
           : null;
@@ -896,7 +897,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
             try {
               imagePath = await steamService.downloadImage(
                 steamResult.appId,
-                useLibraryImage: false,
+                title: game.title,
                 imageUrl: steamResult.imageUrl,
               );
             } catch (_) {}

@@ -170,8 +170,11 @@ Future<String?> applySteamResultToGame(
           container.read(databaseNotifierProvider).revision ==
               session.revision &&
           !(isCancelled?.call() ?? false),
-      downloadImage: (appId) =>
-          steamService.downloadImage(appId, imageUrl: result.imageUrl),
+      downloadImage: (appId, title) => steamService.downloadImage(
+        appId,
+        title: title,
+        imageUrl: result.imageUrl,
+      ),
     ).apply(game.id, result, options);
     await persistEncryptedDbIfNeeded(container, database: db);
     return null;

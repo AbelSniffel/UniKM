@@ -708,7 +708,7 @@ class _GameCardState extends ConsumerState<GameCard>
           child: _overImage(Center(child: iconWidget), imageWidth),
         );
       },
-      child: const FittedBox(child: Icon(Icons.check, color: Colors.white)),
+      child: FittedBox(child: Icon(Icons.check, color: theme.onAccentText)),
     ),
   );
 

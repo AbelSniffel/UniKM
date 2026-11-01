@@ -66,7 +66,6 @@ class CardDisplaySection extends ConsumerWidget {
     title: 'List View',
     settings: [listViewModeSpec],
     extraTexts: ['List view mode', 'regular', 'slim', 'list', 'dense'],
-    info: 'Slim fits more games in list view.',
   );
 
   static const SettingsSearchGroup chipsSearchGroup = SettingsSearchGroup(
@@ -130,24 +129,19 @@ class CardDisplaySection extends ConsumerWidget {
           titleIcon: Icons.view_list_outlined,
           searchQuery: searchQuery,
           matchesSearch: matchesSearch,
-          childBuilder: () => SettingsControlWrap(
-            children: [
-              SettingsChoiceCard<ListViewDensityMode>(
-                theme: theme,
-                label: listViewModeSpec.label,
-                icon: listViewModeSpec.icon,
-                value: resolveListViewDensityMode(
-                  slimListView: cardSettings.slimListView,
-                ),
-                choices: const [
-                  SettingsChoice(ListViewDensityMode.regular, 'Regular'),
-                  SettingsChoice(ListViewDensityMode.slim, 'Slim'),
-                ],
-                onChanged: (value) => settingsNotifier.setMany(
-                  listViewDensityModeSettings(value),
-                ),
-              ),
+          childBuilder: () => SettingsChoiceCard<ListViewDensityMode>(
+            theme: theme,
+            label: listViewModeSpec.label,
+            icon: listViewModeSpec.icon,
+            value: resolveListViewDensityMode(
+              slimListView: cardSettings.slimListView,
+            ),
+            choices: const [
+              SettingsChoice(ListViewDensityMode.regular, 'Regular'),
+              SettingsChoice(ListViewDensityMode.slim, 'Slim'),
             ],
+            onChanged: (value) =>
+                settingsNotifier.setMany(listViewDensityModeSettings(value)),
           ),
         ),
         buildSearchableSectionEntry(

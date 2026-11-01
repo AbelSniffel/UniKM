@@ -6,7 +6,6 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:path/path.dart' as p;
-import 'package:pointycastle/export.dart';
 
 import 'encryption_manager.dart';
 
@@ -103,19 +102,21 @@ Future<String> decryptSteamKm1JsonExport(File file, String password) async {
     throw const FormatException('SteamKM1 encrypted export is malformed');
   }
 
-  final keyBytes = await _deriveKeyBytes(
+  final key = await _deriveSecretKey(
     password: password,
     salt: salt,
     iterations: _steamKm1Iterations,
   );
-
-  final cipher = CBCBlockCipher(AESEngine())
-    ..init(false, ParametersWithIV<KeyParameter>(KeyParameter(keyBytes), iv));
-
-  final output = Uint8List(ciphertext.length);
-  for (var offset = 0; offset < ciphertext.length; offset += cipher.blockSize) {
-    cipher.processBlock(ciphertext, offset, output, offset);
-  }
+  // Padding is checked below, so a wrong password reads as one.
+  final output = Uint8List.fromList(
+    await crypto.AesCbc.with256bits(
+      macAlgorithm: crypto.MacAlgorithm.empty,
+      paddingAlgorithm: const _NoPadding(),
+    ).decrypt(
+      crypto.SecretBox(ciphertext, nonce: iv, mac: crypto.Mac.empty),
+      secretKey: key,
+    ),
+  );
 
   final unpadded = _removePkcs7Padding(output);
   try {
@@ -256,17 +257,15 @@ Future<crypto.SecretKey> _deriveSecretKey({
   );
 }
 
-Future<Uint8List> _deriveKeyBytes({
-  required String password,
-  required List<int> salt,
-  required int iterations,
-}) async {
-  final key = await _deriveSecretKey(
-    password: password,
-    salt: salt,
-    iterations: iterations,
-  );
-  return Uint8List.fromList(await key.extractBytes());
+/// Leaves padding to [_removePkcs7Padding].
+class _NoPadding extends crypto.PaddingAlgorithm {
+  const _NoPadding();
+
+  @override
+  int getBlockPadding(int blockLength, Uint8List bytes) => 0;
+
+  @override
+  void setBlockPadding(int blockLength, Uint8List bytes, int start) {}
 }
 
 Uint8List _removePkcs7Padding(Uint8List data) {

@@ -24,7 +24,7 @@ import 'platform_icon.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const double kBadgeHeight = 28.0;
-const double kGameCardChipBackgroundAlpha = 0.80;
+const double kGameCardChipBackgroundAlpha = 0.875;
 const double kPlatformBadgeHeight = 32.0;
 const double kSelectionIndicatorSize = 20.0;
 const EdgeInsets kSelectionIndicatorPadding = EdgeInsets.all(8.0);
@@ -84,7 +84,7 @@ abstract final class GameCardBadges {
     GameFetchStatus.waiting => (
       color: theme.secondary,
       tooltip: 'Queued for fetch',
-      icon: Icon(Icons.schedule, color: Colors.white, size: iconSize),
+      icon: Icon(Icons.schedule, color: theme.onSecondaryText, size: iconSize),
     ),
     GameFetchStatus.processing => (
       color: theme.background,
@@ -352,7 +352,7 @@ abstract final class GameCardBadges {
           tooltip: 'Selected',
           color: theme.accent,
           size: kBadgeHeight,
-          icon: Icon(Icons.check, color: Colors.white, size: iconSize),
+          icon: Icon(Icons.check, color: theme.onAccentText, size: iconSize),
         ),
     ];
 

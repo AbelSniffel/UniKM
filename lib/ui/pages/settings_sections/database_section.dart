@@ -406,7 +406,7 @@ class DatabaseSection extends ConsumerStatefulWidget {
         title: 'Database Sync',
         settings: [enableLocalDeviceSyncSpec, autoSyncOnStartupSpec],
         extraTexts: ['Device Sync', 'Enable Local Device Sync', 'LAN'],
-        info: 'Sync with trusted devices on your network.',
+        // info: 'Sync with trusted devices on your network.',
       );
 
   @override
@@ -486,28 +486,22 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
       ],
     );
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 220;
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: stacked
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    labelWidget,
-                    const SizedBox(height: kElementVSpacing),
-                    Align(alignment: Alignment.centerRight, child: trailing),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: labelWidget),
-                    const SizedBox(width: kElementHSpacing),
-                    trailing,
-                  ],
-                ),
-        );
-      },
+      builder: (context, constraints) => constraints.maxWidth < 220
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: kElementVSpacing,
+              children: [
+                labelWidget,
+                Align(alignment: Alignment.centerRight, child: trailing),
+              ],
+            )
+          : Row(
+              spacing: kElementHSpacing,
+              children: [
+                Expanded(child: labelWidget),
+                trailing,
+              ],
+            ),
     );
   }
 
@@ -600,11 +594,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Divider(
-                  key: const ValueKey('data-management-separator'),
-                  height: 8,
-                  color: widget.theme.border,
-                ),
                 _buildResponsiveSettingRow(
                   label: DatabaseSection.activeDatabaseSpec.label,
                   description: _activeDbPath,
@@ -641,10 +630,9 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   color: widget.theme.accent,
                   onPressed: () => showDeviceSyncDialog(context),
                 ),
-                SettingsInfoButton(
-                  theme: widget.theme,
-                  message: DatabaseSection.databaseSyncSearchGroup.info!,
-                ),
+                if (DatabaseSection.databaseSyncSearchGroup.info
+                    case final info?)
+                  SettingsInfoButton(theme: widget.theme, message: info),
               ],
             ),
             searchQuery: widget.searchQuery,
@@ -676,10 +664,13 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             theme: widget.theme,
             titleIcon: Icons.security,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: SettingsInfoButton(
-              theme: widget.theme,
-              message: DatabaseSection.keyVisibilitySearchGroup.info!,
-            ),
+            trailing: switch (DatabaseSection.keyVisibilitySearchGroup.info) {
+              final info? => SettingsInfoButton(
+                theme: widget.theme,
+                message: info,
+              ),
+              null => null,
+            },
             searchQuery: widget.searchQuery,
             isSearchMatch: isSearching,
             groupPosition: position,

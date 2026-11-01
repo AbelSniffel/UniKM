@@ -11,6 +11,7 @@ import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import 'animated_gradient_bar.dart';
+import 'nav_button_group.dart';
 import 'navigation_panel_overlay.dart';
 import 'navigation_theme_menu.dart';
 
@@ -223,49 +224,14 @@ class NavigationPanel extends ConsumerWidget {
     required bool isHorizontal,
     required bool isCollapsed,
     required NavExpansionMode expansionMode,
-  }) {
-    final buttonChildren = [
-      for (var itemIndex = 0; itemIndex < indices.length; itemIndex++) ...[
-        if (itemIndex > 0)
-          isHorizontal ? const SizedBox(width: 4) : const SizedBox(height: 4),
-        isHorizontal
-            ? _buildIndexedNavButton(
-                indices[itemIndex],
-                true,
-                isCollapsed,
-                expansionMode,
-              )
-            : SizedBox(
-                width: double.infinity,
-                child: _buildIndexedNavButton(
-                  indices[itemIndex],
-                  false,
-                  isCollapsed,
-                  expansionMode,
-                ),
-              ),
-      ],
-    ];
-
-    final content = Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
-      ),
-      child: isHorizontal
-          ? Row(mainAxisSize: MainAxisSize.min, children: buttonChildren)
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: buttonChildren,
-            ),
-    );
-
-    if (isHorizontal) return content;
-
-    return SizedBox(width: double.infinity, child: content);
-  }
+  }) => NavButtonGroup(
+    theme: theme,
+    isHorizontal: isHorizontal,
+    children: [
+      for (final index in indices)
+        _buildIndexedNavButton(index, isHorizontal, isCollapsed, expansionMode),
+    ],
+  );
 
   Widget _buildIndexedNavButton(
     int index,

@@ -109,54 +109,44 @@ class _MenuButton extends StatefulWidget {
 }
 
 class _MenuButtonState extends State<_MenuButton> {
-  Future<void> _openMenu() async {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      button.localToGlobal(Offset.zero) & button.size,
-      Offset.zero & overlay.size,
-    );
-
-    final selected = await showAppMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        for (final (value, icon, label) in const [
-          ('import', Icons.file_download, 'Import Database'),
-          ('export', Icons.file_upload, 'Export Database'),
-          ('change_db', Icons.swap_horiz, 'Change Database'),
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return AppMenuAnchor(
+      theme: theme,
+      menuChildren: [
+        for (final (icon, label, open) in <(IconData, String, VoidCallback)>[
+          (
+            Icons.file_download,
+            'Import Database',
+            () => showImportDialog(context),
+          ),
+          (
+            Icons.file_upload,
+            'Export Database',
+            () => showExportDialog(context),
+          ),
+          (
+            Icons.swap_horiz,
+            'Change Database',
+            () => showChangeDatabaseDialog(context, theme),
+          ),
         ])
-          PopupMenuItem<String>(
-            value: value,
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: widget.theme.textPrimary),
-                const SizedBox(width: 12),
-                Text(label, style: TextStyle(color: widget.theme.textPrimary)),
-              ],
-            ),
+          appMenuItem(
+            theme,
+            leading: Icon(icon, size: 18),
+            onPressed: open,
+            child: Text(label),
           ),
       ],
+      builder: (context, controller, _) => _TitleBarActionButton(
+        theme: theme,
+        icon: Icons.menu,
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
     );
-
-    if (!mounted) return;
-    switch (selected) {
-      case 'import':
-        showImportDialog(context);
-      case 'export':
-        showExportDialog(context);
-      case 'change_db':
-        showChangeDatabaseDialog(context, widget.theme);
-    }
   }
-
-  @override
-  Widget build(BuildContext context) => _TitleBarActionButton(
-    theme: widget.theme,
-    icon: Icons.menu,
-    onPressed: _openMenu,
-  );
 }
 
 class _SyncButton extends ConsumerWidget {

@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import '../../core/database/database.dart';
+import '../../core/services/cover_images.dart';
 import '../../core/services/encrypted_db_session.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/services/legacy_db_converter.dart';
+import '../../core/services/logging.dart';
 
 /// An initialized connection and the persistence session that owns its file.
 class OpenedDatabase {
@@ -79,6 +81,12 @@ class DatabaseSessionLoader {
     final database = AppDatabase.fromFile(File(path));
     try {
       await database.initDefaults();
+      try {
+        await CoverImages.migrateLegacyFolders(database);
+      } catch (e) {
+        // Covers keep their old paths; the next open tries again.
+        AppLog.d('Cover image migration failed: $e');
+      }
       return database;
     } catch (_) {
       await database.close();

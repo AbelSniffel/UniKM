@@ -1,5 +1,5 @@
 /// Compact selection actions anchored to the bottom of the library.
-/// Frequent actions stay visible; remaining actions use a native overflow menu.
+/// Frequent actions stay visible; remaining actions use the shared anchored overflow menu.
 /// The selected games sit above the bar as a horizontally scrolling row of
 /// chips; tapping a chip deselects that game.
 library;
@@ -15,6 +15,7 @@ import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_selection_actions.dart';
+import '../../widgets/navigation_panel_overlay.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/segmented_bar.dart';
 
@@ -36,6 +37,8 @@ class SelectionRibbon extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedCount = ref.watch(_ribbonSelectedCountProvider);
     final theme = ref.watch(themeProvider);
+    // Same overlay-aware theme the navigation panel paints with.
+    final overlayTheme = ref.watch(effectiveThemeProvider);
     final notifier = ref.read(gamesProvider.notifier);
     final allUsed = ref.watch(selectedGamesAllUsedProvider);
     final allSelected = ref.watch(
@@ -155,19 +158,28 @@ class SelectionRibbon extends ConsumerWidget {
               ),
       ),
     ];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _SelectedGamesStrip(theme: theme),
-        _RibbonBar(
-          theme: theme,
-          selectedCount: selectedCount,
-          isVeryNarrowLayout: isVeryNarrowLayout,
-          isMultiSelectEnabled: isMultiSelectEnabled,
-          actions: actions,
-          onClearAll: notifier.clearSelection,
+    // One surface, two rows: a single overlay paint keeps the pattern
+    // continuous across the chip strip and the action bar.
+    return ColoredBox(
+      color: theme.navBackground,
+      child: NavigationPanelOverlayPaint(
+        theme: overlayTheme,
+        isHorizontal: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _SelectedGamesStrip(theme: theme),
+            _RibbonBar(
+              theme: theme,
+              selectedCount: selectedCount,
+              isVeryNarrowLayout: isVeryNarrowLayout,
+              isMultiSelectEnabled: isMultiSelectEnabled,
+              actions: actions,
+              onClearAll: notifier.clearSelection,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -217,7 +229,6 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
       key: const ValueKey('selection-games-strip'),
       height: height,
       decoration: BoxDecoration(
-        color: theme.navBackground,
         border: Border(top: BorderSide(color: theme.border)),
       ),
       child: Listener(
@@ -353,60 +364,50 @@ class _RibbonBar extends StatelessWidget {
     ),
   );
 
-  Widget _moreMenu(List<_RibbonAction> overflow) =>
-      AppPopupMenuButton<_RibbonAction>(
-        key: const ValueKey('selection-more-actions'),
-        tooltip: 'More actions',
-        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
-        color: theme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
+  /// The overflow actions, opening upward from the bar.
+  Widget _moreMenu(List<_RibbonAction> overflow) => AppMenuAnchor(
+    theme: theme,
+    alignment: Alignment.topLeft,
+    alignmentOffset: const Offset(0, -4),
+    menuChildren: [
+      for (final (index, action) in overflow.indexed) ...[
+        if (index > 0 && action.group != overflow[index - 1].group)
+          Divider(height: 1, color: theme.border),
+        appMenuItem(
+          theme,
+          key: ValueKey('selection-menu-${action.id}'),
+          onPressed: action.onPressed,
+          color: _menuColor(action),
+          leading: Icon(
+            action.icon,
+            size: 20,
+            color: _menuColor(action) ?? theme.accent,
+          ),
+          trailing: action.id == 'multi'
+              ? Icon(
+                  action.selected
+                      ? Icons.check_box
+                      : Icons.check_box_outline_blank,
+                  size: 18,
+                  color: action.selected ? theme.accent : theme.textHint,
+                )
+              : null,
+          child: Text(action.label),
         ),
-        onSelected: (action) => action.onPressed?.call(),
-        itemBuilder: (context) => [
-          for (final (index, action) in overflow.indexed) ...[
-            if (index > 0 && action.group != overflow[index - 1].group)
-              const PopupMenuDivider(),
-            PopupMenuItem<_RibbonAction>(
-              key: ValueKey('selection-menu-${action.id}'),
-              value: action,
-              enabled: action.onPressed != null,
-              child: Row(
-                children: [
-                  Icon(
-                    action.icon,
-                    size: 20,
-                    color: _menuColor(action) ?? theme.accent,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      action.label,
-                      style: TextStyle(
-                        color: _menuColor(action) ?? theme.textPrimary,
-                      ),
-                    ),
-                  ),
-                  if (action.id == 'multi') ...[
-                    const SizedBox(width: 12),
-                    Icon(
-                      action.selected
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      size: 18,
-                      color: action.selected ? theme.accent : theme.textHint,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+      ],
+    ],
+    builder: (context, controller, _) => Tooltip(
+      message: 'More actions',
+      child: InkWell(
+        key: const ValueKey('selection-more-actions'),
+        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: Center(
           child: Icon(Icons.more_horiz, size: 22, color: theme.textPrimary),
         ),
-      );
+      ),
+    ),
+  );
 
   /// Disabled and destructive menu items override the usual colours.
   Color? _menuColor(_RibbonAction action) => action.onPressed == null
@@ -437,149 +438,160 @@ class _RibbonBar extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => SizedBox(
     key: const ValueKey('selection-ribbon-bar'),
     height: kNavigationPanelHorizontalExtent,
-    color: theme.navBackground,
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final showLabels =
-            !isVeryNarrowLayout &&
-            constraints.maxWidth >= 840 &&
-            MediaQuery.textScalerOf(context).scale(14) <= 17;
-        final tiny = constraints.maxWidth < 280;
-        final labelStyle = Theme.of(context).textTheme.labelLarge!;
-        final summaryWidth =
-            ((tiny ? 20 : 42) +
-                    _textWidth(
-                      context,
-                      showLabels ? '$selectedCount selected' : '$selectedCount',
-                      labelStyle.copyWith(fontWeight: FontWeight.bold),
-                    ))
-                .clamp(40.0, constraints.maxWidth * 0.45)
-                .toDouble();
-        const moreWidth = 42.0;
-        final clearWidth = showLabels
-            ? 42 + _textWidth(context, 'Deselect all', labelStyle)
-            : 40.0;
-        const actionWidth = 40.0;
-        final cumulativeWidths = <double>[0];
-        for (var index = 0; index < actions.length; index++) {
-          cumulativeWidths.add(
-            cumulativeWidths.last +
-                actionWidth +
-                (index > 0 && actions[index].group != actions[index - 1].group
-                    ? 8
-                    : 0),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showLabels =
+              !isVeryNarrowLayout &&
+              constraints.maxWidth >= 840 &&
+              MediaQuery.textScalerOf(context).scale(14) <= 17;
+          final tiny = constraints.maxWidth < 280;
+          final labelStyle = Theme.of(context).textTheme.labelLarge!;
+          final summaryWidth =
+              ((tiny ? 20 : 42) +
+                      _textWidth(
+                        context,
+                        showLabels
+                            ? '$selectedCount selected'
+                            : '$selectedCount',
+                        labelStyle.copyWith(fontWeight: FontWeight.bold),
+                      ))
+                  .clamp(40.0, constraints.maxWidth * 0.45)
+                  .toDouble();
+          const moreWidth = 42.0;
+          final clearWidth = showLabels
+              ? 42 + _textWidth(context, 'Deselect all', labelStyle)
+              : 40.0;
+          const actionWidth = 40.0;
+          final cumulativeWidths = <double>[0];
+          for (var index = 0; index < actions.length; index++) {
+            cumulativeWidths.add(
+              cumulativeWidths.last +
+                  actionWidth +
+                  (index > 0 && actions[index].group != actions[index - 1].group
+                      ? 8
+                      : 0),
+            );
+          }
+          final available =
+              constraints.maxWidth - summaryWidth - 8 - clearWidth - 4;
+          var visibleCount = actions.length;
+          if (cumulativeWidths.last > available) {
+            visibleCount = 0;
+            while (visibleCount < actions.length &&
+                cumulativeWidths[visibleCount + 1] + moreWidth + 8 <=
+                    available) {
+              visibleCount++;
+            }
+          }
+          final groups = <List<_RibbonAction>>[];
+          for (final action in actions.take(visibleCount)) {
+            if (groups.isEmpty || groups.last.last.group != action.group) {
+              groups.add([]);
+            }
+            groups.last.add(action);
+          }
+          final hasOverflow = visibleCount < actions.length;
+          final controlsWidth =
+              cumulativeWidths[visibleCount] +
+              (hasOverflow ? moreWidth + (visibleCount > 0 ? 8 : 0) : 0);
+          final centeredLeft = (constraints.maxWidth - controlsWidth) / 2;
+          final controlsLeft = centeredLeft.clamp(
+            summaryWidth + 8,
+            constraints.maxWidth - clearWidth - 4 - controlsWidth,
           );
-        }
-        final available =
-            constraints.maxWidth - summaryWidth - 8 - clearWidth - 4;
-        var visibleCount = actions.length;
-        if (cumulativeWidths.last > available) {
-          visibleCount = 0;
-          while (visibleCount < actions.length &&
-              cumulativeWidths[visibleCount + 1] + moreWidth + 8 <= available) {
-            visibleCount++;
-          }
-        }
-        final groups = <List<_RibbonAction>>[];
-        for (final action in actions.take(visibleCount)) {
-          if (groups.isEmpty || groups.last.last.group != action.group) {
-            groups.add([]);
-          }
-          groups.last.add(action);
-        }
-        final hasOverflow = visibleCount < actions.length;
-        final controlsWidth =
-            cumulativeWidths[visibleCount] +
-            (hasOverflow ? moreWidth + (visibleCount > 0 ? 8 : 0) : 0);
-        final centeredLeft = (constraints.maxWidth - controlsWidth) / 2;
-        final controlsLeft = centeredLeft.clamp(
-          summaryWidth + 8,
-          constraints.maxWidth - clearWidth - 4 - controlsWidth,
-        );
-        final controls = Transform.translate(
-          offset: Offset(controlsLeft - centeredLeft, 0),
-          child: Row(
-            key: const ValueKey('selection-action-groups'),
-            mainAxisSize: MainAxisSize.min,
-            spacing: 8,
-            children: [
-              for (final group in groups)
-                _group(
-                  key: ValueKey('selection-group-${group.first.group.name}'),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final (index, action) in group.indexed)
-                        ButtonGroupShape(
-                          borderRadius: buttonGroupBorderRadius(
-                            index: index,
-                            count: group.length,
-                            radius: theme.cornerRadius * 1.25,
-                            textDirection: Directionality.of(context),
+          final controls = Transform.translate(
+            offset: Offset(controlsLeft - centeredLeft, 0),
+            child: Row(
+              key: const ValueKey('selection-action-groups'),
+              mainAxisSize: MainAxisSize.min,
+              spacing: 8,
+              children: [
+                for (final group in groups)
+                  _group(
+                    key: ValueKey('selection-group-${group.first.group.name}'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final (index, action) in group.indexed)
+                          ButtonGroupShape(
+                            borderRadius: buttonGroupBorderRadius(
+                              index: index,
+                              count: group.length,
+                              radius: theme.cornerRadius * 1.25,
+                              textDirection: Directionality.of(context),
+                            ),
+                            child: _ActionControl(theme: theme, action: action),
                           ),
-                          child: _ActionControl(theme: theme, action: action),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              if (hasOverflow)
-                _group(
-                  key: const ValueKey('selection-group-more'),
-                  child: SizedBox(
-                    width: moreWidth,
-                    height: 40,
-                    child: _moreMenu(actions.skip(visibleCount).toList()),
+                if (hasOverflow)
+                  _group(
+                    key: const ValueKey('selection-group-more'),
+                    child: SizedBox(
+                      width: moreWidth,
+                      height: 40,
+                      child: _moreMenu(actions.skip(visibleCount).toList()),
+                    ),
                   ),
-                ),
-            ],
-          ),
-        );
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _selectionSummary(context, showLabels, tiny, summaryWidth),
+              ],
             ),
-            Align(alignment: Alignment.center, child: controls),
-            Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox(
-                width: clearWidth,
-                height: 40,
-                child: Tooltip(
-                  message: 'Deselect all',
-                  child: showLabels
-                      ? TextButton.icon(
-                          onPressed: onClearAll,
-                          icon: const Icon(Icons.close, size: 18),
-                          label: const Text('Deselect all'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: theme.textSecondary,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        )
-                      : IconButton(
-                          onPressed: onClearAll,
-                          icon: const Icon(Icons.close, size: 20),
-                          color: theme.textSecondary,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 40,
-                            height: 40,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
+          );
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _selectionSummary(
+                  context,
+                  showLabels,
+                  tiny,
+                  summaryWidth,
                 ),
               ),
-            ),
-          ],
-        );
-      },
+              Align(alignment: Alignment.center, child: controls),
+              Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  width: clearWidth,
+                  height: 40,
+                  child: Tooltip(
+                    message: 'Deselect all',
+                    child: showLabels
+                        ? TextButton.icon(
+                            onPressed: onClearAll,
+                            icon: const Icon(Icons.close, size: 18),
+                            label: const Text('Deselect all'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: theme.textSecondary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          )
+                        : IconButton(
+                            onPressed: onClearAll,
+                            icon: const Icon(Icons.close, size: 20),
+                            color: theme.textSecondary,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 40,
+                              height: 40,
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     ),
   );
 }
@@ -630,6 +642,11 @@ class _ActionControl extends StatelessWidget {
                   (states) => states.contains(WidgetState.disabled)
                       ? theme.primaryButtonDisabled
                       : theme.primaryButton,
+                ),
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? theme.primaryButtonDisabledText
+                      : theme.primaryButtonText,
                 ),
               ),
               child: icon,

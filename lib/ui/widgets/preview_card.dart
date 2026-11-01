@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import 'settings_card_indicator.dart';
 import 'settings_card_layout.dart';
 
 /// Uses settings-card row sizing with equal widths, retaining state when
@@ -156,77 +157,59 @@ class _PreviewCardState extends State<PreviewCard> {
 
   @override
   Widget build(BuildContext context) {
-    const borderWidth = 1.0;
+    const borderWidth = 0.0;
     final theme = widget.theme;
     final outerRadius = BorderRadius.circular(theme.cornerRadius);
     final innerRadius = math.max(0.0, theme.cornerRadius - borderWidth);
     final selected = widget.isSelected;
     final inline = widget.inlineLabel;
-    final nameColor = selected ? theme.accent : theme.textPrimary;
-    final name = Text(
-      widget.name,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: nameColor,
-        fontSize: inline ? null : 13,
-        fontWeight: FontWeight.w600,
-      ),
-    );
+    // The ring, dot and name chip share one selection motion. Each animates
+    // only its own small subtree, and only while the selection changes, so
+    // resizing or rebuilding a card never runs it.
+    Widget onSelection(Widget Function(double t) builder) =>
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: selected ? 1 : 0),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : kMediumAnimation,
+          curve: Curves.easeOutCubic,
+          builder: (_, t, _) => builder(t),
+        );
     // On a preview the name and the selection dot sit in opposite corners.
-    const labelInset = 2.0;
+    // The chip sits flush in the bottom-left corner, so the card's own clip
+    // rounds that corner in line with the border and only its top-right
+    // corner is its own.
     final scrim = theme.background.withValues(alpha: 0.6);
-    final dot = Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: theme.background.withValues(alpha: 0.8),
-        borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(10)),
-        border: Border.all(color: theme.border),
-      ),
-      child: Container(
-        key: const ValueKey('preview-selection-check'),
-        width: 16,
-        height: 16,
-        decoration: BoxDecoration(
-          color: theme.accent,
-          borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(8)),
-        ),
-      ),
-    );
-    final label = Container(
-      key: const ValueKey('preview-card-label'),
-      padding: inline
-          ? EdgeInsets.zero
-          : EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: inline
-          ? null
-          : BoxDecoration(
-              color: scrim,
-              // A selected card squares the top-left and bottom-right corners.
-              borderRadius: selected
-                  ? BorderRadius.only(
-                      topRight: outerRadius.topRight,
-                      bottomLeft: outerRadius.bottomLeft,
-                    )
-                  : outerRadius,
+    final label = onSelection(
+      (t) => Container(
+        key: const ValueKey('preview-card-label'),
+        padding: inline
+            ? EdgeInsets.zero
+            // The selection ring covers the chip's bottom edge, so a selected
+            // chip adds room below its text; otherwise it is even.
+            : EdgeInsets.fromLTRB(12, 3, 9, 3 + 3 * t),
+        decoration: inline
+            ? null
+            : BoxDecoration(
+                color: scrim,
+                borderRadius: BorderRadius.only(topRight: outerRadius.topRight),
+              ),
+        child: ExcludeSemantics(
+          child: Text(
+            widget.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Color.lerp(theme.textPrimary, theme.accent, t),
+              fontSize: inline ? null : 13,
+              fontWeight: FontWeight.w600,
             ),
-      child: ExcludeSemantics(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: [Flexible(child: name)],
+          ),
         ),
       ),
     );
-    final selection = TweenAnimationBuilder<double>(
-      tween: Tween(end: selected ? 1 : 0),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : kMediumAnimation,
-      curve: Curves.easeOutCubic,
-      builder: (context, t, _) => t == 0
+    final selection = onSelection(
+      (t) => t == 0
           ? const SizedBox.shrink()
           : _SelectionRing(theme: theme, t: t, gap: !inline),
     );
@@ -245,10 +228,40 @@ class _PreviewCardState extends State<PreviewCard> {
             // A full-size background also covers the border's inner AA
             // edge. No saveLayer: every card would need its own offscreen
             // pass each frame, and the border already hides the clip's edge.
+            // The icon and name chip share this clip and reach under the
+            // border, so no background shows between them and the border at
+            // any display scale.
             ClipRRect(
               borderRadius: outerRadius,
               clipBehavior: Clip.antiAlias,
-              child: background,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  background,
+                  if (widget.icon != null)
+                    Positioned(
+                      right: borderWidth + 2,
+                      bottom: borderWidth,
+                      child: Icon(
+                        widget.icon,
+                        size: widget.height == null ? 32 : 45,
+                        color:
+                            widget.backgroundIconColor ??
+                            theme.surface.withValues(alpha: 0.25),
+                      ),
+                    ),
+                  if (!inline)
+                    Positioned(
+                      left: 0,
+                      right: 27,
+                      bottom: 0,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: label,
+                      ),
+                    ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(borderWidth),
@@ -257,29 +270,7 @@ class _PreviewCardState extends State<PreviewCard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (widget.icon != null)
-                      Positioned(
-                        right: 2,
-                        bottom: 0,
-                        child: Icon(
-                          widget.icon,
-                          size: widget.height == null ? 32 : 45,
-                          color:
-                              widget.backgroundIconColor ??
-                              theme.surface.withValues(alpha: 0.25),
-                        ),
-                      ),
-                    if (!inline)
-                      Positioned(
-                        left: labelInset,
-                        right: labelInset + 24,
-                        bottom: labelInset,
-                        child: Align(
-                          alignment: Alignment.bottomLeft,
-                          child: label,
-                        ),
-                      )
-                    else
+                    if (inline)
                       Positioned(
                         top: 0,
                         bottom: 0,
@@ -321,18 +312,30 @@ class _PreviewCardState extends State<PreviewCard> {
                 ),
               ),
             ),
-            // Above the card's border, clipped to the card's corner, so the dot
-            // sits flush in it.
-            if (!inline && selected)
+            // The settings cards' mini dot, inset from the corner, pops in
+            // on the selected card. Its outline matches the ring's inner gap.
+            if (!inline)
               Positioned(
                 top: 0,
                 right: 0,
                 child: IgnorePointer(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.only(
-                      topRight: outerRadius.topRight,
-                    ),
-                    child: dot,
+                  child: onSelection(
+                    (t) => t == 0
+                        ? const SizedBox.shrink()
+                        : Opacity(
+                            opacity: t,
+                            child: Transform.scale(
+                              scale: 0.4 + 0.6 * t,
+                              child: SettingsCardMiniDot(
+                                key: const ValueKey('preview-selection-check'),
+                                theme: theme,
+                                value: true,
+                                enabled: true,
+                                outlineColor: theme.surface,
+                                glow: false,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ),

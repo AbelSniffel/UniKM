@@ -26,7 +26,12 @@ Future<DateTime?> showDeadlinePickerDialog({
 }) {
   final today = DateUtils.dateOnly(currentDate ?? DateTime.now());
   final earliestDate = DateUtils.dateOnly(firstDate ?? today);
-  final latestDate = DateUtils.dateOnly(lastDate ?? DateTime(9999, 12, 31));
+  // A far-off default end makes the month pager ~100k pages long, and its
+  // fractional page width then fails Flutter's layout precision assert,
+  // freezing the app.
+  final latestDate = DateUtils.dateOnly(
+    lastDate ?? DateTime(today.year + 100, 12, 31),
+  );
   final fallbackDate = today.isBefore(earliestDate) ? earliestDate : today;
   final selectedDate = _clampDate(
     DateUtils.dateOnly(initialDate ?? fallbackDate),

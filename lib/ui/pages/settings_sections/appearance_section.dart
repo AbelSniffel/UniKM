@@ -180,9 +180,12 @@ class AppearanceSection extends ConsumerWidget {
                   child: visibleThemes.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Text(
-                            'No custom themes yet. Create one from your current colors.',
-                            style: TextStyle(color: theme.textSecondary),
+                          child: Center(
+                            child: Text(
+                              'No custom themes yet.\nCreate one from your current colors.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: theme.textSecondary),
+                            ),
                           ),
                         )
                       : PreviewCardWrap(

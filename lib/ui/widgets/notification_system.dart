@@ -793,9 +793,10 @@ class _NotificationToastState extends State<NotificationToast>
     NotificationType.steam => 'Steam',
   };
 
-  Widget _buildFooter() {
+  /// Text-style actions, which sit under the text or beside any progress.
+  List<Widget> _textActions() {
     final notification = widget.notification;
-    final actions = [
+    return [
       for (final (label, onPressed) in [
         if (notification.actionStyle == NotificationActionStyle.text)
           (notification.actionLabel, notification.onAction),
@@ -805,25 +806,19 @@ class _NotificationToastState extends State<NotificationToast>
         if (label != null && onPressed != null)
           TextButton(onPressed: onPressed, child: Text(label)),
     ];
-    // A wide action's row carries the progress instead.
-    final progress = notification.actionStyle == NotificationActionStyle.text
-        ? notification.progress
-        : null;
-    if (progress == null && actions.isEmpty) return const SizedBox.shrink();
+  }
+
+  /// Text actions under the text when there is no progress row to hold them.
+  Widget _buildFooter() {
+    if (widget.notification.progress != null) return const SizedBox.shrink();
+    final actions = _textActions();
+    if (actions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: progress == null
-          ? Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(spacing: 6, children: actions),
-            )
-          : Row(
-              children: [
-                Expanded(child: _buildProgressBar(progress)),
-                if (actions.isNotEmpty) const SizedBox(width: kElementHSpacing),
-                ...actions,
-              ],
-            ),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Wrap(spacing: 6, children: actions),
+      ),
     );
   }
 
@@ -834,17 +829,15 @@ class _NotificationToastState extends State<NotificationToast>
   );
 
   /// Across the toast under the text: any progress filling the row with the
-  /// main action as an outlined or elevated button at its end, or that
-  /// button alone at full width.
+  /// actions at its end, or an outlined or elevated main action alone at
+  /// full width.
   Widget _buildWideAction() {
     final notification = widget.notification;
-    if (notification.actionStyle == NotificationActionStyle.text) {
-      return const SizedBox.shrink();
-    }
+    final text = notification.actionStyle == NotificationActionStyle.text;
     final label = notification.actionLabel;
     final onPressed = notification.onAction;
     final progress = notification.progress;
-    final button = label == null || onPressed == null
+    final button = text || label == null || onPressed == null
         ? null
         : switch (notification.actionStyle) {
             NotificationActionStyle.outlined => OutlinedButton(
@@ -853,16 +846,18 @@ class _NotificationToastState extends State<NotificationToast>
             ),
             _ => ElevatedButton(onPressed: onPressed, child: Text(label)),
           };
-    if (button == null && progress == null) return const SizedBox.shrink();
+    if (progress == null && button == null) return const SizedBox.shrink();
     return Padding(
-      // Evens out the card's narrower end padding.
-      padding: const EdgeInsetsDirectional.only(top: 10, end: 6),
+      // Evens out the card's narrower end padding; text buttons bring their
+      // own.
+      padding: EdgeInsetsDirectional.only(top: 10, end: text ? 0 : 6),
       child: progress == null
           ? button
           : Row(
               spacing: kElementHSpacing,
               children: [
                 Expanded(child: _buildProgressBar(progress)),
+                if (text) ..._textActions(),
                 ?button,
               ],
             ),

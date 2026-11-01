@@ -2,7 +2,6 @@
 /// Matches the original Python SettingsPage with 5+ sections
 library;
 
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
 import '../widgets/hover_builder.dart';
+import '../widgets/nav_button_group.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_search_field.dart';
@@ -158,7 +158,6 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Advanced',
     icon: Icons.settings_applications,
     searchGroups: [
-      AdvancedSection.displaySearchGroup,
       AdvancedSection.systemSearchGroup,
       if (AdvancedSection.showExperimentalSettings)
         AdvancedSection.experimentalSearchGroup,
@@ -174,34 +173,50 @@ final List<(String, String, IconData)> _settingsRailSections = [
   ),
 ];
 
-const double _settingsRailItemOuterHorizontalPadding = 8;
-const double _settingsRailItemOuterVerticalPadding = 2;
-const double _settingsRailButtonHorizontalPadding = 12;
-const double _settingsRailButtonVerticalPadding = 8;
-const double _settingsRailIconSize = 22;
-const double _settingsRailIconLabelSpacing = 8;
-const double _settingsRailLabelWidthBuffer = 25;
-const double _settingsRailCollapsedButtonExtent =
-    (_settingsRailButtonHorizontalPadding * 2) + _settingsRailIconSize;
-const double _settingsRailButtonHeight =
-    (_settingsRailButtonVerticalPadding * 2) + _settingsRailIconSize;
+/// Space around the section button group inside the rail.
+const double _settingsRailOuterPadding = 8;
+
+/// A section button's width when only its icon shows.
+const double _settingsRailCollapsedButtonExtent = 40;
+
+/// Slack on the measured label, which uses a fallback font, so none is cut.
+const double _settingsRailLabelWidthBuffer = 24;
+
+// The collapse toggle at the foot of the rail.
+const double _settingsRailToggleVerticalPadding = 8;
+const double _settingsRailToggleHeight =
+    (_settingsRailToggleVerticalPadding * 2) + kIconSize;
 
 final double _settingsRailMaxLabelWidth = _measureSettingsRailMaxLabelWidth();
-final double _settingsRailExpandedButtonWidth =
-    _settingsRailCollapsedButtonExtent +
-    _settingsRailIconLabelSpacing +
-    _settingsRailMaxLabelWidth +
-    _settingsRailLabelWidthBuffer;
+
+/// An expanded section button: the longest label under its icon, plus the
+/// button's own padding.
+final double _settingsRailExpandedButtonWidth = math.max(
+  _settingsRailCollapsedButtonExtent,
+  _settingsRailMaxLabelWidth + 24 + _settingsRailLabelWidthBuffer,
+);
+
+/// The rail's width: a button plus its group and outer padding.
+double _settingsRailWidth({required bool collapsed}) =>
+    (collapsed
+        ? _settingsRailCollapsedButtonExtent
+        : _settingsRailExpandedButtonWidth) +
+    (_settingsRailOuterPadding + NavButtonGroup.padding) * 2;
+
+/// Phones and very narrow windows always collapse the rail.
+bool _settingsRailForceCollapsed(BuildContext context, bool veryNarrow) {
+  final platform = Theme.of(context).platform;
+  return veryNarrow ||
+      platform == TargetPlatform.android ||
+      platform == TargetPlatform.iOS;
+}
 
 double _measureSettingsRailMaxLabelWidth() {
   final painter = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
   var maxWidth = 0.0;
 
   for (final (_, label, _) in _settingsRailSections) {
-    painter.text = TextSpan(
-      text: label,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-    );
+    painter.text = TextSpan(text: label, style: const TextStyle(fontSize: 14));
     painter.layout();
     if (painter.width > maxWidth) maxWidth = painter.width;
   }
@@ -326,11 +341,10 @@ class _SettingsSectionRail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final platform = Theme.of(context).platform;
-    final forceCollapsed =
-        isVeryNarrowLayout ||
-        platform == TargetPlatform.android ||
-        platform == TargetPlatform.iOS;
+    final forceCollapsed = _settingsRailForceCollapsed(
+      context,
+      isVeryNarrowLayout,
+    );
     final collapsed =
         forceCollapsed ||
         ref.watch(
@@ -340,13 +354,9 @@ class _SettingsSectionRail extends ConsumerWidget {
         );
     return RepaintBoundary(
       child: AnimatedContainer(
-        duration: forceCollapsed ? Duration.zero : kNavPanelMotionAnimation,
+        duration: kNavPanelMotionAnimation,
         curve: kNavPanelMotionCurve,
-        width:
-            (collapsed
-                ? _settingsRailCollapsedButtonExtent
-                : _settingsRailExpandedButtonWidth) +
-            _settingsRailItemOuterHorizontalPadding * 2,
+        width: _settingsRailWidth(collapsed: collapsed),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.surface,
@@ -362,24 +372,28 @@ class _SettingsSectionRail extends ConsumerWidget {
           child: Column(
             children: [
               Expanded(
-                child: ListView.builder(
+                child: ListView(
                   key: const ValueKey('settings-section-navigation'),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: _settingsRailSections.length,
-                  itemBuilder: (context, index) {
-                    final (id, label, icon) = _settingsRailSections[index];
-                    return _SettingsSectionButton(
-                      key: ValueKey<String>('settings-rail-$id'),
+                  padding: const EdgeInsets.all(_settingsRailOuterPadding),
+                  children: [
+                    NavButtonGroup(
                       theme: theme,
-                      icon: icon,
-                      label: label,
-                      expandedButtonWidth: _settingsRailExpandedButtonWidth,
-                      isSelected: !isSearching && selectedSection == id,
-                      isCollapsed: collapsed,
-                      isEnabled: !isSearching,
-                      onTap: () => onSectionSelected(id),
-                    );
-                  },
+                      isHorizontal: false,
+                      children: [
+                        for (final (id, label, icon) in _settingsRailSections)
+                          _SettingsSectionButton(
+                            key: ValueKey<String>('settings-rail-$id'),
+                            theme: theme,
+                            icon: icon,
+                            label: label,
+                            isSelected: !isSearching && selectedSection == id,
+                            isCollapsed: collapsed,
+                            isEnabled: !isSearching,
+                            onTap: () => onSectionSelected(id),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               if (!forceCollapsed)
@@ -404,9 +418,9 @@ class _SettingsSectionRail extends ConsumerWidget {
                           width: collapsed
                               ? _settingsRailCollapsedButtonExtent
                               : _settingsRailExpandedButtonWidth,
+                          alignment: Alignment.center,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: _settingsRailButtonHorizontalPadding,
-                            vertical: _settingsRailButtonVerticalPadding,
+                            vertical: _settingsRailToggleVerticalPadding,
                           ),
                           decoration: BoxDecoration(
                             color: hovered
@@ -415,7 +429,7 @@ class _SettingsSectionRail extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(
                               math.min(
                                 theme.cornerRadius * 1.25,
-                                _settingsRailButtonHeight / 2,
+                                _settingsRailToggleHeight / 2,
                               ),
                             ),
                           ),
@@ -599,13 +613,14 @@ class _SettingsPageBody extends ConsumerWidget {
   }
 }
 
-class _SettingsSectionButton extends StatefulWidget {
+/// A section button in the rail: the navigation panel's vertical button, with
+/// its label under the icon on the selected section only.
+class _SettingsSectionButton extends StatelessWidget {
   const _SettingsSectionButton({
     super.key,
     required this.theme,
     required this.icon,
     required this.label,
-    required this.expandedButtonWidth,
     required this.isSelected,
     required this.isCollapsed,
     required this.isEnabled,
@@ -615,98 +630,26 @@ class _SettingsSectionButton extends StatefulWidget {
   final AppThemeData theme;
   final IconData icon;
   final String label;
-  final double expandedButtonWidth;
   final bool isSelected;
   final bool isCollapsed;
   final bool isEnabled;
   final VoidCallback onTap;
 
   @override
-  State<_SettingsSectionButton> createState() => _SettingsSectionButtonState();
-}
-
-class _SettingsSectionButtonState extends State<_SettingsSectionButton> {
-  Timer? _hideLabelTimer;
-  bool _showLabel = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _showLabel = !widget.isCollapsed;
-  }
-
-  @override
-  void didUpdateWidget(covariant _SettingsSectionButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCollapsed == widget.isCollapsed) return;
-
-    _hideLabelTimer?.cancel();
-
-    if (widget.isCollapsed) {
-      _hideLabelTimer = Timer(kFastAnimation, () {
-        if (!mounted || !widget.isCollapsed) return;
-        setState(() => _showLabel = false);
-      });
-      return;
-    }
-
-    setState(() => _showLabel = true);
-  }
-
-  @override
-  void dispose() {
-    _hideLabelTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final keepsExpandedLayout = !widget.isCollapsed || _showLabel;
-    final buttonWidth = keepsExpandedLayout
-        ? widget.expandedButtonWidth
-        : _settingsRailCollapsedButtonExtent;
-    final roundedRadius = math.min(
-      widget.theme.cornerRadius * 1.25,
-      _settingsRailButtonHeight / 2,
-    );
-    final borderRadiusMultiplier = widget.theme.cornerRadius == 0
-        ? 1.0
-        : roundedRadius / widget.theme.cornerRadius;
-    final button = AnimatedContainer(
-      duration: kMediumAnimation,
-      curve: Curves.easeInOutCubic,
-      width: buttonWidth,
-      child: AppNavigationButton(
-        theme: widget.theme,
-        variant: AppNavigationButtonVariant.settingsSection,
-        isSelected: widget.isSelected,
-        isEnabled: widget.isEnabled,
-        isHorizontal: true,
-        onTap: widget.onTap,
-        iconData: widget.icon,
-        iconSize: _settingsRailIconSize,
-        labelText: _showLabel ? widget.label : null,
-        tooltipMessage: widget.isCollapsed && !_showLabel ? widget.label : null,
-        padding: const EdgeInsets.symmetric(
-          horizontal: _settingsRailButtonHorizontalPadding,
-          vertical: _settingsRailButtonVerticalPadding,
-        ),
-        alignment: Alignment.centerLeft,
-        borderRadiusMultiplier: borderRadiusMultiplier,
-        minWidth: _settingsRailCollapsedButtonExtent,
-        minHeight: _settingsRailButtonHeight,
-        horizontalSpacing: _settingsRailIconLabelSpacing,
-        horizontalMainAxisSize: MainAxisSize.max,
-        horizontalMainAxisAlignment: MainAxisAlignment.start,
-      ),
-    );
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _settingsRailItemOuterHorizontalPadding,
-        vertical: _settingsRailItemOuterVerticalPadding,
-      ),
-      child: button,
+    final showLabel = !isCollapsed && isSelected;
+    return AppNavigationButton(
+      theme: theme,
+      isSelected: isSelected,
+      isEnabled: isEnabled,
+      isHorizontal: false,
+      onTap: onTap,
+      iconData: icon,
+      labelText: label,
+      labelVisible: showLabel,
+      labelFadeDuration: kNavButtonExpandAnimation,
+      labelFadeCurve: kNavButtonExpandCurve,
+      tooltipMessage: showLabel ? null : label,
     );
   }
 }

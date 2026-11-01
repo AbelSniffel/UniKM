@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'multi_child_render_box.dart';
 
 /// Edit this value (1 or greater) to cap columns in All and search views.
-const int kSettingsSectionMaxColumns = 2;
+const int kSettingsSectionMaxColumns = 4;
 
 const double kSettingsSectionMinimumWidth = 440;
 const double kSettingsSectionSpacing = 24;

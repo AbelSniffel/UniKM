@@ -329,9 +329,6 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
       actions: [
         ElevatedButton.icon(
           onPressed: canRefresh ? _refreshDiscovery : null,
-          icon: isRefreshing
-              ? const AppCircularProgressIndicator(size: 18)
-              : const Icon(Icons.refresh),
           label: const Text('Refresh'),
         ),
       ],
@@ -349,13 +346,6 @@ class _SyncContent extends ConsumerWidget {
   final DeviceSyncSnapshot sync;
   final AppThemeData theme;
   final bool refreshing;
-
-  IconData _statusIcon(DeviceSyncStatus status) => switch (status) {
-    DeviceSyncStatus.discovering => Icons.radar,
-    DeviceSyncStatus.syncing => Icons.sync,
-    DeviceSyncStatus.error => Icons.link_off,
-    _ => Icons.link,
-  };
 
   static const _placeholderNames = {
     '',
@@ -507,12 +497,12 @@ class _SyncContent extends ConsumerWidget {
     final notifier = ref.read(deviceSyncProvider.notifier);
     final unifiedRows = _buildUnifiedRows();
     final showDeviceId = ref.watch(showSyncDeviceIdProvider);
-    final hasStatus =
-        sync.statusMessage != null && sync.statusMessage!.isNotEmpty;
-    final isRefreshing =
-        refreshing || sync.status == DeviceSyncStatus.discovering;
+    final statusMessage = (sync.statusMessage?.isNotEmpty ?? false)
+        ? sync.statusMessage!
+        : 'Ready.';
     final isBusy =
-        isRefreshing ||
+        refreshing ||
+        sync.status == DeviceSyncStatus.discovering ||
         sync.status == DeviceSyncStatus.syncing ||
         sync.status == DeviceSyncStatus.connecting;
     // Treat messages that indicate a failure/rejection as a "broken link" state
@@ -534,7 +524,10 @@ class _SyncContent extends ConsumerWidget {
         TintedHeading(
           theme: theme,
           title: 'Devices',
-          trailing: '${unifiedRows.length}',
+          trailing: isBusy ? null : '${unifiedRows.length}',
+          action: isBusy
+              ? const AppCircularProgressIndicator(strokeWidth: 2, size: 14)
+              : null,
         ),
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 260),
@@ -582,35 +575,17 @@ class _SyncContent extends ConsumerWidget {
                   },
                 ),
         ),
-        if (hasStatus)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-            ),
-            child: Row(
-              spacing: 8,
-              children: [
-                if (isBusy)
-                  const AppCircularProgressIndicator(strokeWidth: 2, size: 14)
-                else
-                  Icon(
-                    isNegativeMessage
-                        ? Icons.link_off
-                        : _statusIcon(sync.status),
-                    size: 16,
-                    color: statusColor,
-                  ),
-                Expanded(
-                  child: Text(
-                    sync.statusMessage!,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
           ),
+          child: Text(
+            statusMessage,
+            style: TextStyle(color: theme.textSecondary, fontSize: 12),
+          ),
+        ),
         if (showDeviceId)
           SelectableText(
             'Device ID: ${sync.deviceId}',

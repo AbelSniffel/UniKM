@@ -21,6 +21,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import '../../core/database/sqlite_file.dart';
 import '../../core/database/database.dart';
 import '../../core/settings/settings_model.dart';
+import '../../core/services/cover_images.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/services/legacy_encrypted_import.dart';
 import '../../core/services/platform_file_actions.dart';
@@ -790,7 +791,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           .throwIfInvalid(game);
       records.add(ImportRecord(game, links[row['id']] ?? []));
     }
-    final imagesDir = await AppDatabase.getSteamImagesDirectory();
+    final imagesDir = await CoverImages.directory();
     final cache = <String, String>{};
     final normalized = <ImportRecord>[];
     for (var i = 0; i < records.length; i++) {
@@ -798,6 +799,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       final record = records[i];
       final cover = await _normalizeImportedCoverImagePath(
         record.game.coverImage.value,
+        title: record.game.title.value,
         sourceDbFile: file,
         targetImagesDir: imagesDir,
         cache: cache,
@@ -826,6 +828,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
 
   Future<String> _normalizeImportedCoverImagePath(
     String rawCoverImage, {
+    required String title,
     required File sourceDbFile,
     required Directory targetImagesDir,
     required Map<String, String> cache,
@@ -844,29 +847,21 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       return raw;
     }
 
-    // One image per name: a same-named image from another source is
-    // overwritten.
-    final sourceName = p.basename(sourceFile.path);
-    final destinationFile = File(
-      p.join(
-        targetImagesDir.path,
-        sourceName.isEmpty
-            ? 'cover_${DateTime.now().millisecondsSinceEpoch}.img'
-            : sourceName,
-      ),
-    );
-
-    final sourceCanonical = _normalizeForCompare(sourceFile.absolute.path);
-    final destinationCanonical = _normalizeForCompare(
-      destinationFile.absolute.path,
-    );
-    if (sourceCanonical != destinationCanonical) {
+    // Covers already in the images folder stay; others are stored under the
+    // game's title, reusing an identical image another game already has.
+    var destination = sourceFile.path;
+    if (_normalizeForCompare(sourceFile.parent.absolute.path) !=
+        _normalizeForCompare(targetImagesDir.absolute.path)) {
       _checkImport();
-      await _imageCheckpoint!.copy(sourceFile, destinationFile);
+      destination = (await _imageCheckpoint!.store(
+        sourceFile,
+        targetImagesDir,
+        title,
+      )).path;
     }
 
-    cache[raw] = destinationFile.path;
-    return destinationFile.path;
+    cache[raw] = destination;
+    return destination;
   }
 
   File? _resolveSourceCoverImageFile(String raw, File sourceDbFile) {
@@ -956,7 +951,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     required File sourceFile,
     required String sourceLabel,
   }) async {
-    final imagesDir = await AppDatabase.getSteamImagesDirectory();
+    final imagesDir = await CoverImages.directory();
     final cache = <String, String>{};
     final imported = <ImportRecord>[];
     for (var i = 0; i < records.length; i++) {
@@ -964,6 +959,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       final record = records[i];
       final cover = await _normalizeImportedCoverImagePath(
         record.iconPath ?? '',
+        title: record.title,
         sourceDbFile: sourceFile,
         targetImagesDir: imagesDir,
         cache: cache,

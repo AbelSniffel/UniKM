@@ -130,7 +130,7 @@ enum ToggleStyle {
 /// Status controls used only by interaction settings cards.
 enum SettingsCardIndicatorStyle {
   switchControl('Switch', 'Use the selected app switch inside the card.'),
-  retroSquare('Retro Square', 'A glowing recessed display with retro texture.');
+  miniDot('Mini Dot', 'A small dot in the card corner that grows when on.');
 
   const SettingsCardIndicatorStyle(this.displayName, this.description);
 

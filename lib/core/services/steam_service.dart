@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 
 import '../constants/app_constants.dart';
 import '../database/database.dart';
+import 'cover_images.dart';
 
 import 'logging.dart';
 import '../utils/title_similarity.dart';
@@ -455,7 +456,7 @@ class SteamService {
   /// Initialize the service (get images directory)
   Future<void> init() async {
     try {
-      _imagesDir = await AppDatabase.getSteamImagesDirectory();
+      _imagesDir = await CoverImages.directory();
     } catch (e) {
       _log('Failed to init Steam image cache: $e');
       _imagesDir = null;
@@ -656,19 +657,34 @@ class SteamService {
     }
   }
 
-  /// Download and save game image, returns local path
+  /// Downloads [appId]'s artwork and returns its local path. With a [title]
+  /// it is saved as that title's cover, and a cover already saved under the
+  /// same title, from any platform, is reused. Without one it is a preview,
+  /// kept in a temporary folder until a titled save reuses it.
   Future<String?> downloadImage(
     String appId, {
+    String? title,
     bool useLibraryImage = false,
     String? imageUrl,
   }) async {
     if (_imagesDir == null) await init();
     if (_imagesDir == null) return null;
 
-    final localPath = p.join(_imagesDir!.path, '$appId.jpg');
+    final preview = p.join(
+      Directory.systemTemp.path,
+      'unikm-steam-previews',
+      '$appId.jpg',
+    );
+    final name = CoverImages.stem(title ?? '');
+    final localPath = title == null
+        ? preview
+        : p.join(_imagesDir!.path, '${name.isEmpty ? appId : name}.jpg');
 
-    // Check if already downloaded
     if (File(localPath).existsSync()) return localPath;
+    if (title != null && File(preview).existsSync()) {
+      return (await File(preview).copy(localPath)).path;
+    }
+    if (title == null) await File(preview).parent.create(recursive: true);
 
     // Resolve current artwork even for old cached results: newer apps use
     // hashed store_item_assets paths rather than the legacy CDN layout.
@@ -880,8 +896,8 @@ class SteamService {
     SteamSearchResult result;
     try {
       // Collect tags (SteamSpy first, then app details genres/categories)
-      // Insertion-ordered; at most 30 SteamSpy tags, then genres/categories
-      // until the 30th tag is reached.
+      // Insertion-ordered: SteamSpy tags by votes, then genres and
+      // categories, up to [_maxTags].
       final tags = <String>{};
       final dataSources = <SteamDataSource>[];
       String? headerImage;
@@ -1011,10 +1027,16 @@ class SteamService {
     return result;
   }
 
-  /// Adds [candidates] to [tags], stopping once an addition reaches 30.
+  /// Most tags kept per game. SteamSpy gives at most 20 user tags and the
+  /// store adds a few genres and up to about 20 categories, so 50 keeps all
+  /// of them in practice while still bounding what is stored per game.
+  static const _maxTags = 50;
+
+  /// Adds [candidates] to [tags] until it holds [_maxTags].
   static void _addTags(Set<String> tags, Iterable<String?> candidates) {
     for (final tag in candidates) {
-      if (tag != null && tags.add(tag) && tags.length >= 30) break;
+      if (tags.length >= _maxTags) break;
+      if (tag != null) tags.add(tag);
     }
   }
 

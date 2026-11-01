@@ -243,6 +243,9 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   /// Text and icons on [secondary] (and [error]) fills.
   Color get onSecondaryText => contrastColor(baseSecondary);
 
+  /// Icons on solid [accent] fills, such as the selection check.
+  Color get onAccentText => contrastColor(baseAccent);
+
   /// Primary button foreground when disabled.
   Color get primaryButtonDisabledText => textSecondary.withValues(alpha: 0.5);
 
@@ -1344,6 +1347,28 @@ const kRoyalTheme = AppThemeData(
   iconData: Icons.diamond,
 );
 
+/// Neon theme (black / green / lime)
+const kNeonTheme = AppThemeData(
+  id: 'builtin-neon',
+  name: 'Neon',
+  baseBackground: Color(0xFF1B1B1B),
+  baseSecondary: Color(0xFF11D337),
+  baseAccent: Color(0xFFE9FF64),
+  iconData: Icons.wb_iridescent,
+  cornerRadius: 18,
+);
+
+/// Strawberry theme (deep red)
+const kStrawberryTheme = AppThemeData(
+  id: 'builtin-strawberry',
+  name: 'Strawberry',
+  baseBackground: Color(0xFF250B0A),
+  baseSecondary: Color(0xFFEC1414),
+  baseAccent: Color(0xFFF65C5C),
+  iconData: Icons.icecream,
+  cornerRadius: 18,
+);
+
 /// All built-in themes
 const List<AppThemeData> kBuiltInThemes = [
   kDarkTheme,
@@ -1353,4 +1378,6 @@ const List<AppThemeData> kBuiltInThemes = [
   kOceanTheme,
   kForestTheme,
   kRoyalTheme,
+  kNeonTheme,
+  kStrawberryTheme,
 ];

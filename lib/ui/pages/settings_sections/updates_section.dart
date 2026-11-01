@@ -57,7 +57,6 @@ class UpdatesSection extends ConsumerStatefulWidget {
         'Update Preferences',
         'beta',
       ],
-      info: 'Pre-releases are beta versions.',
     ),
     SettingsSearchGroup(
       title: 'GitHub Repository & API',

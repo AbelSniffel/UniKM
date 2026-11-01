@@ -1,5 +1,3 @@
-import 'dart:ui' show ClipOp;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -193,7 +191,7 @@ class SettingsActionCard extends StatelessWidget {
   }
 }
 
-class SettingsChoiceCard<T> extends StatelessWidget {
+class SettingsChoiceCard<T> extends StatefulWidget {
   const SettingsChoiceCard({
     super.key,
     required this.theme,
@@ -217,11 +215,31 @@ class SettingsChoiceCard<T> extends StatelessWidget {
   final ValueChanged<T>? onChanged;
 
   @override
+  State<SettingsChoiceCard<T>> createState() => _SettingsChoiceCardState<T>();
+}
+
+class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
+  final _menu = MenuController();
+
+  /// The card's width, taken as the menu opens so a resize never rebuilds it.
+  double? _menuWidth;
+
+  void _toggleMenu() {
+    if (_menu.isOpen) return _menu.close();
+    setState(() => _menuWidth = (context.size ?? Size.zero).width);
+    // Opens once the width has rebuilt into the menu.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_menu.isOpen) _menu.open();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final selected = choices
-        .where((choice) => choice.value == value)
+    final theme = widget.theme;
+    final selected = widget.choices
+        .where((choice) => choice.value == widget.value)
         .firstOrNull;
-    final selectedLabel = selected?.label ?? value.toString();
+    final selectedLabel = selected?.label ?? widget.value.toString();
     final selectedChoice = Align(
       widthFactor: 1,
       heightFactor: 1,
@@ -244,54 +262,38 @@ class SettingsChoiceCard<T> extends StatelessWidget {
         ),
       ),
     );
-    return Builder(
-      builder: (cardContext) => Semantics(
+    return AppMenuAnchor(
+      theme: theme,
+      controller: _menu,
+      // The menu matches the card's width.
+      width: _menuWidth,
+      maxHeight: kDropdownMenuMaxHeight,
+      menuChildren: [
+        for (final choice in widget.choices)
+          appMenuItem(
+            theme,
+            selected: choice.value == widget.value,
+            onPressed: () => widget.onChanged?.call(choice.value),
+            child: Text(choice.label),
+          ),
+      ],
+      builder: (context, controller, _) => Semantics(
         button: true,
-        enabled: onChanged != null,
-        label: label,
+        enabled: widget.onChanged != null,
+        label: widget.label,
         value: selectedLabel,
         child: _SettingsControlCard(
           theme: theme,
-          label: label,
-          description: description,
-          icon: icon,
+          label: widget.label,
+          description: widget.description,
+          icon: widget.icon,
           active: selected != null,
-          enabled: onChanged != null,
-          onTap: onChanged == null ? null : () => _openMenu(cardContext),
+          enabled: widget.onChanged != null,
+          onTap: widget.onChanged == null ? null : _toggleMenu,
           trailing: selectedChoice,
         ),
       ),
     );
-  }
-
-  Future<void> _openMenu(BuildContext context) async {
-    final card = context.findRenderObject() as RenderBox;
-    final origin = card.localToGlobal(Offset.zero);
-    final menuWidth = card.size.width;
-    final selected = await showAppMenu<T>(
-      context: context,
-      position: overlayMenuPosition(
-        context,
-        Rect.fromLTWH(origin.dx, origin.dy + card.size.height, menuWidth, 1),
-      ),
-      color: theme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      constraints: BoxConstraints(minWidth: menuWidth),
-      items: [
-        for (final choice in choices)
-          CheckedPopupMenuItem<T>(
-            value: choice.value,
-            checked: choice.value == value,
-            child: Text(
-              choice.label,
-              style: TextStyle(color: theme.textPrimary),
-            ),
-          ),
-      ],
-    );
-    if (selected != null && context.mounted) onChanged?.call(selected);
   }
 }
 
@@ -333,11 +335,9 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final radius = BorderRadius.circular(theme.cornerRadius);
-    final indicatorSize =
+    final miniDot =
         widget.isToggle &&
-            widget.indicatorStyle != SettingsCardIndicatorStyle.switchControl
-        ? SettingsCardIndicator.size
-        : null;
+        widget.indicatorStyle == SettingsCardIndicatorStyle.miniDot;
     final highlighted = widget.enabled && (_hovered || _pressed || _focused);
     // A settings search lights the card whose label it matches.
     final query = SettingsSearchScope.queryOf(context);
@@ -390,7 +390,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
           : background,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
-        side: !widget.enabled || indicatorSize != null
+        side: !widget.enabled
             ? BorderSide.none
             : BorderSide(
                 color: borderColor,
@@ -435,17 +435,13 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
                       children: [
                         ?iconSquare,
                         label,
-                        if (indicatorSize != null)
-                          SizedBox(width: indicatorSize.width)
-                        else ...[
-                          const SizedBox(width: 12),
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: constraints.maxWidth * 0.65,
-                            ),
-                            child: widget.trailing,
+                        const SizedBox(width: 12),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth * 0.65,
                           ),
-                        ],
+                          child: widget.trailing,
+                        ),
                       ],
                     ),
                   ),
@@ -458,100 +454,26 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         ),
       ),
     );
-    final indicatorOverlay = indicatorSize == null
-        ? null
-        : CustomPaint(
-            foregroundPainter: widget.enabled
-                ? _SettingsIndicatorBorderPainter(
-                    radius: theme.cornerRadius,
-                    color: borderColor,
-                    indicatorSize: indicatorSize,
-                    omitIndicator:
-                        widget.indicatorStyle ==
-                            SettingsCardIndicatorStyle.retroSquare &&
-                        (widget.active || !highlighted),
-                  )
-                : null,
-            child: ExcludeSemantics(
-              child: ClipRRect(
-                borderRadius: radius,
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: RepaintBoundary(
-                    child: SettingsCardIndicator(
-                      theme: theme,
-                      value: widget.active,
-                      enabled: widget.enabled,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
     return RepaintBoundary(
       child: SettingsCardInset(
         active: widget.active && widget.enabled,
         raisedWhenInactive: widget.isToggle && widget.enabled,
         surfaceColor: theme.background,
         borderRadius: theme.cornerRadius,
-        overlay: indicatorOverlay == null
-            ? null
-            : RepaintBoundary(child: indicatorOverlay),
+        overlay: miniDot
+            ? Align(
+                alignment: Alignment.topRight,
+                child: SettingsCardMiniDot(
+                  theme: theme,
+                  value: widget.active,
+                  enabled: widget.enabled,
+                ),
+              )
+            : null,
         shadeOverlay: !(widget.active && widget.enabled),
         cacheRaster: true,
         child: RepaintBoundary(child: material),
       ),
     );
   }
-}
-
-/// OFF hover outlines cross the indicator without changing its geometry.
-class _SettingsIndicatorBorderPainter extends CustomPainter {
-  const _SettingsIndicatorBorderPainter({
-    required this.radius,
-    required this.color,
-    required this.indicatorSize,
-    required this.omitIndicator,
-  });
-
-  final double radius;
-  final Color color;
-  final Size indicatorSize;
-  final bool omitIndicator;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final outline = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(radius),
-    ).scaleRadii();
-    canvas.save();
-    if (omitIndicator) {
-      canvas.clipRect(
-        Rect.fromLTWH(
-          size.width - indicatorSize.width,
-          -1,
-          indicatorSize.width + 1,
-          indicatorSize.height + 1,
-        ),
-        clipOp: ClipOp.difference,
-        doAntiAlias: false,
-      );
-    }
-    canvas.drawRRect(
-      outline.deflate(0.5),
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_SettingsIndicatorBorderPainter oldDelegate) =>
-      oldDelegate.radius != radius ||
-      oldDelegate.color != color ||
-      oldDelegate.indicatorSize != indicatorSize ||
-      oldDelegate.omitIndicator != omitIndicator;
 }

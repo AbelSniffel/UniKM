@@ -63,6 +63,10 @@ class _AppComboBoxState<T> extends FormFieldState<T> {
   bool _focused = false;
   bool _hovered = false;
   bool _open = false;
+  final _menu = MenuController();
+
+  /// The control's own width, taken as the menu opens.
+  double? _menuWidth;
 
   AppComboBox<T> get _combo => widget as AppComboBox<T>;
   AppThemeData get _theme =>
@@ -72,61 +76,22 @@ class _AppComboBoxState<T> extends FormFieldState<T> {
           ? kDarkTheme
           : kLightTheme);
 
-  Future<void> _openMenu() async {
-    if (!_combo.enabled || _open) return;
+  void _openMenu() {
+    if (!_combo.enabled) return;
+    if (_menu.isOpen) return _menu.close();
     _focusNode.requestFocus();
-    setState(() => _open = true);
     final box = context.findRenderObject()! as RenderBox;
-    final overlay =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final width = (_combo.menuWidth ?? box.size.width).clamp(
-      0.0,
-      (overlay.size.width - 16).clamp(0.0, double.infinity),
-    );
-    final theme = _theme;
-    final selected = await showAppMenu<T>(
-      context: context,
-      initialValue: value,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(origin.dx, origin.dy + box.size.height, width, 0),
-        Offset.zero & overlay.size,
-      ),
-      color: theme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        side: BorderSide(color: theme.border),
-      ),
-      constraints: BoxConstraints(
-        minWidth: width,
-        maxWidth: width,
-        maxHeight: _combo.menuMaxHeight,
-      ),
-      items: [
-        for (final item in _combo.items)
-          PopupMenuItem<T>(
-            value: item.value,
-            enabled: item.enabled,
-            onTap: item.onTap,
-            child: DefaultTextStyle.merge(
-              style: _combo.style ?? TextStyle(color: theme.textPrimary),
-              child: IconTheme.merge(
-                data: IconThemeData(color: theme.textPrimary),
-                child: item,
-              ),
-            ),
-          ),
-      ],
-    );
-    if (!mounted) return;
-    setState(() => _open = false);
-    if (selected == null ||
-        !_combo.enabled ||
-        !_combo.items.any((item) => item.value == selected && item.enabled)) {
-      return;
-    }
-    didChange(selected);
-    _combo.onChanged?.call(selected);
+    setState(() => _menuWidth = _combo.menuWidth ?? box.size.width);
+    // Opens once the width has rebuilt into the menu.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_menu.isOpen) _menu.open();
+    });
+  }
+
+  void _select(DropdownMenuItem<T> item) {
+    item.onTap?.call();
+    didChange(item.value);
+    _combo.onChanged?.call(item.value);
   }
 
   @override
@@ -153,6 +118,29 @@ class _AppComboBoxState<T> extends FormFieldState<T> {
         ],
       ),
     );
+    return AppMenuAnchor(
+      theme: theme,
+      controller: _menu,
+      childFocusNode: _focusNode,
+      onOpen: () => setState(() => _open = true),
+      onClose: () => setState(() => _open = false),
+      width: _menuWidth,
+      maxHeight: combo.menuMaxHeight,
+      menuChildren: [
+        for (final item in combo.items)
+          appMenuItem(
+            theme,
+            selected: item.value == value,
+            onPressed: item.enabled ? () => _select(item) : null,
+            child: item,
+          ),
+      ],
+      builder: (context, controller, _) => _buildField(theme, row),
+    );
+  }
+
+  Widget _buildField(AppThemeData theme, Widget row) {
+    final combo = _combo;
     return Semantics(
       button: true,
       enabled: combo.enabled,

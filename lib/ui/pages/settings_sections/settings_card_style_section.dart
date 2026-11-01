@@ -55,11 +55,11 @@ class _SettingsCardStyleSectionState
             theme: theme,
             style: ref.watch(toggleStyleProvider),
           ),
-          SettingsCardIndicatorStyle.retroSquare => MouseRegion(
+          SettingsCardIndicatorStyle.miniDot => MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTap: () => _toggleDemo(style),
-              child: SettingsCardIndicator(
+              child: SettingsCardMiniDot(
                 theme: theme,
                 value: on,
                 enabled: true,
@@ -96,11 +96,11 @@ class _SettingsCardStyleSectionState
                 onTap: () => ref
                     .read(settingsProvider.notifier)
                     .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
-                // The retro display belongs in the corner, as on real cards.
+                // Corner indicators sit in the corner, as on real cards.
                 previewAlignment:
-                    style == SettingsCardIndicatorStyle.retroSquare
-                    ? Alignment.topRight
-                    : Alignment.centerRight,
+                    style == SettingsCardIndicatorStyle.switchControl
+                    ? Alignment.centerRight
+                    : Alignment.topRight,
                 preview: _preview(style),
               ),
             ),

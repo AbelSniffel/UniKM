@@ -16,14 +16,12 @@ dependencies:
 
   # Database
   drift: ^2.35.1
-  # 3.6+ needs meta newer than Flutter 3.44.8's SDK pin.
-  sqlite3: ^3.5.2
+  sqlite3: ^3.8.0
   path_provider: ^2.1.6
   path: ^1.9.1
 
   # Encryption, including legacy encrypted imports
   cryptography: ^2.9.0
-  pointycastle: ^4.0.0
 
   # HTTP & API
   http: ^1.6.0
@@ -34,7 +32,8 @@ dependencies:
   screen_retriever: ^0.2.2
   
   # Image Handling
-  # 4.x needs material_ui, whose available releases require Dart 3.13+.
+  # 4.x depends on the standalone material_ui package; stay on 3.x until the
+  # app itself moves from flutter/material.dart to material_ui.
   cached_network_image: ^3.4.1
   
   # Storage
@@ -79,8 +78,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   drift_dev: ^2.35.1
-  # 2.15.2+ needs meta newer than Flutter 3.44.8's SDK pin.
-  build_runner: ^2.15.1
+  build_runner: ^2.17.1
 
 flutter:
   uses-material-design: true
