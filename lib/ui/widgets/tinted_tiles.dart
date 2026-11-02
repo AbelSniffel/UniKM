@@ -55,26 +55,32 @@ class TintedHeading extends StatelessWidget {
 }
 
 /// A tinted tile with an icon in its own square, a title, an optional
-/// subtitle and an optional [trailing] widget. With [selected] it is one
-/// choice of several: the chosen tile is tinted more strongly, outlined and
-/// checked. A tile with [onTap] is raised and bordered like the settings
-/// cards, outlined in its colour on hover and pressed in while held or
-/// chosen; one without stays flat.
+/// subtitle and an optional [trailing] widget. A [leading] widget, such as a
+/// live preview of the choice, replaces the icon in a wider square.
+/// With [selected] it is one choice of several: the chosen tile is tinted more
+/// strongly, pressed in and checked, easing in and out with the press depth.
+/// A tile with [onTap] is raised and bordered like the settings cards,
+/// outlined in its colour on hover and pressed in while held or chosen; one
+/// without stays flat.
 class TintedOptionTile extends StatefulWidget {
   const TintedOptionTile({
     super.key,
     required this.theme,
-    required this.icon,
     required this.title,
+    this.icon,
+    this.leading,
     this.subtitle,
     this.selected,
     this.onTap,
     this.color,
     this.trailing,
-  });
+  }) : assert(icon != null || leading != null);
 
   final AppThemeData theme;
-  final IconData icon;
+  final IconData? icon;
+
+  /// Shown instead of [icon], for display only: it takes no taps or focus.
+  final Widget? leading;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -101,91 +107,124 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
     final chosen = widget.selected ?? false;
     final tappable = widget.onTap != null;
     final radius = BorderRadius.circular(theme.cornerRadius);
-    final fill = color.withValues(alpha: chosen ? 0.16 : 0.08);
-    final tile = Material(
-      color: fill,
-      shape: RoundedRectangleBorder(
-        borderRadius: radius,
-        side: BorderSide(
-          color: chosen || (tappable && _hovered)
-              ? color
-              : tappable
-              ? theme.border
-              : Colors.transparent,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: widget.onTap,
-        onHover: tappable ? (value) => setState(() => _hovered = value) : null,
-        onHighlightChanged: tappable
-            ? (value) => setState(() => _pressed = value)
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            spacing: 12,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
-                  borderRadius: radius,
-                ),
-                child: Icon(widget.icon, color: color, size: 20),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 2,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.w600,
+    final leading = widget.leading;
+    final content = Padding(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        spacing: 12,
+        children: [
+          Container(
+            width: leading == null ? 36 : 64,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: radius,
+            ),
+            child: leading == null
+                ? Icon(widget.icon, color: color, size: 20)
+                : IgnorePointer(
+                    child: ExcludeSemantics(
+                      child: ExcludeFocus(
+                        child: FittedBox(fit: BoxFit.scaleDown, child: leading),
                       ),
                     ),
-                    if (widget.subtitle != null)
-                      Text(
-                        widget.subtitle!,
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (widget.selected != null)
-                Icon(
-                  chosen ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: chosen ? color : theme.textHint,
-                  size: 20,
-                )
-              else
-                ?widget.trailing,
-            ],
+                  ),
           ),
-        ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text(
+                  widget.title,
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (widget.subtitle != null)
+                  Text(
+                    widget.subtitle!,
+                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          if (widget.selected != null)
+            AnimatedSwitcher(
+              duration: _selectionDuration(context),
+              switchInCurve: Curves.easeOutBack,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: animation, child: child),
+              ),
+              child: Icon(
+                chosen ? Icons.check_circle : Icons.radio_button_unchecked,
+                key: ValueKey(chosen),
+                color: chosen ? color : theme.textHint,
+                size: 20,
+              ),
+            )
+          else
+            ?widget.trailing,
+        ],
       ),
     );
-    return Semantics(
-      checked: widget.selected,
-      inMutuallyExclusiveGroup: widget.selected != null,
-      child: tappable
-          ? SettingsCardInset(
-              active: chosen || _pressed,
-              raisedWhenInactive: true,
-              borderRadius: theme.cornerRadius,
-              surfaceColor: Color.alphaBlend(fill, theme.surface),
-              cacheRaster: true,
-              child: tile,
-            )
-          : tile,
+    // The tint follows the selection at the pace of the inset's depth, so a
+    // tile losing its choice eases out instead of snapping.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: chosen ? 1 : 0),
+      duration: _selectionDuration(context),
+      curve: Curves.easeOutCubic,
+      child: content,
+      builder: (context, t, content) {
+        final fill = color.withValues(alpha: 0.08 + 0.08 * t);
+        final tile = Material(
+          color: fill,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: !tappable
+                ? BorderSide.none
+                : _hovered
+                ? BorderSide(color: color, width: 1.5)
+                : BorderSide(color: theme.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            onHover: tappable
+                ? (value) => setState(() => _hovered = value)
+                : null,
+            onHighlightChanged: tappable
+                ? (value) => setState(() => _pressed = value)
+                : null,
+            child: content,
+          ),
+        );
+        return Semantics(
+          checked: widget.selected,
+          inMutuallyExclusiveGroup: widget.selected != null,
+          child: tappable
+              ? SettingsCardInset(
+                  active: chosen || _pressed,
+                  raisedWhenInactive: true,
+                  borderRadius: theme.cornerRadius,
+                  surfaceColor: Color.alphaBlend(fill, theme.surface),
+                  cacheRaster: true,
+                  child: tile,
+                )
+              : tile,
+        );
+      },
     );
   }
+
+  /// Matches [SettingsCardInset]'s depth change.
+  static Duration _selectionDuration(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 140);
 }
 
 /// A card tinted with [color] (the accent by default): a large icon in its

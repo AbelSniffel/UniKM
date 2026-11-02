@@ -19,6 +19,7 @@ import '../../widgets/preview_card.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/settings_header_actions.dart';
+import '../../widgets/tinted_tiles.dart';
 import '../../widgets/toggle_switch.dart';
 import '../../widgets/theme_preview_card.dart';
 import '../../widgets/theme_picker_actions.dart';
@@ -401,7 +402,7 @@ class ThemeHeaderActions extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 /// Settings section that lets the user pick between toggle switch styles.
-class _ControlStylesSection extends ConsumerStatefulWidget {
+class _ControlStylesSection extends ConsumerWidget {
   const _ControlStylesSection({
     required this.theme,
     required this.searchQuery,
@@ -417,57 +418,39 @@ class _ControlStylesSection extends ConsumerStatefulWidget {
   final bool isAlternate;
 
   @override
-  ConsumerState<_ControlStylesSection> createState() =>
-      _ControlStylesSectionState();
-}
-
-class _ControlStylesSectionState extends ConsumerState<_ControlStylesSection> {
-  /// Local preview state; trying the switch does not change app settings.
-  final _demoOn = {for (final style in ToggleStyle.values) style: true};
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currentStyle = ref.watch(toggleStyleProvider);
-    final settingsNotifier = ref.read(settingsProvider.notifier);
-
     return SectionGroupBox(
       title: AppearanceSection.controlStylesSearchGroup.title,
-      theme: widget.theme,
+      theme: theme,
       titleIcon: Icons.toggle_on_outlined,
-      searchQuery: widget.searchQuery,
-      isSearchMatch: widget.isSearchMatch,
-      groupPosition: widget.groupPosition,
-      alternateBackground: widget.isAlternate,
-      child: PreviewCardWrap(
+      searchQuery: searchQuery,
+      isSearchMatch: isSearchMatch,
+      groupPosition: groupPosition,
+      alternateBackground: isAlternate,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
         children: [
           for (final style in ToggleStyle.values)
-            Tooltip(
+            TintedOptionTile(
               key: ValueKey(style),
-              message: style.description,
-              child: StyleChoiceCard(
-                name: style.displayName,
-                theme: widget.theme,
-                isSelected: currentStyle == style,
-                onTap: () => settingsNotifier.setSetting(
-                  SettingsKeys.toggleStyle,
-                  style,
-                ),
-                preview: Semantics(
-                  label: '${style.displayName} toggle preview',
-                  toggled: _demoOn[style],
-                  onTap: () =>
-                      setState(() => _demoOn[style] = !_demoOn[style]!),
-                  child: ExcludeSemantics(
-                    child: AppToggleSwitch(
-                      value: _demoOn[style]!,
-                      onChanged: (value) =>
-                          setState(() => _demoOn[style] = value),
-                      theme: widget.theme,
-                      style: style,
-                    ),
-                  ),
-                ),
+              theme: theme,
+              // The style itself, switched on.
+              leading: AppToggleSwitch(
+                value: true,
+                onChanged: (_) {},
+                theme: theme,
+                style: style,
+                // The switch alone, without its On/Off word.
+                label: '',
               ),
+              title: style.displayName,
+              subtitle: style.description,
+              selected: currentStyle == style,
+              onTap: () => ref
+                  .read(settingsProvider.notifier)
+                  .setSetting(SettingsKeys.toggleStyle, style),
             ),
         ],
       ),

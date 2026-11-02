@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
-import '../../widgets/preview_card.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/settings_card_indicator.dart';
+import '../../widgets/tinted_tiles.dart';
 import '../../widgets/toggle_switch.dart';
 
-class SettingsCardStyleSection extends ConsumerStatefulWidget {
+class SettingsCardStyleSection extends ConsumerWidget {
   const SettingsCardStyleSection({
     super.key,
     required this.theme,
@@ -26,83 +26,45 @@ class SettingsCardStyleSection extends ConsumerStatefulWidget {
   final bool isAlternate;
 
   @override
-  ConsumerState<SettingsCardStyleSection> createState() =>
-      _SettingsCardStyleSectionState();
-}
-
-class _SettingsCardStyleSectionState
-    extends ConsumerState<SettingsCardStyleSection> {
-  /// Local preview state; trying a status control does not change settings.
-  final _demoOn = {
-    for (final style in SettingsCardIndicatorStyle.values) style: true,
-  };
-
-  void _toggleDemo(SettingsCardIndicatorStyle style, [bool? value]) =>
-      setState(() => _demoOn[style] = value ?? !_demoOn[style]!);
-
-  Widget _preview(SettingsCardIndicatorStyle style) {
-    final theme = widget.theme;
-    final on = _demoOn[style]!;
-    return Semantics(
-      label: '${style.displayName} status preview',
-      toggled: on,
-      onTap: () => _toggleDemo(style),
-      child: ExcludeSemantics(
-        child: switch (style) {
-          SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
-            value: on,
-            onChanged: (value) => _toggleDemo(style, value),
-            theme: theme,
-            style: ref.watch(toggleStyleProvider),
-          ),
-          SettingsCardIndicatorStyle.miniDot => MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => _toggleDemo(style),
-              child: SettingsCardMiniDot(
-                theme: theme,
-                value: on,
-                enabled: true,
-              ),
-            ),
-          ),
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(settingsCardIndicatorStyleProvider);
     return SectionGroupBox(
       title: 'Settings Card Style',
       titleIcon: Icons.tune,
-      theme: widget.theme,
-      searchQuery: widget.searchQuery,
-      isSearchMatch: widget.isSearchMatch,
-      groupPosition: widget.groupPosition,
-      alternateBackground: widget.isAlternate,
+      theme: theme,
+      searchQuery: searchQuery,
+      isSearchMatch: isSearchMatch,
+      groupPosition: groupPosition,
+      alternateBackground: isAlternate,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
-      child: PreviewCardWrap(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
         children: [
           for (final style in SettingsCardIndicatorStyle.values)
-            Tooltip(
+            TintedOptionTile(
               key: ValueKey(style),
-              message: style.description,
-              child: StyleChoiceCard(
-                name: style.displayName,
-                theme: widget.theme,
-                isSelected: selected == style,
-                onTap: () => ref
-                    .read(settingsProvider.notifier)
-                    .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
-                // Corner indicators sit in the corner, as on real cards.
-                previewAlignment:
-                    style == SettingsCardIndicatorStyle.switchControl
-                    ? Alignment.centerRight
-                    : Alignment.topRight,
-                preview: _preview(style),
-              ),
+              theme: theme,
+              // The indicator itself, switched on.
+              leading: switch (style) {
+                SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
+                  value: true,
+                  onChanged: (_) {},
+                  theme: theme,
+                  label: '',
+                ),
+                SettingsCardIndicatorStyle.miniDot => SettingsCardMiniDot(
+                  theme: theme,
+                  value: true,
+                  enabled: true,
+                ),
+              },
+              title: style.displayName,
+              subtitle: style.description,
+              selected: selected == style,
+              onTap: () => ref
+                  .read(settingsProvider.notifier)
+                  .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
             ),
         ],
       ),

@@ -2,14 +2,9 @@
 /// Matches the original Python SettingsPage with 5+ sections
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/app_constants.dart';
-import '../../core/settings/settings_model.dart';
-import '../widgets/hover_builder.dart';
 import '../widgets/nav_button_group.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
@@ -176,53 +171,13 @@ final List<(String, String, IconData)> _settingsRailSections = [
 /// Space around the section button group inside the rail.
 const double _settingsRailOuterPadding = 8;
 
-/// A section button's width when only its icon shows.
-const double _settingsRailCollapsedButtonExtent = 40;
-
-/// Slack on the measured label, which uses a fallback font, so none is cut.
-const double _settingsRailLabelWidthBuffer = 24;
-
-// The collapse toggle at the foot of the rail.
-const double _settingsRailToggleVerticalPadding = 8;
-const double _settingsRailToggleHeight =
-    (_settingsRailToggleVerticalPadding * 2) + kIconSize;
-
-final double _settingsRailMaxLabelWidth = _measureSettingsRailMaxLabelWidth();
-
-/// An expanded section button: the longest label under its icon, plus the
-/// button's own padding.
-final double _settingsRailExpandedButtonWidth = math.max(
-  _settingsRailCollapsedButtonExtent,
-  _settingsRailMaxLabelWidth + 24 + _settingsRailLabelWidthBuffer,
-);
+/// A section button's width: the rail shows icons only.
+const double _settingsRailButtonExtent = 40;
 
 /// The rail's width: a button plus its group and outer padding.
-double _settingsRailWidth({required bool collapsed}) =>
-    (collapsed
-        ? _settingsRailCollapsedButtonExtent
-        : _settingsRailExpandedButtonWidth) +
+const double _settingsRailWidth =
+    _settingsRailButtonExtent +
     (_settingsRailOuterPadding + NavButtonGroup.padding) * 2;
-
-/// Phones and very narrow windows always collapse the rail.
-bool _settingsRailForceCollapsed(BuildContext context, bool veryNarrow) {
-  final platform = Theme.of(context).platform;
-  return veryNarrow ||
-      platform == TargetPlatform.android ||
-      platform == TargetPlatform.iOS;
-}
-
-double _measureSettingsRailMaxLabelWidth() {
-  final painter = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
-  var maxWidth = 0.0;
-
-  for (final (_, label, _) in _settingsRailSections) {
-    painter.text = TextSpan(text: label, style: const TextStyle(fontSize: 14));
-    painter.layout();
-    if (painter.width > maxWidth) maxWidth = painter.width;
-  }
-
-  return maxWidth;
-}
 
 /// Settings page
 class SettingsPage extends ConsumerStatefulWidget {
@@ -273,20 +228,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     bool matchesSearch(String text) => settingsSearchMatches(searchQuery, text);
 
-    // Created outside the layout callback: a resize then reuses these widgets,
-    // so the page lays out again at the new width without rebuilding. The
-    // rail changes only when the width crosses the very narrow breakpoint.
-    _SettingsSectionRail rail({required bool veryNarrow}) =>
-        _SettingsSectionRail(
-          selectedSection: selectedSection,
-          isSearching: isSearching,
-          isVeryNarrowLayout: veryNarrow,
-          onSectionSelected: (sectionId) => ref
-              .read(settingsPageSelectedSectionProvider.notifier)
-              .set(sectionId),
-        );
-    final wideRail = rail(veryNarrow: false);
-    final narrowRail = rail(veryNarrow: true);
+    final rail = _SettingsSectionRail(
+      selectedSection: selectedSection,
+      isSearching: isSearching,
+      onSectionSelected: (sectionId) =>
+          ref.read(settingsPageSelectedSectionProvider.notifier).set(sectionId),
+    );
     final body = _SettingsPageBody(
       sectionIndex: _settingsRailSections.indexWhere(
         (section) => section.$1 == effectiveSection,
@@ -304,16 +251,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       showOnlyMatches: searchQuery.isNotEmpty,
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) => Row(
-        children: [
-          constraints.maxWidth < kVeryNarrowLayoutBreakpoint
-              ? narrowRail
-              : wideRail,
-          body,
-        ],
-      ),
-    );
+    return Row(children: [rail, body]);
   }
 
   _SettingsSectionDefinition? _selectedSectionDefinitionFor(String sectionId) {
@@ -325,139 +263,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
+/// The section list beside the page: icon-only buttons, named in tooltips.
 class _SettingsSectionRail extends ConsumerWidget {
   const _SettingsSectionRail({
     required this.selectedSection,
     required this.isSearching,
-    required this.isVeryNarrowLayout,
     required this.onSectionSelected,
   });
 
   final String selectedSection;
   final bool isSearching;
-  final bool isVeryNarrowLayout;
   final ValueChanged<String> onSectionSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final forceCollapsed = _settingsRailForceCollapsed(
-      context,
-      isVeryNarrowLayout,
-    );
-    final collapsed =
-        forceCollapsed ||
-        ref.watch(
-          appShellSettingsProvider.select(
-            (s) => s.settingsSectionPanelCollapsed,
-          ),
-        );
     return RepaintBoundary(
-      child: AnimatedContainer(
-        duration: kNavPanelMotionAnimation,
-        curve: kNavPanelMotionCurve,
-        width: _settingsRailWidth(collapsed: collapsed),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: theme.surface,
-            border: Border(right: BorderSide(color: theme.border)),
-            boxShadow: [
-              BoxShadow(
-                color: theme.border.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  key: const ValueKey('settings-section-navigation'),
-                  padding: const EdgeInsets.all(_settingsRailOuterPadding),
-                  children: [
-                    NavButtonGroup(
-                      theme: theme,
-                      isHorizontal: false,
-                      children: [
-                        for (final (id, label, icon) in _settingsRailSections)
-                          _SettingsSectionButton(
-                            key: ValueKey<String>('settings-rail-$id'),
-                            theme: theme,
-                            icon: icon,
-                            label: label,
-                            isSelected: !isSearching && selectedSection == id,
-                            isCollapsed: collapsed,
-                            isEnabled: !isSearching,
-                            onTap: () => onSectionSelected(id),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (!forceCollapsed)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                  child: Tooltip(
-                    message: collapsed
-                        ? 'Expand section list'
-                        : 'Collapse section list',
-                    child: HoverBuilder(
-                      cursor: SystemMouseCursors.click,
-                      builder: (context, hovered) => GestureDetector(
-                        onTap: () => ref
-                            .read(settingsProvider.notifier)
-                            .setSetting(
-                              SettingsKeys.settingsSectionPanelCollapsed,
-                              !collapsed,
-                            ),
-                        child: AnimatedContainer(
-                          duration: kNavPanelMotionAnimation,
-                          curve: kNavPanelMotionCurve,
-                          width: collapsed
-                              ? _settingsRailCollapsedButtonExtent
-                              : _settingsRailExpandedButtonWidth,
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: _settingsRailToggleVerticalPadding,
-                          ),
-                          decoration: BoxDecoration(
-                            color: hovered
-                                ? theme.navItemHover
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                              math.min(
-                                theme.cornerRadius * 1.25,
-                                _settingsRailToggleHeight / 2,
-                              ),
-                            ),
-                          ),
-                          child: AnimatedSwitcher(
-                            duration: kNavPanelMotionAnimation,
-                            transitionBuilder: (child, animation) =>
-                                FadeTransition(
-                                  opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: animation,
-                                    child: child,
-                                  ),
-                                ),
-                            child: Icon(
-                              collapsed
-                                  ? Icons.chevron_right
-                                  : Icons.chevron_left,
-                              key: ValueKey(collapsed),
-                              color: theme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+      child: Container(
+        width: _settingsRailWidth,
+        decoration: BoxDecoration(
+          color: theme.surface,
+          border: Border(right: BorderSide(color: theme.border)),
+          boxShadow: [
+            BoxShadow(
+              color: theme.border.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ListView(
+          key: const ValueKey('settings-section-navigation'),
+          padding: const EdgeInsets.all(_settingsRailOuterPadding),
+          children: [
+            NavButtonGroup(
+              theme: theme,
+              isHorizontal: false,
+              children: [
+                for (final (id, label, icon) in _settingsRailSections)
+                  AppNavigationButton(
+                    key: ValueKey<String>('settings-rail-$id'),
+                    theme: theme,
+                    isSelected: !isSearching && selectedSection == id,
+                    isEnabled: !isSearching,
+                    isHorizontal: false,
+                    onTap: () => onSectionSelected(id),
+                    iconData: icon,
+                    tooltipMessage: label,
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -609,47 +465,6 @@ class _SettingsPageBody extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// A section button in the rail: the navigation panel's vertical button, with
-/// its label under the icon on the selected section only.
-class _SettingsSectionButton extends StatelessWidget {
-  const _SettingsSectionButton({
-    super.key,
-    required this.theme,
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.isCollapsed,
-    required this.isEnabled,
-    required this.onTap,
-  });
-
-  final AppThemeData theme;
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final bool isCollapsed;
-  final bool isEnabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final showLabel = !isCollapsed && isSelected;
-    return AppNavigationButton(
-      theme: theme,
-      isSelected: isSelected,
-      isEnabled: isEnabled,
-      isHorizontal: false,
-      onTap: onTap,
-      iconData: icon,
-      labelText: label,
-      labelVisible: showLabel,
-      labelFadeDuration: kNavButtonExpandAnimation,
-      labelFadeCurve: kNavButtonExpandCurve,
-      tooltipMessage: showLabel ? null : label,
     );
   }
 }

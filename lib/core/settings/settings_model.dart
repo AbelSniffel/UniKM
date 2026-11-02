@@ -218,8 +218,6 @@ class SettingsKeys {
   /// Arrangement for vertical nav panel (left or right position).
   static const String navButtonArrangementV = 'nav_button_arrangement_v';
   static const String navPanelOverlayStyle = 'nav_panel_overlay_style';
-  static const String settingsSectionPanelCollapsed =
-      'settings_section_panel_collapsed';
 
   // Animations
   static const String gradientAnimation = 'gradient_animation';
@@ -339,7 +337,6 @@ class DefaultSettings {
   static const NavExpansionMode navExpansionMode = NavExpansionMode.automatic;
   static const NavPanelOverlayStyle navPanelOverlayStyle =
       NavPanelOverlayStyle.none;
-  static const bool settingsSectionPanelCollapsed = false;
   static const NavButtonArrangement navButtonArrangementH =
       NavButtonArrangement.split;
   static const NavButtonArrangement navButtonArrangementV =
@@ -426,8 +423,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.githubApiToken: DefaultSettings.githubApiToken,
   SettingsKeys.activeTheme: DefaultSettings.activeTheme,
   SettingsKeys.customThemes: <String>[],
-  SettingsKeys.settingsSectionPanelCollapsed:
-      DefaultSettings.settingsSectionPanelCollapsed,
   SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
   SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
   SettingsKeys.viewedNewGameIds: const <String>[],
@@ -643,7 +638,6 @@ typedef AppShellSettings = ({
   NavBarAppearance navBarAppearance,
   NavExpansionMode navExpansionMode,
   GradientAnimation gradientAnimation,
-  bool settingsSectionPanelCollapsed,
   bool autoBackupEnabled,
   int autoBackupIntervalMinutes,
   bool developerMode,
@@ -659,10 +653,6 @@ AppShellSettings appShellSettingsFromMap(Map<String, dynamic> settings) => (
   navBarAppearance: readSetting(settings, SettingsKeys.navBarAppearance),
   navExpansionMode: readSetting(settings, SettingsKeys.navExpansionMode),
   gradientAnimation: readSetting(settings, SettingsKeys.gradientAnimation),
-  settingsSectionPanelCollapsed: readSetting(
-    settings,
-    SettingsKeys.settingsSectionPanelCollapsed,
-  ),
   autoBackupEnabled: readSetting(settings, SettingsKeys.autoBackupEnabled),
   autoBackupIntervalMinutes: readSetting(
     settings,
