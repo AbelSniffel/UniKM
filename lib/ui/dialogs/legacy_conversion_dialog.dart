@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../../core/services/legacy_db_converter.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/tinted_card.dart';
 import '../widgets/tinted_tiles.dart';
 
 /// Reports legacy migration details without owning database initialization.
@@ -34,7 +35,7 @@ Future<void> showLegacyConversionDialog(
             'The imported games were adapted to the current schema.',
             style: TextStyle(color: theme.textSecondary),
           ),
-          TintedOptionTile(
+          TintedCard(
             theme: theme,
             icon: Icons.description_outlined,
             title: p.basename(dbPath),

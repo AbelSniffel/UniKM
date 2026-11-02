@@ -45,6 +45,7 @@ class GameLibraryView extends ConsumerStatefulWidget {
 class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
   var _revealCoordinator = GameCardRevealCoordinator();
   Object? _database;
+  (GameListViewMode, bool)? _layout;
   static const double _gridCacheExtent = kGridCardHeight + kGridCardSpacing;
 
   @override
@@ -64,6 +65,12 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     final slimList = ref.watch(
       gameCardSettingsProvider.select((s) => s.slimListView),
     );
+    // Every layout switch reveals the cards anew, even ones seen before.
+    final layout = (viewMode, slimList);
+    if (_layout != null && _layout != layout) {
+      _revealCoordinator = GameCardRevealCoordinator();
+    }
+    _layout = layout;
 
     if (isLoading) return _buildLoadingState(theme);
     if (error != null) return _buildErrorState(theme, error);
@@ -245,7 +252,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     // NOTE: selectedGameIds is intentionally NOT watched here.
     // The shell owns the selection ribbon, so selection changes do not
     // rebuild the grid/list.
-    return _GameLibraryDragSelectionLayer(
+    final library = _GameLibraryDragSelectionLayer(
       theme: theme,
       gameIds: gameIds,
       viewMode: viewMode,
@@ -289,6 +296,12 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               },
             ),
     );
+    return widget.animateEntries
+        ? NotificationListener(
+            onNotification: _revealCoordinator.onNotification,
+            child: SizeChangedLayoutNotifier(child: library),
+          )
+        : library;
   }
 
   /// The card for [gameId], revealed by an entry animation when enabled.

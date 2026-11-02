@@ -13,6 +13,7 @@ import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
 import '../../core/constants/app_constants.dart';
@@ -22,6 +23,7 @@ import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/segmented_bar.dart';
+import '../widgets/tinted_card.dart';
 import '../widgets/tinted_tiles.dart';
 import '../widgets/game_cover_image.dart';
 import '../widgets/steam_lookup_info_menu.dart';
@@ -148,6 +150,10 @@ List<Tag> _steamPreviewTags(List<String> names) => List.generate(
 
 /// Apply a SteamSearchResult to a game with the given options.
 /// Returns null on success or an error message on failure.
+///
+/// The cover is the match's artwork even when one is saved under the
+/// game's title, unless [refreshCover] is off (a batch): then only a game
+/// matched to a different app gets new artwork.
 Future<String?> applySteamResultToGame(
   ProviderContainer container,
   Game game,
@@ -155,6 +161,7 @@ Future<String?> applySteamResultToGame(
   SteamApplyOptions options, {
   int? expectedRevision,
   bool Function()? isCancelled,
+  bool refreshCover = true,
 }) async {
   try {
     final session = container.read(databaseNotifierProvider);
@@ -174,6 +181,9 @@ Future<String?> applySteamResultToGame(
         appId,
         title: title,
         imageUrl: result.imageUrl,
+        replace:
+            refreshCover ||
+            (game.steamAppId.isNotEmpty && game.steamAppId != appId),
       ),
     ).apply(game.id, result, options);
     await persistEncryptedDbIfNeeded(container, database: db);
@@ -239,15 +249,17 @@ Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
             spacing: 16,
             children: [
               cached != null
-                  ? TintedStatusCard(
+                  ? TintedCard(
                       theme: theme,
+                      size: TintedCardSize.large,
                       icon: Icons.history,
                       title: 'Cached data found',
                       subtitle:
                           '"$title"  ·  Cached ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'at an unknown time'}',
                     )
-                  : TintedStatusCard(
+                  : TintedCard(
                       theme: theme,
+                      size: TintedCardSize.large,
                       icon: Icons.cloud_download_outlined,
                       title: 'Fetch from Steam',
                       subtitle: 'No cached data for "$title"',
@@ -534,6 +546,8 @@ Future<void> performSteamBatchLookup(
       options,
       expectedRevision: sessionRevision,
       isCancelled: () => batchNotifier.isCancelled,
+      // Only re-matched games download artwork again.
+      refreshCover: false,
     );
     if (applyError != null) {
       AppLog.w('[SteamBatchFetch]   ERROR APPLYING: $applyError');
@@ -683,6 +697,20 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     }
   }
 
+  /// The match's store page, or a Steam search for the game until there is
+  /// one, as in the Game Editor.
+  Future<void> _openSteamPage() async {
+    final appId = _isSearching ? null : _result?.appId;
+    final url = appId != null && appId.isNotEmpty
+        ? steamAppPageUrl(appId)
+        : steamSearchPageUrl(widget.game.title);
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      NotificationManager.instance.error('Failed to open Steam page: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
@@ -694,6 +722,20 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         title: 'Steam Lookup',
         theme: theme,
       ),
+      titleActions: [
+        IconButton(
+          tooltip: 'Steam Page',
+          onPressed: _openSteamPage,
+          color: theme.accent,
+          icon: const Icon(Icons.open_in_new),
+        ),
+        if (_result case final result? when !_isSearching)
+          SteamLookupInfoMenu(
+            theme: theme,
+            searchedTitle: widget.game.title,
+            result: result,
+          ),
+      ],
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -718,15 +760,17 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  Widget _buildSearchingState(AppThemeData theme) => TintedStatusCard(
+  Widget _buildSearchingState(AppThemeData theme) => TintedCard(
     theme: theme,
-    leading: AppCircularProgressIndicator(size: 24, color: theme.accent),
+    size: TintedCardSize.large,
+    busy: true,
     title: 'Searching Steam',
     subtitle: widget.game.title,
   );
 
-  Widget _buildErrorState(AppThemeData theme) => TintedStatusCard(
+  Widget _buildErrorState(AppThemeData theme) => TintedCard(
     theme: theme,
+    size: TintedCardSize.large,
     color: theme.error,
     icon: Icons.error_outline,
     title: 'Search failed',
@@ -768,7 +812,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 8,
           children: [
-            TintedHeading(theme: theme, title: 'Apply'),
+            TintedHeading(theme: theme, title: 'Save Info'),
             _SteamOptionsGrid(
               theme: theme,
               options: _options,
@@ -781,101 +825,130 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  /// The match in an accent card: its cover, name, developer and chips, with
-  /// the lookup details menu in the corner.
-  Widget _buildGameSummary(AppThemeData theme, SteamSearchResult result) =>
-      Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.accent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final imageWidth = (constraints.maxWidth * 0.3).clamp(64.0, 148.0);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 12,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(theme.cornerRadius),
-                  child: SizedBox(
-                    width: imageWidth,
-                    height: imageWidth * 215 / 460,
-                    child: AppDialogPreviewScope.maybeOf(context) != null
-                        ? GameCoverImage(
-                            theme: theme,
-                            coverImage: result.imageUrl,
-                          )
-                        : FutureBuilder<String?>(
-                            future: _coverDownloads.putIfAbsent(
-                              result.appId,
-                              () => ref
-                                  .read(steamServiceProvider)
-                                  .downloadImage(
-                                    result.appId,
-                                    imageUrl: result.imageUrl,
-                                  ),
-                            ),
-                            builder: (context, snapshot) => GameCoverImage(
-                              theme: theme,
-                              coverImage: snapshot.data,
-                            ),
-                          ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 2,
-                    children: [
-                      Text(
-                        result.name,
-                        style: TextStyle(
-                          color: theme.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (result.developer?.trim().isNotEmpty == true)
-                        Text(
-                          result.developer!,
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          TintedChip(
-                            theme: theme,
-                            color: theme.accent,
-                            label: 'AppID',
-                            value: result.appId,
-                          ),
-                          if (result.isDlc)
-                            TintedChip(
-                              theme: theme,
-                              color: theme.secondary,
-                              label: 'DLC',
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                SteamLookupInfoMenu(
+  /// The match: its cover beside its name, developer and whether it is a
+  /// DLC.
+  Widget _buildGameSummary(AppThemeData theme, SteamSearchResult result) {
+    final developer = result.developer?.trim();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final coverWidth = (constraints.maxWidth * 0.35).clamp(0.0, 140.0);
+        return Row(
+          spacing: 12,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+              child: SizedBox(
+                width: coverWidth,
+                // A Steam header's shape.
+                height: coverWidth * 215 / 460,
+                child: _LoadingCover(
                   theme: theme,
-                  searchedTitle: widget.game.title,
-                  result: result,
+                  // One future per match, so rebuilds never restart it.
+                  cover: _coverDownloads.putIfAbsent(
+                    result.appId,
+                    () => AppDialogPreviewScope.maybeOf(context) != null
+                        ? Future.value(result.imageUrl)
+                        : ref
+                              .read(steamServiceProvider)
+                              .downloadImage(
+                                result.appId,
+                                imageUrl: result.imageUrl,
+                              ),
+                  ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  Text(
+                    result.name,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (developer?.isNotEmpty == true)
+                    Text(
+                      developer!,
+                      style: TintedCard.detailStyle(theme, large: true),
+                    ),
+                  if (result.isDlc)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: TintedChip(
+                        theme: theme,
+                        color: theme.secondary,
+                        label: 'DLC',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A cover with a spinner on its placeholder while [cover] downloads and
+/// while the image it names decodes.
+class _LoadingCover extends StatefulWidget {
+  const _LoadingCover({required this.theme, required this.cover});
+
+  final AppThemeData theme;
+
+  /// The cover's path once downloaded, or null for none.
+  final Future<String?> cover;
+
+  @override
+  State<_LoadingCover> createState() => _LoadingCoverState();
+}
+
+class _LoadingCoverState extends State<_LoadingCover>
+    implements CoverLoadListener {
+  final _decoding = <Object>{};
+
+  // Reports arrive while the cover builds or unmounts.
+  void _rebuildNextFrame() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) setState(() {});
+  });
+
+  @override
+  void coverLoading(Object cover) {
+    if (_decoding.add(cover)) _rebuildNextFrame();
+  }
+
+  @override
+  void coverSettled(Object cover) {
+    if (_decoding.remove(cover)) _rebuildNextFrame();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<String?>(
+    future: widget.cover,
+    builder: (context, snapshot) {
+      final downloaded = snapshot.connectionState == ConnectionState.done;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: widget.theme.cardCoverPlaceholder),
+          if (downloaded)
+            CoverLoadScope(
+              listener: this,
+              child: GameCoverImage(
+                theme: widget.theme,
+                coverImage: snapshot.data,
+              ),
+            ),
+          if (!downloaded || _decoding.isNotEmpty)
+            const Center(child: AppCircularProgressIndicator(size: 24)),
+        ],
       );
+    },
+  );
 }

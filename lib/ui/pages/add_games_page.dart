@@ -16,6 +16,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/section_groupbox.dart';
+import '../widgets/tinted_card.dart';
 import '../widgets/tinted_tiles.dart';
 import '../widgets/platform_menu_button.dart';
 import '../widgets/batch_games_editor.dart';
@@ -90,45 +91,16 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
                 separatorBuilder: (_, _) => const SizedBox(height: 4),
                 itemBuilder: (_, index) {
                   final MapEntry(key: key, value: game) = duplicates[index];
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(theme.cornerRadius),
-                    ),
-                    child: Row(
-                      spacing: 10,
-                      children: [
-                        Icon(Icons.key, color: theme.error, size: 18),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                game.title,
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  height: 1.15,
-                                ),
-                              ),
-                              Text(
-                                key,
-                                style: TextStyle(
-                                  color: theme.textSecondary,
-                                  fontFamily: 'monospace',
-                                  fontSize: 11,
-                                  height: 1.15,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                  return TintedCard(
+                    theme: theme,
+                    color: theme.accent,
+                    icon: Icons.key,
+                    title: game.title,
+                    details: Text(
+                      key,
+                      style: TintedCard.detailStyle(
+                        theme,
+                      ).copyWith(fontFamily: 'monospace'),
                     ),
                   );
                 },

@@ -30,8 +30,16 @@ class AppDialogPreviewScope extends InheritedWidget {
   bool updateShouldNotify(AppDialogPreviewScope oldWidget) => false;
 }
 
-/// Normal app dialogs retain Flutter's modal routing. Only gallery descendants
-/// are presented inline, within their own preview viewport.
+/// How dialogs open and close: as the library's game cards reveal.
+const _dialogAnimation = AnimationStyle(
+  duration: Duration(milliseconds: 220),
+  curve: Curves.easeOutCubic,
+  reverseCurve: Curves.easeOutCubic,
+);
+
+/// Normal app dialogs retain Flutter's modal routing, popping in like the
+/// library's game cards: fading in while growing from 90%. Only gallery
+/// descendants are presented inline, within their own preview viewport.
 Future<T?> showAppDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -42,8 +50,31 @@ Future<T?> showAppDialog<T>({
   if (preview != null) return preview.present<T>(builder);
   return showDialog<T>(
     context: context,
-    builder: builder,
+    builder: (context) => _DialogPopIn(child: builder(context)),
     barrierDismissible: barrierDismissible,
     useRootNavigator: useRootNavigator,
+    // The route fades the dialog and its backdrop; [_DialogPopIn] scales.
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : _dialogAnimation,
   );
+}
+
+/// Grows a dialog from 90% with its route's animation, as it fades in.
+class _DialogPopIn extends StatelessWidget {
+  const _DialogPopIn({required this.child});
+
+  final Widget child;
+
+  static final _scale = Tween<double>(
+    begin: 0.9,
+    end: 1,
+  ).chain(CurveTween(curve: _dialogAnimation.curve!));
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null) return child;
+    return ScaleTransition(scale: animation.drive(_scale), child: child);
+  }
 }

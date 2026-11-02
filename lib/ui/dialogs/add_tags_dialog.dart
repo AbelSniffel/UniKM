@@ -193,7 +193,7 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
                         onPressed: _saving || tags.isEmpty
                             ? null
                             : _deleteAllCustomTags,
-                        icon: const Icon(Icons.delete_sweep_outlined),
+                        icon: const Icon(Icons.delete),
                         color: theme.error,
                       ),
                     ),

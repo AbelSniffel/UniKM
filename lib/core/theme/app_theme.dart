@@ -215,7 +215,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   Color get surface => blendColors(baseBackground, textPrimary, 0.08);
 
   /// Border color
-  Color get border => textPrimary.withValues(alpha: 0.15);
+  Color get border => textPrimary.withValues(alpha: 0.08);
 
   /// Divider color
   Color get divider => textPrimary.withValues(alpha: 0.1);
@@ -532,6 +532,8 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       // Dialogs
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
+        // Darker than Flutter's default (54%), so a dialog stands out.
+        barrierColor: Colors.black.withValues(alpha: 0.8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(cornerRadius * 2),
         ),

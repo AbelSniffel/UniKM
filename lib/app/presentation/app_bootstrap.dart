@@ -497,7 +497,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
             : Duration(minutes: autoLockMinutes),
         onLock: _lock,
         hideInRecents: hideInRecents,
-        child: child!,
+        child: NotificationHost(theme: theme, child: child!),
       ),
       home: Builder(
         builder: (materialContext) {

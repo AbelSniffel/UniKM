@@ -138,9 +138,9 @@ class TintedChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsetsDirectional.fromSTEB(6, 4, 8, 4),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: color.a * 0.14),
+          color: color.withValues(alpha: color.a * 0.24),
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: color.withValues(alpha: color.a * 0.35)),
+          border: Border.all(color: color.withValues(alpha: color.a * 0.45)),
         ),
         // Rich text, so a long label wraps instead of overflowing.
         child: Text.rich(

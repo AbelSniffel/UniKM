@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
-import 'status_card.dart';
+import 'tinted_card.dart';
 
 /// Notification types
 enum NotificationType { success, error, warning, info, update, download, steam }
@@ -442,6 +442,27 @@ class NotificationManager {
   }
 }
 
+/// Shows notifications above [child], the app's navigator, so they stay
+/// readable and usable over a dialog and its backdrop.
+class NotificationHost extends StatelessWidget {
+  const NotificationHost({super.key, required this.theme, required this.child});
+
+  final AppThemeData theme;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      child,
+      NotificationOverlay(
+        theme: theme,
+        position: NotificationManager.instance.position,
+      ),
+    ],
+  );
+}
+
 /// Notification overlay widget
 class NotificationOverlay extends StatelessWidget {
   const NotificationOverlay({
@@ -676,18 +697,17 @@ class _NotificationToastState extends State<NotificationToast>
         maxWidth: maxWidth,
         minWidth: maxWidth >= 280 ? 280 : 0,
       ),
-      child: StatusCard(
+      child: TintedCard(
         theme: theme,
+        size: TintedCardSize.large,
+        liveRegion: true,
         color: color,
         icon: _getTypeIcon(),
         busy: progress != null,
         // Filled to the progress, so a long task does not spin for minutes.
         busyValue: progress,
         title: notification.title ?? _typeLabel,
-        subtitle: Text(
-          notification.message,
-          style: StatusCard.detailStyle(theme),
-        ),
+        subtitle: notification.message,
         figure: progress == null
             ? null
             : notification.progressLabel ?? '${(progress * 100).round()}%',
@@ -755,7 +775,7 @@ class _NotificationToastState extends State<NotificationToast>
           (notification.secondaryActionLabel, notification.onSecondaryAction),
       ])
         if (label != null && onPressed != null)
-          TextButton(onPressed: onPressed, child: Text(label)),
+          OutlinedButton(onPressed: onPressed, child: Text(label)),
     ];
     if (progress != null) {
       return [

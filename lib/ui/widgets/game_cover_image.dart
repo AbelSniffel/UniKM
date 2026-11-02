@@ -7,6 +7,29 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 
+/// Hears when the covers below a [CoverLoadScope] start and finish loading,
+/// so a card can hold back its entry reveal until its picture is ready.
+abstract interface class CoverLoadListener {
+  void coverLoading(Object cover);
+
+  /// The cover has its first frame, failed, or left the tree.
+  void coverSettled(Object cover);
+}
+
+class CoverLoadScope extends InheritedWidget {
+  const CoverLoadScope({
+    super.key,
+    required this.listener,
+    required super.child,
+  });
+
+  final CoverLoadListener listener;
+
+  @override
+  bool updateShouldNotify(CoverLoadScope oldWidget) =>
+      listener != oldWidget.listener;
+}
+
 class GameCoverImage extends StatelessWidget {
   const GameCoverImage({
     super.key,
@@ -50,7 +73,10 @@ class GameCoverImage extends StatelessWidget {
         fadeOutDuration: Duration.zero,
         memCacheWidth: cacheWidth,
         fit: BoxFit.cover,
-        placeholder: (context, url) => _buildPlaceholder(),
+        // The placeholder shows only while loading: once the image has its
+        // first frame (no fade-out) or fails, it leaves the tree.
+        placeholder: (context, url) =>
+            _CoverLoadReport(loading: true, child: _buildPlaceholder()),
         errorWidget: (context, url, error) => _imageError(),
       );
     }
@@ -74,6 +100,8 @@ class GameCoverImage extends StatelessWidget {
         key: ValueKey(raw),
         gaplessPlayback: true,
         fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, _) =>
+            _CoverLoadReport(loading: frame == null, child: child),
         errorBuilder: (context, error, stackTrace) => _imageError(),
       );
 
@@ -87,9 +115,52 @@ class GameCoverImage extends StatelessWidget {
     child: Center(
       child: Icon(
         Icons.videogame_asset_outlined,
-        size: 52,
+        size: 48,
         color: theme.textHint,
       ),
     ),
   );
+}
+
+/// Tells the nearest [CoverLoadScope] whether its cover is still loading.
+/// The listener is looked up without a dependency: covers never rebuild for it.
+class _CoverLoadReport extends StatefulWidget {
+  const _CoverLoadReport({required this.loading, required this.child});
+
+  final bool loading;
+  final Widget child;
+
+  @override
+  State<_CoverLoadReport> createState() => _CoverLoadReportState();
+}
+
+class _CoverLoadReportState extends State<_CoverLoadReport> {
+  CoverLoadListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _listener = context
+        .getInheritedWidgetOfExactType<CoverLoadScope>()
+        ?.listener;
+    if (widget.loading) _listener?.coverLoading(this);
+  }
+
+  @override
+  void didUpdateWidget(_CoverLoadReport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loading == oldWidget.loading) return;
+    widget.loading
+        ? _listener?.coverLoading(this)
+        : _listener?.coverSettled(this);
+  }
+
+  @override
+  void dispose() {
+    if (widget.loading) _listener?.coverSettled(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

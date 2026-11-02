@@ -1,4 +1,4 @@
-/// Lightweight, content-sized tag badges for grid and list game cards.
+/// Lightweight, content-sized tag badges for list game cards.
 library;
 
 import 'package:collection/collection.dart';
@@ -17,14 +17,12 @@ class GameCardTagsRow extends StatefulWidget {
     required this.game,
     required this.theme,
     required this.isVisible,
-    this.fixedMaxWidth,
     this.topSpacing = 0,
   });
 
   final Game game;
   final AppThemeData theme;
   final bool isVisible;
-  final double? fixedMaxWidth;
   final double topSpacing;
 
   @override
@@ -168,19 +166,16 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
     // Hidden rows never construct badges or measure text. Cache tag data across
     // ordinary rebuilds, and layout across color-only theme changes.
     if (widget.isVisible && _names.isNotEmpty) {
-      final row = widget.fixedMaxWidth == null
-          ? LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.hasBoundedWidth
-                    ? constraints.maxWidth
-                    : MediaQuery.sizeOf(context).width;
-                return _row(context, (width / 8).floorToDouble() * 8);
-              },
-            )
-          : _row(context, widget.fixedMaxWidth!);
       child = Padding(
         padding: EdgeInsets.only(top: widget.topSpacing),
-        child: row,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.hasBoundedWidth
+                ? constraints.maxWidth
+                : MediaQuery.sizeOf(context).width;
+            return _row(context, (width / 8).floorToDouble() * 8);
+          },
+        ),
       );
     }
     return VisibilityReveal(

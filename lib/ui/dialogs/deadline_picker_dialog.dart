@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/time/calendar_date.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/tinted_card.dart';
 
 const _deadlineExactDateFieldKey = ValueKey('deadline_exact_date_input');
 const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
@@ -356,68 +357,22 @@ class _SelectedDateCard extends StatelessWidget {
     return Semantics(
       label: 'Selected deadline: $formatted',
       liveRegion: true,
-      child: Container(
+      child: TintedCard(
         key: const ValueKey('deadline-selected-date'),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(theme.cornerRadius),
-        ),
-        child: Row(
-          spacing: 14,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-              ),
-              child: Icon(Icons.event, color: color, size: 26),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 2,
-                children: [
-                  Text(
-                    formatted,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    DateFormat.EEEE().format(date),
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${daysLeft.abs()}',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                Text(switch (daysLeft) {
-                  0 => 'today',
-                  1 => 'day left',
-                  -1 => 'day ago',
-                  < 0 => 'days ago',
-                  _ => 'days left',
-                }, style: TextStyle(color: theme.textSecondary, fontSize: 12)),
-              ],
-            ),
-          ],
-        ),
+        theme: theme,
+        size: TintedCardSize.large,
+        color: color,
+        icon: Icons.event,
+        title: formatted,
+        subtitle: DateFormat.EEEE().format(date),
+        figure: '${daysLeft.abs()}',
+        figureCaption: switch (daysLeft) {
+          0 => 'today',
+          1 => 'day left',
+          -1 => 'day ago',
+          < 0 => 'days ago',
+          _ => 'days left',
+        },
       ),
     );
   }

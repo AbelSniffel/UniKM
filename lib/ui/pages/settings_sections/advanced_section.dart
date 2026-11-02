@@ -131,9 +131,9 @@ class AdvancedSection extends ConsumerWidget {
                 spacing: kElementHSpacing,
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: ElevatedButton(
                       onPressed: () => DevWindowOverlay.toggle(context),
-                      child: const Text('Open Developer Window'),
+                      child: const Text('Open Dev Window'),
                     ),
                   ),
                   Expanded(

@@ -23,8 +23,8 @@ class AppCircularProgressIndicator extends ConsumerWidget {
     // Its own layer, so the spinner's animation repaints only itself.
     final indicator = RepaintBoundary(
       child: CircularProgressIndicator(
-        color: color ?? theme.accent,
-        backgroundColor: theme.accent.withValues(alpha: 0.2),
+        color: theme.accent,
+        backgroundColor: theme.accent.withValues(alpha: 0.4),
         strokeWidth: strokeWidth ?? theme.progressIndicatorStrokeWidth,
       ),
     );

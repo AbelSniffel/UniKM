@@ -112,6 +112,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             Expanded(
               child: GameLibraryView(
                 scrollController: _scrollController,
+                animateEntries: true,
                 gameListFocusNode: _gameListFocusNode,
                 onSelectAll: _handleSelectAll,
                 onDeleteSelection: () => _handleDeleteSelection(context),

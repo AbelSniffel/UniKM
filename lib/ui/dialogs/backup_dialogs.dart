@@ -390,7 +390,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                                     ),
                                     IconButton(
                                       icon: Icon(
-                                        Icons.delete_outline,
+                                        Icons.delete,
                                         color: theme.secondary,
                                       ),
                                       tooltip: 'Delete this backup',
@@ -543,7 +543,6 @@ Future<bool> showRestoreConfirmDialog(
               title: backup.displayName,
               subtitle: backup.details,
               isEncrypted: backup.isEncrypted,
-              highlighted: true,
               margin: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),

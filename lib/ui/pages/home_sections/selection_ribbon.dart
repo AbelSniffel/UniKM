@@ -228,7 +228,10 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
     return Container(
       key: const ValueKey('selection-games-strip'),
       height: height,
+      // An accent-tinted band over the shared pattern sets the chips apart
+      // from the action bar below.
       decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.15),
         border: Border(top: BorderSide(color: theme.border)),
       ),
       child: Listener(

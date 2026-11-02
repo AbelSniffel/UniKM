@@ -13,6 +13,7 @@ import '../../core/utils/format_utils.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/tinted_card.dart';
 import '../widgets/tinted_tiles.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/pair_code_widgets.dart';
@@ -323,13 +324,20 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
           child: Center(child: AppCircularProgressIndicator(size: 24)),
         ),
         error: (error, _) => _ErrorView(error: error.toString(), theme: theme),
-        data: (sync) =>
-            _SyncContent(sync: sync, theme: theme, refreshing: _refreshing),
+        data: (sync) => _SyncContent(sync: sync, theme: theme),
       ),
       actions: [
+        // While a scan runs, the disabled button shows it is searching.
         ElevatedButton.icon(
           onPressed: canRefresh ? _refreshDiscovery : null,
-          label: const Text('Refresh'),
+          icon: isRefreshing
+              ? AppCircularProgressIndicator(
+                  size: 16,
+                  strokeWidth: 2,
+                  color: theme.textSecondary,
+                )
+              : null,
+          label: Text(isRefreshing ? 'Searching…' : 'Refresh'),
         ),
       ],
     );
@@ -337,15 +345,10 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
 }
 
 class _SyncContent extends ConsumerWidget {
-  const _SyncContent({
-    required this.sync,
-    required this.theme,
-    required this.refreshing,
-  });
+  const _SyncContent({required this.sync, required this.theme});
 
   final DeviceSyncSnapshot sync;
   final AppThemeData theme;
-  final bool refreshing;
 
   static const _placeholderNames = {
     '',
@@ -431,11 +434,11 @@ class _SyncContent extends ConsumerWidget {
       }
       // Sync is currently in progress with this specific device.
       if (sync.activeSyncPeerId == row.id) {
-        return (color: theme.secondary, label: 'Syncing...');
+        return (color: theme.accent, label: 'Syncing...');
       }
       // Device responded to the last discovery scan — it is reachable.
       if (row.discovered != null) {
-        return (color: theme.secondary, label: 'Online');
+        return (color: theme.accent, label: 'Online');
       }
       // Trusted but did not respond to discovery — offline.
       return (color: theme.textSecondary, label: 'Offline');
@@ -500,11 +503,6 @@ class _SyncContent extends ConsumerWidget {
     final statusMessage = (sync.statusMessage?.isNotEmpty ?? false)
         ? sync.statusMessage!
         : 'Ready.';
-    final isBusy =
-        refreshing ||
-        sync.status == DeviceSyncStatus.discovering ||
-        sync.status == DeviceSyncStatus.syncing ||
-        sync.status == DeviceSyncStatus.connecting;
     // Treat messages that indicate a failure/rejection as a "broken link" state
     // even when the status itself is idle (e.g. "Pair request declined.").
     final isNegativeMessage =
@@ -521,14 +519,6 @@ class _SyncContent extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 8,
       children: [
-        TintedHeading(
-          theme: theme,
-          title: 'Devices',
-          trailing: isBusy ? null : '${unifiedRows.length}',
-          action: isBusy
-              ? const AppCircularProgressIndicator(strokeWidth: 2, size: 14)
-              : null,
-        ),
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 260),
           child: unifiedRows.isEmpty
@@ -652,7 +642,7 @@ class _SyncContent extends ConsumerWidget {
             // ListTile supplies an IconTheme color that otherwise also applies
             // to disabled buttons. Resolve both states explicitly here.
             style: IconButton.styleFrom(
-              foregroundColor: theme.textPrimary,
+              foregroundColor: theme.accent,
               disabledForegroundColor: theme.textPrimary.withValues(
                 alpha: 0.38,
               ),
@@ -681,6 +671,7 @@ class _SyncContent extends ConsumerWidget {
             },
             tooltip: 'Remove',
             icon: const Icon(Icons.link_off),
+            color: theme.secondary,
           ),
         ],
       );
@@ -688,7 +679,7 @@ class _SyncContent extends ConsumerWidget {
 
     final discovered = row.discovered;
     if (discovered != null) {
-      return TextButton.icon(
+      return ElevatedButton.icon(
         onPressed: () async {
           try {
             final pairingCompleter = Completer<void>();
@@ -760,72 +751,39 @@ class _DeviceTile extends StatelessWidget {
   final Widget actions;
 
   @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(theme.cornerRadius);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.08),
-        borderRadius: radius,
-      ),
-      child: Row(
-        spacing: 12,
+  Widget build(BuildContext context) => TintedCard(
+    theme: theme,
+    color: theme.accent,
+    leading: Consumer(
+      builder: (context, ref, _) {
+        final pairedId = this.pairedId;
+        return Tooltip(
+          message: pairedId == null
+              ? ''
+              : 'Last sync: ${ref.watch(syncPeerLastSyncProvider(pairedId)).when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+          child: TintedCard.tile(
+            theme: theme,
+            color: color,
+            child: Icon(icon, color: color, size: 20),
+          ),
+        );
+      },
+    ),
+    title: name,
+    details: Text.rich(
+      TextSpan(
         children: [
-          Consumer(
-            builder: (context, ref, _) {
-              final pairedId = this.pairedId;
-              return Tooltip(
-                message: pairedId == null
-                    ? ''
-                    : 'Last sync: ${ref.watch(syncPeerLastSyncProvider(pairedId)).when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.18),
-                    borderRadius: radius,
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-              );
-            },
+          TextSpan(text: '$address  ·  '),
+          TextSpan(
+            text: status,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: '$address  ·  '),
-                      TextSpan(
-                        text: status,
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          actions,
         ],
       ),
-    );
-  }
+      style: TintedCard.detailStyle(theme),
+    ),
+    trailing: actions,
+  );
 }
 
 class _UnifiedDeviceRow {

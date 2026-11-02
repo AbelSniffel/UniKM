@@ -29,15 +29,15 @@ class SettingsCardMiniDot extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(8),
       child: SizedBox.square(
-        dimension: 16,
+        dimension: 18,
         child: Center(
           child: AnimatedContainer(
             duration: MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
                 : const Duration(milliseconds: 140),
             curve: Curves.easeOutCubic,
-            width: lit ? 16 : 14,
-            height: lit ? 16 : 14,
+            width: lit ? 18 : 16,
+            height: lit ? 18 : 16,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               // Transparent while off, so the ring fades in with the dot.
@@ -45,7 +45,7 @@ class SettingsCardMiniDot extends StatelessWidget {
                   ? null
                   : Border.all(
                       color: lit
-                          ? outlineColor!
+                          ? theme.secondary.withValues(alpha: 0.6)
                           : outlineColor!.withValues(alpha: 0),
                       width: 2,
                     ),

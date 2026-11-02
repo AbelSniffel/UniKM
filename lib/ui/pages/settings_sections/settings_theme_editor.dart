@@ -544,7 +544,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 
   /// A softly tinted, outlined panel grouping a section's controls.
   static Widget _panel(AppThemeData theme, Widget child) => Container(
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
       color: theme.textPrimary.withValues(alpha: 0.035),
       borderRadius: BorderRadius.circular(

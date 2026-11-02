@@ -143,7 +143,7 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
     decoration: BoxDecoration(
-      color: theme.accent.withValues(alpha: 0.12),
+      color: theme.accent.withValues(alpha: 0.20),
       borderRadius: BorderRadius.circular(theme.cornerRadius),
     ),
     // Narrow screens and large text shrink the tile's content to fit.

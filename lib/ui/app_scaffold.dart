@@ -714,12 +714,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
               ],
             ),
 
-            // Toast notifications overlay
-            NotificationOverlay(
-              theme: theme,
-              position: NotificationManager.instance.position,
-            ),
-
             // Linux: custom edge resize handles (TitleBarStyle.hidden removes GTK borders)
             if (Platform.isLinux && !_windowMaximized)
               const _LinuxResizeFrame(),

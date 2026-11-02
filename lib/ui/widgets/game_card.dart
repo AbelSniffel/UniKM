@@ -64,6 +64,9 @@ class _GameCardState extends ConsumerState<GameCard>
   static const double _kSlimDlcRibbonExtent = 46.0;
   static const double _kRibbonContainerWidth = 130.0;
   static const double _kRibbonOffset = 9.0;
+  // Large enough to cover the DLC banner on Steam's DLC header artwork.
+  static const double _kGridDlcRibbonHeight = 42.0;
+  static const double _kGridRibbonOffset = 12.0;
   static final DateFormat _ribbonDateFormat = DateFormat('dd/MM/yyyy');
 
   // ── Per-card animation state ───────────────────────────────────────────────
@@ -197,10 +200,8 @@ class _GameCardState extends ConsumerState<GameCard>
     final bool titleVisible = options.showTitleOnNoPicture
         ? (!widget.game.hasCoverImage || _imageLoadFailed)
         : options.showTitle;
-    final bool tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
-    final bool tagsVisible =
-        tagsEnabled && (!options.showTagsOnHoverOnly || _isHovered);
 
+    // Grid cards show no tags: the cover has no room for them.
     return _buildAnimatedShell(
       width: kGridCardWidth,
       height: kGridCardHeight,
@@ -211,23 +212,40 @@ class _GameCardState extends ConsumerState<GameCard>
       ),
       child: ClipRRect(
         borderRadius: radius,
+        // On fractional pixels a bright cover bleeds through the dark USED
+        // tint along the card's edges. The tint reaches a pixel past them,
+        // and a used card's layers are clipped once, together.
+        clipBehavior: widget.game.isUsed
+            ? Clip.antiAliasWithSaveLayer
+            : Clip.antiAlias,
         child: Stack(
           fit: StackFit.expand,
+          // The rounded clip above trims the tint's extra pixel.
+          clipBehavior: Clip.none,
           children: [
             _buildCoverImage(theme),
-            _buildGradientOverlay(theme, isSelected),
             if (widget.game.isUsed)
-              UsedOverlay(
-                theme: theme,
-                patternSize: const Size(kGridCardWidth, kGridCardHeight),
-                gridView: true,
+              Positioned.fill(
+                left: -1,
+                top: -1,
+                right: -1,
+                bottom: -1,
+                child: UsedOverlay(
+                  theme: theme,
+                  patternSize: const Size(kGridCardWidth, kGridCardHeight),
+                  gridView: true,
+                ),
               ),
+            // Above the USED pattern, so a used card shows its selection and
+            // hover glow as brightly as any other.
+            _buildGradientOverlay(theme, isSelected),
             _buildSelectionOverlay(theme, isSelected),
             _buildAnimatedFetchOverlay(theme, fetchStatus),
             ..._buildCornerRibbons(
               theme,
               hasDlc: widget.game.isDlc,
               showNewBadge: showNewBadge,
+              large: true,
             ),
             Positioned(
               left: 8,
@@ -246,14 +264,6 @@ class _GameCardState extends ConsumerState<GameCard>
                   ],
                   if (titleVisible)
                     GameCardBadges.titleChip(theme, widget.game.title),
-                  if (tagsEnabled)
-                    GameCardTagsRow(
-                      game: widget.game,
-                      theme: theme,
-                      isVisible: tagsVisible,
-                      fixedMaxWidth: kGridCardWidth - 16.0,
-                      topSpacing: 4.0,
-                    ),
                 ],
               ),
             ),
@@ -497,17 +507,22 @@ class _GameCardState extends ConsumerState<GameCard>
         animation: _hoverAnim,
         builder: (context, staticChild) {
           final t = _hoverAnim.value;
+          // No filterQuality: that scales an offscreen image of the card
+          // whose bounds snap to whole pixels, so the card shook while
+          // zooming. A plain transform scales it at sub-pixel precision.
           return Transform.scale(
             scale: 1.0 + t * scaleFactor,
             alignment: Alignment.center,
-            filterQuality: FilterQuality.medium,
             child: DecoratedBox(
               decoration: decorationBuilder(t),
               child: staticChild,
             ),
           );
         },
-        child: SizedBox(width: width, height: height, child: child),
+        // The content keeps its own layer, so zooming only moves it.
+        child: RepaintBoundary(
+          child: SizedBox(width: width, height: height, child: child),
+        ),
       ),
     ),
   );
@@ -801,11 +816,13 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Corner ribbon ──────────────────────────────────────────────────────────
 
-  /// The DLC and NEW bands shared by the grid and list layouts.
+  /// The DLC and NEW bands shared by the grid and list layouts. A [large]
+  /// DLC band (grid cards) hides the banner on Steam's DLC artwork.
   List<Widget> _buildCornerRibbons(
     AppThemeData theme, {
     required bool hasDlc,
     required bool showNewBadge,
+    bool large = false,
   }) => [
     if (hasDlc)
       _buildRibbonBand(
@@ -813,6 +830,7 @@ class _GameCardState extends ConsumerState<GameCard>
         color: theme.accent,
         textColor: theme.primaryButtonText,
         bandIndex: 0,
+        large: large,
       ),
     if (showNewBadge)
       _buildRibbonBand(
@@ -821,6 +839,7 @@ class _GameCardState extends ConsumerState<GameCard>
         textColor: theme.onSecondaryText,
         bandIndex: hasDlc ? 1 : 0,
         addedDate: widget.game.createdAt,
+        large: large && hasDlc,
       ),
   ];
 
@@ -831,15 +850,18 @@ class _GameCardState extends ConsumerState<GameCard>
     required int bandIndex,
     DateTime? addedDate,
     bool compact = false,
+    bool large = false,
   }) {
     final isDlc = label == 'DLC';
-    final bandHeight = compact
-        ? 20.0
-        : (isDlc ? _kDlcRibbonHeight : _kRibbonHeight);
+    // With [large], the DLC band is the grid's larger one, and a NEW band
+    // follows it from the same inset.
+    final dlcHeight = large ? _kGridDlcRibbonHeight : _kDlcRibbonHeight;
+    final offset = large ? _kGridRibbonOffset : _kRibbonOffset;
+    final bandHeight = compact ? 20.0 : (isDlc ? dlcHeight : _kRibbonHeight);
     // NEW follows the larger DLC band when both ribbons are visible.
     final cx =
-        (compact ? 8.5 : _kRibbonOffset) +
-        (bandIndex * _kDlcRibbonHeight + bandHeight / 2) / math.sqrt2;
+        (compact ? 8.5 : offset) +
+        (bandIndex * dlcHeight + bandHeight / 2) / math.sqrt2;
 
     final bandWidth = math.max(
       compact ? 96.0 : _kRibbonContainerWidth * (isDlc ? 1.25 : 1),
@@ -864,7 +886,8 @@ class _GameCardState extends ConsumerState<GameCard>
             textColor: textColor,
             bandHeight: bandHeight,
             bandWidth: bandWidth,
-            offset: _kRibbonOffset,
+            offset: offset,
+            fontSize: large && isDlc ? 18 : 12,
           ),
         ),
       );

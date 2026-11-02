@@ -12,6 +12,7 @@ class CornerRibbon extends StatelessWidget {
     this.bandHeight = 22.5,
     this.bandWidth = 130,
     this.offset = 9,
+    this.fontSize = 12,
   });
 
   final String label;
@@ -20,6 +21,7 @@ class CornerRibbon extends StatelessWidget {
   final double bandHeight;
   final double bandWidth;
   final double offset;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +45,7 @@ class CornerRibbon extends StatelessWidget {
                     label,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: 12,
+                      fontSize: fontSize,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.6,
                       decoration: TextDecoration.none,

@@ -1060,7 +1060,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                               actions: [
                                 IconButton(
                                   icon: Icon(
-                                    Icons.delete_outline,
+                                    Icons.delete,
                                     color: widget.theme.secondary,
                                   ),
                                   tooltip: 'Remove from recents',

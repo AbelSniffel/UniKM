@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'settings_card_inset.dart';
+import 'tinted_card.dart';
 
 /// A section title with an optional count or note on the right, and an
 /// optional [action] after it.
@@ -106,101 +107,71 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
     final color = widget.color ?? theme.accent;
     final chosen = widget.selected ?? false;
     final tappable = widget.onTap != null;
-    final radius = BorderRadius.circular(theme.cornerRadius);
     final leading = widget.leading;
-    final content = Padding(
-      padding: const EdgeInsets.all(10),
-      child: Row(
-        spacing: 12,
-        children: [
-          Container(
-            width: leading == null ? 36 : 64,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.18),
-              borderRadius: radius,
+    final trailing = widget.selected == null
+        ? widget.trailing
+        : AnimatedSwitcher(
+            duration: _selectionDuration(context),
+            switchInCurve: Curves.easeOutBack,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: animation, child: child),
             ),
-            child: leading == null
-                ? Icon(widget.icon, color: color, size: 20)
-                : IgnorePointer(
-                    child: ExcludeSemantics(
-                      child: ExcludeFocus(
-                        child: FittedBox(fit: BoxFit.scaleDown, child: leading),
-                      ),
-                    ),
-                  ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                Text(
-                  widget.title,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (widget.subtitle != null)
-                  Text(
-                    widget.subtitle!,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-              ],
+            child: Icon(
+              chosen ? Icons.check_circle : Icons.radio_button_unchecked,
+              key: ValueKey(chosen),
+              color: chosen ? color : theme.textHint,
+              size: 24,
             ),
-          ),
-          if (widget.selected != null)
-            AnimatedSwitcher(
-              duration: _selectionDuration(context),
-              switchInCurve: Curves.easeOutBack,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(scale: animation, child: child),
-              ),
-              child: Icon(
-                chosen ? Icons.check_circle : Icons.radio_button_unchecked,
-                key: ValueKey(chosen),
-                color: chosen ? color : theme.textHint,
-                size: 20,
-              ),
-            )
-          else
-            ?widget.trailing,
-        ],
-      ),
-    );
+          );
     // The tint follows the selection at the pace of the inset's depth, so a
     // tile losing its choice eases out instead of snapping.
     return TweenAnimationBuilder<double>(
       tween: Tween(end: chosen ? 1 : 0),
       duration: _selectionDuration(context),
       curve: Curves.easeOutCubic,
-      child: content,
-      builder: (context, t, content) {
-        final fill = color.withValues(alpha: 0.08 + 0.08 * t);
-        final tile = Material(
-          color: fill,
-          shape: RoundedRectangleBorder(
-            borderRadius: radius,
-            side: !tappable
-                ? BorderSide.none
-                : _hovered
-                ? BorderSide(color: color, width: 1.5)
-                : BorderSide(color: theme.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.onTap,
-            onHover: tappable
-                ? (value) => setState(() => _hovered = value)
-                : null,
-            onHighlightChanged: tappable
-                ? (value) => setState(() => _pressed = value)
-                : null,
-            child: content,
-          ),
+      builder: (context, t, _) {
+        final fill = color.withValues(
+          alpha:
+              TintedCard.choiceFillAlpha +
+              (TintedCard.highlightedFillAlpha - TintedCard.choiceFillAlpha) *
+                  t,
+        );
+        final tile = TintedCard(
+          theme: theme,
+          color: color,
+          icon: widget.icon,
+          leading: leading == null
+              ? null
+              : TintedCard.tile(
+                  theme: theme,
+                  color: color,
+                  width: 64,
+                  child: IgnorePointer(
+                    child: ExcludeSemantics(
+                      child: ExcludeFocus(
+                        child: FittedBox(fit: BoxFit.scaleDown, child: leading),
+                      ),
+                    ),
+                  ),
+                ),
+          title: widget.title,
+          subtitle: widget.subtitle,
+          trailing: trailing,
+          fill: fill,
+          side: !tappable
+              ? BorderSide.none
+              : _hovered
+              ? BorderSide(color: color, width: 1.5)
+              : BorderSide(color: theme.border),
+          onTap: widget.onTap,
+          onHover: tappable
+              ? (value) => setState(() => _hovered = value)
+              : null,
+          onHighlightChanged: tappable
+              ? (value) => setState(() => _pressed = value)
+              : null,
         );
         return Semantics(
           checked: widget.selected,
@@ -225,77 +196,4 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
       MediaQuery.disableAnimationsOf(context)
       ? Duration.zero
       : const Duration(milliseconds: 140);
-}
-
-/// A card tinted with [color] (the accent by default): a large icon in its
-/// own square, or [leading] in its place, a bold title and a subtitle, with
-/// an optional [trailing] widget.
-class TintedStatusCard extends StatelessWidget {
-  const TintedStatusCard({
-    super.key,
-    required this.theme,
-    required this.title,
-    this.icon,
-    this.leading,
-    this.subtitle,
-    this.trailing,
-    this.color,
-  });
-
-  final AppThemeData theme;
-  final String title;
-  final IconData? icon;
-  final Widget? leading;
-  final String? subtitle;
-  final Widget? trailing;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = this.color ?? theme.accent;
-    final radius = BorderRadius.circular(theme.cornerRadius);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: radius,
-      ),
-      child: Row(
-        spacing: 14,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.18),
-              borderRadius: radius,
-            ),
-            child: Center(child: leading ?? Icon(icon, color: color, size: 26)),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-              ],
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
 }

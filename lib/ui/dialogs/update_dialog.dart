@@ -23,7 +23,7 @@ import '../widgets/dialog_helpers.dart';
 import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/segmented_bar.dart';
 import '../widgets/settings_header_actions.dart';
-import '../widgets/status_card.dart';
+import '../widgets/tinted_card.dart';
 import '../widgets/update_status_icons.dart';
 
 Future<void> showUpdateDialog(BuildContext context) =>
@@ -107,7 +107,7 @@ class UpdateDialog extends ConsumerWidget {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
+        spacing: 12,
         children: [
           // Sets the notes apart from the title bar, as far as below it.
           _ReleaseNotes(
@@ -217,21 +217,23 @@ class _StatusCard extends StatelessWidget {
         }.contains(stage)
         ? state.switchingToVersion ?? state.latestVersion
         : null;
-    final detail = StatusCard.detailStyle(theme);
+    final detail = TintedCard.detailStyle(theme, large: true);
     final progress = state.downloadProgress.clamp(0.0, 1.0);
     // The bar's bubbles give the sizes while downloading.
     final size = stage == UpdatePreviewState.updateAvailable
         ? state.downloadSize
         : null;
 
-    return StatusCard(
+    return TintedCard(
       key: const ValueKey('update-status-card'),
       theme: theme,
+      size: TintedCardSize.large,
+      liveRegion: true,
       color: color,
       icon: icon,
       busy: downloading || stage == UpdatePreviewState.checking,
       title: title,
-      subtitle: failed
+      details: failed
           ? SelectableText(
               state.error!,
               style: TextStyle(color: color, fontSize: 12),

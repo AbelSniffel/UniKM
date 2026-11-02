@@ -424,6 +424,12 @@ class SteamService {
     caseSensitive: false,
   );
   static final _parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
+
+  /// Words keys and Steam use interchangeably for an add-on, matched in a
+  /// cleaned (lowercase, punctuation-free) title.
+  static final _addonWordPattern = RegExp(
+    r'\b(dlc|expansion\s+pack|expansion|add\s*on)\b',
+  );
   static final _arabicSequelPattern = RegExp(r'\s\d+([: -]|\b)');
   static final _romanSequelPattern = RegExp(
     r'\s[ivxlcdm]+([: -]|\b)',
@@ -661,11 +667,17 @@ class SteamService {
   /// it is saved as that title's cover, and a cover already saved under the
   /// same title, from any platform, is reused. Without one it is a preview,
   /// kept in a temporary folder until a titled save reuses it.
+  ///
+  /// With [replace], for a game matched to a different app, this app's
+  /// artwork is used even when a cover is saved under the title: an
+  /// identical one is reused, a different one is saved beside it (see
+  /// [CoverImages.store]), so games still using the old cover keep it.
   Future<String?> downloadImage(
     String appId, {
     String? title,
     bool useLibraryImage = false,
     String? imageUrl,
+    bool replace = false,
   }) async {
     if (_imagesDir == null) await init();
     if (_imagesDir == null) return null;
@@ -680,9 +692,12 @@ class SteamService {
         ? preview
         : p.join(_imagesDir!.path, '${name.isEmpty ? appId : name}.jpg');
 
-    if (File(localPath).existsSync()) return localPath;
+    final replacing = replace && title != null;
+    if (!replacing && File(localPath).existsSync()) return localPath;
     if (title != null && File(preview).existsSync()) {
-      return (await File(preview).copy(localPath)).path;
+      return replacing
+          ? _storeCover(title, await File(preview).readAsBytes())
+          : (await File(preview).copy(localPath)).path;
     }
     if (title == null) await File(preview).parent.create(recursive: true);
 
@@ -717,6 +732,7 @@ class SteamService {
         );
         final bytes = response.data;
         if (response.statusCode == 200 && bytes != null && bytes.isNotEmpty) {
+          if (replacing) return await _storeCover(title, bytes);
           await File(localPath).writeAsBytes(bytes);
           return localPath;
         }
@@ -727,6 +743,9 @@ class SteamService {
 
     return null;
   }
+
+  Future<String> _storeCover(String title, List<int> bytes) async =>
+      (await CoverImages.store(_imagesDir!, title, '.jpg', bytes)).file.path;
 
   /// Normalize and map Steam tag names. Returns null if tag should be ignored.
   String? _normalizeTag(String tag) {
@@ -838,11 +857,25 @@ class SteamService {
       for (final name in names) cleanTitleForSearch(name).toLowerCase(),
     ];
     bool overlaps(String a, String b) => a.contains(b) || b.contains(a);
-    // Exact, then exact once cleaned, then either containing the other
-    // (original, then cleaned) without being a different sequel.
+    String withoutAddonWords(String clean) => clean
+        .replaceAll(_addonWordPattern, ' ')
+        .replaceAll(_whitespacePattern, ' ')
+        .trim();
+    // An add-on search ("… Expansion") also matches Steam's other wording
+    // ("… DLC") before a base game whose name it merely contains.
+    final addonSearch = _looksLikeAddonTitle(searchTitle)
+        ? withoutAddonWords(cleanSearch)
+        : '';
+    // Exact, then exact once cleaned, then the same add-on in other words,
+    // then either containing the other (original, then cleaned) without
+    // being a different sequel.
     final stages = <bool Function(int i)>[
       (i) => lower[i] == searchTitle,
       (i) => cleaned[i] == cleanSearch,
+      (i) =>
+          addonSearch.isNotEmpty &&
+          _looksLikeAddonTitle(lower[i]) &&
+          withoutAddonWords(cleaned[i]) == addonSearch,
       (i) =>
           overlaps(lower[i], searchTitle) &&
           !_isSequelMismatch(originalTitle, names[i]),

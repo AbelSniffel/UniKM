@@ -375,7 +375,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
             margin: const EdgeInsetsDirectional.only(end: 10),
             decoration: BoxDecoration(
               color: (widget.active ? theme.accent : theme.textSecondary)
-                  .withValues(alpha: 0.18),
+                  .withValues(alpha: 0.25),
               borderRadius: radius,
             ),
             child: Icon(
@@ -385,7 +385,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
             ),
           );
     final background = theme.background.withValues(
-      alpha: widget.enabled ? 0.65 : 0.45,
+      alpha: widget.enabled ? 0.55 : 0.45,
     );
     final material = Material(
       animationDuration: const Duration(milliseconds: 140),
