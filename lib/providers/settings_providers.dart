@@ -115,11 +115,6 @@ final frameRatePreferenceProvider = _setting<String>(
   SettingsKeys.frameRatePreference,
 );
 
-// Retained for saved-setting compatibility; the UI always uses cards.
-final experimentalInteractionCardsProvider = _setting<bool>(
-  SettingsKeys.experimentalInteractionCards,
-);
-
 /// Typed settings slice used by `GameCard`.
 ///
 /// Uses `select` + value equality to prevent rebuilding every card when

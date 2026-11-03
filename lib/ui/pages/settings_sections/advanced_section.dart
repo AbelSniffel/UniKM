@@ -39,28 +39,12 @@ class AdvancedSection extends ConsumerWidget {
   static const SettingTextSpec resetSettingsSpec = SettingTextSpec(
     label: 'Reset settings',
   );
-  // Reserved for future experimental settings; hidden from UI and search.
-  static const showExperimentalSettings = false;
-
-  static const SettingTextSpec interactionCardsSpec = SettingTextSpec(
-    label: 'Interaction cards',
-    icon: Icons.touch_app_outlined,
-    description:
-        'Use compact interactive cards instead of full-width settings rows',
-  );
-
   static const SettingsSearchGroup systemSearchGroup = SettingsSearchGroup(
     title: 'System',
     settings: [frameRateSpec, devWindowSpec, resetSettingsSpec],
     extraTexts: ['Display', 'FPS', 'defaults'],
     info: 'Ctrl+Alt+D opens the Developer Window.',
   );
-  static const SettingsSearchGroup experimentalSearchGroup =
-      SettingsSearchGroup(
-        title: 'Experimental',
-        settings: [interactionCardsSpec],
-        extraTexts: ['Legacy layout', 'Card style'],
-      );
 
   static const _frameRateOptions = <MapEntry<String, String>>[
     MapEntry('auto', 'Auto'),
@@ -83,28 +67,6 @@ class AdvancedSection extends ConsumerWidget {
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
-        if (showExperimentalSettings)
-          buildSearchableSectionEntry(
-            theme: theme,
-            group: experimentalSearchGroup,
-            titleIcon: Icons.science_outlined,
-            searchQuery: searchQuery,
-            matchesSearch: matchesSearch,
-            childBuilder: () => SettingsControlWrap(
-              children: [
-                SettingsToggleCard(
-                  theme: theme,
-                  label: interactionCardsSpec.label,
-                  description: interactionCardsSpec.description,
-                  icon: interactionCardsSpec.icon,
-                  value: ref.watch(experimentalInteractionCardsProvider),
-                  onChanged: settingsNotifier.setter(
-                    SettingsKeys.experimentalInteractionCards,
-                  ),
-                ),
-              ],
-            ),
-          ),
         buildSearchableSectionEntry(
           theme: theme,
           group: systemSearchGroup,

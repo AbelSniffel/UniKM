@@ -249,10 +249,6 @@ class SettingsKeys {
   static const String useThemeToggleRadius = 'use_theme_toggle_radius';
   static const String sectionTitleLocation = 'section_title_location';
 
-  // Experimental Settings Layout
-  static const String experimentalInteractionCards =
-      'experimental_interaction_cards';
-
   // Backup
   static const String autoBackupEnabled = 'auto_backup_enabled';
   static const String autoBackupIntervalMinutes =
@@ -298,7 +294,6 @@ class SettingsKeys {
   // Debug
   static const String developerMode = 'developer_mode';
   static const String showStatusBar = 'show_status_bar';
-  static const String showFpsCounter = 'show_fps_counter';
   static const String showGameDetailsSkmId = 'show_game_details_skm_id';
   static const String showSyncDeviceId = 'show_sync_device_id';
 
@@ -374,9 +369,6 @@ class DefaultSettings {
   static const SectionTitleLocation sectionTitleLocation =
       SectionTitleLocation.top;
 
-  // Experimental Settings Layout
-  static const bool experimentalInteractionCards = true;
-
   // Backup
   static const bool autoBackupEnabled = true;
   static const int autoBackupIntervalMinutes = 5;
@@ -398,7 +390,6 @@ class DefaultSettings {
   // Debug
   static const bool developerMode = false;
   static const bool showStatusBar = false;
-  static const bool showFpsCounter = true;
   static const bool showGameDetailsSkmId = false;
   static const bool showSyncDeviceId = false;
 
@@ -438,8 +429,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.showTagChips: true,
   SettingsKeys.showRatings: DefaultSettings.showRatings,
   SettingsKeys.useThemeToggleRadius: DefaultSettings.useThemeToggleRadius,
-  SettingsKeys.experimentalInteractionCards:
-      DefaultSettings.experimentalInteractionCards,
   SettingsKeys.autoBackupEnabled: DefaultSettings.autoBackupEnabled,
   SettingsKeys.autoBackupIntervalMinutes:
       DefaultSettings.autoBackupIntervalMinutes,
@@ -467,7 +456,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.hideInRecents: false,
   SettingsKeys.developerMode: DefaultSettings.developerMode,
   SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
-  SettingsKeys.showFpsCounter: DefaultSettings.showFpsCounter,
   SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
   SettingsKeys.showSyncDeviceId: DefaultSettings.showSyncDeviceId,
   SettingsKeys.frameRatePreference: DefaultSettings.frameRatePreference,

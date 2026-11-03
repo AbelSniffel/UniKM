@@ -95,8 +95,6 @@ class SettingsStore {
       ...preserved,
       SettingsKeys.syncEnabled: DefaultSettings.syncEnabled,
       SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
-      SettingsKeys.experimentalInteractionCards:
-          DefaultSettings.experimentalInteractionCards,
       SettingsKeys.settingsCardIndicatorStyle:
           DefaultSettings.settingsCardIndicatorStyle,
     }.entries) {

@@ -152,11 +152,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     railLabel: 'Advanced',
     headerTitle: 'Advanced',
     icon: Icons.settings_applications,
-    searchGroups: [
-      AdvancedSection.systemSearchGroup,
-      if (AdvancedSection.showExperimentalSettings)
-        AdvancedSection.experimentalSearchGroup,
-    ],
+    searchGroups: [AdvancedSection.systemSearchGroup],
     builder: AdvancedSection.new,
   ),
 ];
