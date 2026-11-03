@@ -11,13 +11,11 @@ class SelectionRibbonHost extends StatefulWidget {
     required this.child,
     required this.visible,
     required this.atTop,
-    required this.isVeryNarrowLayout,
   });
 
   final Widget child;
   final bool visible;
   final bool atTop;
-  final bool isVeryNarrowLayout;
 
   @override
   State<SelectionRibbonHost> createState() => _SelectionRibbonHostState();
@@ -63,12 +61,7 @@ class _SelectionRibbonHostState extends State<SelectionRibbonHost>
           alignment: widget.atTop
               ? Alignment.topCenter
               : Alignment.bottomCenter,
-          child: LayoutBuilder(
-            builder: (context, constraints) => SelectionRibbon(
-              isVeryNarrowLayout:
-                  widget.isVeryNarrowLayout || constraints.maxWidth < 700,
-            ),
-          ),
+          child: const SelectionRibbon(),
         ),
       ),
     );

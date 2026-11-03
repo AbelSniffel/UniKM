@@ -9,6 +9,7 @@ import '../core/settings/settings_model.dart';
 import '../core/utils/batch_parser.dart';
 import '../models/game.dart';
 import '../shared/state/session_value.dart';
+import 'games_providers.dart' show gamesProvider;
 import 'settings_providers.dart';
 import '../core/theme/app_theme.dart' show AppThemeData;
 import 'theme_providers.dart' show builtInThemeIdsProvider, themeProvider;
@@ -212,6 +213,29 @@ class SelectionMultiSelectModeNotifier extends Notifier<bool> {
   void setEnabled(bool enabled) => state = enabled;
 
   void toggle() => state = !state;
+}
+
+/// Whether the home page's selection ribbon is open. Selecting a game opens
+/// it, and only its close button closes it: emptying the selection any other
+/// way leaves it open.
+final selectionRibbonOpenProvider =
+    NotifierProvider<SelectionRibbonOpenNotifier, bool>(
+      SelectionRibbonOpenNotifier.new,
+    );
+
+class SelectionRibbonOpenNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final hasSelection = gamesProvider.select(
+      (s) => s.selectedGameIds.isNotEmpty,
+    );
+    ref.listen(hasSelection, (_, selected) {
+      if (selected) state = true;
+    });
+    return ref.read(hasSelection);
+  }
+
+  void close() => state = false;
 }
 
 // =============================================================================

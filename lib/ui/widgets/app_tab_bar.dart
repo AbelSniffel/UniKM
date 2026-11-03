@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/button_group_shape.dart';
 import '../../core/theme/surface_depth.dart';
 
 class AppTab {
@@ -185,7 +184,7 @@ class AppTabBar extends StatelessWidget {
   }
 
   BorderRadius _radiusFor(int index, Radius radius, BuildContext context) =>
-      buttonGroupBorderRadius(
+      _tabBorderRadius(
         index: index,
         count: tabs.length,
         radius: radius.x,
@@ -359,4 +358,22 @@ class _KeepAliveState extends State<_KeepAlive>
     super.build(context);
     return widget.child;
   }
+}
+
+/// Only the outer ends of the joined tabs have rounded corners.
+BorderRadius _tabBorderRadius({
+  required int index,
+  required int count,
+  required double radius,
+  required TextDirection textDirection,
+}) {
+  final corner = Radius.circular(radius);
+  final start = index == 0 ? corner : Radius.zero;
+  final end = index == count - 1 ? corner : Radius.zero;
+  return BorderRadiusDirectional.only(
+    topStart: start,
+    bottomStart: start,
+    topEnd: end,
+    bottomEnd: end,
+  ).resolve(textDirection);
 }

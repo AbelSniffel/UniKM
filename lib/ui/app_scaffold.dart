@@ -395,10 +395,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     );
     final theme = ref.watch(themeProvider);
     final currentNav = ref.watch(currentNavProvider);
-    final hasSelectedGames = ref.watch(
-      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
-    );
-    final showSelectionRibbon = currentNav == NavItem.home && hasSelectedGames;
+    final showSelectionRibbon =
+        currentNav == NavItem.home && ref.watch(selectionRibbonOpenProvider);
     // Only the navigation settings shape the shell; saving the window size or
     // collapsing the settings rail must not rebuild it.
     final shellSettings = ref.watch(
@@ -438,20 +436,17 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       dialogOpen.set(false);
     });
 
-    ref.listen<bool>(
-      gamesProvider.select((s) => s.selectedGameIds.isNotEmpty),
-      (previous, next) {
-        if (previous == null || previous == next) return;
-        if (!next) {
-          ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
-        }
-        setState(() => _navSelectionTransitionActive = true);
-        _navSelectionAnimTimer?.cancel();
-        _navSelectionAnimTimer = Timer(kNavPanelMotionAnimation, () {
-          if (mounted) setState(() => _navSelectionTransitionActive = false);
-        });
-      },
-    );
+    ref.listen<bool>(selectionRibbonOpenProvider, (previous, next) {
+      if (previous == null || previous == next) return;
+      if (!next) {
+        ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
+      }
+      setState(() => _navSelectionTransitionActive = true);
+      _navSelectionAnimTimer?.cancel();
+      _navSelectionAnimTimer = Timer(kNavPanelMotionAnimation, () {
+        if (mounted) setState(() => _navSelectionTransitionActive = false);
+      });
+    });
 
     // Prompt for one new incoming pair request at a time.
     ref.listen(deviceSyncProvider, (previous, next) {
@@ -700,7 +695,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
                               child: SelectionRibbonHost(
                                 visible: showSelectionRibbon,
                                 atTop: false,
-                                isVeryNarrowLayout: isVeryNarrowLayout,
                                 child: pagesStack,
                               ),
                             ),

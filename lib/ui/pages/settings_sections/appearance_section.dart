@@ -391,7 +391,6 @@ class ThemeHeaderActions extends ConsumerWidget {
     return SettingsHeaderActions(
       theme: theme,
       expanded: expanded,
-      inset: true,
       children: buttons,
     );
   }

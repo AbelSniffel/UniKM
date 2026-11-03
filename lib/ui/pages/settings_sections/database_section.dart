@@ -186,7 +186,6 @@ class DatabaseHeaderActions extends ConsumerWidget {
     return SettingsHeaderActions(
       theme: theme,
       expanded: expanded,
-      inset: true,
       children: [
         for (final (icon, tooltip, onTap) in [
           (Icons.download, 'Import DB', () => showImportDialog(context)),

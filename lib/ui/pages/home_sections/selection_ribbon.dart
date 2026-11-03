@@ -10,11 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/button_group_shape.dart';
 import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_selection_actions.dart';
+import '../../widgets/nav_button_group.dart';
 import '../../widgets/navigation_panel_overlay.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/segmented_bar.dart';
@@ -29,9 +29,7 @@ final _ribbonSelectedCountProvider = gamesProvider.select(
 // ---------------------------------------------------------------------------
 
 class SelectionRibbon extends ConsumerWidget {
-  const SelectionRibbon({super.key, this.isVeryNarrowLayout = false});
-
-  final bool isVeryNarrowLayout;
+  const SelectionRibbon({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,13 +57,16 @@ class SelectionRibbon extends ConsumerWidget {
     final hasSteamGames = ref.watch(
       selectedSteamGamesProvider.select((games) => games.isNotEmpty),
     );
+    // The ribbon stays open with nothing selected; game actions wait for a
+    // selection, and editing ones also for a running Steam fetch to finish.
+    final canEdit = selectedCount > 0 && !isFetchActive;
     final actions = [
       _RibbonAction(
         id: 'edit',
         label: 'Edit',
         tooltip: 'Game Editor',
         icon: Icons.edit_outlined,
-        onPressed: isFetchActive
+        onPressed: !canEdit
             ? null
             : () {
                 final games = selected();
@@ -79,21 +80,11 @@ class SelectionRibbon extends ConsumerWidget {
               },
       ),
       _RibbonAction(
-        id: 'copy',
-        label: 'Copy',
-        icon: Icons.copy_all_outlined,
-        onPressed: () {
-          final games = selected();
-          if (games.isEmpty) return;
-          GameSelectionActions.showCopyDialog(context, ref, games);
-        },
-      ),
-      _RibbonAction(
         id: 'used',
         label: allUsed ? 'Mark unused' : 'Mark used',
         tooltip: allUsed ? 'Mark Unused' : 'Mark Used',
         icon: allUsed ? Icons.check_box : Icons.check_box_outline_blank,
-        onPressed: isFetchActive
+        onPressed: !canEdit
             ? null
             : () => GameSelectionActions.toggleUsed(
                 ref,
@@ -102,12 +93,16 @@ class SelectionRibbon extends ConsumerWidget {
               ),
       ),
       _RibbonAction(
-        id: 'all',
-        group: _RibbonActionGroup.selection,
-        label: allSelected ? 'Deselect all' : 'Select all',
-        tooltip: allSelected ? 'Deselect all games' : 'Select all games',
-        icon: allSelected ? Icons.deselect : Icons.select_all,
-        onPressed: allSelected ? notifier.clearSelection : notifier.selectAll,
+        id: 'copy',
+        label: 'Copy',
+        icon: Icons.copy_all_outlined,
+        onPressed: selectedCount == 0
+            ? null
+            : () {
+                final games = selected();
+                if (games.isEmpty) return;
+                GameSelectionActions.showCopyDialog(context, ref, games);
+              },
       ),
       _RibbonAction(
         id: 'multi',
@@ -119,36 +114,46 @@ class SelectionRibbon extends ConsumerWidget {
             ref.read(selectionMultiSelectModeProvider.notifier).toggle(),
       ),
       _RibbonAction(
-        id: 'fetch',
-        group: _RibbonActionGroup.steam,
-        label: isFetchActive ? 'Fetching…' : 'Fetch',
-        tooltip: isFetchActive ? 'Fetching Steam data' : 'Fetch Steam data',
-        icon: Icons.cloud_download_outlined,
-        busy: isFetchActive,
-        onPressed: isFetchActive || !hasSteamGames
-            ? null
-            : () => GameSelectionActions.fetchSteamData(
-                context,
-                ref,
-                selectedSteam(),
-              ),
+        id: 'all',
+        group: _RibbonActionGroup.selection,
+        label: allSelected ? 'Deselect all' : 'Select all',
+        tooltip: allSelected ? 'Deselect all games' : 'Select all games',
+        icon: allSelected ? Icons.deselect : Icons.select_all,
+        onPressed: allSelected ? notifier.clearSelection : notifier.selectAll,
       ),
-      _RibbonAction(
-        id: 'steam',
-        group: _RibbonActionGroup.steam,
-        label: 'Open Steam page',
-        icon: Icons.open_in_new,
-        onPressed: hasSteamGames
-            ? () => GameSelectionActions.openSteamPages(ref, selectedSteam())
-            : null,
-      ),
+      // Steam actions only appear with a Steam game in the selection.
+      if (hasSteamGames) ...[
+        _RibbonAction(
+          id: 'fetch',
+          group: _RibbonActionGroup.steam,
+          label: isFetchActive ? 'Fetching…' : 'Fetch',
+          tooltip: isFetchActive ? 'Fetching Steam data' : 'Fetch Steam data',
+          icon: Icons.cloud_download_outlined,
+          busy: isFetchActive,
+          onPressed: isFetchActive
+              ? null
+              : () => GameSelectionActions.fetchSteamData(
+                  context,
+                  ref,
+                  selectedSteam(),
+                ),
+        ),
+        _RibbonAction(
+          id: 'steam',
+          group: _RibbonActionGroup.steam,
+          label: 'Open Steam page',
+          icon: Icons.open_in_new,
+          onPressed: () =>
+              GameSelectionActions.openSteamPages(ref, selectedSteam()),
+        ),
+      ],
       _RibbonAction(
         id: 'delete',
         group: _RibbonActionGroup.destructive,
         label: 'Delete',
         icon: Icons.delete_outline,
         destructive: true,
-        onPressed: isFetchActive
+        onPressed: !canEdit
             ? null
             : () => GameSelectionActions.deleteGames(
                 context,
@@ -168,14 +173,32 @@ class SelectionRibbon extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _SelectedGamesStrip(theme: theme),
+            // The chip strip folds away while nothing is selected, and
+            // grows back with the next selection.
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: selectedCount > 0 ? 1 : 0),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : kFastAnimation,
+              curve: Curves.easeOutCubic,
+              child: _SelectedGamesStrip(theme: theme),
+              builder: (context, height, strip) => ClipRect(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  heightFactor: height,
+                  child: strip,
+                ),
+              ),
+            ),
             _RibbonBar(
               theme: theme,
               selectedCount: selectedCount,
-              isVeryNarrowLayout: isVeryNarrowLayout,
               isMultiSelectEnabled: isMultiSelectEnabled,
               actions: actions,
-              onClearAll: notifier.clearSelection,
+              onClose: () {
+                notifier.clearSelection();
+                ref.read(selectionRibbonOpenProvider.notifier).close();
+              },
             ),
           ],
         ),
@@ -280,7 +303,7 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
 
 // ---------------------------------------------------------------------------
 
-enum _RibbonActionGroup { game, steam, selection, destructive }
+enum _RibbonActionGroup { game, selection, steam, destructive }
 
 class _RibbonAction {
   const _RibbonAction({
@@ -310,60 +333,37 @@ class _RibbonBar extends StatelessWidget {
   const _RibbonBar({
     required this.theme,
     required this.selectedCount,
-    required this.isVeryNarrowLayout,
     required this.isMultiSelectEnabled,
     required this.actions,
-    required this.onClearAll,
+    required this.onClose,
   });
 
   final AppThemeData theme;
   final int selectedCount;
-  final bool isVeryNarrowLayout;
   final bool isMultiSelectEnabled;
   final List<_RibbonAction> actions;
-  final VoidCallback onClearAll;
+  final VoidCallback onClose;
 
-  Widget _selectionSummary(
-    BuildContext context,
-    bool showLabels,
-    bool tiny,
-    double width,
-  ) => SizedBox(
+  /// Icon-only navigation buttons, 4 px smaller than the navigation panel's.
+  static const double _button = 36;
+  static const double _gap = 8;
+  static const double _groupEdges = NavButtonGroup.padding * 2;
+
+  /// The count in an accent label like the home header's game counter,
+  /// with "Selected" after it when there is room.
+  Widget _selectionSummary(String text, TextStyle style) => Semantics(
     key: const ValueKey('selection-summary'),
-    width: width,
-    height: 40,
-    child: Semantics(
-      label:
-          '$selectedCount games selected${isMultiSelectEnabled ? ', multi-select enabled' : ''}',
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          children: [
-            if (!tiny) ...[
-              Icon(
-                isMultiSelectEnabled
-                    ? Icons.library_add_check_rounded
-                    : Icons.checklist_rounded,
-                size: 20,
-                color: theme.accent,
-              ),
-              const SizedBox(width: 6),
-            ],
-            Flexible(
-              child: Text(
-                showLabels ? '$selectedCount selected' : '$selectedCount',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge!.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
+    label:
+        '$selectedCount games selected${isMultiSelectEnabled ? ', multi-select enabled' : ''}',
+    excludeSemantics: true,
+    child: Container(
+      key: const ValueKey('selection-count'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
       ),
+      child: Text(text, maxLines: 1, softWrap: false, style: style),
     ),
   );
 
@@ -399,16 +399,12 @@ class _RibbonBar extends StatelessWidget {
         ),
       ],
     ],
-    builder: (context, controller, _) => Tooltip(
-      message: 'More actions',
-      child: InkWell(
-        key: const ValueKey('selection-more-actions'),
-        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
-        onTap: () => controller.isOpen ? controller.close() : controller.open(),
-        child: Center(
-          child: Icon(Icons.more_horiz, size: 22, color: theme.textPrimary),
-        ),
-      ),
+    builder: (context, controller, _) => _navButton(
+      key: const ValueKey('selection-more-actions'),
+      icon: Icons.more_horiz,
+      tooltip: 'More actions',
+      selected: controller.isOpen,
+      onTap: () => controller.isOpen ? controller.close() : controller.open(),
     ),
   );
 
@@ -419,13 +415,55 @@ class _RibbonBar extends StatelessWidget {
       ? theme.error
       : null;
 
-  /// A rounded button group background.
-  Widget _group({required Key key, required Widget child}) => Material(
+  Widget _navButton({
+    required Key key,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onTap,
+    bool selected = false,
+    bool busy = false,
+    bool destructive = false,
+  }) => AppNavigationButton(
     key: key,
-    color: theme.buttonGroupBackground,
-    borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
-    clipBehavior: Clip.antiAlias,
-    child: child,
+    theme: theme,
+    isSelected: selected,
+    isEnabled: onTap != null,
+    isHorizontal: true,
+    onTap: onTap,
+    tooltipMessage: tooltip,
+    // Destructive buttons highlight in the theme's secondary color, like
+    // their group.
+    tint: destructive ? theme.secondary : null,
+    padding: const EdgeInsets.all(6),
+    minWidth: _button,
+    iconBuilder: (context, color, size) => busy
+        ? SizedBox.square(
+            dimension: size - 4,
+            child: AppCircularProgressIndicator(color: color, strokeWidth: 2),
+          )
+        : Icon(
+            icon,
+            size: size,
+            color: destructive && onTap != null ? theme.error : color,
+          ),
+  );
+
+  Widget _actionButton(_RibbonAction action) => _navButton(
+    key: ValueKey('selection-action-${action.id}'),
+    icon: action.icon,
+    tooltip: action.tooltip ?? action.label,
+    onTap: action.onPressed,
+    selected: action.selected,
+    busy: action.busy,
+    destructive: action.destructive,
+  );
+
+  Widget _group(String id, List<Widget> children) => NavButtonGroup(
+    key: ValueKey('selection-group-$id'),
+    theme: theme,
+    isHorizontal: true,
+    color: id == _RibbonActionGroup.destructive.name ? theme.secondary : null,
+    children: children,
   );
 
   double _textWidth(BuildContext context, String text, TextStyle style) {
@@ -444,52 +482,56 @@ class _RibbonBar extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     key: const ValueKey('selection-ribbon-bar'),
     height: kNavigationPanelHorizontalExtent,
+    // Groups fill the height left, like the navigation panel's.
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final showLabels =
-              !isVeryNarrowLayout &&
-              constraints.maxWidth >= 840 &&
-              MediaQuery.textScalerOf(context).scale(14) <= 17;
-          final tiny = constraints.maxWidth < 280;
-          final labelStyle = Theme.of(context).textTheme.labelLarge!;
-          final summaryWidth =
-              ((tiny ? 20 : 42) +
-                      _textWidth(
-                        context,
-                        showLabels
-                            ? '$selectedCount selected'
-                            : '$selectedCount',
-                        labelStyle.copyWith(fontWeight: FontWeight.bold),
-                      ))
-                  .clamp(40.0, constraints.maxWidth * 0.45)
-                  .toDouble();
-          const moreWidth = 42.0;
-          final clearWidth = showLabels
-              ? 42 + _textWidth(context, 'Deselect all', labelStyle)
-              : 40.0;
-          const actionWidth = 40.0;
+          final countStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+            color: theme.accent,
+            fontWeight: FontWeight.w600,
+          );
+          const singleGroupWidth = _groupEdges + _button;
+          // Room for the close button, which is larger on touch platforms.
+          const clearWidth = 40.0;
+          // Each button adds its width and the spacing before it: the group's
+          // edges plus the gap between groups when it starts a new group.
           final cumulativeWidths = <double>[0];
           for (var index = 0; index < actions.length; index++) {
+            final startsGroup =
+                index == 0 || actions[index].group != actions[index - 1].group;
             cumulativeWidths.add(
               cumulativeWidths.last +
-                  actionWidth +
-                  (index > 0 && actions[index].group != actions[index - 1].group
-                      ? 8
-                      : 0),
+                  _button +
+                  (startsGroup
+                      ? _groupEdges + (index > 0 ? _gap : 0)
+                      : NavButtonGroup.padding),
             );
           }
-          final available =
-              constraints.maxWidth - summaryWidth - 8 - clearWidth - 4;
-          var visibleCount = actions.length;
-          if (cumulativeWidths.last > available) {
-            visibleCount = 0;
-            while (visibleCount < actions.length &&
-                cumulativeWidths[visibleCount + 1] + moreWidth + 8 <=
+          double summaryWidth(String text) =>
+              24 + _textWidth(context, text, countStyle);
+          // How many actions fit beside a summary of [width].
+          int fitting(double width) {
+            final available =
+                constraints.maxWidth - width - clearWidth - 2 * _gap;
+            if (cumulativeWidths.last <= available) return actions.length;
+            var count = 0;
+            while (count < actions.length &&
+                cumulativeWidths[count + 1] + singleGroupWidth + _gap <=
                     available) {
-              visibleCount++;
+              count++;
             }
+            return count;
+          }
+
+          // "Selected" shows only while every action still fits.
+          var summaryText = '$selectedCount Selected';
+          var summary = summaryWidth(summaryText);
+          var visibleCount = fitting(summary);
+          if (visibleCount < actions.length) {
+            summaryText = '$selectedCount';
+            summary = summaryWidth(summaryText);
+            visibleCount = fitting(summary);
           }
           final groups = <List<_RibbonAction>>[];
           for (final action in actions.take(visibleCount)) {
@@ -501,48 +543,55 @@ class _RibbonBar extends StatelessWidget {
           final hasOverflow = visibleCount < actions.length;
           final controlsWidth =
               cumulativeWidths[visibleCount] +
-              (hasOverflow ? moreWidth + (visibleCount > 0 ? 8 : 0) : 0);
+              (hasOverflow
+                  ? singleGroupWidth + (visibleCount > 0 ? _gap : 0)
+                  : 0);
           final centeredLeft = (constraints.maxWidth - controlsWidth) / 2;
           final controlsLeft = centeredLeft.clamp(
-            summaryWidth + 8,
-            constraints.maxWidth - clearWidth - 4 - controlsWidth,
+            summary + _gap,
+            constraints.maxWidth - clearWidth - _gap - controlsWidth,
           );
+          // The Steam group folds in and out after the selection group, so
+          // the groups around it slide apart or together.
+          final steam = groups
+              .where((group) => group.first.group == _RibbonActionGroup.steam)
+              .firstOrNull;
+          Widget buttons(List<_RibbonAction> group) => _group(
+            group.first.group.name,
+            [for (final action in group) _actionButton(action)],
+          );
+          final row = <Widget>[];
+          void add(Widget group) => row.add(
+            row.isEmpty
+                ? group
+                : Padding(
+                    padding: const EdgeInsets.only(left: _gap),
+                    child: group,
+                  ),
+          );
+          for (final group in groups) {
+            if (group == steam) continue;
+            add(buttons(group));
+            if (group.first.group == _RibbonActionGroup.selection) {
+              row.add(
+                _FoldingGroup(
+                  key: const ValueKey('selection-steam-slot'),
+                  child: steam == null ? null : buttons(steam),
+                ),
+              );
+            }
+          }
+          if (hasOverflow) {
+            add(
+              _group('more', [_moreMenu(actions.skip(visibleCount).toList())]),
+            );
+          }
           final controls = Transform.translate(
             offset: Offset(controlsLeft - centeredLeft, 0),
             child: Row(
               key: const ValueKey('selection-action-groups'),
               mainAxisSize: MainAxisSize.min,
-              spacing: 8,
-              children: [
-                for (final group in groups)
-                  _group(
-                    key: ValueKey('selection-group-${group.first.group.name}'),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final (index, action) in group.indexed)
-                          ButtonGroupShape(
-                            borderRadius: buttonGroupBorderRadius(
-                              index: index,
-                              count: group.length,
-                              radius: theme.cornerRadius * 1.25,
-                              textDirection: Directionality.of(context),
-                            ),
-                            child: _ActionControl(theme: theme, action: action),
-                          ),
-                      ],
-                    ),
-                  ),
-                if (hasOverflow)
-                  _group(
-                    key: const ValueKey('selection-group-more'),
-                    child: SizedBox(
-                      width: moreWidth,
-                      height: 40,
-                      child: _moreMenu(actions.skip(visibleCount).toList()),
-                    ),
-                  ),
-              ],
+              children: row,
             ),
           );
           return Stack(
@@ -550,45 +599,17 @@ class _RibbonBar extends StatelessWidget {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: _selectionSummary(
-                  context,
-                  showLabels,
-                  tiny,
-                  summaryWidth,
-                ),
+                child: _selectionSummary(summaryText, countStyle),
               ),
-              Align(alignment: Alignment.center, child: controls),
+              controls,
               Align(
                 alignment: Alignment.centerRight,
-                child: SizedBox(
-                  width: clearWidth,
-                  height: 40,
-                  child: Tooltip(
-                    message: 'Deselect all',
-                    child: showLabels
-                        ? TextButton.icon(
-                            onPressed: onClearAll,
-                            icon: const Icon(Icons.close, size: 18),
-                            label: const Text('Deselect all'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: theme.textSecondary,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          )
-                        : IconButton(
-                            onPressed: onClearAll,
-                            icon: const Icon(Icons.close, size: 20),
-                            color: theme.textSecondary,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 40,
-                              height: 40,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                  ),
+                // The same close button as the app's dialogs.
+                child: IconButton(
+                  key: const ValueKey('selection-clear'),
+                  tooltip: 'Close',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close),
                 ),
               ),
             ],
@@ -599,66 +620,51 @@ class _RibbonBar extends StatelessWidget {
   );
 }
 
-class _ActionControl extends StatelessWidget {
-  const _ActionControl({required this.theme, required this.action});
-  final AppThemeData theme;
-  final _RibbonAction action;
+/// A button group that folds sideways in as [child] arrives and out once it
+/// is gone, keeping the last group on screen while it folds away. Its gap to
+/// the group before it folds with it.
+class _FoldingGroup extends StatefulWidget {
+  const _FoldingGroup({super.key, required this.child});
+
+  final Widget? child;
+
+  @override
+  State<_FoldingGroup> createState() => _FoldingGroupState();
+}
+
+class _FoldingGroupState extends State<_FoldingGroup> {
+  Widget? _shown;
 
   @override
   Widget build(BuildContext context) {
-    final icon = action.busy
-        ? const AppCircularProgressIndicator(size: 18)
-        : Icon(action.icon, size: 20);
-    final style = ButtonStyle(
-      minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
-      maximumSize: const WidgetStatePropertyAll(Size(40, 40)),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: 8),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: ButtonGroupShape.maybeOf(context) ?? BorderRadius.zero,
-        ),
-      ),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.standard,
-      foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.disabled)
-            ? theme.textHint
-            : action.destructive
-            ? theme.error
-            : theme.textPrimary,
-      ),
-      backgroundColor: WidgetStatePropertyAll(
-        action.selected ? theme.navItemSelected : Colors.transparent,
-      ),
-    );
-    final key = ValueKey('selection-action-${action.id}');
-    return Tooltip(
-      message: action.tooltip ?? action.label,
-      child: action.id == 'edit'
-          ? ElevatedButton(
-              key: key,
-              onPressed: action.onPressed,
-              style: style.copyWith(
-                backgroundColor: WidgetStateProperty.resolveWith(
-                  (states) => states.contains(WidgetState.disabled)
-                      ? theme.primaryButtonDisabled
-                      : theme.primaryButton,
-                ),
-                foregroundColor: WidgetStateProperty.resolveWith(
-                  (states) => states.contains(WidgetState.disabled)
-                      ? theme.primaryButtonDisabledText
-                      : theme.primaryButtonText,
+    _shown = widget.child ?? _shown;
+    final shown = _shown;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: widget.child == null ? 0 : 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : kFastAnimation,
+      curve: Curves.easeOutCubic,
+      onEnd: () {
+        if (widget.child == null) setState(() => _shown = null);
+      },
+      builder: (context, width, _) => shown == null || width == 0
+          ? const SizedBox.shrink()
+          : IgnorePointer(
+              ignoring: widget.child == null,
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: width,
+                  child: Opacity(
+                    opacity: width,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: _RibbonBar._gap),
+                      child: shown,
+                    ),
+                  ),
                 ),
               ),
-              child: icon,
-            )
-          : TextButton(
-              key: key,
-              onPressed: action.onPressed,
-              style: style,
-              child: icon,
             ),
     );
   }

@@ -1,62 +1,33 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/button_group_shape.dart';
+import 'nav_button_group.dart';
 
-/// Shared sizing and decoration for settings header action groups.
+/// Settings header actions in a navigation-panel style button group, like
+/// the library's selection bar: a tinted group of separately highlighted
+/// buttons.
 class SettingsHeaderActions extends StatelessWidget {
   const SettingsHeaderActions({
     super.key,
     required this.theme,
     required this.children,
-    this.encapsulated = true,
     this.expanded = false,
-    this.inset = false,
   });
 
   final AppThemeData theme;
   final List<Widget> children;
-  final bool encapsulated;
+
+  /// Fills the width offered, the buttons sharing it, for a header too narrow
+  /// to keep its actions beside the title.
   final bool expanded;
 
-  /// On a tinted settings header the group takes the tint of the header's
-  /// icon square, since its own tint would blend into the header's.
-  final bool inset;
-
   @override
-  Widget build(BuildContext context) {
-    final actions = Row(
-      mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
-      children: [
-        for (final (index, child) in children.indexed)
-          if (expanded)
-            Expanded(child: _groupButton(context, index, child))
-          else
-            _groupButton(context, index, child),
-      ],
-    );
-    if (!encapsulated) return actions;
-    return Container(
-      decoration: BoxDecoration(
-        color: inset
-            ? theme.accent.withValues(alpha: 0.18)
-            : theme.buttonGroupBackground,
-        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.25),
-      ),
-      child: actions,
-    );
-  }
-
-  Widget _groupButton(BuildContext context, int index, Widget child) =>
-      ButtonGroupShape(
-        borderRadius: buttonGroupBorderRadius(
-          index: index,
-          count: children.length,
-          radius: theme.cornerRadius * 1.25,
-          textDirection: Directionality.of(context),
-        ),
-        child: child,
-      );
+  Widget build(BuildContext context) => NavButtonGroup(
+    theme: theme,
+    isHorizontal: true,
+    expanded: expanded,
+    children: children,
+  );
 }
 
 class SettingsHeaderAction extends StatelessWidget {
@@ -78,26 +49,31 @@ class SettingsHeaderAction extends StatelessWidget {
   final int? badgeCount;
 
   @override
-  Widget build(BuildContext context) => AppNavigationButton(
-    theme: theme,
-    isSelected: false,
-    isEnabled: onTap != null,
-    isHorizontal: true,
-    onTap: onTap,
-    iconData: icon,
-    iconBuilder: badgeCount == null
-        ? null
-        : (context, color, size) => Badge.count(
-            count: badgeCount!,
-            backgroundColor: theme.accent,
-            textColor: theme.accent.computeLuminance() > 0.3
-                ? Colors.black
-                : Colors.white,
-            child: Icon(icon, color: color, size: size),
-          ),
-    iconSize: 20,
-    tooltipMessage: tooltip,
-    minWidth: 40,
-    minHeight: 36,
+  // A fixed height keeps the button 32 px in headers that offer more.
+  Widget build(BuildContext context) => SizedBox(
+    height: 32,
+    child: AppNavigationButton(
+      theme: theme,
+      isSelected: false,
+      isEnabled: onTap != null,
+      isHorizontal: true,
+      onTap: onTap,
+      iconData: icon,
+      iconBuilder: badgeCount == null
+          ? null
+          : (context, color, size) => Badge.count(
+              count: badgeCount!,
+              backgroundColor: theme.accent,
+              textColor: theme.accent.computeLuminance() > 0.3
+                  ? Colors.black
+                  : Colors.white,
+              child: Icon(icon, color: color, size: size),
+            ),
+      tooltipMessage: tooltip,
+      // 4 px smaller than the selection bar's 36 px buttons.
+      iconSize: 20,
+      padding: const EdgeInsets.all(6),
+      minWidth: 32,
+    ),
   );
 }

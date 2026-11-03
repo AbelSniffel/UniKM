@@ -11,7 +11,6 @@ import 'package:uuid/uuid.dart';
 import '../constants/app_constants.dart';
 import 'theme_icons.dart';
 import 'app_slider_theme.dart';
-import 'button_group_shape.dart';
 import 'button_depth.dart';
 import 'button_notification_pulse.dart';
 import 'package:flutter/foundation.dart';
@@ -927,6 +926,7 @@ class AppNavigationButton extends StatefulWidget {
     this.labelFadeCurve = Curves.easeOut,
     this.hideIconWithLabel = false,
     this.hasNotification = false,
+    this.tint,
   });
 
   final AppThemeData theme;
@@ -959,6 +959,10 @@ class AppNavigationButton extends StatefulWidget {
   /// still show an icon while collapsed.
   final bool hideIconWithLabel;
   final bool hasNotification;
+
+  /// The color of the hover and press highlights, at the navigation item
+  /// strengths; the theme's accent by default.
+  final Color? tint;
 
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
@@ -1117,13 +1121,17 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     );
   }
 
+  Color get _hoverColor =>
+      widget.tint?.withValues(alpha: 0.30) ?? widget.theme.navItemHover;
+
+  Color get _pressedColor =>
+      widget.tint?.withValues(alpha: 0.40) ?? widget.theme.navItemSelected;
+
   @override
   Widget build(BuildContext context) {
-    final borderRadius =
-        ButtonGroupShape.maybeOf(context) ??
-        BorderRadius.circular(
-          widget.theme.cornerRadius * widget.borderRadiusMultiplier,
-        );
+    final borderRadius = BorderRadius.circular(
+      widget.theme.cornerRadius * widget.borderRadiusMultiplier,
+    );
 
     final button = AnimatedBuilder(
       key: _buttonKey,
@@ -1157,13 +1165,8 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         final backgroundColor = !widget.isEnabled
             ? Colors.transparent
             : Color.lerp(
-                    Color.lerp(
-                      Colors.transparent,
-                      widget.theme.navItemHover,
-                      hoverT,
-                    ),
-                    widget.selectedBackgroundColor ??
-                        widget.theme.navItemSelected,
+                    Color.lerp(Colors.transparent, _hoverColor, hoverT),
+                    widget.selectedBackgroundColor ?? _pressedColor,
                     selectionT,
                   ) ??
                   Colors.transparent;
@@ -1192,9 +1195,9 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
               child: InkWell(
                 onTap: widget.isEnabled ? widget.onTap : null,
                 borderRadius: borderRadius,
-                splashColor: widget.theme.navItemHover,
-                highlightColor: widget.theme.navItemSelected,
-                hoverColor: widget.theme.navItemHover,
+                splashColor: _hoverColor,
+                highlightColor: _pressedColor,
+                hoverColor: _hoverColor,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minWidth: widget.minWidth,
