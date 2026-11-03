@@ -45,7 +45,9 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   static int _fetchPreviewStep = 0;
 
   final _position = ValueNotifier(const Offset(100, 100));
-  Offset? _dragOffset;
+
+  /// Where the title row was grabbed, from the panel's corner.
+  Offset? _grab;
   int _tab = 0;
 
   static const _fetchPreviewStates = [
@@ -151,21 +153,10 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       batchFetchProvider.select((state) => state.isActive),
     );
     final settings = ref.watch(settingsProvider);
-    final showFps =
-        (settings[SettingsKeys.showFpsCounter] as bool?) ??
-        DefaultSettings.showFpsCounter;
     final showId =
         (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
         DefaultSettings.showGameDetailsSkmId;
     final showSyncDeviceId = ref.watch(showSyncDeviceIdProvider);
-    final viewport = MediaQuery.sizeOf(context);
-    final width = math.min(380.0, math.max(0.0, viewport.width - 24));
-    final height = math.min(400.0, math.max(0.0, viewport.height - 24));
-    Offset clampPosition(Offset position) => Offset(
-      position.dx.clamp(12.0, math.max(12.0, viewport.width - width - 12)),
-      position.dy.clamp(12.0, math.max(12.0, viewport.height - height - 12)),
-    );
-
     Widget action(
       String label,
       IconData icon,
@@ -177,10 +168,22 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       theme: theme,
       onTap: onTap,
       selected: selected,
-      expandLabel: true,
     );
-    Widget section(String title, List<Widget> actions) =>
-        _DevSection(title: title, theme: theme, children: actions);
+    // A small label over its actions, which wrap at their own widths.
+    Widget section(String title, List<Widget> actions) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 4,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.labelMedium!.copyWith(
+            color: theme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Wrap(spacing: 6, runSpacing: 6, children: actions),
+      ],
+    );
     Widget settingToggle(String label, IconData icon, String key, bool value) =>
         action(
           label,
@@ -191,7 +194,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
 
     final content = switch (_tab) {
       0 => [
-        section('Notifications', [
+        section('Send test', [
           action('In-app preview', Icons.notifications_outlined, () {
             for (final (type, title) in const [
               (NotificationType.info, 'Info'),
@@ -212,11 +215,6 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
           ),
         ]),
         section('Deadlines', [
-          action(
-            'Run check',
-            Icons.timer_outlined,
-            () => DeadlineNotificationService.instance.triggerAndRestart(ref),
-          ),
           action('Simulate alerts', Icons.timelapse, () async {
             await DeadlineNotificationService.instance
                 .simulateDeadlineNotifications(ref);
@@ -236,13 +234,6 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             Icons.close,
             _hasActiveFetchPreview ? _clearFetchPreview : null,
           ),
-        ]),
-        section('Dialogs', [
-          action('Open dialog gallery', Icons.grid_view_rounded, () {
-            final navigatorContext = context;
-            widget.onClose();
-            showDialogGallery(navigatorContext);
-          }),
         ]),
       ],
       1 => [
@@ -303,16 +294,24 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             showSyncDeviceId,
           ),
           settingToggle(
-            'FPS counter',
-            Icons.speed,
-            SettingsKeys.showFpsCounter,
-            showFps,
-          ),
-          settingToggle(
             'SKM-ID',
             Icons.tag,
             SettingsKeys.showGameDetailsSkmId,
             showId,
+          ),
+        ]),
+        section('Dialogs', [
+          action('Open dialog gallery', Icons.grid_view_rounded, () {
+            final navigatorContext = context;
+            widget.onClose();
+            showDialogGallery(navigatorContext);
+          }),
+        ]),
+        section('Deadlines', [
+          action(
+            'Run check',
+            Icons.timer_outlined,
+            () => DeadlineNotificationService.instance.triggerAndRestart(ref),
           ),
         ]),
         section('Library · ${selectedGames.length} selected', [
@@ -372,126 +371,68 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
 
     return Positioned.fill(
       child: RepaintBoundary(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ValueListenableBuilder<Offset>(
-            valueListenable: _position,
-            builder: (context, position, child) => Transform.translate(
-              offset: clampPosition(position),
-              child: child,
-            ),
-            child: RepaintBoundary(
-              child: SizedBox(
-                width: width,
-                height: height,
-                child: Material(
-                  key: const ValueKey('dev-tools-panel'),
-                  color: theme.surface,
-                  elevation: 12,
-                  shadowColor: Colors.black.withValues(alpha: 0.35),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(theme.cornerRadius),
-                    side: BorderSide(color: theme.border),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: DefaultTextStyle(
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium!.copyWith(color: theme.textPrimary),
-                    child: Column(
-                      children: [
-                        MouseRegion(
-                          cursor: SystemMouseCursors.move,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            dragStartBehavior: DragStartBehavior.down,
-                            onPanStart: (details) {
-                              _dragOffset =
-                                  details.globalPosition -
-                                  clampPosition(_position.value);
-                            },
-                            onPanUpdate: (details) {
-                              final dragOffset = _dragOffset;
-                              if (dragOffset == null) return;
-                              // Absolute pointer tracking keeps events between frames.
-                              // Only the translation rebuilds; the panel stays cached.
-                              _position.value = clampPosition(
-                                details.globalPosition - dragOffset,
-                              );
-                            },
-                            onPanEnd: (_) => _dragOffset = null,
-                            onPanCancel: () => _dragOffset = null,
-                            child: Container(
-                              color: theme.accent.withValues(alpha: 0.12),
-                              padding: const EdgeInsets.fromLTRB(12, 5, 5, 5),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.tune,
-                                    size: 18,
-                                    color: theme.accent,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Dev Tools',
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  if (showFps) AppFpsCounter(theme: theme),
-                                  IconButton(
-                                    tooltip: 'Close Dev Tools',
-                                    onPressed: widget.onClose,
-                                    icon: Icon(
-                                      Icons.close,
-                                      size: 18,
-                                      color: theme.textSecondary,
-                                    ),
-                                    style: IconButton.styleFrom(
-                                      minimumSize: const Size.square(30),
-                                      padding: const EdgeInsets.all(4),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                  ),
-                                ],
-                              ),
+        // Moving only re-positions the panel; its content stays cached.
+        child: CustomSingleChildLayout(
+          delegate: _PanelLayout(_position),
+          child: RepaintBoundary(
+            child: Material(
+              key: const ValueKey('dev-tools-panel'),
+              color: theme.surface,
+              elevation: 12,
+              shadowColor: Colors.black.withValues(alpha: 0.35),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(theme.cornerRadius),
+                side: BorderSide(color: theme.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: DefaultTextStyle(
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium!.copyWith(color: theme.textPrimary),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // One tinted header: the title bar to drag by, and the
+                    // tabs under it.
+                    ColoredBox(
+                      color: theme.accent.withValues(alpha: 0.12),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 4, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _dragHandle(theme),
+                            AppTabBar(
+                              theme: theme,
+                              selectedIndex: _tab,
+                              onChanged: (index) =>
+                                  setState(() => _tab = index),
+                              tabs: const [
+                                AppTab('Notifications'),
+                                AppTab('Updates'),
+                                AppTab('Tools'),
+                              ],
                             ),
-                          ),
+                          ],
                         ),
-                        Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: AppTabBar(
-                            theme: theme,
-                            selectedIndex: _tab,
-                            onChanged: (index) => setState(() => _tab = index),
-                            tabs: const [
-                              AppTab('Previews'),
-                              AppTab('Updates'),
-                              AppTab('Tools'),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: AppTabTransition(
-                            index: _tab,
-                            child: SingleChildScrollView(
-                              key: ValueKey('dev-tools-tab-$_tab'),
-                              padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: content,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    Flexible(
+                      child: AppTabTransition(
+                        index: _tab,
+                        child: SingleChildScrollView(
+                          key: ValueKey('dev-tools-tab-$_tab'),
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            spacing: 10,
+                            children: content,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -500,53 +441,96 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       ),
     );
   }
-}
 
-class _DevSection extends StatelessWidget {
-  const _DevSection({
-    required this.title,
-    required this.theme,
-    required this.children,
-  });
-  final String title;
-  final AppThemeData theme;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.labelMedium!.copyWith(
-              color: theme.textSecondary,
-              fontWeight: FontWeight.w600,
+  /// The title row, which drags the panel by the point it was grabbed at.
+  Widget _dragHandle(AppThemeData theme) => MouseRegion(
+    cursor: SystemMouseCursors.move,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      dragStartBehavior: DragStartBehavior.down,
+      onPanStart: (details) =>
+          _grab = details.localPosition + const Offset(8, 0),
+      onPanUpdate: (details) {
+        final grab = _grab;
+        if (grab == null) return;
+        // Absolute pointer tracking keeps events between frames; the layout
+        // keeps the panel on screen.
+        final overlay = context.findRenderObject()! as RenderBox;
+        _position.value = overlay.globalToLocal(details.globalPosition) - grab;
+      },
+      onPanEnd: (_) => _grab = null,
+      onPanCancel: () => _grab = null,
+      child: SizedBox(
+        height: 36,
+        child: Row(
+          spacing: 8,
+          children: [
+            Icon(Icons.tune, size: 16, color: theme.accent),
+            Expanded(
+              child: Text(
+                'Dev Tools',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: theme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          ),
+            // Always measured while Dev Tools is open.
+            AppFpsCounter(theme: theme),
+            IconButton(
+              tooltip: 'Close Dev Tools',
+              onPressed: widget.onClose,
+              icon: Icon(Icons.close, size: 16, color: theme.textSecondary),
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(28),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
         ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns =
-                constraints.maxWidth >= 320 &&
-                    MediaQuery.textScalerOf(context).scale(14) <= 17
-                ? 2
-                : 1;
-            final width = (constraints.maxWidth - 6 * (columns - 1)) / columns;
-            return Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final child in children)
-                  SizedBox(width: width, child: child),
-              ],
-            );
-          },
-        ),
-      ],
+      ),
     ),
   );
+}
+
+/// Places the panel at its dragged position, kept 12 px inside the window
+/// at whatever height its tab gives it.
+class _PanelLayout extends SingleChildLayoutDelegate {
+  _PanelLayout(this.position) : super(relayout: position);
+
+  static const _margin = 12.0;
+  final ValueListenable<Offset> position;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final width = math.min(360.0, constraints.maxWidth - _margin * 2);
+    return BoxConstraints(
+      minWidth: math.max(0, width),
+      maxWidth: math.max(0, width),
+      maxHeight: math.max(
+        0,
+        math.min(440.0, constraints.maxHeight - _margin * 2),
+      ),
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    position.value.dx.clamp(
+      _margin,
+      math.max(_margin, size.width - childSize.width - _margin),
+    ),
+    position.value.dy.clamp(
+      _margin,
+      math.max(_margin, size.height - childSize.height - _margin),
+    ),
+  );
+
+  @override
+  bool shouldRelayout(_PanelLayout oldDelegate) =>
+      position != oldDelegate.position;
 }

@@ -30,11 +30,12 @@ class AppDialogPreviewScope extends InheritedWidget {
   bool updateShouldNotify(AppDialogPreviewScope oldWidget) => false;
 }
 
-/// How dialogs open and close: as the library's game cards reveal.
+/// How dialogs open: as the library's game cards reveal. They close quickly
+/// ([_AppDialogRoute.closeDuration]), leaving at once rather than lingering.
 const _dialogAnimation = AnimationStyle(
   duration: Duration(milliseconds: 220),
   curve: Curves.easeOutCubic,
-  reverseCurve: Curves.easeOutCubic,
+  reverseCurve: Curves.easeInCubic,
 );
 
 /// Normal app dialogs retain Flutter's modal routing, popping in like the
@@ -48,33 +49,74 @@ Future<T?> showAppDialog<T>({
 }) {
   final preview = AppDialogPreviewScope.maybeOf(context);
   if (preview != null) return preview.present<T>(builder);
-  return showDialog<T>(
-    context: context,
-    builder: (context) => _DialogPopIn(child: builder(context)),
-    barrierDismissible: barrierDismissible,
-    useRootNavigator: useRootNavigator,
-    // The route fades the dialog and its backdrop; [_DialogPopIn] scales.
-    animationStyle: MediaQuery.disableAnimationsOf(context)
-        ? AnimationStyle.noAnimation
-        : _dialogAnimation,
+  // As [showDialog] builds its route, with a quicker close.
+  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  return navigator.push<T>(
+    _AppDialogRoute<T>(
+      context: context,
+      builder: builder,
+      barrierColor:
+          DialogTheme.of(context).barrierColor ??
+          Theme.of(context).dialogTheme.barrierColor ??
+          Colors.black54,
+      barrierDismissible: barrierDismissible,
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+      traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : _dialogAnimation,
+    ),
   );
 }
 
-/// Grows a dialog from 90% with its route's animation, as it fades in.
-class _DialogPopIn extends StatelessWidget {
-  const _DialogPopIn({required this.child});
+/// A dialog that grows from 90% as its route fades it in, and closes faster
+/// than it opens.
+class _AppDialogRoute<T> extends DialogRoute<T> {
+  _AppDialogRoute({
+    required super.context,
+    required super.builder,
+    super.barrierColor,
+    super.barrierDismissible,
+    super.themes,
+    super.traversalEdgeBehavior,
+    super.animationStyle,
+  });
 
-  final Widget child;
+  static const closeDuration = Duration(milliseconds: 160);
+  static final _scale = Tween<double>(begin: 0.9, end: 1);
 
-  static final _scale = Tween<double>(
-    begin: 0.9,
-    end: 1,
-  ).chain(CurveTween(curve: _dialogAnimation.curve!));
+  CurvedAnimation? _curved;
 
   @override
-  Widget build(BuildContext context) {
-    final animation = ModalRoute.of(context)?.animation;
-    if (animation == null) return child;
-    return ScaleTransition(scale: animation.drive(_scale), child: child);
+  Duration get reverseTransitionDuration =>
+      transitionDuration == Duration.zero ? Duration.zero : closeDuration;
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (_curved?.parent != animation) {
+      _curved?.dispose();
+      _curved = CurvedAnimation(
+        parent: animation,
+        curve: _dialogAnimation.curve!,
+        reverseCurve: _dialogAnimation.reverseCurve,
+      );
+    }
+    return super.buildTransitions(
+      context,
+      animation,
+      secondaryAnimation,
+      ScaleTransition(scale: _scale.animate(_curved!), child: child),
+    );
+  }
+
+  @override
+  void dispose() {
+    _curved?.dispose();
+    super.dispose();
   }
 }

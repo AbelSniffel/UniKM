@@ -50,7 +50,7 @@ class TintedCard extends StatelessWidget {
   });
 
   /// The card's tint.
-  static const double fillAlpha = 0.15;
+  static const double fillAlpha = 0.125;
 
   /// A highlighted card's tint, and a chosen choice tile's.
   static const double highlightedFillAlpha = 0.35;
@@ -212,12 +212,12 @@ class TintedCard extends StatelessWidget {
       ],
     );
     Widget content = Padding(
-      padding: EdgeInsets.all(large ? 12 : 8),
+      padding: EdgeInsets.all(large ? 10 : 8),
       child: children.isEmpty
           ? row
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 12,
+              spacing: 6,
               children: [row, ...children],
             ),
     );

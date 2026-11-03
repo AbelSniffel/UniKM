@@ -5,7 +5,10 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -451,8 +454,7 @@ class NotificationHost extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
+  Widget build(BuildContext context) => _NotificationHostStack(
     children: [
       child,
       NotificationOverlay(
@@ -461,6 +463,73 @@ class NotificationHost extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The widget inspector picks the smallest widget under the pointer from
+/// every layer, so a toast always lost to the page beneath it. In debug
+/// builds, while the inspector selects, the page is hidden from its search
+/// where the pointer is over the notifications.
+class _NotificationHostStack extends Stack {
+  const _NotificationHostStack({required super.children})
+    : super(fit: StackFit.expand);
+
+  @override
+  RenderStack createRenderObject(BuildContext context) =>
+      _RenderNotificationHostStack(textDirection: Directionality.of(context));
+}
+
+class _RenderNotificationHostStack extends RenderStack {
+  _RenderNotificationHostStack({super.textDirection})
+    : super(fit: StackFit.expand);
+
+  /// The last pointer position, which the inspector selects at.
+  Offset? _pointer;
+
+  void _trackPointer(PointerEvent event) => _pointer = event.position;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    if (kDebugMode) {
+      GestureBinding.instance.pointerRouter.addGlobalRoute(_trackPointer);
+    }
+  }
+
+  @override
+  void detach() {
+    if (kDebugMode) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
+    }
+    super.detach();
+  }
+
+  bool get _pointerOverNotifications {
+    final pointer = _pointer;
+    final notifications = lastChild;
+    if (pointer == null || notifications == null || childCount < 2) {
+      return false;
+    }
+    final data = notifications.parentData! as StackParentData;
+    // Without notifications the overlay is an unpositioned empty box.
+    return data.isPositioned &&
+        (data.offset & notifications.size).contains(globalToLocal(pointer));
+  }
+
+  @override
+  List<DiagnosticsNode> debugDescribeChildren() {
+    final children = super.debugDescribeChildren();
+    if (!WidgetsBinding.instance.debugShowWidgetInspectorOverride ||
+        !_pointerOverNotifications) {
+      return children;
+    }
+    return [
+      firstChild!.toDiagnosticsNode(
+        name: 'page under the notifications',
+        style: DiagnosticsTreeStyle.offstage,
+      ),
+      ...children.skip(1),
+    ];
+  }
 }
 
 /// Notification overlay widget
@@ -545,7 +614,13 @@ class NotificationToast extends StatefulWidget {
 
 class _NotificationToastState extends State<NotificationToast>
     with SingleTickerProviderStateMixin {
-  double _dragOffset = 0.0;
+  Offset _drag = Offset.zero;
+
+  /// The axis a swipe locks onto with its first movement.
+  Axis? _axis;
+
+  /// The way a swipe threw the toast, for its exit; a tap exits rightwards.
+  Offset _exitDirection = const Offset(1, 0);
 
   /// Runs the countdown line while an auto-dismiss is scheduled.
   late final _countdown = AnimationController(vsync: this);
@@ -594,16 +669,14 @@ class _NotificationToastState extends State<NotificationToast>
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final maxWidth = math.min(380.0, math.max(0.0, viewportWidth - 32));
     final useSizeCollapse = !_isMobileTarget;
-    final dismissOffset = _isMobileTarget
-        ? const Offset(0.05, 0)
-        : const Offset(0.2, 0);
+    final dismissOffset = _exitDirection * (_isMobileTarget ? 0.05 : 0.2);
     final child = Align(
       alignment: Alignment.topCenter,
       heightFactor: notification.isDismissing && useSizeCollapse ? 0 : 1,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Transform.translate(
-          offset: Offset(_dragOffset, 0),
+          offset: _drag,
           child: AnimatedOpacity(
             duration: NotificationManager.dismissAnimationDuration,
             opacity: notification.isDismissing ? 0 : 1,
@@ -627,22 +700,39 @@ class _NotificationToastState extends State<NotificationToast>
                     notification.onTap?.call();
                     if (notification.dismissible) widget.onDismiss();
                   },
-                  onHorizontalDragUpdate: (details) {
-                    if (notification.dismissible &&
-                        !notification.isDismissing) {
-                      setState(() {
-                        _dragOffset = (_dragOffset + details.delta.dx).clamp(
-                          0.0,
-                          double.infinity,
-                        );
-                      });
+                  // Swiping in any direction, along whichever axis it
+                  // starts on, dismisses; a short one springs back.
+                  // From the touch, so the first update carries the
+                  // movement that started the swipe.
+                  dragStartBehavior: DragStartBehavior.down,
+                  onPanStart: (_) => _axis = null,
+                  onPanUpdate: (details) {
+                    if (!notification.dismissible ||
+                        notification.isDismissing) {
+                      return;
                     }
+                    final delta = details.delta;
+                    _axis ??= delta.dx.abs() >= delta.dy.abs()
+                        ? Axis.horizontal
+                        : Axis.vertical;
+                    setState(
+                      () => _drag += _axis == Axis.horizontal
+                          ? Offset(delta.dx, 0)
+                          : Offset(0, delta.dy),
+                    );
                   },
-                  onHorizontalDragEnd: (details) {
-                    if (notification.dismissible && _dragOffset >= 40.0) {
+                  onPanEnd: (details) {
+                    if (notification.dismissible && _drag.distance >= 40.0) {
+                      // Locked to one axis, so this points along it.
+                      setState(
+                        () => _exitDirection = Offset(
+                          _drag.dx.sign,
+                          _drag.dy.sign,
+                        ),
+                      );
                       widget.onDismiss();
                     } else {
-                      setState(() => _dragOffset = 0.0);
+                      setState(() => _drag = Offset.zero);
                     }
                   },
                   // Hovering holds the countdown and the auto-dismiss.
@@ -703,9 +793,8 @@ class _NotificationToastState extends State<NotificationToast>
         liveRegion: true,
         color: color,
         icon: _getTypeIcon(),
+        // Spins while the task runs; the bar and figure show how far it is.
         busy: progress != null,
-        // Filled to the progress, so a long task does not spin for minutes.
-        busyValue: progress,
         title: notification.title ?? _typeLabel,
         subtitle: notification.message,
         figure: progress == null

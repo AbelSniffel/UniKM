@@ -825,8 +825,8 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  /// The match: its cover beside its name, developer and whether it is a
-  /// DLC.
+  /// The match: its cover beside a card with its name, developer and
+  /// whether it is a DLC.
   Widget _buildGameSummary(AppThemeData theme, SteamSearchResult result) {
     final developer = result.developer?.trim();
     return LayoutBuilder(
@@ -859,33 +859,22 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
               ),
             ),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 2,
-                children: [
-                  Text(
-                    result.name,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (developer?.isNotEmpty == true)
-                    Text(
-                      developer!,
-                      style: TintedCard.detailStyle(theme, large: true),
-                    ),
-                  if (result.isDlc)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: TintedChip(
-                        theme: theme,
-                        color: theme.secondary,
-                        label: 'DLC',
-                      ),
-                    ),
-                ],
+              child: ConstrainedBox(
+                // At least as tall as the cover beside it.
+                constraints: BoxConstraints(minHeight: coverWidth * 215 / 460),
+                child: TintedCard(
+                  theme: theme,
+                  size: TintedCardSize.large,
+                  title: result.name,
+                  subtitle: developer?.isNotEmpty == true ? developer : null,
+                  trailing: result.isDlc
+                      ? TintedChip(
+                          theme: theme,
+                          color: theme.secondary,
+                          label: 'DLC',
+                        )
+                      : null,
+                ),
               ),
             ),
           ],

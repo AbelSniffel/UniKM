@@ -33,8 +33,8 @@ const double kInteractionCardMaxWidth = 360.0;
 
 /// Available settings content width for full-width cards and stacked header actions.
 const double kSettingsCompactLayoutBreakpoint = 420.0;
-const double kSliderTrackHeight = 18.0;
-const double kSliderHandleSize = 28.0;
+const double kSliderTrackHeight = 22.0;
+const double kSliderHandleSize = 24.0;
 const double kSliderHandleGap = 3.0;
 
 // =============================================================================
@@ -77,7 +77,7 @@ const Duration kFilterCollapseAnimation = Duration(milliseconds: 350);
 const Curve kFilterPanelCurve = Curves.easeInOutCubic;
 const Duration kPageTransition = kTabTransition;
 const Curve kPageTransitionCurve = kTabTransitionCurve;
-const Duration kNavPanelMotionAnimation = Duration(milliseconds: 250);
+const Duration kNavPanelMotionAnimation = Duration(milliseconds: 200);
 const Curve kNavPanelMotionCurve = Curves.easeInOutCubic;
 const Duration kNavButtonExpandAnimation = Duration(milliseconds: 200);
 const Curve kNavButtonExpandCurve = Curves.easeInOutCubic;

@@ -58,7 +58,8 @@ class DialogGalleryHost extends ConsumerWidget {
   }
 }
 
-/// Real dialogs on a canvas, with isolated data and visible previews cached.
+/// Real dialogs on a canvas, with isolated data. Every preview stays built,
+/// so panning and zooming only move the canvas.
 class DialogGallery extends ConsumerStatefulWidget {
   const DialogGallery({super.key});
 
@@ -68,17 +69,27 @@ class DialogGallery extends ConsumerStatefulWidget {
 
 class _DialogGalleryState extends ConsumerState<DialogGallery> {
   static const _cell = Size(700, 800);
-  static const _minScale = 0.2;
+  static const _maxScale = 2.0;
   final _transform = TransformationController();
   bool _constraining = false;
-  int _columns = 8;
-  bool _columnsInitialized = false;
+  int? _columns;
   bool _fit = true;
   Size _viewport = Size.zero;
   int _count = 0;
 
-  Size get _canvas =>
-      Size(_columns * _cell.width, (_count / _columns).ceil() * _cell.height);
+  int get _rows => (_count / _columns!).ceil();
+  Size get _canvas => Size(_columns! * _cell.width, _rows * _cell.height);
+  double get _scale => _transform.value.getMaxScaleOnAxis();
+
+  /// The scale that shows every preview; zooming out stops at 20%, or here
+  /// when the window is too small for that.
+  double get _fitScale => math
+      .min(
+        (_viewport.width - 24) / _canvas.width,
+        (_viewport.height - 24) / _canvas.height,
+      )
+      .clamp(0.01, 1.0);
+  double get _minScale => math.min(0.2, _fitScale);
 
   @override
   void initState() {
@@ -86,34 +97,34 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
     _transform.addListener(_constrainTransform);
   }
 
+  @override
+  void dispose() {
+    _transform.dispose();
+    super.dispose();
+  }
+
+  /// Lets the first and last preview centres reach the viewport centre, and
+  /// keeps the edges reachable when a preview is larger than the viewport.
   void _constrainTransform() {
-    if (_constraining || _viewport.isEmpty || _canvas.isEmpty) return;
+    if (_constraining || _viewport.isEmpty || _count == 0) return;
     final matrix = _transform.value;
     final scale = matrix.getMaxScaleOnAxis();
     final translation = matrix.getTranslation();
-    double constrainAxis(
-      double offset,
-      double viewport,
-      double content,
-      double cellExtent,
-    ) {
-      // Allow the first and last preview centers to reach the viewport center.
-      // Also keep the edges reachable when a preview exceeds the viewport.
-      final minOffset = math.min(
+    double clamp(double offset, double viewport, double content, double cell) {
+      final min = math.min(
         viewport - content - 24,
-        viewport / 2 - content + cellExtent / 2,
+        viewport / 2 - content + cell / 2,
       );
-      final maxOffset = math.max(24.0, viewport / 2 - cellExtent / 2);
-      return offset.clamp(minOffset, maxOffset);
+      return offset.clamp(min, math.max(24.0, viewport / 2 - cell / 2));
     }
 
-    final x = constrainAxis(
+    final x = clamp(
       translation.x,
       _viewport.width,
       _canvas.width * scale,
       _cell.width * scale,
     );
-    final y = constrainAxis(
+    final y = clamp(
       translation.y,
       _viewport.height,
       _canvas.height * scale,
@@ -128,222 +139,35 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
     _constraining = false;
   }
 
-  void _fitAll() {
+  /// Scales about the viewport centre, or fits the whole canvas when [scale]
+  /// is null.
+  void _setScale(double? scale) {
     if (_viewport.isEmpty || _count == 0) return;
-    final scale = math
-        .min(
-          (_viewport.width - 24) / _canvas.width,
-          (_viewport.height - 24) / _canvas.height,
-        )
-        .clamp(_minScale, 1.0);
+    _fit = scale == null;
+    final next = scale?.clamp(_minScale, _maxScale) ?? _fitScale;
+    final center = _viewport.center(Offset.zero);
+    final point = _fit
+        ? _canvas.center(Offset.zero)
+        : _transform.toScene(center);
     _transform.value = Matrix4.identity()
       ..translateByDouble(
-        (_viewport.width - _canvas.width * scale) / 2,
-        (_viewport.height - _canvas.height * scale) / 2,
+        center.dx - point.dx * next,
+        center.dy - point.dy * next,
         0,
         1,
       )
-      ..scaleByDouble(scale, scale, scale, 1);
+      ..scaleByDouble(next, next, next, 1);
   }
 
-  void _zoom(double scale) {
-    _fit = false;
-    final nextScale = scale.clamp(_minScale, 2.0);
-    final center = _viewport.center(Offset.zero);
-    final point = _transform.toScene(center);
-    _transform.value = Matrix4.identity()
-      ..translateByDouble(
-        center.dx - point.dx * nextScale,
-        center.dy - point.dy * nextScale,
-        0,
-        1,
-      )
-      ..scaleByDouble(nextScale, nextScale, nextScale, 1);
-  }
+  /// Re-fits, or keeps the canvas in bounds, once the new layout is in.
+  void _refit() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) _fit ? _setScale(null) : _constrainTransform();
+  });
 
   void _changeColumns(int change) {
-    setState(() => _columns = (_columns + change).clamp(2, 12));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _fit ? _fitAll() : _constrainTransform();
-    });
+    setState(() => _columns = (_columns! + change).clamp(2, 12));
+    _refit();
   }
-
-  @override
-  void dispose() {
-    _transform.removeListener(_constrainTransform);
-    _transform.dispose();
-    super.dispose();
-  }
-
-  Widget _instructions(AppThemeData theme) => Text(
-    'Drag to pan • scroll to zoom • live previews',
-    key: const ValueKey('dialog-gallery-instructions'),
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    textAlign: TextAlign.center,
-    style: TextStyle(color: theme.textSecondary),
-  );
-
-  Widget _header(AppThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 920;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 48,
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: math.min(
-                          260,
-                          math.max(0, constraints.maxWidth - 104),
-                        ),
-                      ),
-                      child: Container(
-                        key: const ValueKey('dialog-gallery-title'),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(
-                            theme.cornerRadius,
-                          ),
-                        ),
-                        child: Text(
-                          'Dialog Gallery ($_count)',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: theme.accent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (wide)
-                    Center(
-                      child: SizedBox(
-                        width: constraints.maxWidth - 560,
-                        child: _instructions(theme),
-                      ),
-                    ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NavigationThemeMenuButton(
-                          theme: theme,
-                          position: NavBarPosition.top,
-                        ),
-                        IconButton(
-                          tooltip: 'Close gallery',
-                          onPressed: () => ref
-                              .read(dialogGalleryVisibleProvider.notifier)
-                              .set(false),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!wide)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Center(child: _instructions(theme)),
-              ),
-          ],
-        );
-      },
-    ),
-  );
-
-  Widget _zoomControls(AppThemeData theme) => Row(
-    key: const ValueKey('dialog-gallery-zoom-controls'),
-    mainAxisSize: MainAxisSize.min,
-    spacing: 8,
-    children: [
-      OutlinedButton.icon(
-        onPressed: () {
-          _fit = true;
-          _fitAll();
-        },
-        icon: const Icon(Icons.fit_screen),
-        label: const Text('Fit all'),
-      ),
-      OutlinedButton(onPressed: () => _zoom(1), child: const Text('100%')),
-      IconButton(
-        tooltip: 'Zoom out',
-        onPressed: () => _zoom(_transform.value.getMaxScaleOnAxis() / 1.25),
-        icon: const Icon(Icons.remove),
-      ),
-      ValueListenableBuilder<Matrix4>(
-        valueListenable: _transform,
-        builder: (_, matrix, _) => Text(
-          '${(matrix.getMaxScaleOnAxis() * 100).round()}%',
-          style: TextStyle(color: theme.textSecondary),
-        ),
-      ),
-      IconButton(
-        tooltip: 'Zoom in',
-        onPressed: () => _zoom(_transform.value.getMaxScaleOnAxis() * 1.25),
-        icon: const Icon(Icons.add),
-      ),
-    ],
-  );
-
-  Widget _layoutControls(AppThemeData theme) => Row(
-    mainAxisSize: MainAxisSize.min,
-    spacing: 8,
-    children: [
-      IconButton(
-        tooltip: 'Fewer columns',
-        onPressed: _columns > 2 ? () => _changeColumns(-1) : null,
-        icon: const Icon(Icons.remove),
-      ),
-      Text('$_columns columns', style: TextStyle(color: theme.textSecondary)),
-      IconButton(
-        tooltip: 'More columns',
-        onPressed: _columns < 12 ? () => _changeColumns(1) : null,
-        icon: const Icon(Icons.add),
-      ),
-    ],
-  );
-
-  Widget _footer(AppThemeData theme) => Padding(
-    padding: const EdgeInsets.all(8),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final zoom = _zoomControls(theme);
-        final layout = _layoutControls(theme);
-        if (constraints.maxWidth >= 1000) {
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [zoom, layout],
-          );
-        }
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [zoom, const SizedBox(width: 24), layout],
-          ),
-        );
-      },
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -356,23 +180,14 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
       SettingsKeys.settingsCardIndicatorStyle: cardStyle.$1,
       SettingsKeys.toggleStyle: cardStyle.$2,
     };
+    // Rebuilt with each build, so hot reload refreshes inline builders.
     final entries = buildDialogGalleryCatalog();
-    // Reuse widget instances while the viewer transforms. Panning should only
-    // reposition cached layers, without rebuilding each dialog's controls.
-    final previews = [
-      for (final entry in entries)
-        RepaintBoundary(
-          child: _DialogGalleryTile(
-            key: ValueKey((entry.id, theme, cardStyle)),
-            entry: entry,
-            theme: theme,
-            appearanceSettings: appearanceSettings,
-          ),
-        ),
-    ];
     _count = entries.length;
-    if (!_columnsInitialized) {
-      final window = MediaQuery.sizeOf(context);
+    // From the window's shape. [View] does not notify on resize, so resizing
+    // never rebuilds the gallery.
+    if (_columns == null) {
+      final view = View.of(context);
+      final window = view.physicalSize / view.devicePixelRatio;
       _columns = math
           .sqrt(
             _count *
@@ -383,66 +198,62 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
           )
           .ceil()
           .clamp(2, 12);
-      _columnsInitialized = true;
     }
+    // Built here rather than in the viewport's LayoutBuilder, so a resize
+    // reuses these widgets and leaves every preview as it is.
+    final canvas = SizedBox(
+      width: _canvas.width,
+      child: Wrap(
+        children: [
+          for (final entry in entries)
+            Container(
+              key: ValueKey(entry.id),
+              width: _cell.width,
+              height: _cell.height,
+              padding: const EdgeInsets.all(8),
+              // Its own layer, which panning only moves.
+              child: RepaintBoundary(
+                child: _DialogGalleryTile(
+                  key: ValueKey((entry.id, theme, cardStyle)),
+                  entry: entry,
+                  theme: theme,
+                  appearanceSettings: appearanceSettings,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    final secondary = TextStyle(color: theme.textSecondary);
     return Theme(
       data: ref.watch(themeDataProvider),
       child: Scaffold(
         backgroundColor: theme.background,
         body: SafeArea(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               PageBarSurface(theme: theme, child: _header(theme)),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final viewport = constraints.biggest;
-                    if (_viewport != viewport) {
-                      _viewport = viewport;
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        _fit ? _fitAll() : _constrainTransform();
-                      });
+                    if (_viewport != constraints.biggest) {
+                      _viewport = constraints.biggest;
+                      _refit();
                     }
                     return ClipRect(
-                      child: InteractiveViewer.builder(
+                      child: InteractiveViewer(
                         transformationController: _transform,
+                        constrained: false,
                         alignment: Alignment.topLeft,
-                        // Enforce screen-space bounds ourselves. Flutter's
-                        // scene-space boundary correction can jump on scaling.
+                        // Bounds are kept in screen space by
+                        // [_constrainTransform]; Flutter's scene-space
+                        // correction jumps while scaling.
                         boundaryMargin: const EdgeInsets.all(double.infinity),
                         minScale: _minScale,
-                        maxScale: 2,
+                        maxScale: _maxScale,
                         onInteractionStart: (_) => _fit = false,
-                        builder: (context, viewport) {
-                          final points = [
-                            viewport.point0,
-                            viewport.point1,
-                            viewport.point2,
-                            viewport.point3,
-                          ];
-                          final visible = Rect.fromLTRB(
-                            points.map((p) => p.x).reduce(math.min),
-                            points.map((p) => p.y).reduce(math.min),
-                            points.map((p) => p.x).reduce(math.max),
-                            points.map((p) => p.y).reduce(math.max),
-                          ).inflate(100);
-                          return SizedBox(
-                            width: _canvas.width,
-                            height: _canvas.height,
-                            child: Stack(
-                              children: [
-                                for (final (index, entry) in entries.indexed)
-                                  if (_cellRect(index).overlaps(visible))
-                                    Positioned.fromRect(
-                                      key: ValueKey(entry.id),
-                                      rect: _cellRect(index).deflate(8),
-                                      child: previews[index],
-                                    ),
-                              ],
-                            ),
-                          );
-                        },
+                        child: canvas,
                       ),
                     );
                   },
@@ -451,7 +262,72 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
               PageBarSurface(
                 theme: theme,
                 isFooter: true,
-                child: _footer(theme),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  // One row when it fits; zoom above layout when narrow.
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 24,
+                    runSpacing: 4,
+                    children: [
+                      Row(
+                        key: const ValueKey('dialog-gallery-zoom-controls'),
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _setScale(null),
+                            icon: const Icon(Icons.fit_screen),
+                            label: const Text('Fit all'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => _setScale(1),
+                            child: const Text('100%'),
+                          ),
+                          IconButton(
+                            tooltip: 'Zoom out',
+                            onPressed: () => _setScale(_scale / 1.25),
+                            icon: const Icon(Icons.remove),
+                          ),
+                          ValueListenableBuilder<Matrix4>(
+                            valueListenable: _transform,
+                            builder: (_, matrix, _) => Text(
+                              '${(matrix.getMaxScaleOnAxis() * 100).round()}%',
+                              style: secondary,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Zoom in',
+                            onPressed: () => _setScale(_scale * 1.25),
+                            icon: const Icon(Icons.add),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 8,
+                        children: [
+                          IconButton(
+                            tooltip: 'Fewer columns',
+                            onPressed: _columns! > 2
+                                ? () => _changeColumns(-1)
+                                : null,
+                            icon: const Icon(Icons.remove),
+                          ),
+                          Text('$_columns columns', style: secondary),
+                          IconButton(
+                            tooltip: 'More columns',
+                            onPressed: _columns! < 12
+                                ? () => _changeColumns(1)
+                                : null,
+                            icon: const Icon(Icons.add),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -460,11 +336,82 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
     );
   }
 
-  Rect _cellRect(int index) => Rect.fromLTWH(
-    (index % _columns) * _cell.width,
-    (index ~/ _columns) * _cell.height,
-    _cell.width,
-    _cell.height,
+  /// The title on the left and the theme and close buttons on the right,
+  /// with the hint centred between them, or below them when narrow.
+  Widget _header(AppThemeData theme) => LayoutBuilder(
+    builder: (context, constraints) {
+      final wide = constraints.maxWidth >= 920;
+      final hint = Text(
+        'Drag to pan • scroll to zoom • live previews',
+        key: const ValueKey('dialog-gallery-instructions'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: theme.textSecondary),
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 48,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (wide)
+                    SizedBox(width: constraints.maxWidth - 576, child: hint),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            key: const ValueKey('dialog-gallery-title'),
+                            constraints: const BoxConstraints(maxWidth: 260),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.accent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(
+                                theme.cornerRadius,
+                              ),
+                            ),
+                            child: Text(
+                              'Dialog Gallery ($_count)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      NavigationThemeMenuButton(
+                        theme: theme,
+                        position: NavBarPosition.top,
+                      ),
+                      IconButton(
+                        tooltip: 'Close gallery',
+                        onPressed: () => ref
+                            .read(dialogGalleryVisibleProvider.notifier)
+                            .set(false),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (!wide) hint,
+          ],
+        ),
+      );
+    },
   );
 }
 
@@ -483,22 +430,16 @@ class _DialogGalleryTile extends StatefulWidget {
 }
 
 class _DialogGalleryTileState extends State<_DialogGalleryTile> {
-  late final ProviderContainer _container;
+  late final _container = createDialogGalleryContainer(
+    widget.theme,
+    appearanceSettings: widget.appearanceSettings,
+  );
   final _dismissals = <VoidCallback>[];
   final _contentRevision = ValueNotifier<int>(0);
   WidgetBuilder? _builder;
   String? _error;
   bool _scheduled = false;
   int _generation = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _container = createDialogGalleryContainer(
-      widget.theme,
-      appearanceSettings: widget.appearanceSettings,
-    );
-  }
 
   Future<T?> _capture<T>(WidgetBuilder builder) {
     final result = Completer<T?>();
@@ -561,78 +502,85 @@ class _DialogGalleryTileState extends State<_DialogGalleryTile> {
   }
 
   @override
-  Widget build(BuildContext context) => SectionGroupBox(
-    theme: widget.theme,
-    title: widget.entry.label,
-    titleLocation: SectionTitleLocation.top,
-    headerBottomPadding: 8,
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
-      child: ColoredBox(color: widget.theme.surface, child: _preview(context)),
-    ),
-  );
-
-  Widget _preview(BuildContext context) => FittedBox(
-    fit: BoxFit.contain,
-    child: SizedBox.fromSize(
-      size: widget.entry.viewport,
-      child: UncontrolledProviderScope(
-        container: _container,
-        child: Consumer(
-          builder: (context, ref, _) {
-            final theme = ref.watch(themeProvider);
-            return Theme(
-              data: theme.toThemeData(),
-              child: MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  size: widget.entry.viewport,
-                  padding: EdgeInsets.zero,
-                  viewPadding: EdgeInsets.zero,
-                  viewInsets: EdgeInsets.zero,
-                ),
-                child: ExcludeFocus(
-                  child: AbsorbPointer(
-                    child: AppDialogPreviewScope(
-                      present: _capture,
-                      databaseFiles: galleryDatabaseFiles,
-                      steamCachedAt: galleryDate,
-                      steamResult: widget.entry.cachedSteam
-                          ? gallerySteamResult
-                          : null,
-                      // Keep close callbacks and automatic dismissals inside
-                      // this preview instead of reaching the main program.
-                      child: Navigator(
-                        onGenerateRoute: (_) => PageRouteBuilder<void>(
-                          transitionDuration: Duration.zero,
-                          pageBuilder: (context, _, _) =>
-                              ValueListenableBuilder<int>(
-                                valueListenable: _contentRevision,
-                                builder: (context, _, _) {
-                                  _scheduleOpen(context);
-                                  return _error != null
-                                      ? Center(
-                                          child: Text(
-                                            'Preview failed: $_error',
-                                            style: TextStyle(
-                                              color: theme.error,
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final viewport = widget.entry.viewport;
+    return SectionGroupBox(
+      theme: theme,
+      title: widget.entry.label,
+      titleLocation: SectionTitleLocation.top,
+      headerBottomPadding: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        child: ColoredBox(
+          color: theme.surface,
+          child: FittedBox(
+            child: SizedBox.fromSize(
+              size: viewport,
+              child: UncontrolledProviderScope(
+                container: _container,
+                child: Consumer(
+                  // The cached ThemeData, and the view rather than the
+                  // inherited MediaQuery (whose size changes with every
+                  // resize), so nothing above the dialog's own Navigator
+                  // changes unless the theme does.
+                  builder: (context, ref, _) => Theme(
+                    data: ref.watch(themeDataProvider),
+                    child: MediaQuery(
+                      data: MediaQueryData.fromView(View.of(context)).copyWith(
+                        size: viewport,
+                        padding: EdgeInsets.zero,
+                        viewPadding: EdgeInsets.zero,
+                        viewInsets: EdgeInsets.zero,
+                      ),
+                      child: ExcludeFocus(
+                        child: AbsorbPointer(
+                          child: AppDialogPreviewScope(
+                            present: _capture,
+                            databaseFiles: galleryDatabaseFiles,
+                            steamCachedAt: galleryDate,
+                            steamResult: widget.entry.cachedSteam
+                                ? gallerySteamResult
+                                : null,
+                            // Keep close callbacks and automatic dismissals
+                            // inside this preview instead of reaching the
+                            // main program.
+                            child: Navigator(
+                              onGenerateRoute: (_) => PageRouteBuilder<void>(
+                                transitionDuration: Duration.zero,
+                                pageBuilder: (context, _, _) =>
+                                    ValueListenableBuilder<int>(
+                                      valueListenable: _contentRevision,
+                                      builder: (context, _, _) {
+                                        _scheduleOpen(context);
+                                        if (_error != null) {
+                                          return Center(
+                                            child: Text(
+                                              'Preview failed: $_error',
+                                              style: TextStyle(
+                                                color: theme.error,
+                                              ),
                                             ),
-                                          ),
-                                        )
-                                      : _builder == null
-                                      ? const SizedBox.shrink()
-                                      : Builder(builder: _builder!);
-                                },
+                                          );
+                                        }
+                                        return _builder == null
+                                            ? const SizedBox.shrink()
+                                            : Builder(builder: _builder!);
+                                      },
+                                    ),
                               ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
