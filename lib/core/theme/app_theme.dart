@@ -1023,10 +1023,10 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     super.dispose();
   }
 
-  /// Secondary text blended toward [selected] by [selectionT], or muted
+  /// Primary text blended toward [selected] by [selectionT], or muted
   /// while disabled.
   Color _foreground(Color selected, double selectionT) => widget.isEnabled
-      ? Color.lerp(widget.theme.textSecondary, selected, selectionT)!
+      ? Color.lerp(widget.theme.textPrimary, selected, selectionT)!
       : widget.theme.textSecondary.withValues(alpha: 0.5);
 
   double _labelVisibilityT() {

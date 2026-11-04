@@ -21,6 +21,7 @@ import '../../ui/dialogs/encryption_dialogs.dart';
 import '../../ui/widgets/app_privacy_guard.dart';
 import '../../ui/widgets/app_progress_indicator.dart';
 import '../../ui/widgets/app_scrollbar.dart';
+import '../../ui/widgets/navigation_panel_overlay.dart';
 import '../../ui/widgets/notification_system.dart';
 import '../application/database_session_loader.dart';
 import '../unikm_app.dart';
@@ -491,13 +492,17 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       themeAnimationDuration: Duration.zero,
       themeAnimationCurve: Curves.linear,
       scrollBehavior: const AppScrollBehavior(),
-      builder: (context, child) => AppPrivacyGuard(
-        lockAfter: _booting || _encryptedSession == null || autoLockMinutes <= 0
-            ? null
-            : Duration(minutes: autoLockMinutes),
-        onLock: _lock,
-        hideInRecents: hideInRecents,
-        child: NotificationHost(theme: theme, child: child!),
+      // Panels showing the pattern line it up across this whole window.
+      builder: (context, child) => PanelPatternWindow(
+        child: AppPrivacyGuard(
+          lockAfter:
+              _booting || _encryptedSession == null || autoLockMinutes <= 0
+              ? null
+              : Duration(minutes: autoLockMinutes),
+          onLock: _lock,
+          hideInRecents: hideInRecents,
+          child: NotificationHost(theme: theme, child: child!),
+        ),
       ),
       home: Builder(
         builder: (materialContext) {

@@ -28,6 +28,7 @@ import 'pages/home_page.dart';
 import 'pages/home_sections/selection_ribbon_host.dart';
 import 'pages/settings_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
+import 'widgets/navigation_panel_overlay.dart';
 import 'widgets/app_progress_indicator.dart';
 import 'widgets/app_page_stack.dart';
 import 'widgets/dev_window.dart';
@@ -695,7 +696,11 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
                               child: SelectionRibbonHost(
                                 visible: showSelectionRibbon,
                                 atTop: false,
-                                child: pagesStack,
+                                // A fainter copy of the panels' pattern.
+                                child: PanelPatternSurface(
+                                  page: true,
+                                  child: pagesStack,
+                                ),
                               ),
                             ),
                           ),

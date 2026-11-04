@@ -211,8 +211,12 @@ class TintedCard extends StatelessWidget {
         ?trailing,
       ],
     );
+    final edge = large ? 10.0 : 8.0;
     Widget content = Padding(
-      padding: EdgeInsets.all(large ? 10 : 8),
+      // Text alone starts further in, matching a trailing control's inset.
+      padding: EdgeInsets.all(edge).copyWith(
+        left: leading == null && icon == null && !busy ? edge + 4 : null,
+      ),
       child: children.isEmpty
           ? row
           : Column(

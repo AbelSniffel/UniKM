@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import 'navigation_panel_overlay.dart';
 
-/// The same gradient and navigation overlay at any preview-card size.
+/// The same gradient and background pattern at any preview-card size.
 class ThemePreviewBackground extends StatelessWidget {
   const ThemePreviewBackground({super.key, required this.theme});
 
@@ -24,14 +23,9 @@ class ThemePreviewBackground extends StatelessWidget {
           ),
         ),
       ),
-      if (theme.navPanelOverlayStyle != NavPanelOverlayStyle.none)
-        IgnorePointer(
-          child: NavigationPanelOverlayPaint(
-            theme: theme,
-            preview: true,
-            child: const SizedBox.expand(),
-          ),
-        ),
+      CustomPaint(
+        painter: BackgroundPatternPainter(theme: theme, preview: true),
+      ),
     ],
   );
 }

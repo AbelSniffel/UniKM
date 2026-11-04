@@ -111,9 +111,7 @@ class NavigationPanel extends ConsumerWidget {
       ),
       child: ClipRect(
         child: RepaintBoundary(
-          child: NavigationPanelOverlayPaint(
-            theme: effectiveTheme,
-            isHorizontal: _isHorizontal,
+          child: PanelPatternSurface(
             child: Column(
               mainAxisSize: _isHorizontal ? MainAxisSize.min : MainAxisSize.max,
               children: [

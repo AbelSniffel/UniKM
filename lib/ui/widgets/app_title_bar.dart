@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/models/device_sync_models.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../dialogs/device_sync_dialog.dart';
 import '../dialogs/import_export_dialog.dart';
 import '../pages/settings_sections/database_section.dart'
     show showChangeDatabaseDialog;
+import 'device_sync_icon.dart';
 import 'popup_menu_helpers.dart';
 
 Future<void> _toggleMaximized() async => await windowManager.isMaximized()
@@ -154,50 +154,20 @@ class _SyncButton extends ConsumerWidget {
 
   final AppThemeData theme;
 
-  IconData? _connectedDeviceIcon(DeviceSyncSnapshot sync) {
-    final trustedById = {for (final peer in sync.trustedPeers) peer.id: peer};
-    final onlinePeers = sync.discoveredPeers
-        .where((peer) => trustedById.containsKey(peer.id))
-        .toList();
-    if (onlinePeers.length > 1) return Icons.devices;
-    if (onlinePeers.isEmpty) return null;
-    final peer = onlinePeers.single;
-    final trusted = trustedById[peer.id]!;
-    final type = peer.deviceType == SyncDeviceType.unknown
-        ? trusted.deviceType
-        : peer.deviceType;
-    return switch (type) {
-      SyncDeviceType.mobile => Icons.smartphone,
-      SyncDeviceType.desktop => Icons.desktop_windows,
-      SyncDeviceType.web => Icons.language,
-      SyncDeviceType.unknown => Icons.devices_other,
-    };
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sync = ref.watch(deviceSyncProvider).asData?.value;
-    final enabled = sync?.enabled ?? false;
-    final hasMismatch = sync?.dbMismatchPeerIds.isNotEmpty ?? false;
-    final deviceIcon = enabled && sync != null
-        ? _connectedDeviceIcon(sync)
-        : null;
-    final iconData = !enabled
-        ? Icons.sync_disabled
-        : deviceIcon ?? Icons.link_off;
-    final activeColor = hasMismatch && deviceIcon != null
-        ? Colors.orange
-        : deviceIcon != null
-        ? theme.secondary
-        : theme.textSecondary;
+    final (:icon, :color) = deviceSyncIcon(
+      theme,
+      ref.watch(deviceSyncProvider).asData?.value,
+    );
 
     return Tooltip(
       message: 'Device Sync',
       child: _TitleBarActionButton(
         theme: theme,
-        icon: iconData,
-        color: enabled ? activeColor.withValues(alpha: 0.9) : null,
-        hoverIconColor: enabled ? activeColor : null,
+        icon: icon,
+        color: color?.withValues(alpha: 0.9),
+        hoverIconColor: color,
         onPressed: () => showDeviceSyncDialog(context),
       ),
     );

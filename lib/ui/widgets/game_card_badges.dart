@@ -400,7 +400,10 @@ abstract final class GameCardBadges {
     return squareIconBadge(
       theme,
       tooltip: visual.tooltip,
-      color: visual.color,
+      // The spinner sits on the card itself; the other states keep their fill.
+      color: status == GameFetchStatus.processing
+          ? Colors.transparent
+          : visual.color,
       size: kBadgeHeight,
       icon: fetchStatusIcon(visual, status, iconSize),
     );

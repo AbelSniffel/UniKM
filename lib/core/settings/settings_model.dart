@@ -55,18 +55,21 @@ enum NavBarAppearance {
   final String displayName;
 }
 
-/// Decorative overlay styles applied to the navigation panel background.
+/// Background pattern styles, drawn behind panels and pages.
 enum NavPanelOverlayStyle {
   none('None'),
-  gradient('Gradient'),
-  diagonalStripes('Diagonal'),
+  gradient('Gradient', usesAngle: true),
+  diagonalStripes('Lines', usesAngle: true),
   crosshatch('Crosshatch'),
-  hexPattern('Hex Pattern'),
-  ripple('Ripple');
+  dots('Dots', usesAngle: true),
+  cubes('Cubes');
 
-  const NavPanelOverlayStyle(this.displayName);
+  const NavPanelOverlayStyle(this.displayName, {this.usesAngle = false});
 
   final String displayName;
+
+  /// Whether the pattern angle setting turns this style.
+  final bool usesAngle;
 }
 
 /// Gradient animation styles
@@ -97,7 +100,8 @@ enum GradientAnimation {
 enum GradientAnimationSpeed {
   slow('Slow', 0.5),
   standard('Default', 1.0),
-  fast('Fast', 1.5);
+  fast('Fast', 1.5),
+  veryFast('Very fast', 2.0);
 
   const GradientAnimationSpeed(this.displayName, this.multiplier);
 
@@ -218,6 +222,11 @@ class SettingsKeys {
   /// Arrangement for vertical nav panel (left or right position).
   static const String navButtonArrangementV = 'nav_button_arrangement_v';
   static const String navPanelOverlayStyle = 'nav_panel_overlay_style';
+  // How strongly the background pattern shows, and whether pages show it.
+  static const String patternStrength = 'pattern_strength';
+  static const String pagePattern = 'page_pattern';
+  static const String patternAngle = 'pattern_angle';
+  static const String patternWave = 'pattern_wave';
 
   // Animations
   static const String gradientAnimation = 'gradient_animation';
@@ -332,6 +341,13 @@ class DefaultSettings {
   static const NavExpansionMode navExpansionMode = NavExpansionMode.automatic;
   static const NavPanelOverlayStyle navPanelOverlayStyle =
       NavPanelOverlayStyle.none;
+  static const double patternStrength = 1;
+  static const bool pagePattern = true;
+  // Degrees clockwise: the stripes' slant from vertical, and the direction
+  // the gradient runs.
+  static const int patternAngle = 30;
+  // How the Lines style sways: 0 straight, 0.5 smooth waves, 1 zigzag.
+  static const double patternWave = 0;
   static const NavButtonArrangement navButtonArrangementH =
       NavButtonArrangement.split;
   static const NavButtonArrangement navButtonArrangementV =
@@ -416,6 +432,10 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.customThemes: <String>[],
   SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
   SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
+  SettingsKeys.patternStrength: DefaultSettings.patternStrength,
+  SettingsKeys.pagePattern: DefaultSettings.pagePattern,
+  SettingsKeys.patternAngle: DefaultSettings.patternAngle,
+  SettingsKeys.patternWave: DefaultSettings.patternWave,
   SettingsKeys.viewedNewGameIds: const <String>[],
   SettingsKeys.showTitleChip: DefaultSettings.showTitleChip,
   SettingsKeys.showTitleOnNoPicture: DefaultSettings.showTitleOnNoPicture,

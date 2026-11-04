@@ -45,17 +45,17 @@ class SettingsCardStyleSection extends ConsumerWidget {
             TintedOptionTile(
               key: ValueKey(style),
               theme: theme,
-              // The indicator itself, switched on.
-              leading: switch (style) {
+              // The indicator itself, switched on while chosen.
+              indicator: switch (style) {
                 SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
-                  value: true,
+                  value: selected == style,
                   onChanged: (_) {},
                   theme: theme,
                   label: '',
                 ),
                 SettingsCardIndicatorStyle.miniDot => SettingsCardMiniDot(
                   theme: theme,
-                  value: true,
+                  value: selected == style,
                   enabled: true,
                 ),
               },

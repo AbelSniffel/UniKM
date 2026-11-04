@@ -156,6 +156,33 @@ final navPanelOverlayStyleSettingProvider = _setting<NavPanelOverlayStyle>(
   SettingsKeys.navPanelOverlayStyle,
 );
 
+/// The background pattern strength slider's range, as multipliers.
+const kMinPatternStrength = 0.25;
+const kMaxPatternStrength = 1.25;
+
+/// How strongly the background pattern shows, as a multiplier.
+final patternStrengthProvider = _settingsSlice(
+  (settings) => readSetting<double>(
+    settings,
+    SettingsKeys.patternStrength,
+  ).clamp(kMinPatternStrength, kMaxPatternStrength),
+);
+
+/// How the Lines pattern sways, from 0 (straight) to 1 (zigzag).
+final patternWaveProvider = _settingsSlice(
+  (settings) =>
+      readSetting<double>(settings, SettingsKeys.patternWave).clamp(0.0, 1.0),
+);
+
+/// The background pattern's angle in degrees, from 0 to 359.
+final patternAngleProvider = _settingsSlice(
+  (settings) =>
+      readSetting<int>(settings, SettingsKeys.patternAngle).clamp(0, 180),
+);
+
+/// Whether pages show a fainter copy of the background pattern.
+final pagePatternProvider = _setting<bool>(SettingsKeys.pagePattern);
+
 final gradientAnimationSpeedProvider = _setting<GradientAnimationSpeed>(
   SettingsKeys.gradientAnimationSpeed,
 );

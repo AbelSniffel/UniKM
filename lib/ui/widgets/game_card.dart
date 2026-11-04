@@ -919,7 +919,7 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Context menu ───────────────────────────────────────────────────────────
 
-  void _showContextMenu(BuildContext context, Offset position) async {
+  void _showContextMenu(BuildContext context, Offset position) {
     final selectedIds = ref.read(
       gamesProvider.select((s) => s.selectedGameIds),
     );
@@ -937,105 +937,93 @@ class _GameCardState extends ConsumerState<GameCard>
     final hasSteamTargets = targetGames.any((g) => g.platform == 'Steam');
 
     // Items with a [lockedLabel] are disabled while a Steam fetch runs.
-    PopupMenuItem<String> menuRowItem(
-      String value,
+    Widget item(
       IconData icon,
-      String label, {
+      String label,
+      VoidCallback onPressed, {
       Color? iconColor,
-      Color? textColor,
+      Color? color,
       String? lockedLabel,
     }) {
       final enabled = lockedLabel == null || !isFetching;
-      final mutedColor = theme.textSecondary.withValues(alpha: 0.5);
-      return PopupMenuItem<String>(
-        value: enabled ? value : null,
-        enabled: enabled,
-        child: Row(
-          children: [
-            Icon(
-              enabled ? icon : Icons.lock_rounded,
-              size: 18,
-              color: enabled ? (iconColor ?? theme.textSecondary) : mutedColor,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              enabled ? '$label$suffix' : '$lockedLabel (Locked)$suffix',
-              style: TextStyle(
-                color: enabled ? (textColor ?? theme.textPrimary) : mutedColor,
-              ),
-            ),
-          ],
+      return appMenuItem(
+        theme,
+        leading: Icon(
+          enabled ? icon : Icons.lock_rounded,
+          size: 18,
+          color: enabled ? iconColor : theme.textHint,
         ),
+        color: enabled ? color : null,
+        // The menu runs its choice a frame after closing.
+        onPressed: enabled
+            ? () {
+                if (context.mounted) onPressed();
+              }
+            : null,
+        child: Text(enabled ? '$label$suffix' : '$lockedLabel (Locked)$suffix'),
       );
     }
 
-    final overlayState = Overlay.maybeOf(context);
-    final overlayObject = overlayState?.context.findRenderObject();
-    if (overlayObject is! RenderBox) return;
-
-    final value = await showAppMenu<String>(
+    showAppContextMenu(
       context: context,
-      position: RelativeRect.fromRect(
-        position & const Size(1, 1),
-        Offset.zero & overlayObject.size,
-      ),
-      items: [
-        menuRowItem('copy', Icons.copy_all, 'Copy'),
-        const PopupMenuDivider(),
-        menuRowItem(
-          'details',
+      theme: theme,
+      position: position,
+      menuChildren: [
+        item(
+          Icons.copy_all,
+          'Copy',
+          () => GameSelectionActions.showCopyDialog(context, ref, targetGames),
+        ),
+        appMenuDivider(theme),
+        item(
           Icons.edit_outlined,
           'Game Editor',
+          handleDoubleTap,
           lockedLabel: 'Game Editor',
         ),
         if (hasSteamTargets) ...[
-          menuRowItem('open_steam', Icons.open_in_new, 'Open Steam Page'),
-          menuRowItem(
-            'steam_lookup',
+          item(
+            Icons.open_in_new,
+            'Open Steam Page',
+            () => GameSelectionActions.openSteamPages(ref, targetGames),
+          ),
+          item(
             Icons.cloud_download,
             'Fetch Steam Data',
+            () =>
+                GameSelectionActions.fetchSteamData(context, ref, targetGames),
             iconColor: theme.accent,
             lockedLabel: 'Fetch Steam Data',
           ),
         ],
-        const PopupMenuDivider(),
-        menuRowItem(
-          'toggle_used',
+        appMenuDivider(theme),
+        item(
           widget.game.isUsed
               ? Icons.radio_button_unchecked
               : Icons.check_circle,
           widget.game.isUsed ? 'Mark as Unused' : 'Mark as Used',
+          () => GameSelectionActions.toggleUsed(
+            ref,
+            targetGames,
+            !widget.game.isUsed,
+          ),
           lockedLabel: 'Mark as Used/Unused',
         ),
-        const PopupMenuDivider(),
-        menuRowItem(
-          'delete',
+        appMenuDivider(theme),
+        item(
           Icons.delete_outline,
           'Delete',
-          iconColor: theme.error,
-          textColor: theme.error,
+          () => GameSelectionActions.deleteGames(
+            context,
+            ref,
+            theme,
+            targetGames,
+          ),
+          color: theme.error,
           lockedLabel: 'Delete',
         ),
       ],
     );
-
-    if (value == null) return;
-    if (!context.mounted) return;
-
-    switch (value) {
-      case 'copy':
-        GameSelectionActions.showCopyDialog(context, ref, targetGames);
-      case 'details':
-        handleDoubleTap();
-      case 'open_steam':
-        GameSelectionActions.openSteamPages(ref, targetGames);
-      case 'steam_lookup':
-        GameSelectionActions.fetchSteamData(context, ref, targetGames);
-      case 'toggle_used':
-        GameSelectionActions.toggleUsed(ref, targetGames, !widget.game.isUsed);
-      case 'delete':
-        GameSelectionActions.deleteGames(context, ref, theme, targetGames);
-    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

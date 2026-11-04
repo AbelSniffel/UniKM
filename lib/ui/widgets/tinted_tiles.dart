@@ -55,11 +55,12 @@ class TintedHeading extends StatelessWidget {
   );
 }
 
-/// A tinted tile with an icon in its own square, a title, an optional
-/// subtitle and an optional [trailing] widget. A [leading] widget, such as a
-/// live preview of the choice, replaces the icon in a wider square.
+/// A tinted tile with an optional icon in its own square, a title, an
+/// optional subtitle and an optional [trailing] widget.
 /// With [selected] it is one choice of several: the chosen tile is tinted more
 /// strongly, pressed in and checked, easing in and out with the press depth.
+/// An [indicator], such as the choice's own switch on while chosen, replaces
+/// the check mark.
 /// A tile with [onTap] is raised and bordered like the settings cards,
 /// outlined in its colour on hover and pressed in while held or chosen; one
 /// without stays flat.
@@ -69,19 +70,20 @@ class TintedOptionTile extends StatefulWidget {
     required this.theme,
     required this.title,
     this.icon,
-    this.leading,
+    this.indicator,
     this.subtitle,
     this.selected,
     this.onTap,
     this.color,
     this.trailing,
-  }) : assert(icon != null || leading != null);
+  });
 
   final AppThemeData theme;
   final IconData? icon;
 
-  /// Shown instead of [icon], for display only: it takes no taps or focus.
-  final Widget? leading;
+  /// Shown instead of the check mark, for display only: it takes no taps or
+  /// focus.
+  final Widget? indicator;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -107,9 +109,13 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
     final color = widget.color ?? theme.accent;
     final chosen = widget.selected ?? false;
     final tappable = widget.onTap != null;
-    final leading = widget.leading;
+    final indicator = widget.indicator;
     final trailing = widget.selected == null
         ? widget.trailing
+        : indicator != null
+        ? IgnorePointer(
+            child: ExcludeSemantics(child: ExcludeFocus(child: indicator)),
+          )
         : AnimatedSwitcher(
             duration: _selectionDuration(context),
             switchInCurve: Curves.easeOutBack,
@@ -142,20 +148,6 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
           theme: theme,
           color: color,
           icon: widget.icon,
-          leading: leading == null
-              ? null
-              : TintedCard.tile(
-                  theme: theme,
-                  color: color,
-                  width: 64,
-                  child: IgnorePointer(
-                    child: ExcludeSemantics(
-                      child: ExcludeFocus(
-                        child: FittedBox(fit: BoxFit.scaleDown, child: leading),
-                      ),
-                    ),
-                  ),
-                ),
           title: widget.title,
           subtitle: widget.subtitle,
           trailing: trailing,

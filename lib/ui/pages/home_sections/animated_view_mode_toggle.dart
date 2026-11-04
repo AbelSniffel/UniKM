@@ -33,45 +33,31 @@ class AnimatedViewModeToggle extends StatefulWidget {
 class _AnimatedViewModeToggleState extends State<AnimatedViewModeToggle> {
   void _handleTap() => widget.onToggle();
 
-  Future<void> _showContextMenu(Offset globalPosition) async {
+  void _showContextMenu(Offset globalPosition) {
     final allowRegularListView = !PlatformFileActions.isMobilePlatform;
-    final availableModes = [
-      if (allowRegularListView) ListViewDensityMode.regular,
-      ListViewDensityMode.slim,
-    ];
-    final action = await showAppMenu<String>(
+    showAppContextMenu(
       context: context,
-      position: overlayMenuPosition(context, globalPosition & const Size(1, 1)),
-      items: [
-        CheckedPopupMenuItem<String>(
-          value: GameListViewMode.grid.name,
-          checked: widget.isGridView,
+      theme: widget.theme,
+      position: globalPosition,
+      menuChildren: [
+        appMenuItem(
+          widget.theme,
+          selected: widget.isGridView,
+          onPressed: widget.onSelectGridView,
           child: const Text('Grid view'),
         ),
-        for (final mode in availableModes)
-          CheckedPopupMenuItem<String>(
-            value: mode.name,
-            checked: !widget.isGridView && widget.selectedListViewMode == mode,
+        for (final mode in [
+          if (allowRegularListView) ListViewDensityMode.regular,
+          ListViewDensityMode.slim,
+        ])
+          appMenuItem(
+            widget.theme,
+            selected: !widget.isGridView && widget.selectedListViewMode == mode,
+            onPressed: () => widget.onSelectListViewMode(mode),
             child: Text('${mode.displayName} list view'),
           ),
       ],
     );
-
-    if (!mounted || action == null) return;
-
-    if (action == GameListViewMode.grid.name) {
-      widget.onSelectGridView();
-      return;
-    }
-
-    final selectedMode = ListViewDensityMode.values.firstWhere(
-      (mode) => mode.name == action,
-      orElse: () => widget.selectedListViewMode,
-    );
-
-    if (widget.isGridView || selectedMode != widget.selectedListViewMode) {
-      widget.onSelectListViewMode(selectedMode);
-    }
   }
 
   @override

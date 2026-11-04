@@ -35,8 +35,6 @@ class SelectionRibbon extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedCount = ref.watch(_ribbonSelectedCountProvider);
     final theme = ref.watch(themeProvider);
-    // Same overlay-aware theme the navigation panel paints with.
-    final overlayTheme = ref.watch(effectiveThemeProvider);
     final notifier = ref.read(gamesProvider.notifier);
     final allUsed = ref.watch(selectedGamesAllUsedProvider);
     final allSelected = ref.watch(
@@ -163,45 +161,40 @@ class SelectionRibbon extends ConsumerWidget {
               ),
       ),
     ];
-    // One surface, two rows: a single overlay paint keeps the pattern
-    // continuous across the chip strip and the action bar.
-    return ColoredBox(
-      color: theme.navBackground,
-      child: NavigationPanelOverlayPaint(
-        theme: overlayTheme,
-        isHorizontal: true,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The chip strip folds away while nothing is selected, and
-            // grows back with the next selection.
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: selectedCount > 0 ? 1 : 0),
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : kFastAnimation,
-              curve: Curves.easeOutCubic,
-              child: _SelectedGamesStrip(theme: theme),
-              builder: (context, height, strip) => ClipRect(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  heightFactor: height,
-                  child: strip,
-                ),
+    // One surface, two rows: the pattern runs on across the chip strip and
+    // the action bar.
+    return PanelPatternSurface(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The chip strip folds away while nothing is selected, and
+          // grows back with the next selection.
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: selectedCount > 0 ? 1 : 0),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : kFastAnimation,
+            curve: Curves.easeOutCubic,
+            child: _SelectedGamesStrip(theme: theme),
+            builder: (context, height, strip) => ClipRect(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                heightFactor: height,
+                child: strip,
               ),
             ),
-            _RibbonBar(
-              theme: theme,
-              selectedCount: selectedCount,
-              isMultiSelectEnabled: isMultiSelectEnabled,
-              actions: actions,
-              onClose: () {
-                notifier.clearSelection();
-                ref.read(selectionRibbonOpenProvider.notifier).close();
-              },
-            ),
-          ],
-        ),
+          ),
+          _RibbonBar(
+            theme: theme,
+            selectedCount: selectedCount,
+            isMultiSelectEnabled: isMultiSelectEnabled,
+            actions: actions,
+            onClose: () {
+              notifier.clearSelection();
+              ref.read(selectionRibbonOpenProvider.notifier).close();
+            },
+          ),
+        ],
       ),
     );
   }

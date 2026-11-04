@@ -11,17 +11,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/platform_patterns.dart';
-import '../../../core/models/device_sync_models.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/device_sync_dialog.dart';
 import '../../dialogs/library_stats_dialog.dart';
 import '../../widgets/app_action_button.dart';
-import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
+import '../../widgets/device_sync_icon.dart';
 import '../../widgets/platform_icon.dart';
+import '../../widgets/platform_menu_button.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tag_list.dart';
@@ -31,11 +31,8 @@ import 'animated_view_mode_toggle.dart';
 const double _kLongSearchHintMinWidth = 460;
 const double _kMediumSearchHintMinWidth = 400;
 
-/// From this panel width Tags and Show only sit side by side, sharing one
-/// fixed height: the tag list fills what Tags has left, and Show only scrolls
-/// if large text makes it taller.
-const double _kSideBySidePanelMinWidth = 640;
-const double _kSideBySideGroupHeight = 264;
+/// The tag list scrolls past this height.
+const double _kTagListMaxHeight = 112;
 
 /// A "show only" option: its label, state and setter.
 typedef _FilterOption = ({
@@ -148,12 +145,10 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
   }
 
-  static int _activeFilterCount(
-    ActiveFiltersState state,
-    String? platformFilter,
-  ) =>
+  /// Filters set in the filter panel. The platform has its own button, so it
+  /// neither counts here nor pulses the Filters button.
+  static int _activeFilterCount(ActiveFiltersState state) =>
       state.tagFilters.length +
-      (platformFilter?.isNotEmpty == true ? 1 : 0) +
       _filterOptions.where((option) => option.isOn(state)).length;
 
   void _clearBoolFilters() {
@@ -294,9 +289,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       color: color,
       size: size,
     );
-    // On very narrow layouts the count spans a row of its own and holds sync
-    // and the view toggle at its ends. Otherwise it leads the search row
-    // as a plain label, with sync before it and the view toggle at the end.
+    // On very narrow layouts the count spans a row of its own between sync
+    // and the view toggle. Otherwise it leads the search row, with sync
+    // before it and the view toggle at the end.
     final stacked = widget.isVeryNarrowLayout;
     final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
     final viewToggle = AnimatedViewModeToggle(
@@ -321,14 +316,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
             SettingsKeys.gameListViewMode: GameListViewMode.list,
           }),
     );
-    final countLabel = stacked
-        ? _GamesCount(
-            theme: theme,
-            expand: true,
-            leading: sync,
-            trailing: viewToggle,
-          )
-        : _GamesCount(theme: theme);
+    final countLabel = _GamesCount(theme: theme);
     final searchRow = Row(
       children: [
         if (!stacked) ...[
@@ -351,61 +339,66 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           ),
         ),
         gap,
-        // Platform, sort and filters are separate buttons on the header.
-        Row(
-          key: const ValueKey('home-toolbar-actions'),
-          mainAxisSize: MainAxisSize.min,
-          spacing: kElementHSpacing,
-          children: [
-            _IconMenuButton<String>(
-              key: const ValueKey('home-platform-button'),
-              theme: theme,
-              tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
-              highlighted: selectedPlatform != null,
-              iconBuilder: (context, _, size) => selectedPlatform == null
-                  ? Icon(
-                      Icons.videogame_asset_outlined,
-                      color: theme.accent,
-                      size: size,
-                    )
-                  : platformIcon(selectedPlatform, theme.accent, size),
-              selected: platformFilter ?? '',
-              entries: [
-                (
-                  value: '',
-                  label: 'All Platforms',
-                  icon: const Icon(Icons.videogame_asset_outlined, size: 18),
-                ),
-                for (final platform in platforms)
+        // Platform, sort and filters are separate buttons on the header, all
+        // as tall as the search bar.
+        SizedBox(
+          height: kElementHeight,
+          child: Row(
+            key: const ValueKey('home-toolbar-actions'),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: kElementHSpacing,
+            children: [
+              IconMenuButton<String>(
+                key: const ValueKey('home-platform-button'),
+                theme: theme,
+                tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
+                highlighted: selectedPlatform != null,
+                icon: (color, size) => selectedPlatform == null
+                    ? Icon(
+                        Icons.videogame_asset_outlined,
+                        color: color,
+                        size: size,
+                      )
+                    : platformIcon(selectedPlatform, color, size),
+                value: platformFilter ?? '',
+                choices: [
                   (
-                    value: platform,
-                    label: platform,
-                    icon: platformIcon(platform, theme.textPrimary, 18),
+                    '',
+                    'All Platforms',
+                    const Icon(Icons.videogame_asset_outlined, size: 18),
                   ),
-              ],
-              onSelected: (value) =>
-                  _notifier.setPlatformFilter(value.isEmpty ? null : value),
-            ),
-            _IconMenuButton<GameSortMode>(
-              key: const ValueKey('home-sort-button'),
-              theme: theme,
-              tooltip: 'Sort: ${sortMode.displayName}',
-              highlighted: sortMode != DefaultSettings.gameSortMode,
-              iconBuilder: (context, _, size) =>
-                  Icon(_sortIconFor(sortMode), color: theme.accent, size: size),
-              selected: sortMode,
-              entries: [
-                for (final mode in GameSortMode.values)
-                  (
-                    value: mode,
-                    label: mode.displayName,
-                    icon: Icon(_sortIconFor(mode), size: 18),
-                  ),
-              ],
-              onSelected: _notifier.setSortMode,
-            ),
-            _buildFiltersToggleButton(theme, filters, platformFilter),
-          ],
+                  for (final platform in platforms)
+                    (
+                      platform,
+                      platform,
+                      platformIcon(platform, theme.textPrimary, 18),
+                    ),
+                ],
+                onSelected: (value) =>
+                    _notifier.setPlatformFilter(value.isEmpty ? null : value),
+              ),
+              IconMenuButton<GameSortMode>(
+                key: const ValueKey('home-sort-button'),
+                theme: theme,
+                tooltip: 'Sort: ${sortMode.displayName}',
+                highlighted: sortMode != DefaultSettings.gameSortMode,
+                icon: (color, size) =>
+                    Icon(_sortIconFor(sortMode), color: color, size: size),
+                value: sortMode,
+                choices: [
+                  for (final mode in GameSortMode.values)
+                    (
+                      mode,
+                      mode.displayName,
+                      Icon(_sortIconFor(mode), size: 18),
+                    ),
+                ],
+                onSelected: _notifier.setSortMode,
+              ),
+              _buildFiltersToggleButton(theme, filters),
+            ],
+          ),
         ),
         if (!stacked) ...[gap, viewToggle],
       ],
@@ -413,16 +406,26 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     if (!stacked) return searchRow;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [countLabel, const SizedBox(height: 8), searchRow],
+      children: [
+        Row(
+          children: [
+            if (sync != null) ...[sync, gap],
+            Expanded(child: countLabel),
+            gap,
+            viewToggle,
+          ],
+        ),
+        const SizedBox(height: 8),
+        searchRow,
+      ],
     );
   }
 
   Widget _buildFiltersToggleButton(
     AppThemeData theme,
     ActiveFiltersState filters,
-    String? platformFilter,
   ) {
-    final filterCount = _activeFilterCount(filters, platformFilter);
+    final filterCount = _activeFilterCount(filters);
     final hasActiveFilters = filterCount > 0;
     return GestureDetector(
       onSecondaryTapUp: (details) =>
@@ -506,45 +509,40 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       child: child,
     );
 
-    Widget optionsGroup({required bool fill}) => group(
-      id: 'options',
-      title: 'Show only',
-      icon: Icons.filter_alt_outlined,
-      trailing: clearButton(
-        id: 'options',
-        icon: Icons.filter_alt_off_outlined,
-        tooltip: 'Clear options',
-        onClear: hasOptions ? _clearBoolFilters : null,
-      ),
-      child: _scrollIf(
-        fill,
-        Wrap(
-          key: const ValueKey('home-filter-options'),
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final option in _filterOptions)
-              AppActionButton(
-                label: option.label,
-                theme: theme,
-                selected: option.isOn(filters),
-                onTap: () => option.set(_notifier, !option.isOn(filters)),
-              ),
-          ],
+    // The options sit straight on the header, lined up with the tags
+    // groupbox's content (beside it, its top padding too). Only the toggles
+    // wrap; Clear keeps its place.
+    // Only the toggles wrap; Clear keeps its place at the end.
+    final optionsGroup = Row(
+      key: const ValueKey('home-filter-group-options'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: kElementHSpacing,
+      children: [
+        Expanded(
+          child: Wrap(
+            key: const ValueKey('home-filter-options'),
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final option in _filterOptions)
+                AppActionButton(
+                  label: option.label,
+                  theme: theme,
+                  selected: option.isOn(filters),
+                  onTap: () => option.set(_notifier, !option.isOn(filters)),
+                ),
+            ],
+          ),
         ),
-      ),
+        clearButton(
+          id: 'options',
+          icon: Icons.filter_alt_off_outlined,
+          tooltip: 'Clear options',
+          onClear: hasOptions ? _clearBoolFilters : null,
+        ),
+      ],
     );
-    // Filling a fixed height, the tag list takes the space left below the
-    // search; stacked, it caps its own height instead.
-    Widget tagList({bool scrollable = false, double? maxHeight}) => TagList(
-      tags: matchingTags,
-      selectedTagIds: selectedTagIds,
-      theme: theme,
-      onTagToggled: _notifier.toggleTagFilter,
-      scrollable: scrollable,
-      maxHeight: maxHeight,
-    );
-    Widget tagsGroup({required bool fill}) => group(
+    final tagsGroup = group(
       id: 'tags',
       title: 'Tags',
       icon: Icons.label_outline,
@@ -583,34 +581,23 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
             ],
           ),
           const SizedBox(height: 6),
-          if (fill)
-            Expanded(child: tagList(scrollable: true))
-          else
-            tagList(maxHeight: 150),
+          TagList(
+            tags: matchingTags,
+            selectedTagIds: selectedTagIds,
+            theme: theme,
+            onTagToggled: _notifier.toggleTagFilter,
+            maxHeight: _kTagListMaxHeight,
+          ),
         ],
       ),
     );
 
-    final panel = LayoutBuilder(
+    // Tags spans the full width, with Show only below it.
+    final panel = Column(
       key: const ValueKey('home-filter-panel'),
-      builder: (context, constraints) =>
-          constraints.maxWidth >= _kSideBySidePanelMinWidth
-          ? SizedBox(
-              height: _kSideBySideGroupHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 8,
-                children: [
-                  Expanded(child: tagsGroup(fill: true)),
-                  SizedBox(width: 320, child: optionsGroup(fill: true)),
-                ],
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 8,
-              children: [tagsGroup(fill: false), optionsGroup(fill: false)],
-            ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [tagsGroup, optionsGroup],
     );
     // The padding sits inside the clipping size animation, leaving room for
     // the groupbox shadows at the sides and bottom.
@@ -629,10 +616,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           );
   }
 
-  /// Scrolls [child] when it must fit a fixed height.
-  static Widget _scrollIf(bool scroll, Widget child) =>
-      scroll ? SingleChildScrollView(primary: false, child: child) : child;
-
   void _showFiltersContextMenu(
     Offset globalPosition,
     AppThemeData theme,
@@ -645,87 +628,46 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         hasBoolFilters ||
         ref.read(gamesProvider).platformFilter?.isNotEmpty == true;
 
-    PopupMenuItem<String> item(
-      String value,
-      IconData icon,
-      String label,
-      bool enabled,
-    ) {
-      final color = enabled ? theme.textPrimary : theme.textHint;
-      return PopupMenuItem<String>(
-        value: value,
-        enabled: enabled,
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: kElementHSpacing),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: color),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    Widget item(IconData icon, String label, VoidCallback? onPressed) =>
+        appMenuItem(
+          theme,
+          leading: Icon(icon, size: 18),
+          onPressed: onPressed,
+          child: Text(label),
+        );
 
-    showAppMenu<String>(
+    showAppContextMenu(
       context: context,
-      position: RelativeRect.fromLTRB(
-        globalPosition.dx,
-        globalPosition.dy,
-        globalPosition.dx,
-        globalPosition.dy,
-      ),
-      items: [
+      theme: theme,
+      position: globalPosition,
+      menuChildren: [
         item(
-          'clear_tags',
           Icons.label_off_outlined,
           'Clear Tag Filters',
-          hasTagFilters,
+          hasTagFilters ? () => _notifier.setTagFilters([]) : null,
         ),
         item(
-          'clear_options',
           Icons.filter_alt_off_outlined,
           'Clear Options',
-          hasBoolFilters,
+          hasBoolFilters ? _clearBoolFilters : null,
         ),
-        const PopupMenuDivider(height: 1),
-        item('clear_all', Icons.clear_all, 'Clear All Filters', hasAnyFilters),
+        appMenuDivider(theme),
+        item(
+          Icons.clear_all,
+          'Clear All Filters',
+          hasAnyFilters ? _clearAllFilters : null,
+        ),
       ],
-    ).then((value) {
-      switch (value) {
-        case 'clear_tags':
-          _notifier.setTagFilters([]);
-        case 'clear_options':
-          _clearBoolFilters();
-        case 'clear_all':
-          _clearAllFilters();
-      }
-    });
+    );
   }
 }
 
-/// The library size, or "12 / 263 Games" while filters narrow it, centered
-/// in a full-width label with optional controls at either end. Tapping it
-/// opens the library stats.
+/// The library size, or "12 / 263 Games" while filters narrow it, as a
+/// button that opens the library stats.
 class _GamesCount extends ConsumerWidget {
-  const _GamesCount({
-    required this.theme,
-    this.leading,
-    this.trailing,
-    this.expand = false,
-  });
+  const _GamesCount({required this.theme});
 
   final AppThemeData theme;
-  final Widget? leading;
-  final Widget? trailing;
-
-  /// Spans its row with the text centered; otherwise sizes to its content.
-  final bool expand;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -733,154 +675,22 @@ class _GamesCount extends ConsumerWidget {
       gamesProvider.select((s) => s.filteredGames.length),
     );
     final total = ref.watch(gamesProvider.select((s) => s.games.length));
-    final text = Tooltip(
+    return Tooltip(
       message: 'Library stats',
-      child: Text(
-        shown < total ? '$shown / $total Games' : '$total Games',
-        style: TextStyle(color: theme.accent, fontWeight: FontWeight.w600),
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-    final hasControls = leading != null || trailing != null;
-    // A min-size row keeps each control at its natural width; the toolbar
-    // buttons otherwise fill the width they are offered.
-    Widget control(Widget child) =>
-        Row(mainAxisSize: MainAxisSize.min, children: [child]);
-    final label = Container(
-      key: const ValueKey('library-game-counter'),
-      // Controls inside keep clear of the label's edges.
-      padding: hasControls
-          ? const EdgeInsets.all(4)
-          : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      child: expand
-          // The text centers on the whole label, clear of the end controls,
-          // whether or not both ends have one.
-          ? Stack(
-              alignment: Alignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 52),
-                  child: text,
-                ),
-                if (leading != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: control(leading!),
-                  ),
-                if (trailing != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: control(trailing!),
-                  ),
-              ],
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: 6,
-              children: [
-                ?leading,
-                Flexible(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: hasControls ? 6 : 0,
-                    ),
-                    child: text,
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-    );
-    // Controls inside the label keep their own taps.
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () =>
+      child: ElevatedButton(
+        key: const ValueKey('library-game-counter'),
+        onPressed: () =>
             showLibraryStatsDialog(context, ref.read(allGamesProvider)),
-        child: label,
-      ),
-    );
-  }
-}
-
-/// One choice in an [_IconMenuButton] menu.
-typedef _MenuEntry<T> = ({T value, String label, Widget icon});
-
-/// A compact icon button that opens a menu of choices, the current one
-/// checked, like the navigation theme menu.
-class _IconMenuButton<T> extends StatefulWidget {
-  const _IconMenuButton({
-    super.key,
-    required this.theme,
-    required this.tooltip,
-    required this.highlighted,
-    required this.iconBuilder,
-    required this.selected,
-    required this.entries,
-    required this.onSelected,
-  });
-
-  final AppThemeData theme;
-  final String tooltip;
-
-  /// Shown selected while the choice differs from the default.
-  final bool highlighted;
-  final Widget Function(BuildContext context, Color color, double size)
-  iconBuilder;
-  final T selected;
-  final List<_MenuEntry<T>> entries;
-  final ValueChanged<T> onSelected;
-
-  @override
-  State<_IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
-}
-
-class _IconMenuButtonState<T> extends State<_IconMenuButton<T>> {
-  final _controller = MenuController();
-  final _buttonFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _buttonFocus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = widget.theme;
-    return AppMenuAnchor(
-      theme: theme,
-      controller: _controller,
-      childFocusNode: _buttonFocus,
-      menuChildren: [
-        for (final entry in widget.entries)
-          appMenuItem(
-            theme,
-            selected: entry.value == widget.selected,
-            leading: entry.icon,
-            onPressed: () => widget.onSelected(entry.value),
-            child: Text(entry.label),
-          ),
-      ],
-      builder: (context, controller, _) => Focus(
-        focusNode: _buttonFocus,
-        child: AppNavigationButton(
-          theme: theme,
-          isSelected: widget.highlighted || controller.isOpen,
-          isEnabled: true,
-          isHorizontal: true,
-          onTap: () =>
-              controller.isOpen ? controller.close() : controller.open(),
-          iconBuilder: widget.iconBuilder,
-          tooltipMessage: widget.tooltip,
-          selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 40),
+        ),
+        child: Text(
+          shown < total ? '$shown / $total Games' : '$total Games',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );
@@ -892,36 +702,15 @@ class _LibrarySyncButton extends ConsumerWidget {
 
   final AppThemeData theme;
 
-  (IconData, Color) _iconForStatus(DeviceSyncStatus status) => switch (status) {
-    DeviceSyncStatus.discovering => (Icons.radar, theme.accent),
-    DeviceSyncStatus.connecting => (Icons.link, theme.accent),
-    DeviceSyncStatus.connected => (Icons.link, theme.accent),
-    DeviceSyncStatus.syncing => (Icons.sync, theme.accent),
-    DeviceSyncStatus.error => (Icons.link_off, theme.error),
-    DeviceSyncStatus.idle => (Icons.sync_disabled, theme.textSecondary),
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sync = ref.watch(deviceSyncProvider).asData?.value;
-    final enabled = sync?.enabled ?? false;
-    final status = sync?.status ?? DeviceSyncStatus.idle;
-    final statusText = sync?.statusMessage?.toLowerCase() ?? '';
-    final busy =
-        status == DeviceSyncStatus.syncing ||
-        status == DeviceSyncStatus.discovering ||
-        status == DeviceSyncStatus.connecting;
-    // Unpair events show a broken link, matching the sync dialog; so do
-    // peers whose database files differ, to signal out-of-sync.
-    final (icon, color) =
-        statusText.contains('removed its pairing') ||
-            statusText.contains('device removed')
-        ? (Icons.link_off, theme.textSecondary)
-        : sync?.dbMismatchPeerIds.isNotEmpty ?? false
-        ? (Icons.link_off, Colors.orange)
-        : _iconForStatus(status);
+    // The title bar's icon, so both buttons always agree.
+    final (:icon, :color) = deviceSyncIcon(
+      theme,
+      ref.watch(deviceSyncProvider).asData?.value,
+    );
 
-    // Same button style as the view toggle at the label's other end.
+    // Same button style as the view toggle.
     return AppNavigationButton(
       theme: theme,
       isSelected: false,
@@ -929,19 +718,8 @@ class _LibrarySyncButton extends ConsumerWidget {
       isHorizontal: true,
       onTap: () => showDeviceSyncDialog(context),
       tooltipMessage: 'Device Sync',
-      iconBuilder: (context, _, size) => busy
-          ? SizedBox.square(
-              dimension: size - 2,
-              child: AppCircularProgressIndicator(
-                color: enabled ? theme.accent : theme.textSecondary,
-                strokeWidth: 2,
-              ),
-            )
-          : Icon(
-              icon,
-              color: enabled ? color : theme.textSecondary,
-              size: size,
-            ),
+      iconBuilder: (context, _, size) =>
+          Icon(icon, color: color ?? theme.textSecondary, size: size),
     );
   }
 }

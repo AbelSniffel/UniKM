@@ -1,4 +1,4 @@
-/// Navigation panel layout, background, and animation settings.
+/// Navigation panel layout and gradient bar animation settings.
 library;
 
 import 'package:flutter/material.dart';
@@ -13,7 +13,6 @@ import '../../widgets/animated_gradient_bar.dart';
 import '../../widgets/animated_popover.dart';
 import '../../widgets/gradient_speed_icon.dart';
 import '../../widgets/preview_card.dart';
-import '../../widgets/navigation_panel_overlay.dart';
 import '../../widgets/section_groupbox.dart';
 import 'settings_common.dart';
 import 'settings_control_cards.dart';
@@ -42,10 +41,6 @@ class NavigationSection extends ConsumerWidget {
       SettingTextSpec(label: 'Buttons', icon: Icons.smart_button_outlined);
   static const navButtonArrangementVerticalSpec =
       navButtonArrangementHorizontalSpec;
-  static const SettingTextSpec navPanelOverlayStyleSpec = SettingTextSpec(
-    label: 'Navigation panel overlay style',
-    description: 'Add decorative overlays for the navigation panel',
-  );
   static const SettingTextSpec gradientSwapSpec = SettingTextSpec(
     label: 'Swap primary & accent colors',
     description: 'Alternative look for the gradient bar',
@@ -69,26 +64,6 @@ class NavigationSection extends ConsumerWidget {
     info: 'Where the bar sits and where its page buttons go.',
   );
 
-  static const SettingsSearchGroup navOverlaySearchGroup = SettingsSearchGroup(
-    title: 'Navigation Panel Background',
-    settings: [navPanelOverlayStyleSpec],
-    extraTexts: [
-      'None',
-      'Diagonal',
-      'Crosshatch',
-      'Gradient',
-      'Hex Pattern',
-      'Ripple',
-      'Built-in themes',
-      'Default themes',
-      'Custom themes',
-      'Persistent setting',
-      'Saved with custom theme',
-      'Theme override',
-      'Overlay saved in custom theme',
-    ],
-  );
-
   static SettingsSearchGroup get gradientSearchGroup => SettingsSearchGroup(
     title: 'Gradient Bar Animation',
     settings: [gradientSwapSpec],
@@ -103,7 +78,6 @@ class NavigationSection extends ConsumerWidget {
 
   static List<SettingsSearchGroup> get searchGroups => [
     navigationSearchGroup,
-    navOverlaySearchGroup,
     gradientSearchGroup,
   ];
 
@@ -133,12 +107,7 @@ class NavigationSection extends ConsumerWidget {
       matchesSearch: matchesSearch,
       group: gradientSearchGroup,
     );
-    final showNavOverlaySection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: navOverlaySearchGroup,
-    );
-    if (!showNavBarSection && !showNavOverlaySection && !showGradientSection) {
+    if (!showNavBarSection && !showGradientSection) {
       return const SizedBox.shrink();
     }
     return SettingsSectionGroups(
@@ -187,18 +156,6 @@ class NavigationSection extends ConsumerWidget {
           ),
         ),
         SectionGroupEntry(
-          visible: showNavOverlaySection,
-          builder: (position, isAlternate) => _NavigationPanelOverlaySection(
-            theme: theme,
-            searchQuery: searchQuery,
-            isSearchMatch: isSearching,
-            groupPosition: position,
-            isAlternate: isAlternate,
-            onOverlaySelected: (style) =>
-                _applyNavPanelOverlayStyle(ref, style),
-          ),
-        ),
-        SectionGroupEntry(
           visible: showGradientSection,
           builder: (position, isAlternate) => _GradientAnimationSection(
             theme: theme,
@@ -209,96 +166,6 @@ class NavigationSection extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-
-  /// Built-in themes keep the overlay as a setting; custom themes save it.
-  Future<void> _applyNavPanelOverlayStyle(
-    WidgetRef ref,
-    NavPanelOverlayStyle style,
-  ) async {
-    if (ref.read(effectiveNavPanelOverlayStyleProvider) == style) return;
-    if (ref.read(currentThemeIsBuiltInProvider)) {
-      await ref
-          .read(settingsProvider.notifier)
-          .setSetting(SettingsKeys.navPanelOverlayStyle, style);
-      return;
-    }
-    await ref
-        .read(themeProvider.notifier)
-        .saveCustomTheme(
-          ref.read(themeProvider).copyWith(navPanelOverlayStyle: style),
-        );
-  }
-}
-
-class _NavigationPanelOverlaySection extends ConsumerWidget {
-  const _NavigationPanelOverlaySection({
-    required this.theme,
-    required this.searchQuery,
-    required this.isSearchMatch,
-    required this.onOverlaySelected,
-    this.groupPosition = SectionGroupPosition.only,
-    this.isAlternate = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool isSearchMatch;
-  final Future<void> Function(NavPanelOverlayStyle style) onOverlaySelected;
-  final SectionGroupPosition groupPosition;
-  final bool isAlternate;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentTheme = ref.watch(themeProvider);
-    final effectiveOverlayStyle = ref.watch(
-      effectiveNavPanelOverlayStyleProvider,
-    );
-    final effectiveTheme = ref.watch(effectiveThemeProvider);
-
-    return SectionGroupBox(
-      title: NavigationSection.navOverlaySearchGroup.title,
-      theme: theme,
-      titleIcon: Icons.layers_outlined,
-      searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
-      groupPosition: groupPosition,
-      alternateBackground: isAlternate,
-      child: PreviewCardWrap(
-        children: [
-          for (final style in NavPanelOverlayStyle.values)
-            PreviewCard(
-              key: ValueKey(style),
-              name: style.displayName,
-              theme: theme,
-              isSelected: effectiveOverlayStyle == style,
-              onTap: () => onOverlaySelected(style),
-              backgroundBuilder: (context, _) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: effectiveTheme.navBackground,
-                    ),
-                  ),
-                  if (style != NavPanelOverlayStyle.none)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: NavigationPanelOverlayPaint(
-                          theme: currentTheme.copyWith(
-                            navPanelOverlayStyle: style,
-                          ),
-                          preview: true,
-                          child: const SizedBox.expand(),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -331,6 +198,7 @@ class _GradientAnimationSection extends ConsumerWidget {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final swapGradientColors = ref.watch(swapGradientColorsProvider);
     final previewAnimationsPlaying = ref.watch(gradientPreviewPlayingProvider);
+    final speed = ref.watch(gradientAnimationSpeedProvider);
 
     return SectionGroupBox(
       title: NavigationSection.gradientSearchGroup.title,
@@ -356,7 +224,47 @@ class _GradientAnimationSection extends ConsumerWidget {
               trailing: swapGradientColors ? theme.accent : theme.secondary,
             ),
           ),
-          _GradientSpeedButton(theme: theme),
+          SliderPopoverButton(
+            theme: theme,
+            title: 'Animation speed',
+            value:
+                '${speed.multiplier.toStringAsFixed(speed.multiplier % 1 == 0 ? 0 : 1)}×',
+            icon: GradientSpeedIcon(
+              speed: speed,
+              color: theme.accent,
+              paused: !previewAnimationsPlaying,
+            ),
+            action: IconButton(
+              tooltip: previewAnimationsPlaying
+                  ? 'Pause preview animations'
+                  : 'Play preview animations',
+              onPressed: () => ref
+                  .read(gradientPreviewPlayingProvider.notifier)
+                  .set(!previewAnimationsPlaying),
+              icon: Icon(
+                previewAnimationsPlaying
+                    ? Icons.pause_circle_rounded
+                    : Icons.play_circle_rounded,
+                color: theme.accent,
+                size: 26,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              visualDensity: VisualDensity.compact,
+            ),
+            slider: Slider(
+              value: speed.index.toDouble(),
+              max: GradientAnimationSpeed.values.length - 1,
+              divisions: GradientAnimationSpeed.values.length - 1,
+              label: speed.displayName,
+              semanticFormatterCallback: (value) =>
+                  GradientAnimationSpeed.values[value.round()].displayName,
+              onChanged: (value) => settingsNotifier.setSetting(
+                SettingsKeys.gradientAnimationSpeed,
+                GradientAnimationSpeed.values[value.round()],
+              ),
+            ),
+          ),
         ],
       ),
       child: Column(
@@ -403,101 +311,4 @@ class _GradientOrderIcon extends StatelessWidget {
     ).createShader(bounds),
     child: const Icon(Icons.swap_horiz, size: 26),
   );
-}
-
-class _GradientSpeedButton extends ConsumerWidget {
-  const _GradientSpeedButton({required this.theme});
-
-  final AppThemeData theme;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final speed = ref.watch(gradientAnimationSpeedProvider);
-    final previewAnimationsPlaying = ref.watch(gradientPreviewPlayingProvider);
-    return AnimatedPopover(
-      theme: theme,
-      child: SizedBox(
-        width: 260,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Animation speed',
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message:
-                              '${speed.displayName} (${speed.multiplier.toStringAsFixed(speed == GradientAnimationSpeed.standard ? 0 : 1)}×)',
-                          child: GradientSpeedIcon(
-                            speed: speed,
-                            color: theme.accent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: previewAnimationsPlaying
-                        ? 'Pause preview animations'
-                        : 'Play preview animations',
-                    onPressed: () => ref
-                        .read(gradientPreviewPlayingProvider.notifier)
-                        .set(!previewAnimationsPlaying),
-                    icon: Icon(
-                      previewAnimationsPlaying
-                          ? Icons.pause_circle_rounded
-                          : Icons.play_circle_rounded,
-                      color: theme.accent,
-                      size: 26,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 36,
-                      height: 36,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-              Slider(
-                value: speed.index.toDouble(),
-                min: 0,
-                max: 2,
-                divisions: 2,
-                label: speed.displayName,
-                semanticFormatterCallback: (value) =>
-                    GradientAnimationSpeed.values[value.round()].displayName,
-                onChanged: (value) => ref
-                    .read(settingsProvider.notifier)
-                    .setSetting(
-                      SettingsKeys.gradientAnimationSpeed,
-                      GradientAnimationSpeed.values[value.round()],
-                    ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      builder: (context, toggle) => IconButton(
-        tooltip: 'Animation speed',
-        onPressed: toggle,
-        icon: Icon(Icons.speed_rounded, color: theme.accent, size: 26),
-      ),
-    );
-  }
 }

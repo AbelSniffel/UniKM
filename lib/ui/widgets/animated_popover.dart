@@ -10,11 +10,15 @@ class AnimatedPopover extends StatefulWidget {
     required this.theme,
     required this.child,
     required this.builder,
+    this.onOpenChanged,
   });
 
   final AppThemeData theme;
   final Widget child;
   final Widget Function(BuildContext context, VoidCallback toggle) builder;
+
+  /// Called as the panel starts opening (true) or closing (false).
+  final ValueChanged<bool>? onOpenChanged;
 
   @override
   State<AnimatedPopover> createState() => _AnimatedPopoverState();
@@ -70,9 +74,11 @@ class _AnimatedPopoverState extends State<AnimatedPopover>
       onOpenRequested: (_, showOverlay) {
         showOverlay();
         _animation.forward();
+        widget.onOpenChanged?.call(true);
       },
       onCloseRequested: (hideOverlay) {
         if (!_animation.status.isForwardOrCompleted) return;
+        widget.onOpenChanged?.call(false);
         _animation.reverse().whenComplete(() {
           if (mounted && _animation.isDismissed) hideOverlay();
         });
@@ -186,4 +192,96 @@ class _PopoverPosition extends SingleChildLayoutDelegate {
       heightFactor != oldDelegate.heightFactor ||
       padding != oldDelegate.padding ||
       direction != oldDelegate.direction;
+}
+
+/// A header icon button that opens a popover with a titled slider, such as
+/// the gradient bar's animation speed.
+class SliderPopoverButton extends StatelessWidget {
+  const SliderPopoverButton({
+    super.key,
+    required this.theme,
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.slider,
+    this.action,
+    this.onOpenChanged,
+  });
+
+  final AppThemeData theme;
+
+  /// Heads the popover and is the button's tooltip.
+  final String title;
+
+  /// The current value, in the accent right after the title.
+  final String value;
+  final Widget icon;
+  final Widget slider;
+
+  /// An extra button at the end of the title row.
+  final Widget? action;
+
+  /// Called as the popover starts opening (true) or closing (false).
+  final ValueChanged<bool>? onOpenChanged;
+
+  @override
+  Widget build(BuildContext context) => AnimatedPopover(
+    theme: theme,
+    onOpenChanged: onOpenChanged,
+    child: SizedBox(
+      width: 300,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 36,
+              // The value sits right after the title, reading as one label.
+              child: Row(
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: Row(
+                      spacing: 6,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          value,
+                          style: TextStyle(
+                            color: theme.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ?action,
+                ],
+              ),
+            ),
+            // Without side padding, so the track lines up with the title row.
+            SliderTheme(
+              data: SliderTheme.of(
+                context,
+              ).copyWith(padding: const EdgeInsets.symmetric(vertical: 8)),
+              child: slider,
+            ),
+          ],
+        ),
+      ),
+    ),
+    builder: (context, toggle) =>
+        IconButton(tooltip: title, onPressed: toggle, icon: icon),
+  );
 }

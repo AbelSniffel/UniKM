@@ -95,7 +95,7 @@ class AppMenuAnchor extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       consumeOutsideTap: true,
       useRootOverlay: true,
-      reservedPadding: const EdgeInsets.all(8),
+      reservedPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       alignmentOffset: alignmentOffset,
       style: appMenuStyle(theme, alignment: alignment).copyWith(
         minimumSize: width == null
@@ -156,6 +156,54 @@ Widget appMenuItem(
       ),
     ),
   );
+}
+
+/// A thin line between groups of [appMenuItem]s.
+Widget appMenuDivider(AppThemeData theme) =>
+    Divider(height: 1, thickness: 1, color: theme.border);
+
+/// Opens an [AppMenuAnchor] menu at the global [position], for right-click
+/// menus, so they look like the title bar and toolbar menus. The menu lives in
+/// the overlay only while open, so nothing is added to the clicked widget.
+void showAppContextMenu({
+  required BuildContext context,
+  required AppThemeData theme,
+  required Offset position,
+  required List<Widget> menuChildren,
+}) {
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final box = overlay.context.findRenderObject()! as RenderBox;
+  final anchor = box.globalToLocal(position);
+  final controller = MenuController();
+  // Focus lets Escape close the menu.
+  final focusNode = FocusNode(skipTraversal: true);
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (context) => Positioned(
+      left: anchor.dx,
+      top: anchor.dy,
+      child: AppMenuAnchor(
+        theme: theme,
+        controller: controller,
+        childFocusNode: focusNode,
+        alignmentOffset: Offset.zero,
+        // Removed after the frame, once the chosen item has run.
+        onClose: () => WidgetsBinding.instance.addPostFrameCallback((_) {
+          entry.remove();
+          entry.dispose();
+          focusNode.dispose();
+        }),
+        menuChildren: menuChildren,
+        builder: (context, _, _) =>
+            Focus(focusNode: focusNode, child: const SizedBox.shrink()),
+      ),
+    ),
+  );
+  overlay.insert(entry);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    focusNode.requestFocus();
+    controller.open();
+  });
 }
 
 /// Clips item feedback to the menu shape, which PopupMenuTheme cannot configure.

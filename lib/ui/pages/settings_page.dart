@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../widgets/nav_button_group.dart';
+import '../widgets/navigation_panel.dart' show isVeryNarrowAppLayout;
+import '../widgets/navigation_panel_overlay.dart';
+import '../widgets/platform_menu_button.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/app_search_field.dart';
@@ -152,7 +155,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     railLabel: 'Advanced',
     headerTitle: 'Advanced',
     icon: Icons.settings_applications,
-    searchGroups: [AdvancedSection.systemSearchGroup],
+    searchGroups: AdvancedSection.searchGroups,
     builder: AdvancedSection.new,
   ),
 ];
@@ -215,6 +218,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ref.listen(settingsPageSearchQueryProvider, (_, _) => _scrollToTop());
     ref.listen(settingsPageSelectedSectionProvider, (_, _) => _scrollToTop());
     final selectedSection = ref.watch(settingsPageSelectedSectionProvider);
+    final navigation = ref.watch(
+      appShellSettingsProvider.select(
+        (settings) => (settings.navBarPosition, settings.navBarAppearance),
+      ),
+    );
+    // Narrow windows swap the section rail for a picker beside the search bar.
+    final narrow = isVeryNarrowAppLayout(
+      MediaQuery.sizeOf(context).width,
+      position: navigation.$1,
+      appearance: navigation.$2,
+    );
     final searchQuery = ref.watch(settingsPageSearchQueryProvider);
     final isSearching = searchQuery.isNotEmpty;
     final effectiveSection = searchQuery.isNotEmpty ? 'all' : selectedSection;
@@ -224,11 +238,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     bool matchesSearch(String text) => settingsSearchMatches(searchQuery, text);
 
+    void selectSection(String sectionId) =>
+        ref.read(settingsPageSelectedSectionProvider.notifier).set(sectionId);
     final rail = _SettingsSectionRail(
       selectedSection: selectedSection,
       isSearching: isSearching,
-      onSectionSelected: (sectionId) =>
-          ref.read(settingsPageSelectedSectionProvider.notifier).set(sectionId),
+      onSectionSelected: selectSection,
     );
     final body = _SettingsPageBody(
       sectionIndex: _settingsRailSections.indexWhere(
@@ -237,6 +252,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       scrollController: _contentScrollController,
       searchController: _searchController,
       searchQuery: searchQuery,
+      selectedSection: selectedSection,
+      showSectionPicker: narrow,
+      onSectionSelected: isSearching ? null : selectSection,
       onSearchChanged: (value) => ref
           .read(settingsPageSearchQueryProvider.notifier)
           .set(value.trim().toLowerCase()),
@@ -247,7 +265,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       showOnlyMatches: searchQuery.isNotEmpty,
     );
 
-    return Row(children: [rail, body]);
+    return Row(children: [if (!narrow) rail, body]);
   }
 
   _SettingsSectionDefinition? _selectedSectionDefinitionFor(String sectionId) {
@@ -278,7 +296,7 @@ class _SettingsSectionRail extends ConsumerWidget {
       child: Container(
         width: _settingsRailWidth,
         decoration: BoxDecoration(
-          color: theme.surface,
+          color: theme.navBackground,
           border: Border(right: BorderSide(color: theme.border)),
           boxShadow: [
             BoxShadow(
@@ -288,28 +306,31 @@ class _SettingsSectionRail extends ConsumerWidget {
             ),
           ],
         ),
-        child: ListView(
-          key: const ValueKey('settings-section-navigation'),
-          padding: const EdgeInsets.all(_settingsRailOuterPadding),
-          children: [
-            NavButtonGroup(
-              theme: theme,
-              isHorizontal: false,
-              children: [
-                for (final (id, label, icon) in _settingsRailSections)
-                  AppNavigationButton(
-                    key: ValueKey<String>('settings-rail-$id'),
-                    theme: theme,
-                    isSelected: !isSearching && selectedSection == id,
-                    isEnabled: !isSearching,
-                    isHorizontal: false,
-                    onTap: () => onSectionSelected(id),
-                    iconData: icon,
-                    tooltipMessage: label,
-                  ),
-              ],
-            ),
-          ],
+        // The navigation panel's background and pattern, lined up with it.
+        child: PanelPatternSurface(
+          child: ListView(
+            key: const ValueKey('settings-section-navigation'),
+            padding: const EdgeInsets.all(_settingsRailOuterPadding),
+            children: [
+              NavButtonGroup(
+                theme: theme,
+                isHorizontal: false,
+                children: [
+                  for (final (id, label, icon) in _settingsRailSections)
+                    AppNavigationButton(
+                      key: ValueKey<String>('settings-rail-$id'),
+                      theme: theme,
+                      isSelected: !isSearching && selectedSection == id,
+                      isEnabled: !isSearching,
+                      isHorizontal: false,
+                      onTap: () => onSectionSelected(id),
+                      iconData: icon,
+                      tooltipMessage: label,
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -322,6 +343,9 @@ class _SettingsPageBody extends ConsumerWidget {
     required this.scrollController,
     required this.searchController,
     required this.searchQuery,
+    required this.selectedSection,
+    required this.showSectionPicker,
+    required this.onSectionSelected,
     required this.onSearchChanged,
     required this.sections,
     required this.matchesSearch,
@@ -332,6 +356,11 @@ class _SettingsPageBody extends ConsumerWidget {
   final ScrollController scrollController;
   final TextEditingController searchController;
   final String searchQuery;
+  final String selectedSection;
+  final bool showSectionPicker;
+
+  /// Null while searching, which shows every section.
+  final ValueChanged<String>? onSectionSelected;
   final ValueChanged<String> onSearchChanged;
   final List<_SettingsSectionDefinition> sections;
   final bool Function(String) matchesSearch;
@@ -341,14 +370,44 @@ class _SettingsPageBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
 
+    final search = AppSearchField(
+      theme: theme,
+      controller: searchController,
+      hintText: 'Search settings...',
+      onChanged: onSearchChanged,
+    );
+    final (_, sectionLabel, sectionIcon) = _settingsRailSections.firstWhere(
+      (section) => section.$1 == selectedSection,
+      orElse: () => _settingsRailSections.first,
+    );
+    final sectionPicker = IconMenuButton<String>(
+      key: const ValueKey<String>('settings-section-picker'),
+      theme: theme,
+      value: selectedSection,
+      tooltip: 'Section: $sectionLabel',
+      onSelected: onSectionSelected,
+      icon: (color, size) => Icon(sectionIcon, color: color, size: size),
+      choices: [
+        for (final (id, label, icon) in _settingsRailSections)
+          (id, label, Icon(icon, size: 20)),
+      ],
+    );
     final searchField = Container(
       key: const ValueKey<String>('settings-search-container'),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: AppSearchField(
-        theme: theme,
-        controller: searchController,
-        hintText: 'Search settings...',
-        onChanged: onSearchChanged,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      // Separates the fixed search bar from the scrolling sections.
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: theme.border)),
+      ),
+      // The picker stretches to the search bar's height.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: search),
+            if (showSectionPicker) ...[const SizedBox(width: 8), sectionPicker],
+          ],
+        ),
       ),
     );
 
