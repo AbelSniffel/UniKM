@@ -60,6 +60,7 @@ class AdvancedSection extends ConsumerWidget {
   );
   static const SettingTextSpec devWindowSpec = SettingTextSpec(
     label: 'Developer Window',
+    description: 'Shortcut: Ctrl+Alt+D',
   );
   static const SettingTextSpec resetSettingsSpec = SettingTextSpec(
     label: 'Reset settings',
@@ -68,7 +69,6 @@ class AdvancedSection extends ConsumerWidget {
     title: 'System',
     settings: [frameRateSpec, devWindowSpec, resetSettingsSpec],
     extraTexts: ['Display', 'FPS', 'defaults'],
-    info: 'Ctrl+Alt+D opens the Developer Window.',
   );
 
   static List<SettingsSearchGroup> get searchGroups => [
@@ -151,9 +151,12 @@ class AdvancedSection extends ConsumerWidget {
                 spacing: kElementHSpacing,
                 children: [
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => DevWindowOverlay.toggle(context),
-                      child: const Text('Open Dev Window'),
+                    child: Tooltip(
+                      message: devWindowSpec.description,
+                      child: ElevatedButton(
+                        onPressed: () => DevWindowOverlay.toggle(context),
+                        child: const Text('Open Dev Window'),
+                      ),
                     ),
                   ),
                   Expanded(

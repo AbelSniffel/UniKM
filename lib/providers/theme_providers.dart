@@ -255,6 +255,15 @@ final effectiveNavPanelOverlayStyleProvider = Provider<NavPanelOverlayStyle>((
       : theme.navPanelOverlayStyle;
 });
 
+/// Whether pages show a fainter copy of the background pattern: off while no
+/// pattern is chosen, and the saved choice again once one is.
+final pagePatternProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(effectiveNavPanelOverlayStyleProvider) !=
+          NavPanelOverlayStyle.none &&
+      ref.watch(pagePatternSettingProvider),
+);
+
 final effectiveThemeProvider = Provider<AppThemeData>((ref) {
   final theme = ref.watch(themeProvider);
   final overlayStyle = ref.watch(effectiveNavPanelOverlayStyleProvider);

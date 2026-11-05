@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
+import '../../providers/app_providers.dart';
 import 'section_groupbox.dart';
 
 /// A settings section: its header on top of a panel of groups, which show
-/// as plain headings. One rounded border and shadow surround both.
-class SettingsSectionFamily extends StatelessWidget {
+/// as plain headings. One rounded border surrounds both, on a group box's
+/// background and, while it is raised, its shadow.
+class SettingsSectionFamily extends ConsumerWidget {
   const SettingsSectionFamily({
     super.key,
     required this.theme,
@@ -19,14 +22,21 @@ class SettingsSectionFamily extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final radius = BorderRadius.circular(theme.cornerRadius);
+    final tinted = ref.watch(pagePatternProvider);
+    final color = SectionGroupBox.background(theme, tinted: tinted);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: SurfaceDepth.gradient(theme.surface, highlight: 0.085),
+        color: color,
+        gradient: SectionGroupBox.gradient(
+          color,
+          tinted: tinted,
+          highlight: 0.05,
+        ),
         borderRadius: radius,
-        boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
+        boxShadow: [if (!tinted) SurfaceDepth.shadow(isDark: theme.isDark)],
       ),
       foregroundDecoration: BoxDecoration(
         borderRadius: radius,

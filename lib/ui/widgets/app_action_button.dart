@@ -230,9 +230,9 @@ class AppActionButton extends StatelessWidget {
       accentColor: accentColor,
       readOnly: readOnly,
       transparentWhenIdle: transparentWhenIdle,
-      // Toggles keep a calm outline on hover; only tags that delete on click
-      // highlight it as a warning.
-      hoverBorder: selected == null || deleteOnHover,
+      // Toggles, tags that delete on click included, keep a calm outline on
+      // hover.
+      hoverBorder: selected == null,
       depthStrength: depthStrength,
     );
     final button = ButtonThemeSync(

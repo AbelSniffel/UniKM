@@ -7,10 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/surface_depth.dart';
 import '../../providers/app_providers.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/theme/surface_depth.dart';
 import 'search_highlight.dart';
+import 'tinted_card.dart';
 
 /// Controls how a group box is positioned within a connected group strip.
 /// - [only]: standalone box, full border, all corners rounded (default)
@@ -92,14 +93,37 @@ class SectionGroupBox extends ConsumerWidget {
   /// Position of this box within a connected group strip.
   final SectionGroupPosition groupPosition;
 
-  /// When true, uses [AppThemeData.background] instead of [AppThemeData.surface]
-  /// as the body background — creates the alternating-row visual effect.
+  /// When true, the body takes the tinted cards' slightly stronger tint
+  /// ([TintedCard.fillAlpha]) — creates the alternating-row visual effect.
   final bool alternateBackground;
 
   /// When false, the title header (or left title panel) is not rendered — only
   /// the bordered/background container is shown. Useful when you want the
   /// groupbox strip visuals (borders, alternating colours) without labels.
   final bool showTitle;
+
+  /// While the pattern shows on pages ([tinted]), a flat accent tint, the
+  /// same as the tinted cards'; otherwise the raised surface under the
+  /// [gradient]. [alternate] takes the slightly stronger tint or the darker
+  /// surface.
+  static Color background(
+    AppThemeData theme, {
+    required bool tinted,
+    bool alternate = false,
+  }) => tinted
+      ? theme.accent.withValues(
+          alpha: alternate ? TintedCard.fillAlpha : TintedCard.choiceFillAlpha,
+        )
+      : alternate
+      ? Color.lerp(theme.surface, theme.background, 0.6)!
+      : theme.surface;
+
+  /// The raised surface's shading over [color], or none while [tinted].
+  static Gradient? gradient(
+    Color color, {
+    required bool tinted,
+    double highlight = 0.085,
+  }) => tinted ? null : SurfaceDepth.gradient(color, highlight: highlight);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -108,11 +132,12 @@ class SectionGroupBox extends ConsumerWidget {
         titleLocation ?? ref.watch(sectionTitleLocationProvider);
 
     if (spaced) return _buildFlat(effectiveTitleLocation);
+    final tinted = ref.watch(pagePatternProvider);
     return SearchHighlight(
       query: searchQuery,
       isMatch: isSearchMatch,
       builder: (context, highlightValue) =>
-          _buildFrame(context, highlightValue, effectiveTitleLocation),
+          _buildFrame(context, highlightValue, effectiveTitleLocation, tinted),
     );
   }
 
@@ -212,6 +237,7 @@ class SectionGroupBox extends ConsumerWidget {
     BuildContext context,
     double highlightValue,
     SectionTitleLocation location,
+    bool tinted,
   ) {
     final baseBorderColor = theme.border;
     final effectiveBorderColor =
@@ -224,11 +250,11 @@ class SectionGroupBox extends ConsumerWidget {
     final highlightBg = theme.accent.withValues(alpha: 0.10 * highlightValue);
     final pos = groupPosition;
 
-    // Subtle alternating background: blend 40% toward the base background so
-    // the difference is visible but not jarring.
-    final baseColor = alternateBackground
-        ? Color.lerp(theme.surface, theme.background, 0.6)!
-        : theme.surface;
+    final baseColor = background(
+      theme,
+      tinted: tinted,
+      alternate: alternateBackground,
+    );
     final bgColor = Color.alphaBlend(highlightBg, baseColor);
 
     // Which sides carry a visible border.
@@ -259,10 +285,9 @@ class SectionGroupBox extends ConsumerWidget {
       color: bgColor,
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
+      // Kept while tinted too, so switching styles keeps the content mounted.
       child: Ink(
-        decoration: BoxDecoration(
-          gradient: SurfaceDepth.gradient(bgColor, highlight: 0.085),
-        ),
+        decoration: BoxDecoration(gradient: gradient(bgColor, tinted: tinted)),
         child: content,
       ),
     );
@@ -289,7 +314,7 @@ class SectionGroupBox extends ConsumerWidget {
       decoration: BoxDecoration(
         borderRadius: outerRadius,
         boxShadow: [
-          SurfaceDepth.shadow(isDark: theme.isDark),
+          if (!tinted) SurfaceDepth.shadow(isDark: theme.isDark),
           if (highlightValue > 0)
             BoxShadow(
               color: theme.accent.withValues(alpha: 0.18 * highlightValue),

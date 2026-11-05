@@ -59,7 +59,8 @@ class AppearanceSection extends ConsumerWidget {
   );
   static const SettingTextSpec pagePatternSpec = SettingTextSpec(
     label: 'Show on pages',
-    description: 'A much fainter copy of the pattern behind every page',
+    description:
+        'A much fainter copy of the pattern behind every page, seen through tinted group boxes',
     icon: Icons.wallpaper,
   );
   static const SettingsSearchGroup themeSearchGroup = SettingsSearchGroup(
@@ -607,7 +608,11 @@ class _BackgroundPatternSectionState
             description: pagesSpec.description,
             icon: pagesSpec.icon,
             value: ref.watch(pagePatternProvider),
-            onChanged: settingsNotifier.setter(SettingsKeys.pagePattern),
+            // Without a pattern there is nothing to show on pages.
+            onChanged:
+                effectiveTheme.navPanelOverlayStyle == NavPanelOverlayStyle.none
+                ? null
+                : settingsNotifier.setter(SettingsKeys.pagePattern),
           ),
         ],
       ),

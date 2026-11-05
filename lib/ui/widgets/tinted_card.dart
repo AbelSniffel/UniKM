@@ -25,6 +25,7 @@ class TintedCard extends StatelessWidget {
     super.key,
     required this.theme,
     required this.title,
+    this.titleColor,
     this.icon,
     this.leading,
     this.busy = false,
@@ -63,6 +64,9 @@ class TintedCard extends StatelessWidget {
 
   final AppThemeData theme;
   final String title;
+
+  /// Overrides the title's colour, such as a chosen choice tile's tint.
+  final Color? titleColor;
   final IconData? icon;
 
   /// Replaces the icon square, such as a cover or a [tile] around a preview.
@@ -175,7 +179,7 @@ class TintedCard extends StatelessWidget {
                   maxLines: large ? null : 2,
                   overflow: large ? null : TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: theme.textPrimary,
+                    color: titleColor ?? theme.textPrimary,
                     fontSize: large ? 18 : null,
                     fontWeight: large ? FontWeight.w700 : FontWeight.w600,
                   ),

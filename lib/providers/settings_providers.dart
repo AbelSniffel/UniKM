@@ -180,8 +180,9 @@ final patternAngleProvider = _settingsSlice(
       readSetting<int>(settings, SettingsKeys.patternAngle).clamp(0, 180),
 );
 
-/// Whether pages show a fainter copy of the background pattern.
-final pagePatternProvider = _setting<bool>(SettingsKeys.pagePattern);
+/// The saved Show on pages choice; [pagePatternProvider] turns it off while
+/// no pattern is chosen.
+final pagePatternSettingProvider = _setting<bool>(SettingsKeys.pagePattern);
 
 final gradientAnimationSpeedProvider = _setting<GradientAnimationSpeed>(
   SettingsKeys.gradientAnimationSpeed,

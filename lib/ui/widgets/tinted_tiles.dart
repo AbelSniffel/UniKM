@@ -60,7 +60,8 @@ class TintedHeading extends StatelessWidget {
 /// With [selected] it is one choice of several: the chosen tile is tinted more
 /// strongly, pressed in and checked, easing in and out with the press depth.
 /// An [indicator], such as the choice's own switch on while chosen, replaces
-/// the check mark.
+/// the check mark, and the tile takes the settings toggle cards' colours with
+/// its title in its tint while chosen.
 /// A tile with [onTap] is raised and bordered like the settings cards,
 /// outlined in its colour on hover and pressed in while held or chosen; one
 /// without stays flat.
@@ -138,17 +139,23 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
       duration: _selectionDuration(context),
       curve: Curves.easeOutCubic,
       builder: (context, t, _) {
-        final fill = color.withValues(
-          alpha:
-              TintedCard.choiceFillAlpha +
-              (TintedCard.highlightedFillAlpha - TintedCard.choiceFillAlpha) *
-                  t,
-        );
+        final fill = indicator != null
+            ? theme.background.withValues(alpha: 0.55)
+            : color.withValues(
+                alpha:
+                    TintedCard.choiceFillAlpha +
+                    (TintedCard.highlightedFillAlpha -
+                            TintedCard.choiceFillAlpha) *
+                        t,
+              );
         final tile = TintedCard(
           theme: theme,
           color: color,
           icon: widget.icon,
           title: widget.title,
+          titleColor: indicator == null
+              ? null
+              : Color.lerp(theme.textPrimary, color, t),
           subtitle: widget.subtitle,
           trailing: trailing,
           fill: fill,
@@ -173,7 +180,12 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
                   active: chosen || _pressed,
                   raisedWhenInactive: true,
                   borderRadius: theme.cornerRadius,
-                  surfaceColor: Color.alphaBlend(fill, theme.surface),
+                  surfaceColor: indicator != null
+                      ? theme.background
+                      : Color.alphaBlend(fill, theme.surface),
+                  // Like the toggle cards, a chosen tile's shading sits
+                  // under its content.
+                  shadeOverlay: indicator == null || !chosen,
                   cacheRaster: true,
                   child: tile,
                 )
