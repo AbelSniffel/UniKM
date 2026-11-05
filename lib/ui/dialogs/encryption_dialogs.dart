@@ -43,9 +43,8 @@ class EnableEncryptionDialog extends ConsumerStatefulWidget {
     EnableEncryptionDialog dialog,
   ) => showAppDialog<String?>(
     context: context,
-    barrierDismissible: true,
     builder: (context) => DialogInteractionScope(
-      onDismiss: () => Navigator.of(context).pop(null),
+      onDismiss: () => Navigator.of(context).pop(),
       child: dialog,
     ),
   );
@@ -104,7 +103,7 @@ class _EnableEncryptionDialogState
   @override
   Widget build(BuildContext context) => DialogInteractionScope(
     onPrimaryAction: _confirm,
-    onDismiss: () => Navigator.of(context).pop(null),
+    onDismiss: () => Navigator.of(context).pop(),
     child: ThemedAlertDialog(
       theme: widget.theme,
       title: DialogHeader(
@@ -141,7 +140,6 @@ class _EnableEncryptionDialogState
               ],
               PasswordField(
                 controller: _passwordController,
-                labelText: 'Password',
                 validator: requiredPasswordWithLength(),
               ),
               const SizedBox(height: 12),
@@ -163,7 +161,7 @@ class _EnableEncryptionDialogState
       actions: [
         DialogActionBar(
           theme: widget.theme,
-          onCancel: () => Navigator.of(context).pop(null),
+          onCancel: () => Navigator.of(context).pop(),
           onConfirm: _confirm,
           confirmIcon: Icons.lock,
           confirmLabel: widget.confirmLabel,
@@ -436,48 +434,44 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
             },
             theme: theme,
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              IgnorePointer(
-                ignoring: _busy,
-                child: AppTabBar(
-                  theme: theme,
-                  controller: _tabs,
-                  tabs: [
-                    const AppTab('Disable'),
-                    const AppTab('Change Password'),
-                    if (widget.biometric != null) AppTab(label),
+          contentChildren: [
+            IgnorePointer(
+              ignoring: _busy,
+              child: AppTabBar(
+                theme: theme,
+                controller: _tabs,
+                tabs: [
+                  const AppTab('Disable'),
+                  const AppTab('Change Password'),
+                  if (widget.biometric != null) AppTab(label),
+                ],
+              ),
+            ),
+            const SizedBox(height: kDialogSpacing),
+            ExcludeFocus(
+              excluding: _busy,
+              child: AbsorbPointer(
+                absorbing: _busy,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: kDialogSpacing,
+                  children: [
+                    AppTabTransition(
+                      index: _selectedTab,
+                      child: switch (tab) {
+                        0 => _disableContent(),
+                        1 => _changeContent(),
+                        _ => _biometricContent(),
+                      },
+                    ),
+                    if (_error != null)
+                      Text(_error!, style: TextStyle(color: theme.secondary)),
                   ],
                 ),
               ),
-              const SizedBox(height: kDialogSpacing),
-              ExcludeFocus(
-                excluding: _busy,
-                child: AbsorbPointer(
-                  absorbing: _busy,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: kDialogSpacing,
-                    children: [
-                      AppTabTransition(
-                        index: _selectedTab,
-                        child: switch (tab) {
-                          0 => _disableContent(),
-                          1 => _changeContent(),
-                          _ => _biometricContent(),
-                        },
-                      ),
-                      if (_error != null)
-                        Text(_error!, style: TextStyle(color: theme.secondary)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
           actions: [
             Column(
               mainAxisSize: MainAxisSize.min,

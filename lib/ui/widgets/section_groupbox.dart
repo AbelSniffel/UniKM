@@ -59,16 +59,11 @@ class SectionGroupBox extends ConsumerWidget {
     this.stackTrailingWhenCompact = false,
     this.headerCrossAxisAlignment = CrossAxisAlignment.start,
     this.headerBottomPadding = 12,
-    this.contentFit = FlexFit.tight,
     this.searchQuery = '',
-    this.isSearchMatch = false,
     this.groupPosition = SectionGroupPosition.only,
     this.alternateBackground = false,
     this.showTitle = true,
   });
-
-  /// Whether vertically bounded content fills its space or shrinks to its child.
-  final FlexFit contentFit;
 
   final String title;
   final AppThemeData theme;
@@ -88,7 +83,6 @@ class SectionGroupBox extends ConsumerWidget {
   /// Gap below a top title, before the body content.
   final double headerBottomPadding;
   final String searchQuery;
-  final bool isSearchMatch;
 
   /// Position of this box within a connected group strip.
   final SectionGroupPosition groupPosition;
@@ -135,7 +129,6 @@ class SectionGroupBox extends ConsumerWidget {
     final tinted = ref.watch(pagePatternProvider);
     return SearchHighlight(
       query: searchQuery,
-      isMatch: isSearchMatch,
       builder: (context, highlightValue) =>
           _buildFrame(context, highlightValue, effectiveTitleLocation, tinted),
     );
@@ -200,7 +193,7 @@ class SectionGroupBox extends ConsumerWidget {
           // A flat heading marks the searched words in its title.
           searchHighlightSpan(
             title,
-            flat && isSearchMatch ? searchQuery : '',
+            flat ? searchQuery : '',
             titleStyle,
             searchMarkStyle(theme.accent),
           ),
@@ -336,7 +329,6 @@ class SectionGroupBox extends ConsumerWidget {
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.max,
       children: [
         // Title panel
         if (showTitle)
@@ -458,15 +450,10 @@ class SectionGroupBox extends ConsumerWidget {
       builder: (context, constraints) {
         final fitToHeight = constraints.hasBoundedHeight;
         return Column(
-          mainAxisSize: contentFit == FlexFit.loose
-              ? MainAxisSize.min
-              : MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (showTitle) titleHeader,
-            fitToHeight
-                ? Flexible(fit: contentFit, child: contentWidget)
-                : contentWidget,
+            fitToHeight ? Expanded(child: contentWidget) : contentWidget,
           ],
         );
       },

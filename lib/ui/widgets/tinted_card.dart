@@ -29,7 +29,6 @@ class TintedCard extends StatelessWidget {
     this.icon,
     this.leading,
     this.busy = false,
-    this.busyValue,
     this.subtitle,
     this.details,
     this.figure,
@@ -72,9 +71,6 @@ class TintedCard extends StatelessWidget {
   /// Replaces the icon square, such as a cover or a [tile] around a preview.
   final Widget? leading;
   final bool busy;
-
-  /// Fills the spinner to this share instead of spinning.
-  final double? busyValue;
   final String? subtitle;
 
   /// Replaces [subtitle], for rich or styled text.
@@ -157,7 +153,6 @@ class TintedCard extends StatelessWidget {
                     // Its own layer, so the spinner repaints only itself.
                     child: RepaintBoundary(
                       child: CircularProgressIndicator(
-                        value: busyValue,
                         color: color,
                         backgroundColor: theme.accent.withValues(alpha: 0.2),
                         strokeWidth: theme.progressIndicatorStrokeWidth,

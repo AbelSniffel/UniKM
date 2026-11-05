@@ -20,13 +20,11 @@ class UpdatesSection extends ConsumerStatefulWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec includePrereleaseSpec = SettingTextSpec(
@@ -145,7 +143,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           group: UpdatesSection.searchGroups[0],
           titleIcon: Icons.download_rounded,
           searchQuery: widget.searchQuery,
-          matchesSearch: widget.matchesSearch,
           childBuilder: () => SettingsControlWrap(
             children: [
               SettingsToggleCard(
@@ -178,7 +175,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           group: UpdatesSection.searchGroups[1],
           titleIcon: Icons.code,
           searchQuery: widget.searchQuery,
-          matchesSearch: widget.matchesSearch,
           childBuilder: () => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

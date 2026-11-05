@@ -8,12 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // =============================================================================
 
 /// Status of a game in a batch fetch operation
-enum GameFetchStatus {
-  waiting,
-  processing,
-  done,
-  error,
-}
+enum GameFetchStatus { waiting, processing, done, error }
 
 /// State for tracking batch Steam data fetch operations
 class BatchFetchState {
@@ -27,22 +22,22 @@ class BatchFetchState {
 
   /// Whether a batch fetch is currently active
   final bool isActive;
-  
+
   /// Map of game ID to its fetch status
   final Map<int, GameFetchStatus> gameStatuses;
-  
+
   /// Currently processing game ID
   final int? currentGameId;
-  
+
   /// Total games in the batch
   final int totalGames;
-  
+
   /// Number of completed games (done or error)
   final int completedGames;
 
   /// Get status for a specific game
   GameFetchStatus? getStatus(int gameId) => gameStatuses[gameId];
-  
+
   BatchFetchState copyWith({
     bool? isActive,
     Map<int, GameFetchStatus>? gameStatuses,
@@ -53,7 +48,9 @@ class BatchFetchState {
   }) => BatchFetchState(
     isActive: isActive ?? this.isActive,
     gameStatuses: gameStatuses ?? this.gameStatuses,
-    currentGameId: clearCurrentGame ? null : (currentGameId ?? this.currentGameId),
+    currentGameId: clearCurrentGame
+        ? null
+        : (currentGameId ?? this.currentGameId),
     totalGames: totalGames ?? this.totalGames,
     completedGames: completedGames ?? this.completedGames,
   );
@@ -63,9 +60,9 @@ class BatchFetchState {
 class BatchFetchNotifier extends Notifier<BatchFetchState> {
   @override
   BatchFetchState build() => const BatchFetchState();
-  
+
   bool _cancelled = false;
-  
+
   /// Check if batch fetch has been cancelled
   bool get isCancelled => _cancelled;
 
@@ -76,10 +73,9 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
       isActive: true,
       gameStatuses: {for (final id in gameIds) id: GameFetchStatus.waiting},
       totalGames: gameIds.length,
-      completedGames: 0,
     );
   }
-  
+
   /// Cancel the batch fetch (user-initiated).
   ///
   /// If no game is currently being processed (i.e. the loop is idle between
@@ -98,10 +94,7 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
     if (!state.gameStatuses.containsKey(gameId)) return;
     final newStatuses = Map<int, GameFetchStatus>.from(state.gameStatuses);
     newStatuses[gameId] = GameFetchStatus.processing;
-    state = state.copyWith(
-      gameStatuses: newStatuses,
-      currentGameId: gameId,
-    );
+    state = state.copyWith(gameStatuses: newStatuses, currentGameId: gameId);
   }
 
   /// Mark a game as done.
@@ -126,6 +119,7 @@ class BatchFetchNotifier extends Notifier<BatchFetchState> {
 }
 
 /// Provider for batch fetch state
-final batchFetchProvider = NotifierProvider<BatchFetchNotifier, BatchFetchState>(
-  BatchFetchNotifier.new,
-);
+final batchFetchProvider =
+    NotifierProvider<BatchFetchNotifier, BatchFetchState>(
+      BatchFetchNotifier.new,
+    );

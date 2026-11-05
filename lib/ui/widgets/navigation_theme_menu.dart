@@ -84,7 +84,7 @@ class _NavigationThemeMenuButtonState
         _ThemePicker(
           onSelected: (selected) =>
               ref.read(themeProvider.notifier).setTheme(selected),
-          onCreate: () => _openEditor(),
+          onCreate: _openEditor,
           onEdit: (selected) => _openEditor(existing: selected),
           onDelete: _deleteTheme,
         ),

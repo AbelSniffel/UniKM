@@ -145,7 +145,6 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   Future<void> _changeDatabase() async {
     final result = await FilePicker.pickFile(
       dialogTitle: 'Open UniKM Database',
-      type: FileType.any,
     );
 
     final selectedPath = result?.path;
@@ -202,7 +201,6 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
           const SizedBox(height: kDialogSpacing),
           PasswordField(
             controller: _passwordController,
-            labelText: 'Password',
             // The biometric prompt opens first; typing stays one tap away.
             autofocus: widget.onBiometricUnlock == null,
             onFieldSubmitted: (_) => _submit(),
@@ -223,7 +221,7 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
     actions: [
       DialogActionBar(
         theme: widget.theme,
-        onCancel: () => Navigator.of(context).pop(null),
+        onCancel: () => Navigator.of(context).pop(),
         onConfirm: _submit,
         confirmIcon: Icons.lock_open,
         confirmLabel: 'Unlock',

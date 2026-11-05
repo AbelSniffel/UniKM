@@ -62,7 +62,7 @@ class TagsNotifier extends Notifier<List<Tag>> {
     try {
       final snapshotEpoch = _snapshotEpoch;
       final entries = await db.getAllTags();
-      final tags = entries.map((e) => Tag.fromEntry(e)).toList();
+      final tags = entries.map(Tag.fromEntry).toList();
       if (ref.mounted &&
           generation == _generation &&
           identical(ref.read(databaseProvider), db)) {

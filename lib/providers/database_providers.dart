@@ -46,8 +46,7 @@ class DatabaseNotifier extends Notifier<DatabaseState> {
       state = DatabaseState(database: db, revision: state.revision + 1);
 
   /// Clears the current database (call before switching).
-  void clearDatabase() =>
-      state = DatabaseState(database: null, revision: state.revision + 1);
+  void clearDatabase() => state = DatabaseState(revision: state.revision + 1);
 }
 
 /// Provider for the database state notifier.

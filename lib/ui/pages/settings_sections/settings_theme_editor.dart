@@ -219,7 +219,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     final previewTheme = ref.watch(themeProvider);
 
     return PopScope(
-      canPop: true,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_saved) {
           WidgetsBinding.instance.addPostFrameCallback(

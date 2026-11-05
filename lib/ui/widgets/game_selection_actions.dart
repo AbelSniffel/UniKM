@@ -24,9 +24,7 @@ typedef _Read = T Function<T>(ProviderListenable<T> provider);
 
 abstract final class GameSelectionActions {
   static bool _syncOperationLocked(_Read read, {required String action}) {
-    if (!read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
-      return false;
-    }
+    if (!read(deviceSyncServiceProvider).isReceiverSyncInFlight) return false;
     NotificationManager.instance.warning(
       'Cannot $action while device sync is in progress',
     );

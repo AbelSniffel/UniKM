@@ -736,18 +736,14 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
             result: result,
           ),
       ],
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_isSearching)
-            _buildSearchingState(theme)
-          else if (_error != null)
-            _buildErrorState(theme)
-          else if (_result != null)
-            _buildResultState(theme),
-        ],
-      ),
+      contentChildren: [
+        if (_isSearching)
+          _buildSearchingState(theme)
+        else if (_error != null)
+          _buildErrorState(theme)
+        else if (_result != null)
+          _buildResultState(theme),
+      ],
       actions: [
         if (_result != null && !_isSearching)
           ElevatedButton(

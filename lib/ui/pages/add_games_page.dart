@@ -54,62 +54,55 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
       title: 'Duplicate Keys Found',
       theme: theme,
     ),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 16,
-      children: [
-        Text(
-          duplicates.length == 1
-              ? 'This key is already in your library. Skip it, or add it '
-                    'again as a separate game.'
-              : 'These keys are already in your library. Skip them, or add '
-                    'them again as separate games.',
-          style: TextStyle(color: theme.textSecondary),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 8,
-          children: [
-            TintedHeading(
-              theme: theme,
-              title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
-              trailing: '${duplicates.length}',
+    contentSpacing: 16,
+    contentChildren: [
+      Text(
+        duplicates.length == 1
+            ? 'This key is already in your library. Skip it, or add it '
+                  'again as a separate game.'
+            : 'These keys are already in your library. Skip them, or add '
+                  'them again as separate games.',
+        style: TextStyle(color: theme.textSecondary),
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          TintedHeading(
+            theme: theme,
+            title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
+            trailing: '${duplicates.length}',
+          ),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: (MediaQuery.sizeOf(ctx).height * 0.45).clamp(100, 320),
             ),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: (MediaQuery.sizeOf(ctx).height * 0.45).clamp(
-                  100,
-                  320,
-                ),
-              ),
-              child: ListView.separated(
-                key: const ValueKey('duplicate-keys-list'),
-                shrinkWrap: true,
-                padding: EdgeInsets.zero,
-                itemCount: duplicates.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 4),
-                itemBuilder: (_, index) {
-                  final MapEntry(key: key, value: game) = duplicates[index];
-                  return TintedCard(
-                    theme: theme,
-                    color: theme.accent,
-                    icon: Icons.key,
-                    title: game.title,
-                    details: Text(
-                      key,
-                      style: TintedCard.detailStyle(
-                        theme,
-                      ).copyWith(fontFamily: 'monospace'),
-                    ),
-                  );
-                },
-              ),
+            child: ListView.separated(
+              key: const ValueKey('duplicate-keys-list'),
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: duplicates.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 4),
+              itemBuilder: (_, index) {
+                final MapEntry(key: key, value: game) = duplicates[index];
+                return TintedCard(
+                  theme: theme,
+                  color: theme.accent,
+                  icon: Icons.key,
+                  title: game.title,
+                  details: Text(
+                    key,
+                    style: TintedCard.detailStyle(
+                      theme,
+                    ).copyWith(fontFamily: 'monospace'),
+                  ),
+                );
+              },
             ),
-          ],
-        ),
-      ],
-    ),
+          ),
+        ],
+      ),
+    ],
     actions: [
       OutlinedButton(
         onPressed: () => Navigator.pop(ctx, DuplicateAction.addAnyway),
@@ -195,6 +188,17 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
 }
 
 /// Single entry tab
+/// Warns and returns true while a device sync is receiving.
+bool _syncBlocksAdding(WidgetRef ref) {
+  final busy = ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight;
+  if (busy) {
+    NotificationManager.instance.warning(
+      'Cannot add games while device sync is in progress',
+    );
+  }
+  return busy;
+}
+
 class _SingleEntryTab extends ConsumerStatefulWidget {
   const _SingleEntryTab({required this.theme});
 
@@ -307,12 +311,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
   }
 
   Future<void> _submit() async {
-    if (ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
-      NotificationManager.instance.warning(
-        'Cannot add games while device sync is in progress',
-      );
-      return;
-    }
+    if (_syncBlocksAdding(ref)) return;
     if (!_formKey.currentState!.validate()) {
       _editorLayoutKey.currentState?.showDetails();
       return;
@@ -808,12 +807,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
   }
 
   Future<void> _import() async {
-    if (ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
-      NotificationManager.instance.warning(
-        'Cannot add games while device sync is in progress',
-      );
-      return;
-    }
+    if (_syncBlocksAdding(ref)) return;
     if (_parsedGames.isEmpty) return;
 
     final duplicates = DuplicateKeyChecker.findDuplicatesByInputKeys(

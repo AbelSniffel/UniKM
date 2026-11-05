@@ -364,6 +364,8 @@ class ThemedAlertDialog extends StatelessWidget {
     this.theme,
     this.title,
     this.content,
+    this.contentChildren,
+    this.contentSpacing = 0,
     this.body,
     this.actions,
     this.below,
@@ -385,6 +387,11 @@ class ThemedAlertDialog extends StatelessWidget {
 
   final Widget? title;
   final Widget? content;
+
+  /// The [content] when it is null, stacked [contentSpacing] apart and
+  /// stretched to the dialog's width.
+  final List<Widget>? contentChildren;
+  final double contentSpacing;
 
   /// A non-scrollable flexible widget placed below [content] and above [actions].
   /// Expands to fill the remaining height. Use this for widgets such as [TabBarView]
@@ -426,6 +433,17 @@ class ThemedAlertDialog extends StatelessWidget {
         : maxHeight ?? (screenHeight * 0.85);
 
     final actions = this.actions ?? const <Widget>[];
+    final children = contentChildren;
+    final content =
+        this.content ??
+        (children == null
+            ? null
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: contentSpacing,
+                children: children,
+              ));
     final rows = <Widget>[
       if (title != null)
         Padding(
@@ -445,7 +463,7 @@ class ThemedAlertDialog extends StatelessWidget {
           ),
         ),
       if (content != null)
-        Flexible(child: SingleChildScrollView(child: content!)),
+        Flexible(child: SingleChildScrollView(child: content)),
       if (body != null) Expanded(child: body!),
       if (actions.length == 1)
         SizedBox(width: double.infinity, child: actions.first)
@@ -566,7 +584,6 @@ Future<bool> showConfirmDialog({
 }) async {
   final result = await showAppDialog<bool>(
     context: context,
-    barrierDismissible: true,
     builder: (ctx) => DialogInteractionScope(
       onPrimaryAction: () => Navigator.pop(ctx, true),
       onDismiss: () => Navigator.pop(ctx, false),

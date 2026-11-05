@@ -275,7 +275,7 @@ class EncryptionManager {
         nonce: salt,
       );
       return await derived.extractBytes();
-    }).then((bytes) => SecretKey(bytes));
+    }).then(SecretKey.new);
   }
 
   bool _isFileInUse(FileSystemException e) {

@@ -70,7 +70,6 @@ class DeadlineNotificationService {
       // Windows uses native WinRT toasts via PowerShell — no plugin init needed.
       if (!Platform.isWindows) {
         const darwin = DarwinInitializationSettings(
-          requestAlertPermission: true,
           requestBadgePermission: false,
           requestSoundPermission: false,
         );
@@ -94,7 +93,7 @@ class DeadlineNotificationService {
               .resolvePlatformSpecificImplementation<
                 IOSFlutterLocalNotificationsPlugin
               >()
-              ?.requestPermissions(alert: true, badge: false, sound: false);
+              ?.requestPermissions(alert: true);
         }
       }
       _initialized = true;

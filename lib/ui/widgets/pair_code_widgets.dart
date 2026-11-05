@@ -90,47 +90,45 @@ class _PairCodeCell extends StatelessWidget {
   final AppThemeData theme;
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 48,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Digit with fade+scale transition when value changes.
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 120),
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
-                child: child,
-              ),
-            ),
-            child: Text(
-              char ?? '',
-              key: ValueKey(char),
-              style: TextStyle(
-                color: theme.textPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-              ),
+  Widget build(BuildContext context) => SizedBox(
+    width: 32,
+    height: 48,
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        // Digit with fade+scale transition when value changes.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 120),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
+              child: child,
             ),
           ),
-          Positioned(
-            left: 2,
-            right: 2,
-            bottom: 4,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                color: theme.border,
-                borderRadius: BorderRadius.circular(1),
-              ),
+          child: Text(
+            char ?? '',
+            key: ValueKey(char),
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+        Positioned(
+          left: 2,
+          right: 2,
+          bottom: 4,
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              color: theme.border,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

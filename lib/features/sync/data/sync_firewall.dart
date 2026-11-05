@@ -91,14 +91,9 @@ class SyncFirewall {
 
       void commitRule() {
         if (currentProgram == executablePath && currentAction == 'allow') {
-          if (currentProfiles.contains('private') ||
-              currentProfiles.contains('all')) {
-            hasPrivateAllow = true;
-          }
-          if (currentProfiles.contains('public') ||
-              currentProfiles.contains('all')) {
-            hasPublicAllow = true;
-          }
+          final all = currentProfiles.contains('all');
+          hasPrivateAllow |= all || currentProfiles.contains('private');
+          hasPublicAllow |= all || currentProfiles.contains('public');
         }
 
         currentProgram = '';
@@ -227,53 +222,48 @@ class SyncFirewall {
 
   Future<LinuxFirewallCheckResult?> checkLinuxFirewallAccess() async {
     if (kIsWeb || !Platform.isLinux) return null;
+    Future<String> stdoutOf(String tool, List<String> arguments) async =>
+        ((await _runProcess(tool, arguments, runInShell: true)).stdout
+                as String)
+            .trim()
+            .toLowerCase();
+    final udp = '${SyncPorts.discovery}';
+    final tcp = '${SyncPorts.transfer}';
 
     // Try ufw first (most common on Ubuntu/Debian)
     try {
-      final result = await _runProcess('ufw', ['status'], runInShell: true);
-      final output = (result.stdout as String).trim().toLowerCase();
-      if (output.contains('active')) {
-        // Check if UniKM app path is allowed
-        final appPath = Platform.resolvedExecutable;
-        final appAllowed =
-            output.contains(appPath.toLowerCase()) ||
-            output.contains(SyncPorts.discovery.toString()) ||
-            output.contains(SyncPorts.transfer.toString());
+      final status = await stdoutOf('ufw', ['status']);
+      if (status.contains('active')) {
+        final udpAllowed = status.contains(udp);
+        final tcpAllowed = status.contains(tcp);
         return LinuxFirewallCheckResult(
           available: true,
           active: true,
-          uniKMAllowed: appAllowed,
-          udpPortAllowed: output.contains(SyncPorts.discovery.toString()),
-          tcpPortAllowed: output.contains(SyncPorts.transfer.toString()),
+          // A rule for the app's own path also counts.
+          uniKMAllowed:
+              status.contains(Platform.resolvedExecutable.toLowerCase()) ||
+              udpAllowed ||
+              tcpAllowed,
+          udpPortAllowed: udpAllowed,
+          tcpPortAllowed: tcpAllowed,
           firewallTool: 'ufw',
         );
       }
       // ufw is installed but not active
-      return LinuxFirewallCheckResult(
+      return const LinuxFirewallCheckResult(
         available: true,
-        active: false,
         firewallTool: 'ufw',
       );
     } catch (_) {}
 
     // Try firewalld (common on Fedora/RHEL/CentOS)
     try {
-      final result = await _runProcess('firewall-cmd', [
-        '--state',
-      ], runInShell: true);
-      final output = (result.stdout as String).trim().toLowerCase();
-      if (output == 'running') {
+      if (await stdoutOf('firewall-cmd', ['--state']) == 'running') {
         // Check if ports are open
-        final udpCheck = await _runProcess('firewall-cmd', [
-          '--query-port=${SyncPorts.discovery}/udp',
-        ], runInShell: true);
-        final tcpCheck = await _runProcess('firewall-cmd', [
-          '--query-port=${SyncPorts.transfer}/tcp',
-        ], runInShell: true);
         final udpOpen =
-            (udpCheck.stdout as String).trim().toLowerCase() == 'yes';
+            await stdoutOf('firewall-cmd', ['--query-port=$udp/udp']) == 'yes';
         final tcpOpen =
-            (tcpCheck.stdout as String).trim().toLowerCase() == 'yes';
+            await stdoutOf('firewall-cmd', ['--query-port=$tcp/tcp']) == 'yes';
         return LinuxFirewallCheckResult(
           available: true,
           active: true,
@@ -283,9 +273,8 @@ class SyncFirewall {
           firewallTool: 'firewalld',
         );
       }
-      return LinuxFirewallCheckResult(
+      return const LinuxFirewallCheckResult(
         available: true,
-        active: false,
         firewallTool: 'firewalld',
       );
     } catch (_) {}
@@ -298,9 +287,7 @@ class SyncFirewall {
       ], runInShell: true);
       final output = (result.stdout as String).trim().toLowerCase();
       if (result.exitCode == 0 && output.isNotEmpty) {
-        final hasRule =
-            output.contains(SyncPorts.discovery.toString()) ||
-            output.contains(SyncPorts.transfer.toString());
+        final hasRule = output.contains(udp) || output.contains(tcp);
         return LinuxFirewallCheckResult(
           available: true,
           active: true,

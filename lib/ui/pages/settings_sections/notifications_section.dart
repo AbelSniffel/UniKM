@@ -15,13 +15,11 @@ class NotificationsSection extends ConsumerWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec deadlineRemindersSpec = SettingTextSpec(
@@ -52,7 +50,6 @@ class NotificationsSection extends ConsumerWidget {
           group: typesSearchGroup,
           titleIcon: Icons.notifications_active,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => buildSpecToggleSettingList(
             theme: theme,
             entries: [

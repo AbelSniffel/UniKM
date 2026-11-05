@@ -89,6 +89,12 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
   }
 
   /// Opens the configured database again from the start.
+  /// Starts or ends a boot, ending with [error] when it failed.
+  void _setBooting(bool booting, [Object? error]) => setState(() {
+    _booting = booting;
+    _error = error;
+  });
+
   Future<void> _restartBootstrap() {
     setState(() {
       _booting = true;
@@ -230,20 +236,14 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       await _addRecentDbPath(baseDbPath);
 
       if (!mounted) return;
-      setState(() {
-        _booting = false;
-        _error = null;
-      });
+      _setBooting(false);
 
       // Start daily deadline reminders and run an initial check after a
       // short delay so the app has had time to fully load.
       _startDeadlineReminders();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _booting = false;
-        _error = e;
-      });
+      _setBooting(false, e);
     }
   }
 
@@ -315,10 +315,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       // Saving failed: show the error and its Retry rather than reopening
       // the file without the latest changes.
       if (!mounted) return;
-      setState(() {
-        _booting = false;
-        _error = e;
-      });
+      _setBooting(false, e);
       return;
     }
     await _restartBootstrap();
@@ -327,10 +324,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
   Future<void> _switchDatabase(DatabaseSwitchRequest request) async {
     if (_booting) return;
 
-    setState(() {
-      _booting = true;
-      _error = null;
-    });
+    _setBooting(true);
 
     try {
       final selectedPath = request is OpenDatabaseRequest
@@ -447,10 +441,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
         'Using database: ${p.basename(baseDbPath)}',
       );
 
-      setState(() {
-        _booting = false;
-        _error = null;
-      });
+      _setBooting(false);
 
       // Keep the current search query visible/active across database file
       // switches while still clearing non-search filters.
@@ -467,10 +458,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       _startDeadlineReminders();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _booting = false;
-        _error = e;
-      });
+      _setBooting(false, e);
     }
   }
 
@@ -490,7 +478,6 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       debugShowCheckedModeBanner: false,
       theme: materialTheme,
       themeAnimationDuration: Duration.zero,
-      themeAnimationCurve: Curves.linear,
       scrollBehavior: const AppScrollBehavior(),
       // Panels showing the pattern line it up across this whole window.
       builder: (context, child) => PanelPatternWindow(

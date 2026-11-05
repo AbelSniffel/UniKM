@@ -306,7 +306,6 @@ class _ThemeSelector extends ConsumerWidget {
             theme: theme,
             animationStyle: gradientAnimation,
             isVertical: isVert,
-            height: kNavigationPanelGradientHeight,
             width: isVert ? double.infinity : null,
             autoPauseWhenNotVisible: true,
             flipWaveForLeftVertical: position == NavBarPosition.left,
@@ -413,7 +412,6 @@ class _NavButton extends StatelessWidget {
 
     return AppNavigationButton(
       theme: theme,
-      variant: AppNavigationButtonVariant.navigation,
       isSelected: isSelected,
       isEnabled: !isLocked,
       hasNotification: item.hasNotification,

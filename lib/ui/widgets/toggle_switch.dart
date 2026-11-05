@@ -55,7 +55,6 @@ class AppToggleSwitch extends ConsumerWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_regularSwitchHeight / 2),
           child: FittedBox(
-            fit: BoxFit.contain,
             alignment: Alignment.centerRight,
             child: Switch(
               value: value,

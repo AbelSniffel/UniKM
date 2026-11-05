@@ -298,8 +298,6 @@ class _GameCardState extends ConsumerState<GameCard>
     );
     final gradientColors = _computeListGradientColors(theme, isSelected);
     final listGradient = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
       // ignore: prefer_const_constructors
       transform: GradientRotation(25 * math.pi / 180),
       colors: [theme.background, gradientColors[1], gradientColors[0]],
@@ -512,7 +510,6 @@ class _GameCardState extends ConsumerState<GameCard>
           // zooming. A plain transform scales it at sub-pixel precision.
           return Transform.scale(
             scale: 1.0 + t * scaleFactor,
-            alignment: Alignment.center,
             child: DecoratedBox(
               decoration: decorationBuilder(t),
               child: staticChild,
@@ -707,7 +704,6 @@ class _GameCardState extends ConsumerState<GameCard>
           padding: EdgeInsets.all(4 + 4 * t),
           decoration: BoxDecoration(
             color: theme.accent.withValues(alpha: t),
-            shape: BoxShape.rectangle,
             borderRadius: BorderRadius.circular(theme.cornerRadius),
             boxShadow: shadow,
           ),
@@ -768,7 +764,6 @@ class _GameCardState extends ConsumerState<GameCard>
       padding: kSelectionIndicatorPadding,
       decoration: BoxDecoration(
         color: color,
-        shape: BoxShape.rectangle,
         borderRadius: BorderRadius.circular(theme.cornerRadius),
         boxShadow: [
           BoxShadow(

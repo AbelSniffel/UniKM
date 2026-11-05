@@ -79,7 +79,7 @@ class AppTitleBar extends ConsumerWidget {
           _WindowButton(
             icon: Icons.remove,
             theme: theme,
-            onPressed: () => windowManager.minimize(),
+            onPressed: windowManager.minimize,
           ),
           _WindowButton(
             icon: Icons.crop_square,
@@ -90,7 +90,7 @@ class AppTitleBar extends ConsumerWidget {
             icon: Icons.close,
             theme: theme,
             hoverColor: theme.secondary,
-            onPressed: () => windowManager.close(),
+            onPressed: windowManager.close,
           ),
         ],
       ),

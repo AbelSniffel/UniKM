@@ -27,13 +27,8 @@ class SettingTextSpec {
 /// Returns true when the supplied [group] should be shown for the given
 /// search state.  It handles trimming and the common
 /// "isSearching && !match -> hide" case used throughout settings sections.
-bool shouldShowSettingsGroup({
-  required String query,
-  required bool Function(String) matchesSearch,
-  required SettingsSearchGroup group,
-}) =>
-    query.trim().isEmpty ||
-    matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group);
+bool shouldShowSettingsGroup(String query, SettingsSearchGroup group) =>
+    query.trim().isEmpty || matchesSettingsSearchGroup(query, group);
 
 /// The gap between the headed groups of a settings panel.
 const double kSettingsGroupSpacing = 20;
@@ -67,18 +62,13 @@ SectionGroupEntry buildSearchableSectionEntry({
   required AppThemeData theme,
   required SettingsSearchGroup group,
   required String searchQuery,
-  required bool Function(String) matchesSearch,
   required Widget Function() childBuilder,
   IconData? titleIcon,
   bool Function()? extraMatch,
   bool attachesToAbove = false,
 }) {
   bool matches() =>
-      shouldShowSettingsGroup(
-        query: searchQuery,
-        matchesSearch: matchesSearch,
-        group: group,
-      ) ||
+      shouldShowSettingsGroup(searchQuery, group) ||
       (extraMatch?.call() ?? false);
   return SectionGroupEntry(
     visible: visible ?? matches(),
@@ -90,7 +80,6 @@ SectionGroupEntry buildSearchableSectionEntry({
             theme: theme,
             titleIcon: titleIcon,
             searchQuery: searchQuery,
-            isSearchMatch: searchQuery.trim().isNotEmpty,
             // Attached boxes drop the top corners that meet the header.
             groupPosition: !attachesToAbove
                 ? position
@@ -280,18 +269,8 @@ class SettingsSearchGroup {
   ];
 }
 
-bool matchesSettingsSearchGroup({
-  required bool Function(String) matchesSearch,
-  required SettingsSearchGroup group,
-}) => group.indexTexts.any(matchesSearch);
-
-bool matchesAnySettingsSearchGroup({
-  required bool Function(String) matchesSearch,
-  required List<SettingsSearchGroup> groups,
-}) => groups.any(
-  (group) =>
-      matchesSettingsSearchGroup(matchesSearch: matchesSearch, group: group),
-);
+bool matchesSettingsSearchGroup(String query, SettingsSearchGroup group) =>
+    group.indexTexts.any((text) => settingsSearchMatches(query, text));
 
 /// Setting row that takes a canonical [SettingTextSpec].
 class SpecSettingRow extends StatelessWidget {

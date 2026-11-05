@@ -50,83 +50,63 @@ class LibraryStatsDialog extends ConsumerWidget {
         title: 'Library Stats',
         theme: theme,
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 20,
+      contentSpacing: 20,
+      contentChildren: [
+        Row(
+          spacing: 8,
           children: [
-            Row(
-              spacing: 8,
-              children: [
-                for (final (label, value) in [
-                  ('Keys', games.length),
-                  ('Unused', unused.length),
-                  ('Due in 7 days', dueThisWeek),
-                ])
-                  Expanded(child: _StatTile(theme, label, value)),
-              ],
-            ),
-            _StatBar(theme, 'Keys', [
-              (label: 'Unused', count: unused.length, color: theme.accent),
-              (
-                label: 'Used',
-                count: games.length - unused.length,
-                color: theme.textSecondary.withValues(alpha: 0.45),
-              ),
-            ]),
-            _StatBar(theme, 'Type', [
-              (
-                label: 'Games',
-                count: count((g) => !g.isDlc),
-                color: theme.accent,
-              ),
-              (
-                label: 'DLC',
-                count: count((g) => g.isDlc),
-                color: theme.secondary,
-              ),
-            ]),
-            _StatBar(theme, 'Unused Key Deadlines', [
-              (
-                label: 'Expired',
-                count: due((d) => d < 0),
-                color: theme.secondary,
-              ),
-              (
-                label: 'Within 7 days',
-                count: dueThisWeek,
-                color: theme.deadlineSoon,
-              ),
-              (
-                label: 'Within 30 days',
-                count: due((d) => d > 7 && d <= 30),
-                color: theme.deadlineNormal,
-              ),
-              (
-                label: 'Later',
-                count: due((d) => d > 30),
-                color: theme.deadlineNormal.withValues(alpha: 0.5),
-              ),
-              (
-                label: 'No deadline',
-                count: daysLeft.where((days) => days == null).length,
-                color: theme.textSecondary.withValues(alpha: 0.3),
-              ),
-            ]),
-            _StatBar(theme, 'Platforms', [
-              for (final (i, MapEntry(:key, :value)) in byPlatform.indexed)
-                (
-                  label: key,
-                  count: value,
-                  color: accent
-                      .withHue((accent.hue + i * 137.5) % 360)
-                      .toColor(),
-                ),
-            ]),
+            for (final (label, value) in [
+              ('Keys', games.length),
+              ('Unused', unused.length),
+              ('Due in 7 days', dueThisWeek),
+            ])
+              Expanded(child: _StatTile(theme, label, value)),
           ],
         ),
-      ),
+        _StatBar(theme, 'Keys', [
+          (label: 'Unused', count: unused.length, color: theme.accent),
+          (
+            label: 'Used',
+            count: games.length - unused.length,
+            color: theme.textSecondary.withValues(alpha: 0.45),
+          ),
+        ]),
+        _StatBar(theme, 'Type', [
+          (label: 'Games', count: count((g) => !g.isDlc), color: theme.accent),
+          (label: 'DLC', count: count((g) => g.isDlc), color: theme.secondary),
+        ]),
+        _StatBar(theme, 'Unused Key Deadlines', [
+          (label: 'Expired', count: due((d) => d < 0), color: theme.secondary),
+          (
+            label: 'Within 7 days',
+            count: dueThisWeek,
+            color: theme.deadlineSoon,
+          ),
+          (
+            label: 'Within 30 days',
+            count: due((d) => d > 7 && d <= 30),
+            color: theme.deadlineNormal,
+          ),
+          (
+            label: 'Later',
+            count: due((d) => d > 30),
+            color: theme.deadlineNormal.withValues(alpha: 0.5),
+          ),
+          (
+            label: 'No deadline',
+            count: daysLeft.where((days) => days == null).length,
+            color: theme.textSecondary.withValues(alpha: 0.3),
+          ),
+        ]),
+        _StatBar(theme, 'Platforms', [
+          for (final (i, MapEntry(:key, :value)) in byPlatform.indexed)
+            (
+              label: key,
+              count: value,
+              color: accent.withHue((accent.hue + i * 137.5) % 360).toColor(),
+            ),
+        ]),
+      ],
     );
   }
 }

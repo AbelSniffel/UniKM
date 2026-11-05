@@ -400,7 +400,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
 
   /// Generate Flutter ThemeData from this app theme
   ThemeData toThemeData() {
-    final inputBorder = resolveInputBorder(showTopBorder: false);
+    final inputBorder = resolveInputBorder();
     final touch =
         defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
@@ -915,9 +915,6 @@ class AppNavigationButton extends StatefulWidget {
     this.selectedBackgroundColor,
     this.minWidth = 40,
     this.minHeight = 26,
-    this.horizontalSpacing = 6,
-    this.horizontalMainAxisSize = MainAxisSize.min,
-    this.horizontalMainAxisAlignment = MainAxisAlignment.center,
     this.duration = Duration.zero,
     this.variant = AppNavigationButtonVariant.navigation,
     this.iconSize = kIconSize,
@@ -945,9 +942,6 @@ class AppNavigationButton extends StatefulWidget {
   final Color? selectedBackgroundColor;
   final double minWidth;
   final double minHeight;
-  final double horizontalSpacing;
-  final MainAxisSize horizontalMainAxisSize;
-  final MainAxisAlignment horizontalMainAxisAlignment;
   final Duration duration;
   final AppNavigationButtonVariant variant;
   final double iconSize;
@@ -1098,25 +1092,17 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     if (!widget.isHorizontal) {
       return Column(mainAxisSize: MainAxisSize.min, children: [?icon, ?label]);
     }
-    Widget? spacedLabel = label == null
+    final spacedLabel = label == null
         ? null
         : Padding(
             padding: EdgeInsets.only(
-              left: icon == null
-                  ? 0
-                  : widget.horizontalSpacing *
-                        labelVisibilityT *
-                        iconVisibilityT,
+              left: icon == null ? 0 : 6 * labelVisibilityT * iconVisibilityT,
             ),
             child: label,
           );
-    if (spacedLabel != null &&
-        widget.horizontalMainAxisSize == MainAxisSize.max) {
-      spacedLabel = Flexible(child: spacedLabel);
-    }
     return Row(
-      mainAxisSize: widget.horizontalMainAxisSize,
-      mainAxisAlignment: widget.horizontalMainAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [?icon, ?spacedLabel],
     );
   }

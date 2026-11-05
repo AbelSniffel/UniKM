@@ -269,56 +269,52 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
         title: 'Select Deadline',
         theme: theme,
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
-        children: [
-          _SelectedDateCard(
-            theme: theme,
-            date: _selectedDate,
-            daysLeft: calendarDaysUntil(_selectedDate, _currentDateOnly),
+      contentSpacing: 16,
+      contentChildren: [
+        _SelectedDateCard(
+          theme: theme,
+          date: _selectedDate,
+          daysLeft: calendarDaysUntil(_selectedDate, _currentDateOnly),
+        ),
+        Container(
+          key: const ValueKey('deadline-calendar-panel'),
+          height: calendarHeight,
+          decoration: BoxDecoration(
+            color: theme.surface,
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+            border: Border.all(color: theme.border),
           ),
-          Container(
-            key: const ValueKey('deadline-calendar-panel'),
-            height: calendarHeight,
-            decoration: BoxDecoration(
-              color: theme.surface,
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              border: Border.all(color: theme.border),
-            ),
-            child: DatePickerTheme(
-              data: DatePickerTheme.of(
-                context,
-              ).copyWith(todayBorder: BorderSide.none),
-              child: CalendarDatePicker(
-                key: ValueKey(
-                  'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
-                ),
-                initialDate: _selectedDate,
-                firstDate: widget.firstDate,
-                lastDate: widget.lastDate,
-                currentDate: widget.currentDate,
-                onDateChanged: _setSelectedDate,
+          child: DatePickerTheme(
+            data: DatePickerTheme.of(
+              context,
+            ).copyWith(todayBorder: BorderSide.none),
+            child: CalendarDatePicker(
+              key: ValueKey(
+                'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
               ),
+              initialDate: _selectedDate,
+              firstDate: widget.firstDate,
+              lastDate: widget.lastDate,
+              currentDate: widget.currentDate,
+              onDateChanged: _setSelectedDate,
             ),
           ),
-          // Side by side when both fit, stacked on narrow screens.
-          LayoutBuilder(
-            builder: (context, constraints) =>
-                constraints.maxWidth / textScale >= 360
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 12,
-                    children: [
-                      Expanded(child: exactDate),
-                      Expanded(child: dayAmount),
-                    ],
-                  )
-                : Column(spacing: 12, children: [exactDate, dayAmount]),
-          ),
-        ],
-      ),
+        ),
+        // Side by side when both fit, stacked on narrow screens.
+        LayoutBuilder(
+          builder: (context, constraints) =>
+              constraints.maxWidth / textScale >= 360
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 12,
+                  children: [
+                    Expanded(child: exactDate),
+                    Expanded(child: dayAmount),
+                  ],
+                )
+              : Column(spacing: 12, children: [exactDate, dayAmount]),
+        ),
+      ],
       actions: [
         OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),

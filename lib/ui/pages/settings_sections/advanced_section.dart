@@ -24,13 +24,11 @@ class AdvancedSection extends ConsumerWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec toggleStyleSpec = SettingTextSpec(
@@ -95,12 +93,8 @@ class AdvancedSection extends ConsumerWidget {
       ),
     );
 
-    final isSearching = searchQuery.trim().isNotEmpty;
-    bool show(SettingsSearchGroup group) => shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: group,
-    );
+    bool show(SettingsSearchGroup group) =>
+        shouldShowSettingsGroup(searchQuery, group);
 
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
@@ -110,7 +104,6 @@ class AdvancedSection extends ConsumerWidget {
           builder: (position, isAlternate) => _ControlStylesSection(
             theme: theme,
             searchQuery: searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             isAlternate: isAlternate,
           ),
@@ -120,7 +113,6 @@ class AdvancedSection extends ConsumerWidget {
           builder: (position, isAlternate) => SettingsCardStyleSection(
             theme: theme,
             searchQuery: searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             isAlternate: isAlternate,
           ),
@@ -130,7 +122,6 @@ class AdvancedSection extends ConsumerWidget {
           group: systemSearchGroup,
           titleIcon: Icons.settings,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => Column(
             children: [
               SettingsChoiceCard<String>(
@@ -207,14 +198,12 @@ class _ControlStylesSection extends ConsumerWidget {
   const _ControlStylesSection({
     required this.theme,
     required this.searchQuery,
-    required this.isSearchMatch,
     this.groupPosition = SectionGroupPosition.only,
     this.isAlternate = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool isSearchMatch;
   final SectionGroupPosition groupPosition;
   final bool isAlternate;
 
@@ -226,7 +215,6 @@ class _ControlStylesSection extends ConsumerWidget {
       theme: theme,
       titleIcon: Icons.toggle_on_outlined,
       searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
       child: Column(

@@ -659,7 +659,6 @@ class DeviceSyncService {
       lastSyncAt: lastSyncIso.isEmpty ? null : DateTime.tryParse(lastSyncIso),
       lastTrustedPeerId:
           (settings[SettingsKeys.syncLastTrustedPeerId] as String?)?.trim(),
-      statusMessage: null,
     );
   }
 
@@ -675,12 +674,7 @@ class DeviceSyncService {
     RawDatagramSocket? socket;
     StreamSubscription<RawSocketEvent>? listenSub;
     try {
-      socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        0,
-        reuseAddress: true,
-        reusePort: false,
-      );
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
 
       socket.broadcastEnabled = true;
 
@@ -1304,18 +1298,22 @@ class DeviceSyncService {
       remoteStaticPubB64: remoteFingerprint,
       pairingId: peer.pairingId,
     );
-    await _sendOnce(payload, InternetAddress(peer.host), peer.port);
+    await _sendOnce(payload, [(InternetAddress(peer.host), peer.port)]);
   }
 
-  /// Sends one control packet from a short-lived socket.
+  /// Sends one control packet to each of [targets] from a short-lived socket,
+  /// which may broadcast.
   Future<void> _sendOnce(
     Map<String, dynamic> payload,
-    InternetAddress address,
-    int port,
+    List<(InternetAddress, int)> targets,
   ) async {
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     try {
-      socket.send(_jsonBytes(payload), address, port);
+      socket.broadcastEnabled = true;
+      final packet = _jsonBytes(payload);
+      for (final (address, port) in targets) {
+        socket.send(packet, address, port);
+      }
     } finally {
       socket.close();
     }
@@ -1593,10 +1591,7 @@ class DeviceSyncService {
   }
 
   List<Map<String, dynamic>> _payloadRecords(Object? value) => value is List
-      ? value
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList()
+      ? value.whereType<Map>().map(Map<String, dynamic>.from).toList()
       : const [];
 
   void _requireManualSyncContext({
@@ -2129,8 +2124,6 @@ class DeviceSyncService {
     final socket = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
       discoveryPort,
-      reuseAddress: true,
-      reusePort: false,
     );
     if (!_foreground || epoch != _networkEpoch) {
       socket.close();
@@ -2212,7 +2205,6 @@ class DeviceSyncService {
       _syncServer = await ServerSocket.bind(
         InternetAddress.anyIPv4,
         transferPort,
-        shared: false,
       );
       if (!_foreground || epoch != _networkEpoch) {
         await _syncServer?.close();
@@ -2687,12 +2679,7 @@ class DeviceSyncService {
     // receiver; otherwise it is the sole receiver.
     final socket = useResponderPort
         ? _responderSocket!
-        : await RawDatagramSocket.bind(
-            InternetAddress.anyIPv4,
-            0,
-            reuseAddress: true,
-            reusePort: false,
-          );
+        : await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
 
     StreamSubscription<RawSocketEvent>? sub;
     if (!useResponderPort) {
@@ -3170,49 +3157,36 @@ class DeviceSyncService {
 
   Future<void> _sendAnnounce(String deviceId) async {
     if (kIsWeb) return;
-
-    final socket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      0,
-      reuseAddress: true,
-      reusePort: false,
-    );
-    socket.broadcastEnabled = true;
-
-    try {
-      final packet = _jsonBytes({
+    await _sendOnce(
+      {
         'type': _announceType,
         'protocol': _protocolVersion,
         'from': _localIdentityMap(deviceId),
         'port': discoveryPort,
         'transferPort': transferPort,
-      });
-      socket.send(packet, InternetAddress('255.255.255.255'), defaultLanPort);
-    } finally {
-      socket.close();
-    }
+      },
+      [(InternetAddress('255.255.255.255'), defaultLanPort)],
+    );
   }
 
   Future<void> _sendOffline(String deviceId) async {
     if (kIsWeb || _responderSocket == null) return;
-    RawDatagramSocket? socket;
     try {
-      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-      socket.broadcastEnabled = true;
-      final packet = _jsonBytes({
-        'type': _offlineType,
-        'protocol': _protocolVersion,
-        'from': _localIdentityMap(deviceId),
-      });
-      socket.send(packet, InternetAddress('255.255.255.255'), defaultLanPort);
-      for (final peer in _trustedPeers) {
-        final address = InternetAddress.tryParse(peer.host);
-        if (address != null) socket.send(packet, address, peer.port);
-      }
+      await _sendOnce(
+        {
+          'type': _offlineType,
+          'protocol': _protocolVersion,
+          'from': _localIdentityMap(deviceId),
+        },
+        [
+          (InternetAddress('255.255.255.255'), defaultLanPort),
+          for (final peer in _trustedPeers)
+            if (InternetAddress.tryParse(peer.host) case final address?)
+              (address, peer.port),
+        ],
+      );
     } catch (_) {
       // Going offline must still succeed if the network is unavailable.
-    } finally {
-      socket?.close();
     }
   }
 

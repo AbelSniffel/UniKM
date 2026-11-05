@@ -20,6 +20,7 @@ import '../../widgets/custom_theme_actions.dart';
 import '../../widgets/preview_card.dart';
 import '../../widgets/navigation_panel_overlay.dart';
 import '../../widgets/notification_system.dart';
+import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../widgets/theme_preview_card.dart';
@@ -35,13 +36,11 @@ class AppearanceSection extends ConsumerWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec backgroundPatternSpec = SettingTextSpec(
@@ -65,7 +64,6 @@ class AppearanceSection extends ConsumerWidget {
   );
   static const SettingsSearchGroup themeSearchGroup = SettingsSearchGroup(
     title: 'Theme',
-    settings: [],
     extraTexts: [
       'Built-in themes',
       'Default themes',
@@ -131,10 +129,11 @@ class AppearanceSection extends ConsumerWidget {
     // A name search can reveal a theme in the other collection without
     // replacing the user's remembered tab.
     final otherTab = 1 - selectedTab;
+    bool named(AppThemeData t) => settingsSearchMatches(searchQuery, t.name);
     final visibleTab =
         isSearching &&
-            !themesForTab(selectedTab).any((t) => matchesSearch(t.name)) &&
-            themesForTab(otherTab).any((t) => matchesSearch(t.name))
+            !themesForTab(selectedTab).any(named) &&
+            themesForTab(otherTab).any(named)
         ? otherTab
         : selectedTab;
     final visibleThemes = themesForTab(visibleTab);
@@ -144,19 +143,13 @@ class AppearanceSection extends ConsumerWidget {
 
     // Check which sections match search
     bool themeNameMatches() =>
-        builtInThemes.any((t) => matchesSearch(t.name)) ||
-        customThemes.any((t) => matchesSearch(t.name));
+        builtInThemes.any(named) || customThemes.any(named);
     final showThemeSection =
-        shouldShowSettingsGroup(
-          query: searchQuery,
-          matchesSearch: matchesSearch,
-          group: themeSearchGroup,
-        ) ||
+        shouldShowSettingsGroup(searchQuery, themeSearchGroup) ||
         themeNameMatches();
     final showPatternSection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: backgroundPatternSearchGroup,
+      searchQuery,
+      backgroundPatternSearchGroup,
     );
     if (isSearching && !showThemeSection && !showPatternSection) {
       return const SizedBox.shrink();
@@ -171,7 +164,6 @@ class AppearanceSection extends ConsumerWidget {
           group: themeSearchGroup,
           titleIcon: Icons.color_lens,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           extraMatch: themeNameMatches,
           childBuilder: () => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,7 +249,6 @@ class AppearanceSection extends ConsumerWidget {
           builder: (position, isAlternate) => _BackgroundPatternSection(
             theme: theme,
             searchQuery: searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             isAlternate: isAlternate,
           ),
@@ -294,10 +285,7 @@ void _openThemeEditor(
 
 Future<void> _importThemes(BuildContext context, WidgetRef ref) async {
   try {
-    final result = await FilePicker.pickFile(
-      dialogTitle: 'Import Theme',
-      type: FileType.any,
-    );
+    final result = await FilePicker.pickFile(dialogTitle: 'Import Theme');
 
     final selectedPath = result?.path;
     if (selectedPath == null || selectedPath.isEmpty) return;
@@ -407,14 +395,12 @@ class _BackgroundPatternSection extends ConsumerStatefulWidget {
   const _BackgroundPatternSection({
     required this.theme,
     required this.searchQuery,
-    required this.isSearchMatch,
     this.groupPosition = SectionGroupPosition.only,
     this.isAlternate = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool isSearchMatch;
   final SectionGroupPosition groupPosition;
   final bool isAlternate;
 
@@ -471,7 +457,6 @@ class _BackgroundPatternSectionState
       titleIcon: Icons.layers_outlined,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
       searchQuery: widget.searchQuery,
-      isSearchMatch: widget.isSearchMatch,
       groupPosition: widget.groupPosition,
       alternateBackground: widget.isAlternate,
       // The icon buttons' own padding spaces them, so narrow headers fit.

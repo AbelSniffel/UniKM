@@ -60,7 +60,6 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
 
   return showAppDialog<CreateDatabaseChoiceResult>(
     context: context,
-    barrierDismissible: true,
     builder: (ctx) => DialogInteractionScope(
       onDismiss: () => Navigator.pop(ctx),
       child: StatefulBuilder(
@@ -72,56 +71,52 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
             title: 'Create Database',
             theme: theme,
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              TintedHeading(theme: theme, title: 'Database Type'),
-              for (final (type, icon, title, subtitle) in [
-                (
-                  'unencrypted',
-                  Icons.lock_open,
-                  'Unencrypted database',
-                  'Creates a standard SQLite database file.',
-                ),
-                (
-                  'encrypted',
-                  Icons.lock,
-                  'Encrypted database',
-                  'Creates an encrypted database that requires a password.',
-                ),
-              ])
-                TintedOptionTile(
-                  theme: theme,
-                  icon: icon,
-                  title: title,
-                  subtitle: subtitle,
-                  selected: selectedType == type,
-                  onTap: () => setState(() => selectedType = type),
-                ),
-              if (useMobileLayout)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: TextField(
-                    controller: fileNameController,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'Database file name',
-                      hintText: selectedType == 'encrypted'
-                          ? 'UniKM_keys.enc'
-                          : 'UniKM_keys.db',
-                      errorText: fileNameError,
-                    ),
-                    onChanged: (_) {
-                      if (fileNameError != null) {
-                        setState(() => fileNameError = null);
-                      }
-                    },
+          contentSpacing: 8,
+          contentChildren: [
+            TintedHeading(theme: theme, title: 'Database Type'),
+            for (final (type, icon, title, subtitle) in [
+              (
+                'unencrypted',
+                Icons.lock_open,
+                'Unencrypted database',
+                'Creates a standard SQLite database file.',
+              ),
+              (
+                'encrypted',
+                Icons.lock,
+                'Encrypted database',
+                'Creates an encrypted database that requires a password.',
+              ),
+            ])
+              TintedOptionTile(
+                theme: theme,
+                icon: icon,
+                title: title,
+                subtitle: subtitle,
+                selected: selectedType == type,
+                onTap: () => setState(() => selectedType = type),
+              ),
+            if (useMobileLayout)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextField(
+                  controller: fileNameController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Database file name',
+                    hintText: selectedType == 'encrypted'
+                        ? 'UniKM_keys.enc'
+                        : 'UniKM_keys.db',
+                    errorText: fileNameError,
                   ),
+                  onChanged: (_) {
+                    if (fileNameError != null) {
+                      setState(() => fileNameError = null);
+                    }
+                  },
                 ),
-            ],
-          ),
+              ),
+          ],
           actions: [
             ElevatedButton(
               onPressed: () {
@@ -318,13 +313,11 @@ class DatabaseSection extends ConsumerStatefulWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec activeDatabaseSpec = SettingTextSpec(
@@ -547,12 +540,8 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         );
     final nextBackupTime = ref.watch(nextAutoBackupTimeProvider);
     final databaseSwitching = ref.watch(databaseSwitchingProvider);
-    final isSearching = widget.searchQuery.trim().isNotEmpty;
-    bool shows(SettingsSearchGroup group) => shouldShowSettingsGroup(
-      query: widget.searchQuery,
-      matchesSearch: widget.matchesSearch,
-      group: group,
-    );
+    bool shows(SettingsSearchGroup group) =>
+        shouldShowSettingsGroup(widget.searchQuery, group);
 
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
@@ -566,7 +555,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             titleIcon: Icons.backup,
             headerBottomPadding: 0,
             searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
@@ -635,7 +623,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
               ],
             ),
             searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
             child: buildSpecToggleSettingList(
@@ -671,7 +658,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
               null => null,
             },
             searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
             child: SettingsControlWrap(
@@ -854,7 +840,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
     try {
       final result = await FilePicker.pickFile(
         dialogTitle: 'Open UniKM Database',
-        type: FileType.any,
       );
       if (!mounted) return;
       final selectedPath = result?.path;
@@ -948,7 +933,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
           icon: Icons.swap_horiz,
           title: 'Change Database',
           theme: widget.theme,
-          showCloseButton: false,
         ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1105,7 +1089,6 @@ Future<void> showChangeDatabaseDialog(
   final container = ProviderScope.containerOf(context, listen: false);
   return showAppDialog<void>(
     context: context,
-    barrierDismissible: true,
     builder: (ctx) => _ChangeDatabaseDialog(theme: theme, container: container),
   );
 }

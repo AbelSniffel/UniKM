@@ -211,7 +211,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
           action(
             'OS notification',
             Icons.desktop_windows_outlined,
-            () => DeadlineNotificationService.instance.sendTestOsNotification(),
+            DeadlineNotificationService.instance.sendTestOsNotification,
           ),
         ]),
         section('Deadlines', [

@@ -258,66 +258,61 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
         title: 'Export Database',
         theme: theme,
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
-        children: [
+      contentSpacing: 16,
+      contentChildren: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            TintedHeading(theme: theme, title: 'Format'),
+            ..._optionTiles(
+              theme,
+              [
+                _exportFormatOptions.first,
+                if (hasEncryptedSession) _encryptedExportFormatOption,
+                ..._exportFormatOptions.skip(1),
+              ],
+              _exportFormat,
+              (value) => setState(() => _exportFormat = value),
+            ),
+          ],
+        ),
+        if (showsAdditionalInfo)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 8,
             children: [
-              TintedHeading(theme: theme, title: 'Format'),
-              ..._optionTiles(
-                theme,
-                [
-                  _exportFormatOptions.first,
-                  if (hasEncryptedSession) _encryptedExportFormatOption,
-                  ..._exportFormatOptions.skip(1),
+              TintedHeading(theme: theme, title: 'Include'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  AppActionButton(
+                    theme: theme,
+                    label: 'Used Keys',
+                    selected: _includeUsed,
+                    onTap: () => setState(() => _includeUsed = !_includeUsed),
+                  ),
+                  if (_exportFormat != 'txt') ...[
+                    AppActionButton(
+                      theme: theme,
+                      label: 'Tags',
+                      selected: _includeTags,
+                      onTap: () => setState(() => _includeTags = !_includeTags),
+                    ),
+                    AppActionButton(
+                      theme: theme,
+                      label: 'Notes',
+                      selected: _includeNotes,
+                      onTap: () =>
+                          setState(() => _includeNotes = !_includeNotes),
+                    ),
+                  ],
                 ],
-                _exportFormat,
-                (value) => setState(() => _exportFormat = value),
               ),
             ],
           ),
-          if (showsAdditionalInfo)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 8,
-              children: [
-                TintedHeading(theme: theme, title: 'Include'),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    AppActionButton(
-                      theme: theme,
-                      label: 'Used Keys',
-                      selected: _includeUsed,
-                      onTap: () => setState(() => _includeUsed = !_includeUsed),
-                    ),
-                    if (_exportFormat != 'txt') ...[
-                      AppActionButton(
-                        theme: theme,
-                        label: 'Tags',
-                        selected: _includeTags,
-                        onTap: () =>
-                            setState(() => _includeTags = !_includeTags),
-                      ),
-                      AppActionButton(
-                        theme: theme,
-                        label: 'Notes',
-                        selected: _includeNotes,
-                        onTap: () =>
-                            setState(() => _includeNotes = !_includeNotes),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-        ],
-      ),
+      ],
       actions: [
         ElevatedButton.icon(
           onPressed: _isExporting ? null : _export,
@@ -432,7 +427,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
   Future<void> _selectFile() async {
     final result = await FilePicker.pickFile(
       dialogTitle: 'Select Database File',
-      type: FileType.any,
     );
     final path = result?.path;
     if (path != null) await _handleSelectedFilePath(path);
@@ -497,7 +491,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       // Legacy JSON backups may use only the .bak suffix.
       final header = await file
           .openRead(0, 256)
-          .map((b) => String.fromCharCodes(b))
+          .map(String.fromCharCodes)
           .join();
       final trimmed = header.trimLeft();
       if (trimmed.isNotEmpty &&
@@ -699,10 +693,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     );
     if (decryptedJson == null) return false;
 
-    final decoded = jsonDecode(decryptedJson);
-    final records = parseSteamKm1JsonExportData(decoded);
     await _importSteamKm1Records(
-      records,
+      parseSteamKm1JsonExportData(jsonDecode(decryptedJson)),
       sourceFile: file,
       sourceLabel: 'SteamKM1 encrypted backup',
     );
@@ -887,9 +879,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     final content = await file.readAsString();
     final decoded = jsonDecode(content);
     if (looksLikeSteamKm1JsonExportData(decoded)) {
-      final records = parseSteamKm1JsonExportData(decoded);
       await _importSteamKm1Records(
-        records,
+        parseSteamKm1JsonExportData(decoded),
         sourceFile: file,
         sourceLabel: 'SteamKM1 JSON',
       );
@@ -1004,65 +995,61 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         title: 'Import Database',
         theme: theme,
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              TintedHeading(
-                theme: theme,
-                title: 'Source File',
-                trailing: _selectedFile != null && _previewCount > 0
-                    ? '$_previewCount games found in file'
-                    : null,
-              ),
-              FileDropField(
-                key: const ValueKey('import-source-file-target'),
-                theme: theme,
-                description:
-                    'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
-                selectedName: _selectedFile == null
-                    ? null
-                    : p.basename(_selectedFile!),
-                enabled: !_isImporting,
-                onBrowse: _selectFile,
-                onFileSelected: _handleSelectedFilePath,
-                onClear: _clearFileSelection,
-                invalidDropMessage: 'Drop one supported database import file.',
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              TintedHeading(theme: theme, title: 'Import Mode'),
-              ..._optionTiles(
-                theme,
-                _importModeOptions,
-                _importMode,
-                (value) => setState(() => _importMode = value),
-              ),
-              SettingsToggleCard(
-                theme: theme,
-                icon: Icons.content_copy_outlined,
-                label: 'Allow duplicate keys',
-                value: _allowDuplicates,
-                onChanged: (value) => setState(() => _allowDuplicates = value),
-              ),
-            ],
-          ),
-          if (_importMode == 'replace')
-            DialogBanner.warning(
+      contentSpacing: 16,
+      contentChildren: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            TintedHeading(
               theme: theme,
-              message: 'Replace mode will delete all existing data!',
+              title: 'Source File',
+              trailing: _selectedFile != null && _previewCount > 0
+                  ? '$_previewCount games found in file'
+                  : null,
             ),
-        ],
-      ),
+            FileDropField(
+              key: const ValueKey('import-source-file-target'),
+              theme: theme,
+              description:
+                  'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
+              selectedName: _selectedFile == null
+                  ? null
+                  : p.basename(_selectedFile!),
+              enabled: !_isImporting,
+              onBrowse: _selectFile,
+              onFileSelected: _handleSelectedFilePath,
+              onClear: _clearFileSelection,
+              invalidDropMessage: 'Drop one supported database import file.',
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            TintedHeading(theme: theme, title: 'Import Mode'),
+            ..._optionTiles(
+              theme,
+              _importModeOptions,
+              _importMode,
+              (value) => setState(() => _importMode = value),
+            ),
+            SettingsToggleCard(
+              theme: theme,
+              icon: Icons.content_copy_outlined,
+              label: 'Allow duplicate keys',
+              value: _allowDuplicates,
+              onChanged: (value) => setState(() => _allowDuplicates = value),
+            ),
+          ],
+        ),
+        if (_importMode == 'replace')
+          DialogBanner.warning(
+            theme: theme,
+            message: 'Replace mode will delete all existing data!',
+          ),
+      ],
       actions: [
         if (_isImporting && !_importCommitted)
           OutlinedButton(

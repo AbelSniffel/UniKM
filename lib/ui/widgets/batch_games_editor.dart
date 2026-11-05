@@ -363,7 +363,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
             selectionHeightStyle: ui.BoxHeightStyle.strut,
             selectionWidthStyle: ui.BoxWidthStyle.tight,
             decoration: InputDecoration(
-              constraints: const BoxConstraints(minHeight: 0),
+              constraints: const BoxConstraints(),
               contentPadding: EdgeInsets.fromLTRB(
                 textInset,
                 6,
@@ -390,7 +390,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
         isFocused: _focus.hasFocus,
         isHovering: _hovered,
         decoration: InputDecoration(
-          constraints: const BoxConstraints(minHeight: 0),
+          constraints: const BoxConstraints(),
           filled: true,
           fillColor: widget.theme.inputBackground,
           contentPadding: const EdgeInsets.symmetric(

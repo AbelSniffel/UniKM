@@ -602,7 +602,7 @@ class _GalleryUpdates extends UpdateNotifier {
           '## Highlights\n\n- Sample release notes for the gallery\n'
           '- Downloads and installs stay in this dialog',
       htmlUrl: 'https://example.invalid/releases/v9.9.9',
-      publishedAt: DateTime(2026, 10, 1),
+      publishedAt: DateTime(2026, 10),
       isPrerelease: false,
       downloadUrl: 'https://example.invalid/unikm-9.9.9.exe',
       downloadSize: 48234496,

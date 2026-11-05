@@ -14,14 +14,12 @@ class SettingsCardStyleSection extends ConsumerWidget {
     super.key,
     required this.theme,
     required this.searchQuery,
-    required this.isSearchMatch,
     required this.groupPosition,
     required this.isAlternate,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool isSearchMatch;
   final SectionGroupPosition groupPosition;
   final bool isAlternate;
 
@@ -33,7 +31,6 @@ class SettingsCardStyleSection extends ConsumerWidget {
       titleIcon: Icons.tune,
       theme: theme,
       searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
       headerCrossAxisAlignment: CrossAxisAlignment.center,

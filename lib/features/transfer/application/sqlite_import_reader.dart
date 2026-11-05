@@ -125,7 +125,7 @@ Future<void> _readWorker((String, SendPort) request) async {
             for (final table in ['games', 'tags', 'game_tags'])
               table: db
                   .select('SELECT * FROM $table')
-                  .map((r) => Map<String, dynamic>.from(r))
+                  .map(Map<String, dynamic>.from)
                   .toList(),
           },
         ),

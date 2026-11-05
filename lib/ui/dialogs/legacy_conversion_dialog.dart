@@ -26,64 +26,60 @@ Future<void> showLegacyConversionDialog(
         title: 'Legacy Database Converted',
         theme: theme,
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
-        children: [
-          Text(
-            'The imported games were adapted to the current schema.',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          TintedCard(
-            theme: theme,
-            icon: Icons.description_outlined,
-            title: p.basename(dbPath),
-            subtitle: 'Source file, left unchanged',
-          ),
-          if (actions.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 8,
-              children: [
-                TintedHeading(
-                  theme: theme,
-                  title: 'Changes Applied',
-                  trailing: '${actions.length}',
-                ),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 220),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: 6,
-                      children: [
-                        for (final action in actions)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            spacing: 8,
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                color: theme.accent,
-                                size: 18,
+      contentSpacing: 16,
+      contentChildren: [
+        Text(
+          'The imported games were adapted to the current schema.',
+          style: TextStyle(color: theme.textSecondary),
+        ),
+        TintedCard(
+          theme: theme,
+          icon: Icons.description_outlined,
+          title: p.basename(dbPath),
+          subtitle: 'Source file, left unchanged',
+        ),
+        if (actions.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              TintedHeading(
+                theme: theme,
+                title: 'Changes Applied',
+                trailing: '${actions.length}',
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 6,
+                    children: [
+                      for (final action in actions)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          spacing: 8,
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: theme.accent,
+                              size: 18,
+                            ),
+                            Expanded(
+                              child: Text(
+                                action,
+                                style: TextStyle(color: theme.textPrimary),
                               ),
-                              Expanded(
-                                child: Text(
-                                  action,
-                                  style: TextStyle(color: theme.textPrimary),
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
+                            ),
+                          ],
+                        ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-        ],
-      ),
+              ),
+            ],
+          ),
+      ],
       actions: [
         ElevatedButton(
           onPressed: () => Navigator.of(ctx).pop(),

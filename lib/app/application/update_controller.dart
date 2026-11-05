@@ -222,9 +222,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final actionStyle = done
         ? NotificationActionStyle.elevated
         : NotificationActionStyle.outlined;
-    final VoidCallback onAction = done
-        ? () => launchInstaller()
-        : cancelDownload;
+    final VoidCallback onAction = done ? launchInstaller : cancelDownload;
     final handle = _downloadNotificationHandle;
     if (handle == null) {
       _downloadNotificationHandle = NotificationManager.instance.showHandle(
@@ -316,12 +314,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   Future<void> checkForUpdates() async {
     final notificationState = state;
-    state = state.copyWith(
-      isChecking: true,
-      hasUpdate: false,
-      release: null,
-      error: null,
-    );
+    state = state.copyWith(isChecking: true, hasUpdate: false, release: null);
 
     try {
       final updatesSettings = ref.read(updatesSettingsProvider);
@@ -432,7 +425,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
       downloadedBytes: 0,
       totalBytes: 0,
       downloadedFilePath: null,
-      error: null,
     );
 
     if (_dialogOpen) {
@@ -451,9 +443,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
             downloadedBytes: received,
             totalBytes: total,
           );
-          if (!_dialogOpen) {
-            _showDownloadProgressNotification(received, total);
-          }
+          if (!_dialogOpen) _showDownloadProgressNotification(received, total);
         },
       );
 

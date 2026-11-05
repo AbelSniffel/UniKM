@@ -39,7 +39,6 @@ class UsedOverlay extends StatelessWidget {
             tileToCanvas: tileToCanvas,
           ),
           isComplex: true,
-          willChange: false,
           child: const SizedBox.expand(),
         ),
       ],

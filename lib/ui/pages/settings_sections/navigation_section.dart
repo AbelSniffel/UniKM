@@ -24,12 +24,10 @@ class NavigationSection extends ConsumerWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec navPositionSpec = SettingTextSpec(
@@ -96,16 +94,13 @@ class NavigationSection extends ConsumerWidget {
         ? navButtonArrangementH
         : navButtonArrangementV;
 
-    final isSearching = searchQuery.trim().isNotEmpty;
     final showNavBarSection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: navigationSearchGroup,
+      searchQuery,
+      navigationSearchGroup,
     );
     final showGradientSection = shouldShowSettingsGroup(
-      query: searchQuery,
-      matchesSearch: matchesSearch,
-      group: gradientSearchGroup,
+      searchQuery,
+      gradientSearchGroup,
     );
     if (!showNavBarSection && !showGradientSection) {
       return const SizedBox.shrink();
@@ -119,7 +114,6 @@ class NavigationSection extends ConsumerWidget {
           group: navigationSearchGroup,
           titleIcon: Icons.view_sidebar,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => SettingsControlWrap(
             children: [
               SettingsChoiceCard<NavBarPosition>(
@@ -160,7 +154,6 @@ class NavigationSection extends ConsumerWidget {
           builder: (position, isAlternate) => _GradientAnimationSection(
             theme: theme,
             searchQuery: searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             isAlternate: isAlternate,
           ),
@@ -179,14 +172,12 @@ class _GradientAnimationSection extends ConsumerWidget {
   const _GradientAnimationSection({
     required this.theme,
     required this.searchQuery,
-    required this.isSearchMatch,
     this.groupPosition = SectionGroupPosition.only,
     this.isAlternate = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool isSearchMatch;
   final SectionGroupPosition groupPosition;
   final bool isAlternate;
 
@@ -206,7 +197,6 @@ class _GradientAnimationSection extends ConsumerWidget {
       titleIcon: Icons.gradient,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
       searchQuery: searchQuery,
-      isSearchMatch: isSearchMatch,
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
       trailing: Row(

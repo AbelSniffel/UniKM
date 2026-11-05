@@ -35,7 +35,6 @@ Future<bool?> showGameEditorDialog(
   Future<void> Function(int gameId)? onViewedGame,
 }) => showAppDialog<bool>(
   context: context,
-  barrierDismissible: true,
   builder: (ctx) => GameEditorDialog(
     game: game,
     gameIds: gameIds,

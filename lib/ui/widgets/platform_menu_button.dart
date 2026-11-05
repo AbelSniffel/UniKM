@@ -69,7 +69,6 @@ class IconMenuButton<T> extends StatefulWidget {
     required this.onSelected,
     required this.icon,
     required this.choices,
-    this.menuWidth = 230,
     this.highlighted = false,
   });
 
@@ -81,7 +80,6 @@ class IconMenuButton<T> extends StatefulWidget {
   /// The current choice's icon in the given color and size.
   final Widget Function(Color color, double size) icon;
   final List<(T, String, Widget)> choices;
-  final double menuWidth;
 
   /// Shows the button selected, such as while a filter is active.
   final bool highlighted;
@@ -115,7 +113,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
       theme: theme,
       controller: _menu,
       childFocusNode: _focusNode,
-      width: widget.menuWidth,
+      width: 230,
       maxHeight: kDropdownMenuMaxHeight,
       menuChildren: [
         for (final (value, label, icon) in widget.choices)

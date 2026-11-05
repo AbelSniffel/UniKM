@@ -70,8 +70,6 @@ class CardGlowPainter extends CustomPainter {
       rect,
       Paint()
         ..shader = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
           colors: [accentColor, primaryColor],
         ).createShader(rect),
     );

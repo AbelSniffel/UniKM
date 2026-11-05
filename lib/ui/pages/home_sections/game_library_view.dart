@@ -264,7 +264,6 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               key: const PageStorageKey('game-library-scroll'),
               controller: scrollController,
               padding: const EdgeInsets.all(12),
-              clipBehavior: Clip.hardEdge,
               addAutomaticKeepAlives: false,
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
@@ -282,7 +281,6 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               controller: scrollController,
               itemExtent: listItemExtent,
               padding: const EdgeInsets.all(12),
-              clipBehavior: Clip.hardEdge,
               addAutomaticKeepAlives: false,
               itemCount: gameIds.length,
               itemBuilder: (context, index) {

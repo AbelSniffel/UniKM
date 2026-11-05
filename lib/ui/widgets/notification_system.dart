@@ -274,7 +274,6 @@ class NotificationManager {
       actionStyle: actionStyle ?? NotificationActionStyle.text,
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
-      isDismissing: false,
       dismissible: dismissible,
       autoDismiss: autoDismisses
           ? (start: DateTime.now(), length: dismissAfter)
@@ -437,7 +436,7 @@ class NotificationManager {
       );
 
   void info(String message, {String? title}) =>
-      showHandle(message: message, type: NotificationType.info, title: title);
+      showHandle(message: message, title: title);
 
   void dispose() {
     dismissAll();

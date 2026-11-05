@@ -38,7 +38,6 @@ class SettingsControlWrap extends StatelessWidget {
           availableWidth: width,
           cardCount: children.length,
           minimumCardWidth: minimumCardWidth,
-          spacing: gap,
         );
         return Wrap(
           spacing: gap,

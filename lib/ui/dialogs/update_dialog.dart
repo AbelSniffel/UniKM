@@ -104,21 +104,17 @@ class UpdateDialog extends ConsumerWidget {
           ],
         ),
       ],
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 12,
-        children: [
-          // Sets the notes apart from the title bar, as far as below it.
-          _ReleaseNotes(
-            theme: theme,
-            releases: state.allReleases,
-            updateRelease: state.hasUpdate ? state.release : null,
-          ),
-          // Next to the buttons that act on it.
-          _StatusCard(theme: theme, state: state),
-        ],
-      ),
+      contentSpacing: 12,
+      contentChildren: [
+        // Sets the notes apart from the title bar, as far as below it.
+        _ReleaseNotes(
+          theme: theme,
+          releases: state.allReleases,
+          updateRelease: state.hasUpdate ? state.release : null,
+        ),
+        // Next to the buttons that act on it.
+        _StatusCard(theme: theme, state: state),
+      ],
       // The next step for the update, like any dialog's buttons.
       actions: switch (stage) {
         UpdatePreviewState.updateAvailable => [

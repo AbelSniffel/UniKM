@@ -9,9 +9,7 @@ List<Map<String, Object>> buildDeadlineSchedule(
 ) {
   final groups = <(DateTime, int), _DeadlineGroup>{};
   for (final game in games) {
-    if (game.isUsed || !game.hasDeadline || game.deadlineDate == null) {
-      continue;
-    }
+    if (game.isUsed || !game.hasDeadline || game.deadlineDate == null) continue;
     final deadline = calendarDay(game.deadlineDate!);
     for (final (offset, kind) in const [(-7, 1003), (0, 1002), (1, 1001)]) {
       final day = deadline.add(Duration(days: offset));

@@ -132,8 +132,8 @@ double weightedSimilarity(String a, String b) {
 
   // Boost if both have the same numeric token
   if (hasNumberA && hasNumberB) {
-    final numsA = tokensA.where((t) => _numberPattern.hasMatch(t)).toSet();
-    final numsB = tokensB.where((t) => _numberPattern.hasMatch(t)).toSet();
+    final numsA = tokensA.where(_numberPattern.hasMatch).toSet();
+    final numsB = tokensB.where(_numberPattern.hasMatch).toSet();
     if (numsA.intersection(numsB).isNotEmpty) {
       combined = math.min(1.0, combined + 0.12);
     }

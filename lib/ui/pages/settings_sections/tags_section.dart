@@ -25,13 +25,11 @@ class TagsSection extends ConsumerStatefulWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec customTagsInputSpec = SettingTextSpec(
@@ -202,15 +200,12 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
     final tags = ref.watch(tagsProvider);
     final customTags = tags.where((t) => !t.isSteamTag).toList();
     final steamTags = tags.where((t) => t.isSteamTag).toList();
-    final isSearching = widget.searchQuery.trim().isNotEmpty;
     final legacyCleanupDone = ref.watch(legacyDefaultTagsCleanupDoneProvider);
     final legacyCustomCount = customTags
         .where((t) => kLegacyDefaultTagNames.contains(t.name))
         .length;
-    bool matches(SettingsSearchGroup group) => matchesSettingsSearchGroup(
-      matchesSearch: widget.matchesSearch,
-      group: group,
-    );
+    bool matches(SettingsSearchGroup group) =>
+        matchesSettingsSearchGroup(widget.searchQuery, group);
 
     // A counted tag list, or a hint while there are none.
     SectionGroupEntry tagGroup(
@@ -231,7 +226,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
         headerCrossAxisAlignment: CrossAxisAlignment.center,
         trailing: trailing,
         searchQuery: widget.searchQuery,
-        isSearchMatch: isSearching,
         groupPosition: position,
         alternateBackground: isAlternate,
         child: Column(
@@ -321,7 +315,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
             titleIcon: Icons.cleaning_services,
             theme: theme,
             searchQuery: widget.searchQuery,
-            isSearchMatch: isSearching,
             groupPosition: position,
             alternateBackground: isAlternate,
             child: Column(

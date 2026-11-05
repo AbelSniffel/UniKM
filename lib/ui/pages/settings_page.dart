@@ -22,11 +22,7 @@ import 'settings_sections/settings_sections.dart';
 /// Every section widget shares this constructor shape, so the definitions
 /// below pass constructor tear-offs.
 typedef _SettingsSectionBuilder =
-    Widget Function({
-      required AppThemeData theme,
-      required String searchQuery,
-      required bool Function(String) matchesSearch,
-    });
+    Widget Function({required AppThemeData theme, required String searchQuery});
 
 typedef _SectionExtraMatch =
     bool Function(WidgetRef ref, bool Function(String) matchesSearch);
@@ -53,20 +49,13 @@ class _SettingsSectionDefinition {
   final _SettingsSectionBuilder builder;
   final _SectionExtraMatch? extraMatch;
 
-  bool shouldShow({
-    required WidgetRef ref,
-    required TargetPlatform platform,
-    required bool Function(String) matchesSearch,
-    required bool showOnlyMatches,
-  }) {
-    if (!showOnlyMatches) return true;
-
-    return matchesAnySettingsSearchGroup(
-          matchesSearch: matchesSearch,
-          groups: platformSearchGroups?.call(platform) ?? searchGroups,
-        ) ||
-        (extraMatch?.call(ref, matchesSearch) ?? false);
-  }
+  bool shouldShow(WidgetRef ref, TargetPlatform platform, String query) =>
+      query.isEmpty ||
+      (platformSearchGroups?.call(platform) ?? searchGroups).any(
+        (group) => matchesSettingsSearchGroup(query, group),
+      ) ||
+      (extraMatch?.call(ref, (text) => settingsSearchMatches(query, text)) ??
+          false);
 }
 
 final List<_SettingsSectionDefinition> _settingsSections = [
@@ -236,8 +225,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       selectedSection,
     );
 
-    bool matchesSearch(String text) => settingsSearchMatches(searchQuery, text);
-
     void selectSection(String sectionId) =>
         ref.read(settingsPageSelectedSectionProvider.notifier).set(sectionId);
     final rail = _SettingsSectionRail(
@@ -261,8 +248,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       sections: effectiveSection == 'all'
           ? _settingsSections
           : [?selectedSectionDefinition],
-      matchesSearch: matchesSearch,
-      showOnlyMatches: searchQuery.isNotEmpty,
     );
 
     return Row(children: [if (!narrow) rail, body]);
@@ -348,8 +333,6 @@ class _SettingsPageBody extends ConsumerWidget {
     required this.onSectionSelected,
     required this.onSearchChanged,
     required this.sections,
-    required this.matchesSearch,
-    this.showOnlyMatches = false,
   });
 
   final int sectionIndex;
@@ -363,8 +346,6 @@ class _SettingsPageBody extends ConsumerWidget {
   final ValueChanged<String>? onSectionSelected;
   final ValueChanged<String> onSearchChanged;
   final List<_SettingsSectionDefinition> sections;
-  final bool Function(String) matchesSearch;
-  final bool showOnlyMatches;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -414,12 +395,7 @@ class _SettingsPageBody extends ConsumerWidget {
     // Filter whole sections before arranging their connected groupboxes.
     final visibleSections = sections
         .where(
-          (s) => s.shouldShow(
-            ref: ref,
-            platform: Theme.of(context).platform,
-            matchesSearch: matchesSearch,
-            showOnlyMatches: showOnlyMatches,
-          ),
+          (s) => s.shouldShow(ref, Theme.of(context).platform, searchQuery),
         )
         .toList(growable: false);
     // As above, only the column count follows the width; the section widgets
@@ -447,11 +423,7 @@ class _SettingsPageBody extends ConsumerWidget {
                 _ => null,
               },
             ),
-            child: section.builder(
-              theme: theme,
-              searchQuery: searchQuery,
-              matchesSearch: matchesSearch,
-            ),
+            child: section.builder(theme: theme, searchQuery: searchQuery),
           ),
         ),
     ];

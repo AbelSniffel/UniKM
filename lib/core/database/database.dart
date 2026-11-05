@@ -615,7 +615,6 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       'SELECT value FROM $_syncMetadataTable WHERE key = ?',
       variables: [Variable.withString(key)],
-      readsFrom: const {},
     ).get();
     if (rows.isEmpty) return null;
     return rows.first.data['value'] as String?;
@@ -724,7 +723,6 @@ class AppDatabase extends _$AppDatabase {
       'WHERE local_revision > ? '
       'ORDER BY local_revision ASC, game_id ASC',
       variables: [Variable.withInt(revision)],
-      readsFrom: const {},
     ).get();
 
     return rows
@@ -747,7 +745,6 @@ class AppDatabase extends _$AppDatabase {
       'SELECT peer_id, last_revision, last_sync_at, remote_revision_id '
       'FROM $_syncPeerCheckpointsTable WHERE peer_id = ?',
       variables: [Variable.withString(trimmedPeerId)],
-      readsFrom: const {},
     ).get();
     if (rows.isEmpty) return null;
 

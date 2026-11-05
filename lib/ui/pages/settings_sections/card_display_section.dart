@@ -16,13 +16,11 @@ class CardDisplaySection extends ConsumerWidget {
     super.key,
     required this.theme,
     this.searchQuery = '',
-    required this.matchesSearch,
     this.attachesToAbove = false,
   });
 
   final AppThemeData theme;
   final String searchQuery;
-  final bool Function(String) matchesSearch;
   final bool attachesToAbove;
 
   static const SettingTextSpec showTitleSpec = SettingTextSpec(
@@ -113,11 +111,7 @@ class CardDisplaySection extends ConsumerWidget {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final showListViewSection =
         supportsListViewMode(Theme.of(context).platform) &&
-        shouldShowSettingsGroup(
-          query: searchQuery,
-          matchesSearch: matchesSearch,
-          group: listViewSearchGroup,
-        );
+        shouldShowSettingsGroup(searchQuery, listViewSearchGroup);
 
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
@@ -128,7 +122,6 @@ class CardDisplaySection extends ConsumerWidget {
           group: listViewSearchGroup,
           titleIcon: Icons.view_list_outlined,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => SettingsChoiceCard<ListViewDensityMode>(
             theme: theme,
             label: listViewModeSpec.label,
@@ -149,7 +142,6 @@ class CardDisplaySection extends ConsumerWidget {
           group: chipsSearchGroup,
           titleIcon: Icons.style_outlined,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => buildSpecToggleSettingList(
             theme: theme,
             entries: [
@@ -190,7 +182,6 @@ class CardDisplaySection extends ConsumerWidget {
           group: displayRulesSearchGroup,
           titleIcon: Icons.visibility_outlined,
           searchQuery: searchQuery,
-          matchesSearch: matchesSearch,
           childBuilder: () => buildSpecToggleSettingList(
             theme: theme,
             entries: [

@@ -1404,7 +1404,6 @@ class GradientEffectPreview extends StatelessWidget {
             isPlaying: isPlaying,
             autoPauseWhenNotVisible: true,
             optimizeForPreview: true,
-            maxFps: 60,
           ),
         ),
       ],

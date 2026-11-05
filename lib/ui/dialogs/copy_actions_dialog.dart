@@ -41,58 +41,50 @@ class CopyActionsDialog extends ConsumerWidget {
         title: 'Copy Options',
         theme: theme,
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 16,
-          children: [
-            _ActionGroup(theme, 'Keys', targets.length, [
-              (
-                Icons.key,
-                'Key Only',
-                'KEY',
-                () => GameClipboard.copyKeysOnly(targets),
-              ),
-              (
-                Icons.short_text,
-                'Title + Key',
-                'Title: KEY',
-                () => GameClipboard.copyTitleWithKey(targets),
-              ),
-              (
-                Icons.visibility_off_outlined,
-                'Discord Spoiler',
-                'Title: ||KEY||',
-                () => GameClipboard.copyDiscordSpoiler(targets),
-              ),
-            ]),
-            if (redeemable > 0)
-              _ActionGroup(theme, 'Redeem Links', redeemable, [
-                (
-                  Icons.open_in_new,
-                  'Open Redeem Page',
-                  'Opens in your browser',
-                  () =>
-                      GameSelectionActions.openRedeemPages(container, targets),
-                ),
-                (
-                  Icons.link,
-                  'Redeem Link Only',
-                  'https://…',
-                  () => GameClipboard.copyRedeemLink(targets),
-                ),
-                (
-                  Icons.add_link,
-                  'Title + Redeem Link',
-                  'Title: https://…',
-                  () =>
-                      GameClipboard.copyRedeemLink(targets, includeTitle: true),
-                ),
-              ]),
-          ],
-        ),
-      ),
+      contentSpacing: 16,
+      contentChildren: [
+        _ActionGroup(theme, 'Keys', targets.length, [
+          (
+            Icons.key,
+            'Key Only',
+            'KEY',
+            () => GameClipboard.copyKeysOnly(targets),
+          ),
+          (
+            Icons.short_text,
+            'Title + Key',
+            'Title: KEY',
+            () => GameClipboard.copyTitleWithKey(targets),
+          ),
+          (
+            Icons.visibility_off_outlined,
+            'Discord Spoiler',
+            'Title: ||KEY||',
+            () => GameClipboard.copyDiscordSpoiler(targets),
+          ),
+        ]),
+        if (redeemable > 0)
+          _ActionGroup(theme, 'Redeem Links', redeemable, [
+            (
+              Icons.open_in_new,
+              'Open Redeem Page',
+              'Opens in your browser',
+              () => GameSelectionActions.openRedeemPages(container, targets),
+            ),
+            (
+              Icons.link,
+              'Redeem Link Only',
+              'https://…',
+              () => GameClipboard.copyRedeemLink(targets),
+            ),
+            (
+              Icons.add_link,
+              'Title + Redeem Link',
+              'Title: https://…',
+              () => GameClipboard.copyRedeemLink(targets, includeTitle: true),
+            ),
+          ]),
+      ],
     );
   }
 }

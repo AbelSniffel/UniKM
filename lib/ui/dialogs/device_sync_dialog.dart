@@ -34,59 +34,48 @@ Future<bool?> showChooseSyncDirectionDialog({
   required bool hasMismatch,
   required String peerName,
   required String peerId,
-}) {
-  return showAppDialog<bool>(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) => ThemedAlertDialog(
-      theme: theme,
-      maxWidth: kCompactDialogWidth,
-      title: DialogHeader(
-        icon: Icons.sync,
-        title: 'Sync Library',
+}) => showAppDialog<bool>(
+  context: context,
+  builder: (ctx) => ThemedAlertDialog(
+    theme: theme,
+    maxWidth: kCompactDialogWidth,
+    title: DialogHeader(icon: Icons.sync, title: 'Sync Library', theme: theme),
+    contentSpacing: 8,
+    contentChildren: [
+      TintedHeading(theme: theme, title: 'Sync with $peerName'),
+      Consumer(
+        builder: (context, ref, _) {
+          final lastSync = ref.watch(syncPeerLastSyncProvider(peerId));
+          return Text(
+            'Last sync: ${lastSync.when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+            style: TextStyle(color: theme.textSecondary, fontSize: 12),
+          );
+        },
+      ),
+      if (hasMismatch)
+        DialogBanner.warning(
+          theme: theme,
+          message:
+              'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
+        ),
+      // Each direction merges its changes into the other library.
+      TintedOptionTile(
         theme: theme,
+        icon: Icons.download,
+        title: 'Receive',
+        subtitle: 'Merge $peerName\'s changes into this library',
+        onTap: () => Navigator.pop(ctx, false),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
-          TintedHeading(theme: theme, title: 'Sync with $peerName'),
-          Consumer(
-            builder: (context, ref, _) {
-              final lastSync = ref.watch(syncPeerLastSyncProvider(peerId));
-              return Text(
-                'Last sync: ${lastSync.when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
-                style: TextStyle(color: theme.textSecondary, fontSize: 12),
-              );
-            },
-          ),
-          if (hasMismatch)
-            DialogBanner.warning(
-              theme: theme,
-              message:
-                  'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
-            ),
-          // Each direction merges its changes into the other library.
-          TintedOptionTile(
-            theme: theme,
-            icon: Icons.download,
-            title: 'Receive',
-            subtitle: 'Merge $peerName\'s changes into this library',
-            onTap: () => Navigator.pop(ctx, false),
-          ),
-          TintedOptionTile(
-            theme: theme,
-            icon: Icons.upload,
-            title: 'Send',
-            subtitle: 'Merge this library\'s changes into $peerName',
-            onTap: () => Navigator.pop(ctx, true),
-          ),
-        ],
+      TintedOptionTile(
+        theme: theme,
+        icon: Icons.upload,
+        title: 'Send',
+        subtitle: 'Merge this library\'s changes into $peerName',
+        onTap: () => Navigator.pop(ctx, true),
       ),
-    ),
-  );
-}
+    ],
+  ),
+);
 
 String _formatLastSync(DateTime? value) =>
     value == null ? 'Never' : formatDateTimeMinutes(value.toLocal());
@@ -437,9 +426,7 @@ class _SyncContent extends ConsumerWidget {
         return (color: theme.accent, label: 'Syncing...');
       }
       // Device responded to the last discovery scan — it is reachable.
-      if (row.discovered != null) {
-        return (color: theme.accent, label: 'Online');
-      }
+      if (row.discovered != null) return (color: theme.accent, label: 'Online');
       // Trusted but did not respond to discovery — offline.
       return (color: theme.textSecondary, label: 'Offline');
     }

@@ -213,10 +213,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   }
 
   Future<void> _selectBackupFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.any,
-      dialogTitle: 'Select Backup File',
-    );
+    final result = await FilePicker.pickFile(dialogTitle: 'Select Backup File');
     final path = result?.path;
     if (path != null) await _handleFilePath(path);
   }
@@ -299,7 +296,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
 
     return ThemedAlertDialog(
       theme: theme,
-      maxWidth: 600,
       maxHeight: 700,
       title: DialogHeader(
         icon: Icons.backup,
@@ -532,35 +528,30 @@ Future<bool> showRestoreConfirmDialog(
           theme: theme,
         ),
         maxHeight: 450,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TintedHeading(theme: theme, title: 'Backup to Restore'),
-            const SizedBox(height: 8),
-            DatabaseFileRow(
-              theme: theme,
-              title: backup.displayName,
-              subtitle: backup.details,
-              isEncrypted: backup.isEncrypted,
-              margin: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 16),
-            SettingsToggleCard(
-              theme: theme,
-              icon: Icons.backup_outlined,
-              label: 'Backup current database',
-              value: createBackupFirst,
-              onChanged: (value) => setState(() => createBackupFirst = value),
-            ),
-            const SizedBox(height: kDialogSpacing),
-            DialogBanner.warning(
-              theme: theme,
-              message:
-                  'This will replace your current database with the backup.',
-            ),
-          ],
-        ),
+        contentChildren: [
+          TintedHeading(theme: theme, title: 'Backup to Restore'),
+          const SizedBox(height: 8),
+          DatabaseFileRow(
+            theme: theme,
+            title: backup.displayName,
+            subtitle: backup.details,
+            isEncrypted: backup.isEncrypted,
+            margin: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 16),
+          SettingsToggleCard(
+            theme: theme,
+            icon: Icons.backup_outlined,
+            label: 'Backup current database',
+            value: createBackupFirst,
+            onChanged: (value) => setState(() => createBackupFirst = value),
+          ),
+          const SizedBox(height: kDialogSpacing),
+          DialogBanner.warning(
+            theme: theme,
+            message: 'This will replace your current database with the backup.',
+          ),
+        ],
         actions: [
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),

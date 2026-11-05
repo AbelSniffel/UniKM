@@ -21,7 +21,6 @@ class AppActionButton extends StatelessWidget {
     required this.theme,
     required this.onTap,
     this.selected,
-    this.expandLabel = false,
     this.accentColor,
     this.deleteOnHover = false,
     this.showStatus = true,
@@ -36,7 +35,6 @@ class AppActionButton extends StatelessWidget {
 
   /// Null for an ordinary action; false/true enables the fixed toggle indicator.
   final bool? selected;
-  final bool expandLabel;
 
   /// Selected text, indicator, and highlighted border color.
   final Color? accentColor;
@@ -67,7 +65,6 @@ class AppActionButton extends StatelessWidget {
     required bool selected,
     Color? accentColor,
     bool deleteOnHover = false,
-    bool expand = false,
     double gap = statusSpacing,
   }) {
     final hovered = states.contains(WidgetState.hovered);
@@ -77,22 +74,18 @@ class AppActionButton extends StatelessWidget {
         states.contains(WidgetState.pressed) ||
         states.contains(WidgetState.focused);
     return Row(
-      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // An expanded label keeps its place; others centre while idle.
-        if (expand)
-          Expanded(child: label)
-        else
-          Flexible(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(end: shown ? 0 : (gap + statusSize) / 2),
-              duration: _statusDuration(context),
-              curve: Curves.easeInOutCubic,
-              child: label,
-              builder: (_, dx, child) =>
-                  Transform.translate(offset: Offset(dx, 0), child: child),
-            ),
+        Flexible(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: shown ? 0 : (gap + statusSize) / 2),
+            duration: _statusDuration(context),
+            curve: Curves.easeInOutCubic,
+            child: label,
+            builder: (_, dx, child) =>
+                Transform.translate(offset: Offset(dx, 0), child: child),
           ),
+        ),
         SizedBox(width: gap),
         AppButtonSelectionIndicator(
           selected: selected,
@@ -265,26 +258,18 @@ class AppActionButton extends StatelessWidget {
                           selected: selected!,
                           accentColor: accentColor,
                           deleteOnHover: deleteOnHover,
-                          expand: expandLabel,
                         ),
                 ),
         child: Row(
-          mainAxisSize: expandLabel ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
               Icon(icon, size: 16),
               const SizedBox(width: 6),
             ],
-            if (expandLabel)
-              Expanded(child: Text(label))
-            else
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+            Flexible(
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
       ),

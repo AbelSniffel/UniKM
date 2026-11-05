@@ -364,7 +364,7 @@ class SyncPayloadCodec {
       final coverDigest = SyncEntryFingerprint.coverIdentity(game.coverImage);
       if (coverDigest.startsWith('sha256:') &&
           !peerCovers.contains(coverDigest)) {
-        coverFiles.putIfAbsent(coverDigest, () => game.coverImage.trim());
+        coverFiles.putIfAbsent(coverDigest, game.coverImage.trim);
       }
       serialized.add({
         'id': game.id,

@@ -563,7 +563,7 @@ class GameEditorNotes extends StatelessWidget {
         textAlignVertical: TextAlignVertical.top,
         style: TextStyle(color: theme.textPrimary),
         decoration: InputDecoration(
-          constraints: const BoxConstraints(minHeight: 0),
+          constraints: const BoxConstraints(),
           filled: true,
           fillColor: theme.inputBackground,
           hintText: 'Add notes about this game...',

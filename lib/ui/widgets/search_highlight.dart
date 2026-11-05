@@ -79,12 +79,10 @@ class SearchHighlight extends StatefulWidget {
   const SearchHighlight({
     super.key,
     required this.query,
-    required this.isMatch,
     required this.builder,
   });
 
   final String query;
-  final bool isMatch;
   final Widget Function(BuildContext context, double value) builder;
 
   @override
@@ -99,7 +97,7 @@ class _SearchHighlightState extends State<SearchHighlight>
     value: _matches ? 1 : 0,
   );
 
-  bool get _matches => widget.isMatch && widget.query.trim().isNotEmpty;
+  bool get _matches => widget.query.trim().isNotEmpty;
 
   @override
   void didUpdateWidget(covariant SearchHighlight oldWidget) {

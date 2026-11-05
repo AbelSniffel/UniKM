@@ -71,7 +71,6 @@ class PreviewCard extends StatefulWidget {
     this.backgroundIconColor,
     this.foreground,
     this.tapKey,
-    this.inlineLabel = false,
   });
 
   /// A card's height in Settings.
@@ -94,11 +93,6 @@ class PreviewCard extends StatefulWidget {
   /// Null lets a menu grid provide the height.
   final double? height;
   final Key? tapKey;
-
-  /// Shows the name as plain settings-card text centered on the left instead
-  /// of in a chip in the bottom-left corner, for single-row cards whose preview
-  /// sits beside it. Selection colors it like the selection border.
-  final bool inlineLabel;
 
   @override
   State<PreviewCard> createState() => _PreviewCardState();
@@ -162,7 +156,6 @@ class _PreviewCardState extends State<PreviewCard> {
     final outerRadius = BorderRadius.circular(theme.cornerRadius);
     final innerRadius = math.max(0.0, theme.cornerRadius - borderWidth);
     final selected = widget.isSelected;
-    final inline = widget.inlineLabel;
     // The ring, dot and name chip share one selection motion. Each animates
     // only its own small subtree, and only while the selection changes, so
     // resizing or rebuilding a card never runs it.
@@ -183,17 +176,13 @@ class _PreviewCardState extends State<PreviewCard> {
     final label = onSelection(
       (t) => Container(
         key: const ValueKey('preview-card-label'),
-        padding: inline
-            ? EdgeInsets.zero
-            // The selection ring covers the chip's bottom edge, so a selected
-            // chip adds room below its text; otherwise it is even.
-            : EdgeInsets.fromLTRB(12, 3, 9, 3 + 3 * t),
-        decoration: inline
-            ? null
-            : BoxDecoration(
-                color: scrim,
-                borderRadius: BorderRadius.only(topRight: outerRadius.topRight),
-              ),
+        // The selection ring covers the chip's bottom edge, so a selected
+        // chip adds room below its text; otherwise it is even.
+        padding: EdgeInsets.fromLTRB(12, 3, 9, 3 + 3 * t),
+        decoration: BoxDecoration(
+          color: scrim,
+          borderRadius: BorderRadius.only(topRight: outerRadius.topRight),
+        ),
         child: ExcludeSemantics(
           child: Text(
             widget.name,
@@ -201,7 +190,7 @@ class _PreviewCardState extends State<PreviewCard> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Color.lerp(theme.textPrimary, theme.accent, t),
-              fontSize: inline ? null : 13,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -209,9 +198,8 @@ class _PreviewCardState extends State<PreviewCard> {
       ),
     );
     final selection = onSelection(
-      (t) => t == 0
-          ? const SizedBox.shrink()
-          : _SelectionRing(theme: theme, t: t, gap: !inline),
+      (t) =>
+          t == 0 ? const SizedBox.shrink() : _SelectionRing(theme: theme, t: t),
     );
     final background = widget.backgroundBuilder(context, theme.cornerRadius);
     return Semantics(
@@ -233,7 +221,6 @@ class _PreviewCardState extends State<PreviewCard> {
             // any display scale.
             ClipRRect(
               borderRadius: outerRadius,
-              clipBehavior: Clip.antiAlias,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -250,16 +237,12 @@ class _PreviewCardState extends State<PreviewCard> {
                             theme.surface.withValues(alpha: 0.25),
                       ),
                     ),
-                  if (!inline)
-                    Positioned(
-                      left: 0,
-                      right: 27,
-                      bottom: 0,
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: label,
-                      ),
-                    ),
+                  Positioned(
+                    left: 0,
+                    right: 27,
+                    bottom: 0,
+                    child: Align(alignment: Alignment.bottomLeft, child: label),
+                  ),
                 ],
               ),
             ),
@@ -270,18 +253,6 @@ class _PreviewCardState extends State<PreviewCard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (inline)
-                      Positioned(
-                        top: 0,
-                        bottom: 0,
-                        // Inline text keeps the settings-card text inset.
-                        left: 12 - borderWidth,
-                        right: 4,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: label,
-                        ),
-                      ),
                     // The live clip above controls every splash, including one
                     // already running when a selected theme changes the corners.
                     Material(
@@ -314,31 +285,30 @@ class _PreviewCardState extends State<PreviewCard> {
             ),
             // The settings cards' mini dot, inset from the corner, pops in
             // on the selected card. Its outline matches the ring's inner gap.
-            if (!inline)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: onSelection(
-                    (t) => t == 0
-                        ? const SizedBox.shrink()
-                        : Opacity(
-                            opacity: t,
-                            child: Transform.scale(
-                              scale: 0.4 + 0.6 * t,
-                              child: SettingsCardMiniDot(
-                                key: const ValueKey('preview-selection-check'),
-                                theme: theme,
-                                value: true,
-                                enabled: true,
-                                outlineColor: theme.surface,
-                                glow: false,
-                              ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: onSelection(
+                  (t) => t == 0
+                      ? const SizedBox.shrink()
+                      : Opacity(
+                          opacity: t,
+                          child: Transform.scale(
+                            scale: 0.4 + 0.6 * t,
+                            child: SettingsCardMiniDot(
+                              key: const ValueKey('preview-selection-check'),
+                              theme: theme,
+                              value: true,
+                              enabled: true,
+                              outlineColor: theme.surface,
+                              glow: false,
                             ),
                           ),
-                  ),
+                        ),
                 ),
               ),
+            ),
             Positioned.fill(child: IgnorePointer(child: selection)),
           ],
         ),
@@ -347,48 +317,39 @@ class _PreviewCardState extends State<PreviewCard> {
   }
 }
 
-/// The selected look: an accent ring over the card's edge. Previews keep
-/// their own colours behind a thin [gap] in the panel colour; a plain style
-/// card is tinted instead, like a chosen Tinted Tile.
+/// The selected look: an accent ring over the card's edge, with the preview
+/// keeping its own colours behind a thin gap in the panel colour.
 class _SelectionRing extends StatelessWidget {
-  const _SelectionRing({
-    required this.theme,
-    required this.t,
-    required this.gap,
-  });
+  const _SelectionRing({required this.theme, required this.t});
 
   static const double width = 2;
 
   final AppThemeData theme;
   final double t;
-  final bool gap;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     key: const ValueKey('preview-selection-overlay'),
     decoration: BoxDecoration(
-      color: gap ? null : theme.accent.withValues(alpha: 0.12 * t),
       border: Border.all(
         color: theme.accent.withValues(alpha: t),
         width: width,
       ),
       borderRadius: BorderRadius.circular(theme.cornerRadius),
     ),
-    child: gap
-        ? Padding(
-            padding: const EdgeInsets.all(width),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: theme.surface.withValues(alpha: t),
-                  width: width,
-                ),
-                borderRadius: BorderRadius.circular(
-                  math.max(0.0, theme.cornerRadius - width),
-                ),
-              ),
-            ),
-          )
-        : null,
+    child: Padding(
+      padding: const EdgeInsets.all(width),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: theme.surface.withValues(alpha: t),
+            width: width,
+          ),
+          borderRadius: BorderRadius.circular(
+            math.max(0.0, theme.cornerRadius - width),
+          ),
+        ),
+      ),
+    ),
   );
 }

@@ -200,7 +200,7 @@ class GamesNotifier extends Notifier<GamesState> {
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
       final tagEntries = tagsByGame[entry.id] ?? const <TagEntry>[];
-      final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
+      final tags = tagEntries.map(Tag.fromEntry).toList();
       games.add(Game.fromEntry(entry, tags: tags));
 
       if (i != 0 && i % _loadChunkSize == 0) await _yieldToUi();
@@ -295,7 +295,7 @@ class GamesNotifier extends Notifier<GamesState> {
     _isLoadingInProgress = true;
 
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(isLoading: true);
 
       final entries = await db.getAllGames();
 
@@ -369,7 +369,7 @@ class GamesNotifier extends Notifier<GamesState> {
       if (entry == null) return null;
 
       final tagEntries = await db.getTagsForGame(id);
-      final tags = tagEntries.map((t) => Tag.fromEntry(t)).toList();
+      final tags = tagEntries.map(Tag.fromEntry).toList();
       final newGame = Game.fromEntry(entry, tags: tags);
       if (!ref.mounted || !identical(ref.read(databaseProvider), db)) {
         return newGame;
