@@ -263,3 +263,57 @@ Future<T?> showAppMenu<T>({
     clipBehavior: Clip.antiAlias,
   );
 }
+
+/// A [button] that opens a [panel] (not a list of items) under its left edge,
+/// on the app's menu surface. The panel may take up to [maxSize] of the screen.
+class AnchoredPanelMenu extends StatefulWidget {
+  const AnchoredPanelMenu({
+    super.key,
+    required this.theme,
+    required this.maxSize,
+    required this.panel,
+    required this.button,
+  });
+
+  final AppThemeData theme;
+  final Size maxSize;
+  final Widget Function(Size size, ScrollController scrollController) panel;
+  final Widget Function(FocusNode focusNode, VoidCallback toggle) button;
+
+  @override
+  State<AnchoredPanelMenu> createState() => _AnchoredPanelMenuState();
+}
+
+class _AnchoredPanelMenuState extends State<AnchoredPanelMenu> {
+  final _buttonFocus = FocusNode();
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _buttonFocus.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = anchoredMenuSize(MediaQuery.of(context), widget.maxSize);
+    return MenuAnchor(
+      animated: !MediaQuery.disableAnimationsOf(context),
+      childFocusNode: _buttonFocus,
+      consumeOutsideTap: true,
+      useRootOverlay: true,
+      reservedPadding: const EdgeInsets.all(8),
+      alignmentOffset: Offset(
+        Directionality.of(context) == TextDirection.ltr ? -size.width : 0,
+        8,
+      ),
+      style: appMenuStyle(widget.theme),
+      menuChildren: [widget.panel(size, _scrollController)],
+      builder: (context, controller, _) => widget.button(
+        _buttonFocus,
+        () => controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}

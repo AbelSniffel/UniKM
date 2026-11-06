@@ -6,7 +6,7 @@ import '../../core/theme/theme_icons.dart';
 import 'popup_menu_helpers.dart';
 
 /// Compact icon selection using the theme menu's native opening/closing motion.
-class ThemeIconMenuButton extends StatefulWidget {
+class ThemeIconMenuButton extends StatelessWidget {
   const ThemeIconMenuButton({
     super.key,
     required this.theme,
@@ -18,32 +18,12 @@ class ThemeIconMenuButton extends StatefulWidget {
   final int? selectedIconCodePoint;
   final ValueChanged<int?> onChanged;
 
-  @override
-  State<ThemeIconMenuButton> createState() => _ThemeIconMenuButtonState();
-}
-
-class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
-  final _controller = MenuController();
-  final _buttonFocus = FocusNode();
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _buttonFocus.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Size _pickerSize(BuildContext context) =>
-      anchoredMenuSize(MediaQuery.of(context), const Size(280, 320));
-
-  Widget _picker(BuildContext context) {
-    final theme = widget.theme;
+  Widget _picker(Size size, ScrollController scrollController) {
     return SizedBox.fromSize(
       key: const ValueKey('theme-icon-picker'),
-      size: _pickerSize(context),
+      size: size,
       child: ListView(
-        controller: _scrollController,
+        controller: scrollController,
         primary: false,
         padding: const EdgeInsets.all(8),
         children: [
@@ -65,12 +45,12 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
               children: [
                 for (final (icon, label) in group.$2)
                   Semantics(
-                    selected: widget.selectedIconCodePoint == icon.codePoint,
+                    selected: selectedIconCodePoint == icon.codePoint,
                     child: IconButton(
                       key: ValueKey('theme-icon-${icon.codePoint}'),
                       tooltip: label,
-                      onPressed: () => widget.onChanged(
-                        widget.selectedIconCodePoint == icon.codePoint
+                      onPressed: () => onChanged(
+                        selectedIconCodePoint == icon.codePoint
                             ? null
                             : icon.codePoint,
                       ),
@@ -81,12 +61,10 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
                         padding: EdgeInsets.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.standard,
-                        foregroundColor:
-                            widget.selectedIconCodePoint == icon.codePoint
+                        foregroundColor: selectedIconCodePoint == icon.codePoint
                             ? theme.accent
                             : theme.textSecondary,
-                        backgroundColor:
-                            widget.selectedIconCodePoint == icon.codePoint
+                        backgroundColor: selectedIconCodePoint == icon.codePoint
                             ? theme.accent.withValues(alpha: 0.2)
                             : Colors.transparent,
                         hoverColor: theme.navItemHover,
@@ -110,28 +88,15 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final selected = widget.selectedIconCodePoint != null;
-    return MenuAnchor(
-      controller: _controller,
-      animated: !MediaQuery.disableAnimationsOf(context),
-      childFocusNode: _buttonFocus,
-      consumeOutsideTap: true,
-      useRootOverlay: true,
-      reservedPadding: const EdgeInsets.all(8),
-      alignmentOffset: Offset(
-        Directionality.of(context) == TextDirection.ltr
-            ? -_pickerSize(context).width
-            : 0,
-        8,
-      ),
-      style: appMenuStyle(theme),
-      menuChildren: [_picker(context)],
-      builder: (context, controller, _) => IconButton(
-        focusNode: _buttonFocus,
+    final selected = selectedIconCodePoint != null;
+    return AnchoredPanelMenu(
+      theme: theme,
+      maxSize: const Size(280, 320),
+      panel: _picker,
+      button: (focusNode, toggle) => IconButton(
+        focusNode: focusNode,
         tooltip: 'Theme icon',
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
+        onPressed: toggle,
         style: IconButton.styleFrom(
           foregroundColor: selected ? theme.accent : theme.textSecondary,
           backgroundColor: selected
@@ -150,7 +115,7 @@ class _ThemeIconMenuButtonState extends State<ThemeIconMenuButton> {
         ),
         icon: Icon(
           selected
-              ? themeIconFromCodePoint(widget.selectedIconCodePoint!)
+              ? themeIconFromCodePoint(selectedIconCodePoint!)
               : Icons.palette,
           size: 20,
         ),
