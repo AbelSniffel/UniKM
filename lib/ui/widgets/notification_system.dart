@@ -45,6 +45,7 @@ class AppNotification {
     this.actionLabel,
     this.onAction,
     this.actionStyle = NotificationActionStyle.text,
+    this.actionIcon,
     this.secondaryActionLabel,
     this.onSecondaryAction,
     this.isDismissing = false,
@@ -65,6 +66,10 @@ class AppNotification {
   final String? actionLabel;
   final VoidCallback? onAction;
   final NotificationActionStyle actionStyle;
+
+  /// Draws a text action as this icon, with [actionLabel] as its
+  /// accessibility label.
+  final IconData? actionIcon;
   final String? secondaryActionLabel;
   final VoidCallback? onSecondaryAction;
   final bool isDismissing;
@@ -110,6 +115,7 @@ class AppNotification {
     actionStyle: clearAction
         ? NotificationActionStyle.text
         : (actionStyle ?? this.actionStyle),
+    actionIcon: clearAction ? null : actionIcon,
     secondaryActionLabel: clearSecondaryAction
         ? null
         : (secondaryActionLabel ?? this.secondaryActionLabel),
@@ -243,6 +249,7 @@ class NotificationManager {
     String? actionLabel,
     VoidCallback? onAction,
     NotificationActionStyle? actionStyle,
+    IconData? actionIcon,
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
     bool persistent = false,
@@ -272,6 +279,7 @@ class NotificationManager {
       actionLabel: actionLabel,
       onAction: onAction,
       actionStyle: actionStyle ?? NotificationActionStyle.text,
+      actionIcon: actionIcon,
       secondaryActionLabel: secondaryActionLabel,
       onSecondaryAction: onSecondaryAction,
       dismissible: dismissible,
@@ -424,8 +432,20 @@ class NotificationManager {
     title: title,
   );
 
-  void error(String message, {String? title}) =>
-      showHandle(message: message, type: NotificationType.error, title: title);
+  void error(
+    String message, {
+    String? title,
+    String? actionLabel,
+    VoidCallback? onAction,
+    IconData? actionIcon,
+  }) => showHandle(
+    message: message,
+    type: NotificationType.error,
+    title: title,
+    actionLabel: actionLabel,
+    onAction: onAction,
+    actionIcon: actionIcon,
+  );
 
   void warning(String message, {String? title, Duration? autoDismissAfter}) =>
       showHandle(
@@ -857,13 +877,25 @@ class _NotificationToastState extends State<NotificationToast>
             _ => ElevatedButton(onPressed: onPressed, child: Text(label)),
           };
     final textActions = [
-      for (final (label, onPressed) in [
-        if (text) (label, onPressed),
+      for (final (label, onPressed, icon) in [
+        if (text) (label, onPressed, notification.actionIcon),
         if (progress == null)
-          (notification.secondaryActionLabel, notification.onSecondaryAction),
+          (
+            notification.secondaryActionLabel,
+            notification.onSecondaryAction,
+            null,
+          ),
       ])
         if (label != null && onPressed != null)
-          OutlinedButton(onPressed: onPressed, child: Text(label)),
+          if (icon != null)
+            // No tooltip: toasts sit above the navigator, outside any
+            // Overlay, where a tooltip throws.
+            IconButton(
+              onPressed: onPressed,
+              icon: Icon(icon, semanticLabel: label),
+            )
+          else
+            OutlinedButton(onPressed: onPressed, child: Text(label)),
     ];
     if (progress != null) {
       return [

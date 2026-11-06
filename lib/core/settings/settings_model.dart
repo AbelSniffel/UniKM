@@ -305,6 +305,7 @@ class SettingsKeys {
   static const String showStatusBar = 'show_status_bar';
   static const String showGameDetailsSkmId = 'show_game_details_skm_id';
   static const String showSyncDeviceId = 'show_sync_device_id';
+  static const String showSyncStatus = 'show_sync_status';
 
   // Display
   static const String frameRatePreference = 'frame_rate_preference';
@@ -408,6 +409,7 @@ class DefaultSettings {
   static const bool showStatusBar = false;
   static const bool showGameDetailsSkmId = false;
   static const bool showSyncDeviceId = false;
+  static const bool showSyncStatus = false;
 
   // Display
   static const String frameRatePreference = 'auto';
@@ -478,6 +480,7 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
   SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
   SettingsKeys.showSyncDeviceId: DefaultSettings.showSyncDeviceId,
+  SettingsKeys.showSyncStatus: DefaultSettings.showSyncStatus,
   SettingsKeys.frameRatePreference: DefaultSettings.frameRatePreference,
   SettingsKeys.windowWidth: DefaultSettings.windowWidth,
   SettingsKeys.windowHeight: DefaultSettings.windowHeight,

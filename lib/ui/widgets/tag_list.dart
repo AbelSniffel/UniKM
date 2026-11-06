@@ -24,13 +24,12 @@ import 'package:unikm/core/constants/app_constants.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
-import 'app_search_field.dart';
 import 'app_tag_button.dart';
 import 'app_action_button.dart';
 import 'app_progress_indicator.dart';
 
-/// A performant, reusable tag list that supports search, selection,
-/// scrolling, and virtualized rendering for large tag collections.
+/// A performant, reusable tag list that supports selection, scrolling, and
+/// virtualized rendering for large tag collections.
 class TagList extends StatefulWidget {
   const TagList({
     super.key,
@@ -40,7 +39,6 @@ class TagList extends StatefulWidget {
     this.allSelected = false,
     this.deleteOnTap = false,
     this.onTagToggled,
-    this.showSearch = false,
     this.maxHeight,
     this.scrollable = false,
   });
@@ -63,11 +61,6 @@ class TagList extends StatefulWidget {
   /// Called when a tag chip is tapped. Receives the tag ID.
   final ValueChanged<int>? onTagToggled;
 
-  /// Whether to show a search field above the tag list.
-  /// When true, the widget must be placed inside a parent with bounded height
-  /// constraints (e.g. [SizedBox], [ConstrainedBox], or [Expanded]).
-  final bool showSearch;
-
   /// Maximum height for the tag list scroll area. When set, the widget wraps
   /// itself in a [ConstrainedBox] and enables scrolling automatically.
   final double? maxHeight;
@@ -82,8 +75,6 @@ class TagList extends StatefulWidget {
 }
 
 class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
-  String _searchQuery = '';
-
   // ---------------------------------------------------------------------------
   // Resize-aware state (scrollable path only)
   // ---------------------------------------------------------------------------
@@ -153,41 +144,13 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     _fadeController.forward(from: 0.0);
   }
 
-  List<Tag> get _filteredTags {
-    if (_searchQuery.isEmpty) return widget.tags;
-    final query = _searchQuery.toLowerCase();
-    return widget.tags
-        .where((t) => t.name.toLowerCase().contains(query))
-        .toList();
-  }
-
   bool _isSelected(Tag tag) =>
       widget.selectedTagIds?.contains(tag.id) ??
       (widget.onTagToggled == null || widget.allSelected);
 
   @override
   Widget build(BuildContext context) {
-    final tags = _filteredTags;
-
-    if (widget.showSearch) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppSearchField(
-            theme: widget.theme,
-            hintText: 'Search tags...',
-            onChanged: (value) => setState(() => _searchQuery = value),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(child: _buildScrollableContent(tags)),
-        ],
-      );
-    }
-
+    final tags = widget.tags;
     if (widget.maxHeight != null) {
       return ConstrainedBox(
         constraints: BoxConstraints(maxHeight: widget.maxHeight!),
@@ -287,7 +250,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   }
 
   /// Cache flow layout by text metrics, not theme colors or selection. Only
-  /// visible rows mount Material/ink/animation trees; every tag stays searchable.
+  /// visible rows mount Material/ink/animation trees; every tag stays reachable.
   List<List<Tag>> _layoutRows(
     BuildContext context,
     List<Tag> tags,

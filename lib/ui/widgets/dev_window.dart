@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/deadline_notification_service.dart';
@@ -131,11 +132,22 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     Future<bool> Function(DeviceSyncNotifier sync) run,
     String failure, {
     String? success,
+    String? command,
   }) async {
     if (await run(ref.read(deviceSyncProvider.notifier))) {
       if (success != null) NotificationManager.instance.success(success);
     } else if (mounted) {
-      NotificationManager.instance.error(failure);
+      // The copy button copies only the command to run manually.
+      NotificationManager.instance.error(
+        command == null
+            ? failure
+            : '$failure You may need to run this command manually:\n$command',
+        actionLabel: command == null ? null : 'Copy command',
+        actionIcon: Icons.copy,
+        onAction: command == null
+            ? null
+            : () => Clipboard.setData(ClipboardData(text: command)),
+      );
     }
   }
 
@@ -157,18 +169,14 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
         DefaultSettings.showGameDetailsSkmId;
     final showSyncDeviceId = ref.watch(showSyncDeviceIdProvider);
-    Widget action(
-      String label,
-      IconData icon,
-      VoidCallback? onTap, {
-      bool? selected,
-    }) => AppActionButton(
-      label: label,
-      icon: icon,
-      theme: theme,
-      onTap: onTap,
-      selected: selected,
-    );
+    final showSyncStatus = ref.watch(showSyncStatusProvider);
+    // Plain outlined buttons in the app theme's style.
+    Widget action(String label, IconData icon, VoidCallback? onTap) =>
+        OutlinedButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon),
+          label: Text(label),
+        );
     // A small label over its actions, which wrap at their own widths.
     Widget section(String title, List<Widget> actions) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,10 +193,12 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       ],
     );
     Widget settingToggle(String label, IconData icon, String key, bool value) =>
-        action(
-          label,
-          icon,
-          () => ref.read(settingsProvider.notifier).setSetting(key, !value),
+        AppActionButton(
+          label: label,
+          icon: icon,
+          theme: theme,
+          onTap: () =>
+              ref.read(settingsProvider.notifier).setSetting(key, !value),
           selected: value,
         );
 
@@ -222,6 +232,11 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               'Deadline notifications simulated',
             );
           }),
+          action(
+            'Run check',
+            Icons.timer_outlined,
+            () => DeadlineNotificationService.instance.triggerAndRestart(ref),
+          ),
         ]),
         section('Steam fetch', [
           action(
@@ -294,24 +309,16 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             showSyncDeviceId,
           ),
           settingToggle(
+            'Sync status',
+            Icons.info_outline,
+            SettingsKeys.showSyncStatus,
+            showSyncStatus,
+          ),
+          settingToggle(
             'SKM-ID',
             Icons.tag,
             SettingsKeys.showGameDetailsSkmId,
             showId,
-          ),
-        ]),
-        section('Dialogs', [
-          action('Open dialog gallery', Icons.grid_view_rounded, () {
-            final navigatorContext = context;
-            widget.onClose();
-            showDialogGallery(navigatorContext);
-          }),
-        ]),
-        section('Deadlines', [
-          action(
-            'Run check',
-            Icons.timer_outlined,
-            () => DeadlineNotificationService.instance.triggerAndRestart(ref),
           ),
         ]),
         section('Library · ${selectedGames.length} selected', [
@@ -349,8 +356,8 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               Icons.shield_outlined,
               () => _firewallAction(
                 (sync) => sync.grantLinuxFirewallAccess(),
-                'Could not add firewall rules. You may need to run this command manually:\n'
-                'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
+                'Could not add firewall rules.',
+                command: 'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
                 success:
                     'Firewall rules added for UniKM (ufw/firewalld/iptables).',
               ),
@@ -360,12 +367,20 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               Icons.shield_outlined,
               () => _firewallAction(
                 (sync) => sync.clearLinuxFirewallAccess(),
-                'Could not remove firewall rules. You may need to run this command manually:\n'
-                'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
+                'Could not remove firewall rules.',
+                command:
+                    'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
                 success: 'Firewall rules removed for UniKM.',
               ),
             ),
           ]),
+        section('Dialogs', [
+          action('Open dialog gallery', Icons.grid_view_rounded, () {
+            final navigatorContext = context;
+            widget.onClose();
+            showDialogGallery(navigatorContext);
+          }),
+        ]),
       ],
     };
 
@@ -377,7 +392,8 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
           child: RepaintBoundary(
             child: Material(
               key: const ValueKey('dev-tools-panel'),
-              color: theme.surface,
+              // The app's main background, like the pages behind it.
+              color: theme.background,
               elevation: 12,
               shadowColor: Colors.black.withValues(alpha: 0.35),
               shape: RoundedRectangleBorder(

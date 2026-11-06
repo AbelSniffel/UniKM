@@ -180,10 +180,13 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     // keeps room on short or large-text screens.
     final maxHeight = MediaQuery.sizeOf(context).height * 0.55;
     // Sits on the page background like the settings page header, without a
-    // raised surface or shadow; a bottom border separates it from the library.
+    // raised surface or shadow, and lets the page pattern show through; a
+    // bottom border separates it from the library.
     return Material(
       key: const ValueKey('home-header-surface'),
-      color: theme.background,
+      color: ref.watch(pagePatternProvider)
+          ? Colors.transparent
+          : theme.background,
       // Keep the inherited text style, as the raised bar did.
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
@@ -556,11 +559,12 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
               Expanded(
                 child: AppSearchField(
                   theme: theme,
+                  // A little translucent, so what is behind shows faintly.
                   backgroundColor: Color.lerp(
                     theme.surface,
                     theme.background,
                     0.6,
-                  ),
+                  )?.withValues(alpha: 0.9),
                   hintText: 'Search tags...',
                   controller: _tagSearchController,
                   onChanged: (value) => setState(() => _tagSearchQuery = value),

@@ -110,6 +110,9 @@ Provider<T> _setting<T>(String key) =>
 /// Developer-only identity display; the sync identity itself is always retained.
 final showSyncDeviceIdProvider = _setting<bool>(SettingsKeys.showSyncDeviceId);
 
+/// Developer-only status line under the Device Sync dialog's devices.
+final showSyncStatusProvider = _setting<bool>(SettingsKeys.showSyncStatus);
+
 /// Frame Rate choice: 'auto' or a refresh rate in Hz.
 final frameRatePreferenceProvider = _setting<String>(
   SettingsKeys.frameRatePreference,
@@ -180,7 +183,7 @@ final patternAngleProvider = _settingsSlice(
       readSetting<int>(settings, SettingsKeys.patternAngle).clamp(0, 180),
 );
 
-/// The saved Show on pages choice; [pagePatternProvider] turns it off while
+/// The saved Translucent background choice; [pagePatternProvider] turns it off while
 /// no pattern is chosen.
 final pagePatternSettingProvider = _setting<bool>(SettingsKeys.pagePattern);
 

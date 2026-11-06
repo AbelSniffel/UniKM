@@ -496,32 +496,28 @@ class GameEditorTags extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(top: 16),
       children: [
+        // Titled like the settings tag groups: the selected custom tags, all Steam tags.
         SectionGroupBox(
-          title: 'Custom Tags',
-          description: customTags.isEmpty
-              ? null
-              : '$chosen of ${customTags.length} selected',
+          title: 'Custom Tags ($chosen)',
           theme: theme,
           titleIcon: Icons.label,
+          plainTitle: true,
           child: customTags.isEmpty
               ? _placeholder('No custom tags created yet')
-              : SizedBox(
-                  height: 120,
-                  child: TagList(
-                    tags: customTags,
-                    theme: theme,
-                    selectedTagIds: selectedTagIds,
-                    onTagToggled: onTagToggled,
-                    showSearch: true,
-                  ),
+              : TagList(
+                  tags: customTags,
+                  theme: theme,
+                  selectedTagIds: selectedTagIds,
+                  onTagToggled: onTagToggled,
+                  maxHeight: 120,
                 ),
         ),
         const SizedBox(height: kDialogSpacing),
         SectionGroupBox(
-          title: 'Steam Tags',
-          description: 'auto-managed',
+          title: 'Steam Tags (${steamTags.length})',
           theme: theme,
           titleIcon: FontAwesomeIcons.steam.data,
+          plainTitle: true,
           alternateBackground: true,
           child: steamTags.isEmpty
               ? _placeholder('No Steam tags imported yet')

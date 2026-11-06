@@ -587,8 +587,12 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
           key: const ValueKey('single-entry-footer'),
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          // Tinted like the group boxes while the page pattern shows.
           decoration: BoxDecoration(
-            color: theme.surface,
+            color: SectionGroupBox.background(
+              theme,
+              tinted: ref.watch(pagePatternProvider),
+            ),
             border: Border(top: BorderSide(color: theme.border)),
           ),
           child: Wrap(
@@ -993,7 +997,10 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: widget.theme.surface,
+          color: SectionGroupBox.background(
+            widget.theme,
+            tinted: ref.watch(pagePatternProvider),
+          ),
           border: Border(top: BorderSide(color: widget.theme.border)),
         ),
         width: double.infinity,

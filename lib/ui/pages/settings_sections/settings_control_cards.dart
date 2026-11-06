@@ -366,6 +366,10 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         ),
       ),
     );
+    // A disabled card's icon goes grey even while its setting stays on.
+    final iconColor = widget.active && widget.enabled
+        ? theme.accent
+        : theme.textSecondary;
     final iconSquare = icon == null
         ? null
         : Container(
@@ -373,15 +377,10 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
             height: 28,
             margin: const EdgeInsetsDirectional.only(end: 10),
             decoration: BoxDecoration(
-              color: (widget.active ? theme.accent : theme.textSecondary)
-                  .withValues(alpha: 0.25),
+              color: iconColor.withValues(alpha: 0.25),
               borderRadius: radius,
             ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: widget.active ? theme.accent : theme.textSecondary,
-            ),
+            child: Icon(icon, size: 18, color: iconColor),
           );
     final background = theme.background.withValues(
       alpha: widget.enabled ? 0.55 : 0.45,

@@ -331,7 +331,17 @@ class DeviceSyncService {
   bool _foreground = true;
   final _activeSyncSockets = <Socket>{};
 
-  Future<void> setForeground(bool foreground) async {
+  Future<void> _foregroundChange = Future.value();
+
+  /// Applies lifecycle changes one at a time, in order. A quick hide and show
+  /// (hidden, then resumed) otherwise let the hide finish last and leave sync
+  /// stopped, the device invisible, while the app is open.
+  Future<void> setForeground(bool foreground) =>
+      _foregroundChange = _foregroundChange
+          .catchError((Object _) {})
+          .then((_) => _applyForeground(foreground));
+
+  Future<void> _applyForeground(bool foreground) async {
     // Peers stop contacting a device that is going to the background.
     if (!foreground && _foreground && _responderSocket != null) {
       await _sendOffline(await _ensureDeviceId());
@@ -711,7 +721,8 @@ class DeviceSyncService {
           syncProtocol: (payload['protocol'] as num?)?.toInt() ?? 0,
           deviceType: peerType,
         );
-      });
+        // A failed send closes this socket; the scan just finds fewer devices.
+      }, onError: (Object _) {});
 
       final discoverPacket = _jsonBytes({
         'type': _discoverType,
@@ -1984,43 +1995,48 @@ class DeviceSyncService {
     }
     final remoteTimestamp =
         (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0;
-    return database
-        .transaction(() async {
-          requireContext();
-          // Manual sync judges competing edits against the last sync time.
-          final checkpoint = manual
-              ? await database.getPeerSyncCheckpoint(peer.id)
-              : null;
-          final knownSyncAt = checkpoint?['lastSyncAt'] as int?;
-          final applied = await codec.applyDeltaPayload(
-            _payloadRecords(payload['games']),
-            tombstones: _payloadRecords(payload['tombstones']),
-            covers: payload['covers'] as Map<String, SyncCover>? ?? const {},
-            lastSyncAt: knownSyncAt == null || knownSyncAt <= 0
-                ? null
-                : DateTime.fromMillisecondsSinceEpoch(knownSyncAt),
-          );
-          requireContext();
-          await database.savePeerSyncCheckpoint(
-            peerId: peer.id,
-            lastRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
-            lastSyncAt: manual && remoteTimestamp > 0
-                ? DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)
-                : DateTime.now(),
-            remoteRevisionId: manual
-                ? payload['syncRevisionId'] as String? ?? ''
-                : payload['contentDigest'] as String? ?? '',
-          );
-          requireContext();
-          return applied;
-        })
-        .then((applied) async {
-          _appliedRevision = (
-            revision: await database.getLocalSyncRevision(),
-            peerId: peer.id,
-          );
-          return applied;
-        });
+    final previousApplied = _appliedRevision;
+    try {
+      return await database.transaction(() async {
+        requireContext();
+        // Manual sync judges competing edits against the last sync time.
+        final checkpoint = manual
+            ? await database.getPeerSyncCheckpoint(peer.id)
+            : null;
+        final knownSyncAt = checkpoint?['lastSyncAt'] as int?;
+        final applied = await codec.applyDeltaPayload(
+          _payloadRecords(payload['games']),
+          tombstones: _payloadRecords(payload['tombstones']),
+          covers: payload['covers'] as Map<String, SyncCover>? ?? const {},
+          lastSyncAt: knownSyncAt == null || knownSyncAt <= 0
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(knownSyncAt),
+        );
+        requireContext();
+        await database.savePeerSyncCheckpoint(
+          peerId: peer.id,
+          lastRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
+          lastSyncAt: manual && remoteTimestamp > 0
+              ? DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)
+              : DateTime.now(),
+          remoteRevisionId: manual
+              ? payload['syncRevisionId'] as String? ?? ''
+              : payload['contentDigest'] as String? ?? '',
+        );
+        requireContext();
+        // Noted before the commit: the revision watch wakes on commit and
+        // must already know the records came from [peer], or it would
+        // signal them back as a local edit and start another sync.
+        _appliedRevision = (
+          revision: await database.getLocalSyncRevision(),
+          peerId: peer.id,
+        );
+        return applied;
+      });
+    } catch (_) {
+      _appliedRevision = previousApplied;
+      rethrow;
+    }
   }
 
   /// A reply from the peer, or the reason it could not serve the session.
@@ -2169,9 +2185,11 @@ class DeviceSyncService {
 
         socket.send(replyPacket, datagram.address, replyPort);
       },
-      onError: (Object error, StackTrace stackTrace) async =>
-          await stopDiscoveryResponder(),
-      onDone: () async => await stopDiscoveryResponder(),
+      // dart:io closes the socket on any error, such as a reply sent while
+      // Wi-Fi drops. Only the responder reopens: pairing and the sync server
+      // carry on, and the device stays visible.
+      onError: (Object _) => _reopenResponder(socket, deviceId),
+      onDone: () => _reopenResponder(socket, deviceId),
     );
 
     // Start the TCP sync data server alongside the UDP responder.
@@ -2180,6 +2198,20 @@ class DeviceSyncService {
     } catch (_) {
       await stopDiscoveryResponder();
       rethrow;
+    }
+  }
+
+  void _reopenResponder(RawDatagramSocket socket, String deviceId) {
+    if (!identical(socket, _responderSocket)) return;
+    unawaited(_responderSub?.cancel());
+    _responderSub = null;
+    _responderSocket = null;
+    socket.close();
+    if (_foreground && _syncEnabled) {
+      // Binding works while the network is down; a later scan retries if not.
+      unawaited(
+        ensureDiscoveryResponder(deviceId: deviceId).catchError((Object _) {}),
+      );
     }
   }
 
@@ -2706,7 +2738,8 @@ class DeviceSyncService {
 
           completer.complete(_PeerPingResult.fromPong(payload));
         }());
-      });
+        // A failed send closes this socket; the ping times out.
+      }, onError: (Object _) {});
     }
 
     final replyPort = useResponderPort ? responderPort : socket.port;

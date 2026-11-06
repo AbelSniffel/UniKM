@@ -22,6 +22,7 @@ import '../widgets/game_metadata_panel.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/platform_menu_button.dart';
+import '../widgets/section_groupbox.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/key_privacy.dart';
 import '../../core/services/steam_service.dart';
@@ -417,57 +418,60 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     return DialogInteractionScope(
       onPrimaryAction: _hasChanges && !_isSaving ? _save : null,
       onDismiss: _dismissDialog,
-      child: ThemedAlertDialog(
-        maxWidth: 1200,
-        showCloseButton: false,
-        body: GameEditorLayout(
-          key: _editorLayoutKey,
-          theme: theme,
-          titleController: _fields.title,
-          cover: _buildCover(theme),
-          trailing: _buildHeaderActions(theme),
-          notesController: _fields.notes,
-          onNotesChanged: _markChanged,
-          information: GameEditorInformation(
+      // No page pattern shows through the dialog.
+      child: RaisedGroupBoxes(
+        child: ThemedAlertDialog(
+          maxWidth: 1200,
+          showCloseButton: false,
+          body: GameEditorLayout(
+            key: _editorLayoutKey,
             theme: theme,
-            platformSelector: PlatformMenuButton(
-              theme: theme,
-              value: _platform,
-              tooltip: 'Selected platform: $_platform. Choose platform',
-              includeAutoDetect: false,
-              onSelected: _changePlatform,
-            ),
             titleController: _fields.title,
-            keyController: _fields.gameKey,
-            isKeyVisible: _isKeyVisible,
-            onKeyVisibilityChanged: (value) =>
-                setState(() => _isKeyVisible = value),
-            onCopyKey: _copyKey,
-            onTitleChanged: (_) => _markChanged(),
-            onKeyChanged: (_) => _markChanged(),
-          ),
-          options: _buildOptions(theme),
-          wideDetails: buildDetails(),
-          detailsBuilder: (information) => buildDetails(
-            information: information,
+            cover: _buildCover(theme),
+            trailing: _buildHeaderActions(theme),
+            notesController: _fields.notes,
+            onNotesChanged: _markChanged,
+            information: GameEditorInformation(
+              theme: theme,
+              platformSelector: PlatformMenuButton(
+                theme: theme,
+                value: _platform,
+                tooltip: 'Selected platform: $_platform. Choose platform',
+                includeAutoDetect: false,
+                onSelected: _changePlatform,
+              ),
+              titleController: _fields.title,
+              keyController: _fields.gameKey,
+              isKeyVisible: _isKeyVisible,
+              onKeyVisibilityChanged: (value) =>
+                  setState(() => _isKeyVisible = value),
+              onCopyKey: _copyKey,
+              onTitleChanged: (_) => _markChanged(),
+              onKeyChanged: (_) => _markChanged(),
+            ),
             options: _buildOptions(theme),
+            wideDetails: buildDetails(),
+            detailsBuilder: (information) => buildDetails(
+              information: information,
+              options: _buildOptions(theme),
+            ),
+            tags: GameEditorTags(
+              theme: theme,
+              customTags: tags.where((tag) => !tag.isSteamTag).toList(),
+              selectedTagIds: _selectedTagIds,
+              steamTags: tags
+                  .where(
+                    (tag) => tag.isSteamTag && _selectedTagIds.contains(tag.id),
+                  )
+                  .toList(),
+              onTagToggled: (tagId) => _edit(() {
+                if (!_selectedTagIds.remove(tagId)) _selectedTagIds.add(tagId);
+              }),
+            ),
           ),
-          tags: GameEditorTags(
-            theme: theme,
-            customTags: tags.where((tag) => !tag.isSteamTag).toList(),
-            selectedTagIds: _selectedTagIds,
-            steamTags: tags
-                .where(
-                  (tag) => tag.isSteamTag && _selectedTagIds.contains(tag.id),
-                )
-                .toList(),
-            onTagToggled: (tagId) => _edit(() {
-              if (!_selectedTagIds.remove(tagId)) _selectedTagIds.add(tagId);
-            }),
-          ),
+          actions: [_buildFooter(theme)],
+          below: _gameIds.length > 1 ? _buildNavigationBar(theme) : null,
         ),
-        actions: [_buildFooter(theme)],
-        below: _gameIds.length > 1 ? _buildNavigationBar(theme) : null,
       ),
     );
   }

@@ -487,6 +487,8 @@ class _SyncContent extends ConsumerWidget {
     final notifier = ref.read(deviceSyncProvider.notifier);
     final unifiedRows = _buildUnifiedRows();
     final showDeviceId = ref.watch(showSyncDeviceIdProvider);
+    // The status line is a developer aid; the device rows show each state.
+    final showStatus = ref.watch(showSyncStatusProvider);
     final statusMessage = (sync.statusMessage?.isNotEmpty ?? false)
         ? sync.statusMessage!
         : 'Ready.';
@@ -552,17 +554,18 @@ class _SyncContent extends ConsumerWidget {
                   },
                 ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
+        if (showStatus)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(theme.cornerRadius),
+            ),
+            child: Text(
+              statusMessage,
+              style: TextStyle(color: theme.textSecondary, fontSize: 12),
+            ),
           ),
-          child: Text(
-            statusMessage,
-            style: TextStyle(color: theme.textSecondary, fontSize: 12),
-          ),
-        ),
         if (showDeviceId)
           SelectableText(
             'Device ID: ${sync.deviceId}',
@@ -669,7 +672,10 @@ class _SyncContent extends ConsumerWidget {
       return ElevatedButton.icon(
         onPressed: () async {
           try {
-            final pairingCompleter = Completer<void>();
+            // Only the code dialog listens, and a pairing that fails before
+            // its code shows never opens it: unhandled, the error would
+            // stop a debug session. The failure is reported below.
+            final pairingCompleter = Completer<void>()..future.ignore();
             final cancelCompleter = Completer<void>();
 
             final pairingFuture = ref
@@ -710,8 +716,8 @@ class _SyncContent extends ConsumerWidget {
   }
 }
 
-/// A device as a tinted tile: its type icon in a square tinted with its
-/// state's colour, its name, address and state, and its actions. Paired
+/// A device as a tile tinted with its state's colour (neutral grey while
+/// offline): its type icon, its name, address and state, and its actions. Paired
 /// devices show their last sync on hovering the icon.
 class _DeviceTile extends StatelessWidget {
   const _DeviceTile({
@@ -740,7 +746,7 @@ class _DeviceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TintedCard(
     theme: theme,
-    color: theme.accent,
+    color: color,
     leading: Consumer(
       builder: (context, ref, _) {
         final pairedId = this.pairedId;

@@ -57,9 +57,8 @@ class AppearanceSection extends ConsumerWidget {
     label: 'Line shape',
   );
   static const SettingTextSpec pagePatternSpec = SettingTextSpec(
-    label: 'Show on pages',
-    description:
-        'A much fainter copy of the pattern behind every page, seen through tinted group boxes',
+    label: 'Translucent background',
+    description: 'Show the pattern faintly behind pages',
     icon: Icons.wallpaper,
   );
   static const SettingsSearchGroup themeSearchGroup = SettingsSearchGroup(

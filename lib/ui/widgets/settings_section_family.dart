@@ -30,11 +30,7 @@ class SettingsSectionFamily extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: color,
-        gradient: SectionGroupBox.gradient(
-          color,
-          tinted: tinted,
-          highlight: 0.05,
-        ),
+        gradient: SectionGroupBox.gradient(color, highlight: 0.05),
         borderRadius: radius,
         boxShadow: [if (!tinted) SurfaceDepth.shadow(isDark: theme.isDark)],
       ),

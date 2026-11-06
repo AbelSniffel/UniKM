@@ -397,7 +397,7 @@ class _GameCardState extends ConsumerState<GameCard>
       height: kSlimListCardHeight,
       scaleFactor: 0.012,
       decorationBuilder: (_) => BoxDecoration(
-        color: theme.surface.withValues(alpha: 0.92),
+        color: theme.surface.withValues(alpha: 0.75),
         borderRadius: BorderRadius.zero,
       ),
       child: Stack(

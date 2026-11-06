@@ -44,6 +44,18 @@ class SpacedSettingsGroups extends InheritedWidget {
   bool updateShouldNotify(SpacedSettingsGroups oldWidget) => false;
 }
 
+/// Keeps the [SectionGroupBox]es below it raised whatever the page pattern,
+/// for a dialog that no page pattern shows through.
+class RaisedGroupBoxes extends InheritedWidget {
+  const RaisedGroupBoxes({super.key, required super.child});
+
+  static bool isEnabledOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<RaisedGroupBoxes>() != null;
+
+  @override
+  bool updateShouldNotify(RaisedGroupBoxes oldWidget) => false;
+}
+
 /// Section groupbox with configurable title position
 class SectionGroupBox extends ConsumerWidget {
   const SectionGroupBox({
@@ -53,7 +65,6 @@ class SectionGroupBox extends ConsumerWidget {
     required this.child,
     this.titleLocation,
     this.padding = const EdgeInsets.all(12),
-    this.description,
     this.titleIcon,
     this.trailing,
     this.stackTrailingWhenCompact = false,
@@ -63,12 +74,12 @@ class SectionGroupBox extends ConsumerWidget {
     this.groupPosition = SectionGroupPosition.only,
     this.alternateBackground = false,
     this.showTitle = true,
+    this.plainTitle = false,
   });
 
   final String title;
   final AppThemeData theme;
   final Widget child;
-  final String? description;
 
   /// Optional override. When null, uses `SettingsKeys.sectionTitleLocation`.
   final SectionTitleLocation? titleLocation;
@@ -96,28 +107,28 @@ class SectionGroupBox extends ConsumerWidget {
   /// groupbox strip visuals (borders, alternating colours) without labels.
   final bool showTitle;
 
-  /// While the pattern shows on pages ([tinted]), a flat accent tint, the
-  /// same as the tinted cards'; otherwise the raised surface under the
-  /// [gradient]. [alternate] takes the slightly stronger tint or the darker
-  /// surface.
+  /// Titles a framed box in the text colour, as flat headings are, instead
+  /// of the accent.
+  final bool plainTitle;
+
+  /// The surface's opacity while the pattern shows on pages ([tinted]).
+  static const double patternAlpha = 0.8;
+
+  /// The raised surface under the [gradient], see-through while the pattern
+  /// shows on pages ([tinted]). [alternate] takes the darker surface.
   static Color background(
     AppThemeData theme, {
     required bool tinted,
     bool alternate = false,
-  }) => tinted
-      ? theme.accent.withValues(
-          alpha: alternate ? TintedCard.fillAlpha : TintedCard.choiceFillAlpha,
-        )
-      : alternate
-      ? Color.lerp(theme.surface, theme.background, 0.6)!
-      : theme.surface;
+  }) =>
+      (alternate
+              ? Color.lerp(theme.surface, theme.background, 0.6)!
+              : theme.surface)
+          .withValues(alpha: tinted ? patternAlpha : 1);
 
-  /// The raised surface's shading over [color], or none while [tinted].
-  static Gradient? gradient(
-    Color color, {
-    required bool tinted,
-    double highlight = 0.085,
-  }) => tinted ? null : SurfaceDepth.gradient(color, highlight: highlight);
+  /// The raised surface's shading over [color].
+  static Gradient gradient(Color color, {double highlight = 0.085}) =>
+      SurfaceDepth.gradient(color, highlight: highlight);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -126,7 +137,9 @@ class SectionGroupBox extends ConsumerWidget {
         titleLocation ?? ref.watch(sectionTitleLocationProvider);
 
     if (spaced) return _buildFlat(effectiveTitleLocation);
-    final tinted = ref.watch(pagePatternProvider);
+    final tinted =
+        !RaisedGroupBoxes.isEnabledOf(context) &&
+        ref.watch(pagePatternProvider);
     return SearchHighlight(
       query: searchQuery,
       builder: (context, highlightValue) =>
@@ -178,50 +191,20 @@ class SectionGroupBox extends ConsumerWidget {
   );
 
   Widget _buildHeaderText({bool flat = false}) {
-    final description = this.description?.trim();
-    final hasDescription = description != null && description.isNotEmpty;
-
     final titleStyle = TextStyle(
-      color: flat ? theme.textPrimary : theme.accent,
+      color: flat || plainTitle ? theme.textPrimary : theme.accent,
       fontSize: 16,
       fontWeight: FontWeight.w600,
       height: 1.35,
     );
     return Text.rich(
-      TextSpan(
-        children: [
-          // A flat heading marks the searched words in its title.
-          searchHighlightSpan(
-            title,
-            flat ? searchQuery : '',
-            titleStyle,
-            searchMarkStyle(theme.accent),
-          ),
-          if (hasDescription)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(
-                  Icons.arrow_right,
-                  size: 18,
-                  color: theme.secondary,
-                ),
-              ),
-            ),
-          if (hasDescription)
-            TextSpan(
-              text: description,
-              style: TextStyle(
-                color: theme.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                height: 1.35,
-              ),
-            ),
-        ],
+      // A flat heading marks the searched words in its title.
+      searchHighlightSpan(
+        title,
+        flat ? searchQuery : '',
+        titleStyle,
+        searchMarkStyle(theme.accent),
       ),
-      softWrap: true,
       overflow: TextOverflow.visible,
     );
   }
@@ -274,13 +257,13 @@ class SectionGroupBox extends ConsumerWidget {
 
     // Paint the background on Material so child controls' ink stays visible.
     final hasCorners = showTop || showBottom;
+    // While see-through, only the gradient paints, so the fill is not doubled.
     final surface = Material(
-      color: bgColor,
+      color: tinted ? Colors.transparent : bgColor,
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
-      // Kept while tinted too, so switching styles keeps the content mounted.
       child: Ink(
-        decoration: BoxDecoration(gradient: gradient(bgColor, tinted: tinted)),
+        decoration: BoxDecoration(gradient: gradient(bgColor)),
         child: content,
       ),
     );
