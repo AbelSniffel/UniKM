@@ -70,6 +70,7 @@ class IconMenuButton<T> extends StatefulWidget {
     required this.icon,
     required this.choices,
     this.highlighted = false,
+    this.expanded = false,
   });
 
   final AppThemeData theme;
@@ -83,6 +84,10 @@ class IconMenuButton<T> extends StatefulWidget {
 
   /// Shows the button selected, such as while a filter is active.
   final bool highlighted;
+
+  /// Fills the width offered, naming the current choice beside its icon
+  /// whenever the whole name fits.
+  final bool expanded;
 
   @override
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
@@ -141,40 +146,83 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
           focusNode: _focusNode,
           child: Semantics(
             expanded: controller.isOpen,
-            // The button fills any space it is offered; this keeps it to its
-            // content unless the parent sets its size.
-            child: IntrinsicWidth(
-              child: IntrinsicHeight(
-                child: AppNavigationButton(
-                  theme: theme,
-                  isSelected: widget.highlighted || controller.isOpen,
-                  isEnabled: enabled,
-                  isHorizontal: true,
-                  onTap: _toggleMenu,
-                  tooltipMessage: widget.tooltip,
-                  selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
-                  // The chevron's glyph has its own side margin, so the icon
-                  // side gets more padding to look even.
-                  padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-                  // The choice keeps the accent; disabled buttons take the muted
-                  // color the button gives them.
-                  iconBuilder: (context, color, size) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      widget.icon(enabled ? theme.accent : color, size),
-                      const SizedBox(width: 1),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        color: enabled ? theme.textPrimary : color,
-                        size: 20,
-                      ),
-                    ],
+            child: widget.expanded
+                ? LayoutBuilder(
+                    builder: (context, constraints) =>
+                        _button(theme, enabled, controller, constraints),
+                  )
+                // The button fills any space it is offered; this keeps it to
+                // its content unless the parent sets its size.
+                : IntrinsicWidth(
+                    child: IntrinsicHeight(
+                      child: _button(theme, enabled, controller, null),
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// The navigation-style button. Given [constraints] (expanded), it names
+  /// the current choice when the whole name fits.
+  Widget _button(
+    AppThemeData theme,
+    bool enabled,
+    MenuController controller,
+    BoxConstraints? constraints,
+  ) {
+    Widget chevron(Color muted) => Icon(
+      Icons.keyboard_arrow_down,
+      color: enabled ? theme.textPrimary : muted,
+      size: 20,
+    );
+    final label = widget.choices
+        .where((choice) => choice.$1 == widget.value)
+        .firstOrNull
+        ?.$2;
+    var named = false;
+    if (constraints != null && label != null) {
+      final painter = TextPainter(
+        // The button's label style, over the inherited one.
+        text: TextSpan(
+          text: label,
+          style: DefaultTextStyle.of(
+            context,
+          ).style.merge(const TextStyle(fontSize: 14)),
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      // Padding, icon, gap and chevron around the name.
+      named =
+          painter.width + 10 + kIconSize + 6 + 20 + 6 <= constraints.maxWidth;
+      painter.dispose();
+    }
+    return AppNavigationButton(
+      theme: theme,
+      isSelected: widget.highlighted || controller.isOpen,
+      isEnabled: enabled,
+      isHorizontal: true,
+      onTap: _toggleMenu,
+      tooltipMessage: widget.tooltip,
+      selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
+      // A lit button's icon grows only on hover or while its menu is open.
+      growWhenSelected: !widget.highlighted || controller.isOpen,
+      // The chevron's glyph has its own side margin, so the icon side gets
+      // more padding to look even.
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      labelText: named ? label : null,
+      trailing: named ? chevron(theme.textHint) : null,
+      // The choice keeps the accent; disabled buttons take the muted color
+      // the button gives them.
+      iconBuilder: (context, color, size) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          widget.icon(enabled ? theme.accent : color, size),
+          if (!named) ...[const SizedBox(width: 1), chevron(color)],
+        ],
       ),
     );
   }

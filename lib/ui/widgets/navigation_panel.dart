@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import 'animated_gradient_bar.dart';
 import 'nav_button_group.dart';
+import 'navigation_more_menu.dart';
 import 'navigation_panel_overlay.dart';
 import 'navigation_theme_menu.dart';
 
@@ -145,11 +146,14 @@ class NavigationPanel extends ConsumerWidget {
                         (forceCollapsed ? 48 : 88) -
                         kElementHSpacing * (isSplit ? 2 : 1))
                     .clamp(0.0, double.infinity);
+            // The More button takes a share of its group's space.
             Widget buildGroup(List<int> indices) => ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: items.isEmpty
                     ? 0
-                    : groupSpace * indices.length / items.length,
+                    : groupSpace *
+                          (indices.length + (_endsWithMenu(indices) ? 1 : 0)) /
+                          (items.length + 1),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -212,6 +216,10 @@ class NavigationPanel extends ConsumerWidget {
 
   List<int> get _allGroupIndices => [for (var i = 0; i < items.length; i++) i];
 
+  /// The More menu button ends the group holding the last page.
+  bool _endsWithMenu(List<int> indices) =>
+      indices.isNotEmpty && indices.last == items.length - 1;
+
   List<int> get _trailingGroupIndices {
     if (items.length <= 2) return const [];
     return [for (var i = 2; i < items.length; i++) i];
@@ -228,6 +236,8 @@ class NavigationPanel extends ConsumerWidget {
     children: [
       for (final index in indices)
         _buildIndexedNavButton(index, isHorizontal, isCollapsed, expansionMode),
+      if (_endsWithMenu(indices))
+        NavigationMoreMenuButton(theme: theme, position: position),
     ],
   );
 
@@ -318,36 +328,22 @@ class _ThemeSelector extends ConsumerWidget {
                 child: SizedBox(
                   width: isVert ? double.infinity : 40,
                   height: 40,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: IconButton(
-                      key: const ValueKey('nav-expansion-mode'),
-                      tooltip:
-                          'Navigation button style: ${expansionMode.displayName}',
-                      onPressed: () => ref
-                          .read(settingsProvider.notifier)
-                          .setSetting(
-                            SettingsKeys.navExpansionMode,
-                            expansionMode.next,
-                          ),
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(40, 40),
-                        padding: const EdgeInsets.all(8),
-                        foregroundColor: theme.textSecondary,
-                        hoverColor: theme.navItemHover,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            theme.cornerRadius * 1.5,
-                          ),
+                  child: GradientBarIconButton(
+                    key: const ValueKey('nav-expansion-mode'),
+                    theme: theme,
+                    tooltip:
+                        'Navigation button style: ${expansionMode.displayName}',
+                    onPressed: () => ref
+                        .read(settingsProvider.notifier)
+                        .setSetting(
+                          SettingsKeys.navExpansionMode,
+                          expansionMode.next,
                         ),
-                      ),
-                      icon: Icon(switch (expansionMode) {
-                        NavExpansionMode.automatic =>
-                          Icons.dynamic_feed_rounded,
-                        NavExpansionMode.expanded => Icons.unfold_more_rounded,
-                        NavExpansionMode.collapsed => Icons.unfold_less_rounded,
-                      }, size: 24),
-                    ),
+                    icon: switch (expansionMode) {
+                      NavExpansionMode.automatic => Icons.dynamic_feed_rounded,
+                      NavExpansionMode.expanded => Icons.unfold_more_rounded,
+                      NavExpansionMode.collapsed => Icons.unfold_less_rounded,
+                    },
                   ),
                 ),
               ),

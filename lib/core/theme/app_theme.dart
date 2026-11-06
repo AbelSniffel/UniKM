@@ -924,6 +924,8 @@ class AppNavigationButton extends StatefulWidget {
     this.hideIconWithLabel = false,
     this.hasNotification = false,
     this.tint,
+    this.trailing,
+    this.growWhenSelected = true,
   });
 
   final AppThemeData theme;
@@ -958,6 +960,14 @@ class AppNavigationButton extends StatefulWidget {
   /// strengths; the theme's accent by default.
   final Color? tint;
 
+  /// Sits after a horizontal button's label without growing on hover, such
+  /// as a menu chevron.
+  final Widget? trailing;
+
+  /// False keeps a selected button's icon at its size, growing only on
+  /// hover, for buttons that stay lit.
+  final bool growWhenSelected;
+
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
 }
@@ -978,6 +988,14 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     reverseDuration: const Duration(milliseconds: 100),
     value: widget.isSelected ? 1.0 : 0.0,
   );
+  // Eases the selected icon size in and out as [growWhenSelected] changes,
+  // such as when a lit menu button's menu closes away from the pointer.
+  late final AnimationController _growController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 100),
+    reverseDuration: const Duration(milliseconds: 100),
+    value: widget.growWhenSelected ? 1.0 : 0.0,
+  );
   late final AnimationController _labelVisibilityController =
       AnimationController(
         vsync: this,
@@ -992,6 +1010,11 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       widget.isSelected
           ? _selectionController.forward()
           : _selectionController.reverse();
+    }
+    if (oldWidget.growWhenSelected != widget.growWhenSelected) {
+      widget.growWhenSelected
+          ? _growController.forward()
+          : _growController.reverse();
     }
     if (oldWidget.isEnabled && !widget.isEnabled) _hoverController.reverse();
     if (oldWidget.labelFadeDuration != widget.labelFadeDuration) {
@@ -1013,6 +1036,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   void dispose() {
     _hoverController.dispose();
     _selectionController.dispose();
+    _growController.dispose();
     _labelVisibilityController.dispose();
     super.dispose();
   }
@@ -1103,7 +1127,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
-      children: [?icon, ?spacedLabel],
+      children: [?icon, ?spacedLabel, ?widget.trailing],
     );
   }
 
@@ -1124,6 +1148,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       animation: Listenable.merge([
         _hoverController,
         _selectionController,
+        _growController,
         _labelVisibilityController,
       ]),
       builder: (context, child) {
@@ -1162,7 +1187,9 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
           color: _foreground(widget.theme.textPrimary, selectionT),
         );
         final iconScale = widget.isEnabled
-            ? 1 + math.max(selectionT, hoverT) * _hoverIconBoost
+            ? 1 +
+                  math.max(selectionT * _growController.value, hoverT) *
+                      _hoverIconBoost
             : 1.0;
 
         return MouseRegion(

@@ -12,6 +12,7 @@ import '../pages/settings_sections/settings_theme_editor.dart';
 import 'app_dialog.dart';
 import 'app_tab_bar.dart';
 import 'custom_theme_actions.dart';
+import 'navigation_more_menu.dart';
 import 'popup_menu_helpers.dart';
 import 'theme_preview_card.dart';
 import 'theme_picker_actions.dart';
@@ -35,11 +36,14 @@ class NavigationThemeMenuButton extends ConsumerStatefulWidget {
 class _NavigationThemeMenuButtonState
     extends ConsumerState<NavigationThemeMenuButton> {
   final _controller = MenuController();
-  final _buttonFocus = FocusNode();
+  // Holds focus around the button while the menu is open, so Escape closes
+  // it. Given back to the button itself, focus would leave its highlight
+  // drawn after the menu closes.
+  final _menuFocus = FocusNode(skipTraversal: true);
 
   @override
   void dispose() {
-    _buttonFocus.dispose();
+    _menuFocus.dispose();
     super.dispose();
   }
 
@@ -63,23 +67,16 @@ class _NavigationThemeMenuButtonState
   Widget build(BuildContext context) {
     final current = ref.watch(themeProvider);
     final theme = widget.theme;
+    final placement = navigationMenuPlacement(widget.position);
     return MenuAnchor(
       controller: _controller,
       animated: !MediaQuery.disableAnimationsOf(context),
-      childFocusNode: _buttonFocus,
+      childFocusNode: _menuFocus,
       consumeOutsideTap: true,
       useRootOverlay: true,
       reservedPadding: const EdgeInsets.all(8),
-      alignmentOffset: switch (widget.position) {
-        NavBarPosition.left || NavBarPosition.right => const Offset(8, 0),
-        NavBarPosition.top || NavBarPosition.bottom => const Offset(0, 8),
-      },
-      style: appMenuStyle(
-        theme,
-        alignment: widget.position == NavBarPosition.left
-            ? Alignment.topRight
-            : Alignment.bottomLeft,
-      ),
+      alignmentOffset: placement.offset,
+      style: appMenuStyle(theme, alignment: placement.alignment),
       menuChildren: [
         _ThemePicker(
           onSelected: (selected) =>
@@ -89,13 +86,62 @@ class _NavigationThemeMenuButtonState
           onDelete: _deleteTheme,
         ),
       ],
-      builder: (context, controller, _) => Material(
+      builder: (context, controller, _) => Focus(
+        focusNode: _menuFocus,
+        child: GradientBarIconButton(
+          theme: theme,
+          tooltip: 'Change theme',
+          icon: current.icon,
+          grown: controller.isOpen,
+          onPressed: () {
+            if (controller.isOpen) return controller.close();
+            _menuFocus.requestFocus();
+            controller.open();
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// An icon button on the navigation gradient bar. Its icon grows while
+/// hovered or [grown], easing in and out like the navigation buttons'.
+class GradientBarIconButton extends StatefulWidget {
+  const GradientBarIconButton({
+    super.key,
+    required this.theme,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.grown = false,
+  });
+
+  final AppThemeData theme;
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  /// Keeps the icon grown, such as while the button's menu is open.
+  final bool grown;
+
+  @override
+  State<GradientBarIconButton> createState() => _GradientBarIconButtonState();
+}
+
+class _GradientBarIconButtonState extends State<GradientBarIconButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
         color: Colors.transparent,
         child: IconButton(
-          focusNode: _buttonFocus,
-          tooltip: 'Change theme',
-          onPressed: () =>
-              controller.isOpen ? controller.close() : controller.open(),
+          tooltip: widget.tooltip,
+          onPressed: widget.onPressed,
           style: IconButton.styleFrom(
             minimumSize: const Size(40, 40),
             padding: const EdgeInsets.all(8),
@@ -105,7 +151,11 @@ class _NavigationThemeMenuButtonState
               borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
             ),
           ),
-          icon: Icon(current.icon, size: 24),
+          icon: AnimatedScale(
+            scale: _hovered || widget.grown ? 1.2 : 1,
+            duration: const Duration(milliseconds: 100),
+            child: Icon(widget.icon, size: 24),
+          ),
         ),
       ),
     );

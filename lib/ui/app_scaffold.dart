@@ -29,7 +29,6 @@ import 'pages/home_sections/selection_ribbon_host.dart';
 import 'pages/settings_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
 import 'widgets/navigation_panel_overlay.dart';
-import 'widgets/app_progress_indicator.dart';
 import 'widgets/app_page_stack.dart';
 import 'widgets/dev_window.dart';
 import 'widgets/app_title_bar.dart';
@@ -518,50 +517,15 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         : nav_panel.kNavigationPanelExpandedWidth;
     const navPanelHorizontalExtent = nav_panel.kNavigationPanelHorizontalExtent;
 
-    final updateIsActive = ref.watch(
-      updateProvider.select((s) => s.isChecking || s.isDownloading),
-    );
-    final updateIsReady = ref.watch(
-      updateProvider.select((s) => s.downloadedFilePath != null),
-    );
-
-    final navItems = NavItem.values
-        .map((item) {
-          final hasNotification =
-              currentNav != item &&
-              ref.watch(
-                pageNotificationsProvider.select((s) => s.contains(item)),
-              );
-          if (item == NavItem.updates) {
-            final showAvailableDownloadIcon = hasNotification && !updateIsReady;
-            final iconData = updateIsReady
-                ? Icons.file_download_done
-                : showAvailableDownloadIcon
-                ? Icons.download_rounded
-                : item.unselectedIcon;
-            return nav_panel.NavItem(
-              label: item.label,
-              hasNotification: hasNotification,
-              icon: iconData,
-              selectedIcon: iconData,
-              iconBuilder: (color, size) => _UpdateNavIcon(
-                iconData: iconData,
-                isActive: updateIsActive,
-                useAccentColor: showAvailableDownloadIcon || updateIsReady,
-                color: color,
-                accentColor: theme.accent,
-                size: size,
-              ),
-            );
-          }
-          return nav_panel.NavItem(
-            label: item.label,
-            tooltipLabel: item == NavItem.addGames ? 'Add Games' : null,
-            icon: item.unselectedIcon,
-            selectedIcon: item.selectedIcon,
-          );
-        })
-        .toList(growable: false);
+    final navItems = [
+      for (final item in NavItem.pages)
+        nav_panel.NavItem(
+          label: item.label,
+          tooltipLabel: item == NavItem.addGames ? 'Add Games' : null,
+          icon: item.unselectedIcon,
+          selectedIcon: item.selectedIcon,
+        ),
+    ];
 
     // Check if batch fetch is active
     final batchFetchActive = ref.watch(
@@ -570,7 +534,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 
     // Shared item-selection handler for all four persistent nav panel instances.
     void onNavItemSelected(int index) {
-      final targetNav = NavItem.values[index];
+      final targetNav = NavItem.pages[index];
       // Adding games waits for incoming sync data and Steam fetches.
       final addBlockedBy = targetNav != NavItem.addGames
           ? null
@@ -585,13 +549,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         );
         return;
       }
-      // Visiting a page acknowledges its pending nav notification state.
-      ref.read(pageNotificationsProvider.notifier).remove(targetNav);
-      if (targetNav == NavItem.updates) {
-        ref.read(updateDialogOpenProvider.notifier).set(true);
-      } else {
-        ref.read(currentNavProvider.notifier).set(targetNav);
-      }
+      ref.read(currentNavProvider.notifier).set(targetNav);
     }
 
     // Returns a NavigationPanel fixed to [pos]. All four instances share the
@@ -601,14 +559,16 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         nav_panel.NavigationPanel(
           key: ValueKey('nav-panel-${pos.name}'),
           items: navItems,
-          selectedIndex: currentNav.index,
+          selectedIndex: NavItem.pages.indexOf(currentNav),
           onItemSelected: onNavItemSelected,
           theme: theme,
           position: pos,
           appearance: navAppearance,
           gradientAnimation: gradientAnimation,
           forceCollapsed: forceCollapsedNav,
-          lockedIndices: batchFetchActive ? {NavItem.addGames.index} : {},
+          lockedIndices: batchFetchActive
+              ? {NavItem.pages.indexOf(NavItem.addGames)}
+              : {},
         );
 
     final pagesStack = _buildPagesStack(
@@ -769,55 +729,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       // Request may already be resolved remotely.
     }
   }
-}
-
-class _UpdateNavIcon extends StatelessWidget {
-  const _UpdateNavIcon({
-    required this.iconData,
-    required this.isActive,
-    required this.useAccentColor,
-    required this.color,
-    required this.accentColor,
-    required this.size,
-  });
-
-  final IconData iconData;
-  final bool isActive;
-  final bool useAccentColor;
-  final Color color;
-  final Color accentColor;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: Center(
-      child: AnimatedSwitcher(
-        duration: kFastAnimation,
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeOut,
-        layoutBuilder: (currentChild, previousChildren) => Stack(
-          alignment: Alignment.center,
-          children: [...previousChildren, ?currentChild],
-        ),
-        transitionBuilder: (child, animation) =>
-            FadeTransition(opacity: animation, child: child),
-        child: isActive
-            ? SizedBox(
-                key: const ValueKey('upd-active'),
-                width: size,
-                height: size,
-                child: AppCircularProgressIndicator(color: color),
-              )
-            : Icon(
-                iconData,
-                key: ValueKey('upd-${iconData.codePoint}-$useAccentColor'),
-                color: useAccentColor ? accentColor : color,
-                size: size,
-              ),
-      ),
-    ),
-  );
 }
 
 /// Persistent slot that slide-animates in/out when [isActive] toggles.

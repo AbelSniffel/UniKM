@@ -185,10 +185,10 @@ enum GameSortMode {
   titleZA('Title Z-A'),
   platformAZ('Platform A-Z'),
   platformZA('Platform Z-A'),
-  dateNewest('Date Added (Newest)'),
-  dateOldest('Date Added (Oldest)'),
-  ratingHigh('Rating (Highest first)'),
-  ratingLow('Rating (Lowest first)');
+  dateNewest('Newest First'),
+  dateOldest('Oldest First'),
+  ratingHigh('Highest Rating'),
+  ratingLow('Lowest Rating');
 
   const GameSortMode(this.displayName);
 

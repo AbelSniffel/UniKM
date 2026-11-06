@@ -41,6 +41,10 @@ enum NavItem {
 
   const NavItem(this.label, this.selectedIcon, this.unselectedIcon);
 
+  /// The destinations with a navigation button, in order. Updates opens from
+  /// the navigation panel's More menu.
+  static const pages = [home, addGames, settings];
+
   final String label;
   final IconData selectedIcon;
   final IconData unselectedIcon;

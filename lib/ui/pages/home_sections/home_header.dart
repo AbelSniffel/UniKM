@@ -19,13 +19,13 @@ import '../../dialogs/library_stats_dialog.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
+import '../../widgets/app_tab_bar.dart';
 import '../../widgets/device_sync_icon.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/platform_menu_button.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tag_list.dart';
-import 'animated_view_mode_toggle.dart';
 
 /// Below these toolbar widths the search hint is shortened.
 const double _kLongSearchHintMinWidth = 460;
@@ -105,6 +105,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   final ScrollController _filtersScrollController = ScrollController();
   late final AnimationController _filterPanelController;
   String _tagSearchQuery = '';
+
+  /// The filter panel's tab on very narrow layouts: 0 Tags, 1 Show only.
+  int _filterTab = 0;
   final _tagSearchController = TextEditingController();
 
   @override
@@ -145,11 +148,12 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
   }
 
-  /// Filters set in the filter panel. The platform has its own button, so it
-  /// neither counts here nor pulses the Filters button.
-  static int _activeFilterCount(ActiveFiltersState state) =>
+  /// Filters set in the filter panel. The platform counts only while its
+  /// button sits in the panel; on the toolbar it shows for itself.
+  int _activeFilterCount(ActiveFiltersState state, String? platformFilter) =>
       state.tagFilters.length +
-      _filterOptions.where((option) => option.isOn(state)).length;
+      _filterOptions.where((option) => option.isOn(state)).length +
+      (widget.isVeryNarrowLayout && platformFilter?.isNotEmpty == true ? 1 : 0);
 
   void _clearBoolFilters() {
     for (final option in _filterOptions) {
@@ -269,12 +273,79 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     required bool showSync,
     required double width,
   }) {
-    final sortMode = ref.watch(gamesProvider.select((s) => s.sortMode));
-    final viewMode = ref.watch(viewModeProvider);
-    final slimListView = ref.watch(
-      gameCardSettingsProvider.select((s) => s.slimListView),
-    );
     const gap = SizedBox(width: kElementHSpacing);
+    final narrow = widget.isVeryNarrowLayout;
+    // On very narrow layouts the count shares a row with sync and filters,
+    // above a full-width search, and platform and sort move into the filter
+    // panel. Otherwise one row holds them all, the search in the middle. The
+    // view choice lives in the navigation panel's More menu.
+    final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
+    final countLabel = _GamesCount(theme: theme);
+    final search = AppSearchField(
+      theme: theme,
+      controller: widget.searchController,
+      focusNode: widget.searchFocusNode,
+      hintText: width >= _kLongSearchHintMinWidth
+          ? 'Search by title or key...'
+          : width >= _kMediumSearchHintMinWidth
+          ? 'Search games...'
+          : 'Search...',
+      onChanged: _notifier.setSearchQueryDebounced,
+      onCleared: () => _notifier.setSearchQuery(''),
+    );
+    final actions = _buttonRow(key: const ValueKey('home-toolbar-actions'), [
+      if (!narrow) ..._buildPlatformAndSort(theme, platformFilter),
+      _buildFiltersToggleButton(theme, filters, platformFilter),
+    ]);
+    if (!narrow) {
+      return Row(
+        children: [
+          if (sync != null) ...[sync, gap],
+          countLabel,
+          gap,
+          Expanded(child: search),
+          gap,
+          actions,
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            if (sync != null) ...[sync, gap],
+            Expanded(child: countLabel),
+            gap,
+            actions,
+          ],
+        ),
+        const SizedBox(height: 8),
+        search,
+      ],
+    );
+  }
+
+  /// Separate header buttons in a row, all as tall as the search bar.
+  static Widget _buttonRow(List<Widget> children, {Key? key}) => SizedBox(
+    height: kElementHeight,
+    child: Row(
+      key: key,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: kElementHSpacing,
+      children: children,
+    ),
+  );
+
+  /// The platform and sort menu buttons: on the toolbar, or [expanded] and
+  /// named atop the filter panel on very narrow layouts.
+  List<Widget> _buildPlatformAndSort(
+    AppThemeData theme,
+    String? platformFilter, {
+    bool expanded = false,
+  }) {
+    final sortMode = ref.watch(gamesProvider.select((s) => s.sortMode));
     final selectedPlatform = platformFilter?.isNotEmpty == true
         ? platformFilter
         : null;
@@ -292,143 +363,55 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       color: color,
       size: size,
     );
-    // On very narrow layouts the count spans a row of its own between sync
-    // and the view toggle. Otherwise it leads the search row, with sync
-    // before it and the view toggle at the end.
-    final stacked = widget.isVeryNarrowLayout;
-    final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
-    final viewToggle = AnimatedViewModeToggle(
-      theme: theme,
-      isGridView: viewMode == GameListViewMode.grid,
-      selectedListViewMode: resolveListViewDensityMode(
-        slimListView: slimListView,
-      ),
-      onToggle: () => ref
-          .read(viewModeProvider.notifier)
-          .setViewMode(
-            viewMode == GameListViewMode.grid
-                ? GameListViewMode.list
-                : GameListViewMode.grid,
+    return [
+      IconMenuButton<String>(
+        key: const ValueKey('home-platform-button'),
+        theme: theme,
+        expanded: expanded,
+        tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
+        // Always lit, so both read as active choices.
+        highlighted: true,
+        icon: (color, size) => selectedPlatform == null
+            ? Icon(Icons.videogame_asset_outlined, color: color, size: size)
+            : platformIcon(selectedPlatform, color, size),
+        value: platformFilter ?? '',
+        choices: [
+          (
+            '',
+            'All Platforms',
+            const Icon(Icons.videogame_asset_outlined, size: 18),
           ),
-      onSelectGridView: () => ref
-          .read(viewModeProvider.notifier)
-          .setViewMode(GameListViewMode.grid),
-      onSelectListViewMode: (mode) =>
-          ref.read(settingsProvider.notifier).setMany({
-            ...listViewDensityModeSettings(mode),
-            SettingsKeys.gameListViewMode: GameListViewMode.list,
-          }),
-    );
-    final countLabel = _GamesCount(theme: theme);
-    final searchRow = Row(
-      children: [
-        if (!stacked) ...[
-          if (sync != null) ...[sync, gap],
-          countLabel,
-          gap,
+          for (final platform in platforms)
+            (platform, platform, platformIcon(platform, theme.textPrimary, 18)),
         ],
-        Expanded(
-          child: AppSearchField(
-            theme: theme,
-            controller: widget.searchController,
-            focusNode: widget.searchFocusNode,
-            hintText: width >= _kLongSearchHintMinWidth
-                ? 'Search by title or key...'
-                : width >= _kMediumSearchHintMinWidth
-                ? 'Search games...'
-                : 'Search...',
-            onChanged: _notifier.setSearchQueryDebounced,
-            onCleared: () => _notifier.setSearchQuery(''),
-          ),
-        ),
-        gap,
-        // Platform, sort and filters are separate buttons on the header, all
-        // as tall as the search bar.
-        SizedBox(
-          height: kElementHeight,
-          child: Row(
-            key: const ValueKey('home-toolbar-actions'),
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: kElementHSpacing,
-            children: [
-              IconMenuButton<String>(
-                key: const ValueKey('home-platform-button'),
-                theme: theme,
-                tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
-                highlighted: selectedPlatform != null,
-                icon: (color, size) => selectedPlatform == null
-                    ? Icon(
-                        Icons.videogame_asset_outlined,
-                        color: color,
-                        size: size,
-                      )
-                    : platformIcon(selectedPlatform, color, size),
-                value: platformFilter ?? '',
-                choices: [
-                  (
-                    '',
-                    'All Platforms',
-                    const Icon(Icons.videogame_asset_outlined, size: 18),
-                  ),
-                  for (final platform in platforms)
-                    (
-                      platform,
-                      platform,
-                      platformIcon(platform, theme.textPrimary, 18),
-                    ),
-                ],
-                onSelected: (value) =>
-                    _notifier.setPlatformFilter(value.isEmpty ? null : value),
-              ),
-              IconMenuButton<GameSortMode>(
-                key: const ValueKey('home-sort-button'),
-                theme: theme,
-                tooltip: 'Sort: ${sortMode.displayName}',
-                highlighted: sortMode != DefaultSettings.gameSortMode,
-                icon: (color, size) =>
-                    Icon(_sortIconFor(sortMode), color: color, size: size),
-                value: sortMode,
-                choices: [
-                  for (final mode in GameSortMode.values)
-                    (
-                      mode,
-                      mode.displayName,
-                      Icon(_sortIconFor(mode), size: 18),
-                    ),
-                ],
-                onSelected: _notifier.setSortMode,
-              ),
-              _buildFiltersToggleButton(theme, filters),
-            ],
-          ),
-        ),
-        if (!stacked) ...[gap, viewToggle],
-      ],
-    );
-    if (!stacked) return searchRow;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            if (sync != null) ...[sync, gap],
-            Expanded(child: countLabel),
-            gap,
-            viewToggle,
-          ],
-        ),
-        const SizedBox(height: 8),
-        searchRow,
-      ],
-    );
+        onSelected: (value) =>
+            _notifier.setPlatformFilter(value.isEmpty ? null : value),
+      ),
+      IconMenuButton<GameSortMode>(
+        key: const ValueKey('home-sort-button'),
+        theme: theme,
+        expanded: expanded,
+        tooltip: 'Sort: ${sortMode.displayName}',
+        // Always lit, so both read as active choices.
+        highlighted: true,
+        icon: (color, size) =>
+            Icon(_sortIconFor(sortMode), color: color, size: size),
+        value: sortMode,
+        choices: [
+          for (final mode in GameSortMode.values)
+            (mode, mode.displayName, Icon(_sortIconFor(mode), size: 18)),
+        ],
+        onSelected: _notifier.setSortMode,
+      ),
+    ];
   }
 
   Widget _buildFiltersToggleButton(
     AppThemeData theme,
     ActiveFiltersState filters,
+    String? platformFilter,
   ) {
-    final filterCount = _activeFilterCount(filters);
+    final filterCount = _activeFilterCount(filters, platformFilter);
     final hasActiveFilters = filterCount > 0;
     return GestureDetector(
       onSecondaryTapUp: (details) =>
@@ -596,12 +579,42 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       ),
     );
 
-    // Tags spans the full width, with Show only below it.
+    // Tags spans the full width, with Show only below it. Very narrow
+    // toolbars leave platform and sort to share a row above tabs that show
+    // the tags or the options.
+    final narrow = widget.isVeryNarrowLayout;
     final panel = Column(
       key: const ValueKey('home-filter-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 8,
-      children: [tagsGroup, optionsGroup],
+      children: narrow
+          ? [
+              Row(
+                key: const ValueKey('home-filter-sorters'),
+                spacing: kElementHSpacing,
+                children: [
+                  for (final button in _buildPlatformAndSort(
+                    theme,
+                    platformFilter,
+                    expanded: true,
+                  ))
+                    Expanded(
+                      child: SizedBox(height: kElementHeight, child: button),
+                    ),
+                ],
+              ),
+              AppTabBar(
+                theme: theme,
+                tabs: const [AppTab('Tags'), AppTab('Show only')],
+                selectedIndex: _filterTab,
+                onChanged: (index) => setState(() => _filterTab = index),
+              ),
+              AppTabTransition(
+                index: _filterTab,
+                child: _filterTab == 0 ? tagsGroup : optionsGroup,
+              ),
+            ]
+          : [tagsGroup, optionsGroup],
     );
     // The padding sits inside the clipping size animation, leaving room for
     // the groupbox shadows at the sides and bottom.
