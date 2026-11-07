@@ -59,6 +59,23 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(cornerRadius),
     ),
+  ).copyWith(foregroundBuilder: _growIconOnHover);
+
+  /// Grows an icon button's icon on hover or selection, as the navigation
+  /// panel's buttons do.
+  static Widget _growIconOnHover(
+    BuildContext context,
+    Set<WidgetState> states,
+    Widget? child,
+  ) => AnimatedScale(
+    scale:
+        !states.contains(WidgetState.disabled) &&
+            (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.selected))
+        ? 1 + _AppNavigationButtonState._hoverIconBoost
+        : 1,
+    duration: const Duration(milliseconds: 100),
+    child: child,
   );
 
   /// Get the icon for this theme

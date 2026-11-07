@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Flat colours only: the tile, and the key in the default accent. -->
+  <rect width="1024" height="1024" rx="228" fill="#1B2233"/>
+  <g transform="translate(14 14) rotate(45 512 512)" fill="#5F92FF">
+    <!-- Bow -->
+    <circle cx="330" cy="512" r="206"/>
+    <!-- Shaft, rounded at the tip -->
+    <path d="M500 468 H858 a44 44 0 0 1 0 88 H500 Z"/>
+    <!-- Teeth -->
+    <path d="M736 540 H822 V650 a24 24 0 0 1 -24 24 H760 a24 24 0 0 1 -24 -24 Z"/>
+    <path d="M628 540 H708 V616 a24 24 0 0 1 -24 24 H652 a24 24 0 0 1 -24 -24 Z"/>
+  </g>
+  <!-- D-pad cut out of the bow, upright -->
+  <g transform="translate(14 14) rotate(45 512 512) rotate(-45 330 512)" fill="#1B2233">
+    <rect x="240" y="477" width="180" height="70" rx="18"/>
+    <rect x="295" y="422" width="70" height="180" rx="18"/>
+  </g>
+</svg>
