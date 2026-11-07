@@ -385,6 +385,9 @@ class _ReleaseNotes extends ConsumerStatefulWidget {
 
 class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
   String? _selectedTag;
+
+  /// The selected release, while it is checked again.
+  String? _checkingTag;
   final _scrollController = ScrollController();
 
   List<GitHubRelease> get _releases => [
@@ -400,6 +403,13 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
   void initState() {
     super.initState();
     _selectedTag = widget.updateRelease?.tagName;
+  }
+
+  /// Checks [tag]'s release again, so the download button matches it.
+  Future<void> _recheck(String tag) async {
+    setState(() => _checkingTag = tag);
+    await ref.read(updateProvider.notifier).refreshRelease(tag);
+    if (mounted && _checkingTag == tag) setState(() => _checkingTag = null);
   }
 
   @override
@@ -445,8 +455,10 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
         release != null &&
         updateState.isDownloading &&
         updateState.switchingToVersion == release.version;
+    final isChecking = release != null && _checkingTag == release.tagName;
     final canDownload =
         release != null &&
+        !isChecking &&
         !isCurrent &&
         !isSkipped &&
         !updateState.isDownloading &&
@@ -491,6 +503,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                     if (_scrollController.hasClients) {
                       _scrollController.jumpTo(0);
                     }
+                    _recheck(tag);
                   },
                 ),
               ),
@@ -501,6 +514,8 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                     ? 'Skipped version'
                     : isDownloading
                     ? 'Downloading...'
+                    : isChecking
+                    ? 'Checking availability...'
                     : release.downloadUrl == null
                     ? 'Installer file not found'
                     : 'Download',
@@ -511,7 +526,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                 onPressed: canDownload
                     ? () => notifier.switchToVersion(release)
                     : null,
-                icon: isDownloading
+                icon: isDownloading || isChecking
                     ? const AppCircularProgressIndicator(size: 20)
                     : Icon(
                         isCurrent

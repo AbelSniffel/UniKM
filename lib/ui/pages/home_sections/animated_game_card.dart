@@ -321,35 +321,39 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
       // A hidden card paints nothing; the card's own repaint boundary keeps
       // its contents from repainting while it scales.
       builder: (context, child) {
-        final card = Opacity(
-          opacity: _animation.value,
-          child: Transform.scale(
-            scale: _startScale + (1 - _startScale) * _animation.value,
-            child: child,
-          ),
-        );
+        final scale = _startScale + (1 - _startScale) * _animation.value;
         final placeholder = widget.placeholder;
-        if (placeholder == null) return card;
-        return Stack(
-          fit: StackFit.passthrough,
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(
-              child: _animation.value == 1
-                  ? const SizedBox.shrink()
-                  // Out of view, its animation pauses.
-                  : ValueListenableBuilder(
-                      valueListenable: _inView,
-                      builder: (context, inView, child) =>
-                          TickerMode(enabled: inView, child: child!),
-                      child: FadeTransition(
-                        opacity: _placeholderFade,
-                        child: placeholder,
+        if (placeholder == null) {
+          return Opacity(
+            opacity: _animation.value,
+            child: Transform.scale(scale: scale, child: child),
+          );
+        }
+        // The placeholder waits at the card's starting size and grows with
+        // it.
+        return Transform.scale(
+          scale: scale,
+          child: Stack(
+            fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: _animation.value == 1
+                    ? const SizedBox.shrink()
+                    // Out of view, its animation pauses.
+                    : ValueListenableBuilder(
+                        valueListenable: _inView,
+                        builder: (context, inView, child) =>
+                            TickerMode(enabled: inView, child: child!),
+                        child: FadeTransition(
+                          opacity: _placeholderFade,
+                          child: placeholder,
+                        ),
                       ),
-                    ),
-            ),
-            card,
-          ],
+              ),
+              Opacity(opacity: _animation.value, child: child),
+            ],
+          ),
         );
       },
       child: CoverLoadScope(listener: this, child: widget.child),

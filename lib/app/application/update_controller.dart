@@ -402,6 +402,23 @@ class UpdateNotifier extends Notifier<UpdateState> {
     }
   }
 
+  /// Fetches [tagName]'s release again, so its download button and link
+  /// match what the release has now. A failed fetch keeps what is known.
+  Future<void> refreshRelease(String tagName) async {
+    _updateService = _serviceFor(ref.read(updatesSettingsProvider));
+    final fresh = await _updateService.fetchRelease(tagName);
+    if (fresh == null) return;
+    final releases = [
+      for (final release in state.allReleases)
+        release.tagName == tagName ? fresh : release,
+    ];
+    state = state.copyWith(
+      allReleases: releases,
+      release: state.release?.tagName == tagName ? fresh : state.release,
+    );
+    unawaited(_updateService.saveReleasesCache(releases));
+  }
+
   Future<void> downloadUpdate() async {
     final release = state.release;
     if (release == null) return;

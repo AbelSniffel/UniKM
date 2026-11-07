@@ -313,6 +313,26 @@ class UpdateService {
     }
   }
 
+  /// The release tagged [tagName] as GitHub has it now, or null when it
+  /// could not be fetched.
+  Future<GitHubRelease?> fetchRelease(String tagName) async {
+    final client = _githubClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse('$_allReleasesUrl/tags/${Uri.encodeComponent(tagName)}'),
+        headers: _headers,
+      );
+      if (response.statusCode != 200) return null;
+      return GitHubRelease.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      if (_githubClient == null) client.close();
+    }
+  }
+
   GitHubRelease? _selectBestUpdateRelease(
     List<GitHubRelease> releases, {
     required String currentVersion,
