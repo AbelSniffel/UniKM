@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +28,9 @@ import '../widgets/update_status_icons.dart';
 
 Future<void> showUpdateDialog(BuildContext context) =>
     showAppDialog<void>(context: context, builder: (_) => const UpdateDialog());
+
+Future<void> _openExternal(Uri uri) =>
+    launchUrl(uri, mode: LaunchMode.externalApplication);
 
 class UpdateDialog extends ConsumerWidget {
   const UpdateDialog({super.key});
@@ -53,7 +57,35 @@ class UpdateDialog extends ConsumerWidget {
     final skipped = ref.watch(
       updatesSettingsProvider.select((s) => s.skippedVersions.length),
     );
-    final stage = state.stage;
+
+    Widget titleAction(
+      String tooltip,
+      Widget icon,
+      VoidCallback? onPressed, {
+      Key? key,
+    }) => IconButton(
+      key: key,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      color: theme.accent,
+      icon: icon,
+    );
+    Widget action(
+      String label,
+      IconData icon,
+      VoidCallback? onPressed, {
+      bool primary = false,
+    }) => primary
+        ? ElevatedButton.icon(
+            onPressed: onPressed,
+            icon: Icon(icon),
+            label: Text(label),
+          )
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: Icon(icon),
+            label: Text(label),
+          );
 
     return ThemedAlertDialog(
       theme: theme,
@@ -66,40 +98,34 @@ class UpdateDialog extends ConsumerWidget {
       titleActions: [
         // A check would replace the release being downloaded or installed.
         if (!state.isDownloading && state.downloadedFilePath == null)
-          IconButton(
+          titleAction(
             key: const ValueKey('update-check-button'),
-            tooltip: state.isChecking
+            state.isChecking
                 ? 'Checking for updates'
                 : state.hasChecked
                 ? 'Recheck Updates'
                 : 'Check for Updates',
-            onPressed: state.isChecking ? null : notifier.checkForUpdates,
-            color: theme.accent,
-            icon: const Icon(Icons.refresh),
+            const Icon(Icons.refresh),
+            state.isChecking ? null : notifier.checkForUpdates,
           ),
         if (skipped > 0)
-          IconButton(
-            tooltip: 'Skipped Versions',
-            onPressed: () => showAppDialog<void>(
-              context: context,
-              builder: (_) => SkippedVersionsDialog(theme: theme),
-            ),
-            color: theme.accent,
-            icon: Badge.count(
+          titleAction(
+            'Skipped Versions',
+            Badge.count(
               count: skipped,
               backgroundColor: theme.accent,
               textColor: theme.onAccentText,
               child: const Icon(Icons.block),
             ),
+            () => showAppDialog<void>(
+              context: context,
+              builder: (_) => SkippedVersionsDialog(theme: theme),
+            ),
           ),
-        IconButton(
-          tooltip: 'GitHub Releases',
-          onPressed: () => launchUrl(
-            Uri.parse('https://github.com/$repo/releases'),
-            mode: LaunchMode.externalApplication,
-          ),
-          color: theme.accent,
-          icon: const Icon(Icons.open_in_new),
+        titleAction(
+          'GitHub Releases',
+          const Icon(Icons.open_in_new),
+          () => _openExternal(Uri.parse('https://github.com/$repo/releases')),
         ),
       ],
       contentSpacing: 12,
@@ -114,44 +140,36 @@ class UpdateDialog extends ConsumerWidget {
         _StatusCard(theme: theme, state: state),
       ],
       // The next step for the update, like any dialog's buttons.
-      actions: switch (stage) {
+      actions: switch (state.stage) {
         UpdatePreviewState.updateAvailable => [
-          OutlinedButton.icon(
-            onPressed: notifier.skipVersion,
-            icon: const Icon(Icons.block),
-            label: const Text('Skip version'),
-          ),
+          action('Skip version', Icons.block, notifier.skipVersion),
           Tooltip(
             message: state.downloadUrl == null
                 ? 'Installer file not found'
                 : 'Download this release',
-            child: ElevatedButton.icon(
-              onPressed: state.downloadUrl == null
-                  ? null
-                  : notifier.downloadUpdate,
-              icon: const Icon(Icons.download),
-              label: const Text('Download'),
+            child: action(
+              'Download',
+              Icons.download,
+              state.downloadUrl == null ? null : notifier.downloadUpdate,
+              primary: true,
             ),
           ),
         ],
         UpdatePreviewState.downloading => [
-          OutlinedButton.icon(
-            onPressed: notifier.cancelDownload,
-            icon: const Icon(Icons.close),
-            label: const Text('Cancel download'),
-          ),
+          action('Cancel download', Icons.close, notifier.cancelDownload),
         ],
         UpdatePreviewState.downloaded => [
           if (!Platform.isAndroid && !Platform.isIOS)
-            OutlinedButton.icon(
-              onPressed: () => _showInFolder(state.downloadedFilePath!),
-              icon: const Icon(Icons.folder_open),
-              label: const Text('Show in Folder'),
+            action(
+              'Show in Folder',
+              Icons.folder_open,
+              () => _showInFolder(state.downloadedFilePath!),
             ),
-          ElevatedButton.icon(
-            onPressed: notifier.launchInstaller,
-            icon: const Icon(Icons.install_desktop),
-            label: const Text('Install & Restart'),
+          action(
+            'Install & Restart',
+            Icons.install_desktop,
+            notifier.launchInstaller,
+            primary: true,
           ),
         ],
         _ => null,
@@ -203,14 +221,13 @@ class _StatusCard extends StatelessWidget {
         UpdateStatusIcons.error,
       ),
     };
-    final target =
-        {
-          UpdatePreviewState.updateAvailable,
-          UpdatePreviewState.downloading,
-          UpdatePreviewState.downloaded,
-        }.contains(stage)
-        ? state.switchingToVersion ?? state.latestVersion
-        : null;
+    final target = switch (stage) {
+      UpdatePreviewState.updateAvailable ||
+      UpdatePreviewState.downloading ||
+      UpdatePreviewState.downloaded =>
+        state.switchingToVersion ?? state.latestVersion,
+      _ => null,
+    };
     final detail = TintedCard.detailStyle(theme, large: true);
     final progress = state.downloadProgress.clamp(0.0, 1.0);
     // The bar's bubbles give the sizes while downloading.
@@ -277,23 +294,6 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-MarkdownStyleSheet _releaseMarkdownStyleSheet(AppThemeData theme) {
-  TextStyle heading(double fontSize) => TextStyle(
-    color: theme.textPrimary,
-    fontSize: fontSize,
-    fontWeight: FontWeight.bold,
-  );
-  return MarkdownStyleSheet(
-    p: TextStyle(color: theme.textPrimary, fontSize: 13),
-    h1: heading(16),
-    h2: heading(14),
-    h3: heading(13),
-    code: TextStyle(color: theme.accent, fontFamily: 'monospace', fontSize: 12),
-    blockquote: TextStyle(color: theme.textSecondary, fontSize: 13),
-    listBullet: TextStyle(color: theme.textPrimary, fontSize: 13),
-  );
-}
-
 /// Dialog that lists all skipped versions with unskip controls.
 class SkippedVersionsDialog extends ConsumerWidget {
   const SkippedVersionsDialog({super.key, required this.theme});
@@ -342,8 +342,7 @@ class SkippedVersionsDialog extends ConsumerWidget {
                         style: TextStyle(color: theme.textPrimary),
                       ),
                       trailing: OutlinedButton(
-                        onPressed: () async =>
-                            await notifier.unskipVersion(version),
+                        onPressed: () => notifier.unskipVersion(version),
                         child: const Text('Unskip'),
                       ),
                     ),
@@ -357,7 +356,7 @@ class SkippedVersionsDialog extends ConsumerWidget {
               await notifier.clearAllSkippedVersions();
               if (context.mounted) Navigator.of(context).pop();
             },
-            child: Text('Clear All'),
+            child: const Text('Clear All'),
           ),
       ],
     );
@@ -382,26 +381,17 @@ class _ReleaseNotes extends ConsumerStatefulWidget {
 }
 
 class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
-  String? _selectedTag;
+  late String? _selectedTag = widget.updateRelease?.tagName;
 
   /// The selected release, while it is checked again.
   String? _checkingTag;
-  final _scrollController = ScrollController();
 
   List<GitHubRelease> get _releases => [
     ...widget.releases,
-    if (widget.updateRelease != null &&
-        !widget.releases.any(
-          (release) => release.tagName == widget.updateRelease!.tagName,
-        ))
-      widget.updateRelease!,
+    if (widget.updateRelease case final update?
+        when !widget.releases.any((r) => r.tagName == update.tagName))
+      update,
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTag = widget.updateRelease?.tagName;
-  }
 
   /// Checks [tag]'s release again, so the download button matches it.
   Future<void> _recheck(String tag) async {
@@ -411,23 +401,16 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
   }
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   void didUpdateWidget(covariant _ReleaseNotes oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A newly detected update is shown; a release that has gone falls back
+    // to the newest.
     final detectedTag = widget.updateRelease?.tagName;
     if (detectedTag != null &&
         detectedTag != oldWidget.updateRelease?.tagName) {
       _selectedTag = detectedTag;
-      if (_scrollController.hasClients) _scrollController.jumpTo(0);
-    } else if (_selectedTag != null &&
-        !_releases.any((release) => release.tagName == _selectedTag)) {
+    } else if (!_releases.any((r) => r.tagName == _selectedTag)) {
       _selectedTag = null;
-      if (_scrollController.hasClients) _scrollController.jumpTo(0);
     }
   }
 
@@ -437,194 +420,288 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
     final notifier = ref.read(updateProvider.notifier);
     final releases = _releases
       ..sort((a, b) => notifier.compareVersions(b.version, a.version));
-    final release = releases.isEmpty
-        ? null
-        : releases.firstWhere(
-            (release) => release.tagName == _selectedTag,
-            orElse: () => releases.first,
-          );
+    if (releases.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.accent.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+        ),
+        child: Text(
+          'Release notes will appear after checking for updates.',
+          style: TextStyle(color: theme.textSecondary),
+        ),
+      );
+    }
+    final release = releases.firstWhere(
+      (r) => r.tagName == _selectedTag,
+      orElse: () => releases.first,
+    );
     final updateState = ref.watch(updateProvider);
-    final skipped = ref.watch(updatesSettingsProvider).skippedVersions;
     final isCurrent =
-        release != null &&
         notifier.compareVersions(release.version, kAppVersion) == 0;
-    final isSkipped = release != null && skipped.contains(release.version);
+    final isSkipped = ref
+        .watch(updatesSettingsProvider)
+        .skippedVersions
+        .contains(release.version);
     final isDownloading =
-        release != null &&
         updateState.isDownloading &&
         updateState.switchingToVersion == release.version;
-    final isChecking = release != null && _checkingTag == release.tagName;
+    final isChecking = _checkingTag == release.tagName;
     final canDownload =
-        release != null &&
         !isChecking &&
         !isCurrent &&
         !isSkipped &&
         !updateState.isDownloading &&
         release.downloadUrl != null;
+    final (tooltip, icon) = isCurrent
+        ? ('Current version', Icons.check_circle)
+        : isSkipped
+        ? ('Skipped version', Icons.block)
+        : isDownloading
+        ? ('Downloading...', Icons.download)
+        : isChecking
+        ? ('Checking availability...', Icons.download)
+        : release.downloadUrl == null
+        ? ('Installer file not found', Icons.download)
+        : ('Download', Icons.download);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: 10,
       children: [
-        if (release == null)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.accent.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-            ),
-            child: Text(
-              'Release notes will appear after checking for updates.',
-              style: TextStyle(color: theme.textSecondary),
-            ),
-          )
-        else ...[
-          Row(
-            spacing: 5,
-            children: [
-              Expanded(
-                child: SettingsChoiceCard<String>(
-                  key: const ValueKey('changelog-version-selector'),
-                  theme: theme,
-                  label: 'Version',
-                  icon: Icons.history,
-                  menuMaxHeight: kDropdownMenuMaxHeight * 2,
-                  value: release.tagName,
-                  choices: [
-                    for (final item in releases)
-                      SettingsChoice(item.tagName, 'v${item.version}'),
-                  ],
-                  onChanged: (tag) {
-                    if (tag == release.tagName) return;
-                    setState(() => _selectedTag = tag);
-                    if (_scrollController.hasClients) {
-                      _scrollController.jumpTo(0);
-                    }
-                    _recheck(tag);
-                  },
-                ),
-              ),
-              IconButton(
-                tooltip: isCurrent
-                    ? 'Current version'
-                    : isSkipped
-                    ? 'Skipped version'
-                    : isDownloading
-                    ? 'Downloading...'
-                    : isChecking
-                    ? 'Checking availability...'
-                    : release.downloadUrl == null
-                    ? 'Installer file not found'
-                    : 'Download',
-                style: theme.compactIconButtonStyle,
-                // On the button rather than the icon, so it dims when there
-                // is nothing to download.
-                color: theme.accent,
-                onPressed: canDownload
-                    ? () => notifier.switchToVersion(release)
-                    : null,
-                icon: isDownloading || isChecking
-                    ? const AppCircularProgressIndicator(size: 20)
-                    : Icon(
-                        isCurrent
-                            ? Icons.check_circle
-                            : isSkipped
-                            ? Icons.block
-                            : Icons.download,
-                      ),
-              ),
-            ],
-          ),
-          Container(
-            key: const ValueKey('changelog-info-panel'),
-            // The notes scroll inside a share of the window, below the
-            // status and picker.
-            constraints: BoxConstraints(
-              maxHeight: math.max(
-                160,
-                MediaQuery.sizeOf(context).height * 0.35,
+        Row(
+          spacing: 5,
+          children: [
+            Expanded(
+              child: SettingsChoiceCard<String>(
+                key: const ValueKey('changelog-version-selector'),
+                theme: theme,
+                label: 'Version',
+                icon: Icons.history,
+                menuMaxHeight: kDropdownMenuMaxHeight * 2,
+                value: release.tagName,
+                choices: [
+                  for (final item in releases)
+                    SettingsChoice(item.tagName, 'v${item.version}'),
+                ],
+                onChanged: (tag) {
+                  if (tag == release.tagName) return;
+                  setState(() => _selectedTag = tag);
+                  _recheck(tag);
+                },
               ),
             ),
-            decoration: BoxDecoration(
-              color: theme.surface,
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              border: Border.all(color: theme.border),
+            IconButton(
+              tooltip: tooltip,
+              style: theme.compactIconButtonStyle,
+              // On the button rather than the icon, so it dims when there
+              // is nothing to download.
+              color: theme.accent,
+              onPressed: canDownload
+                  ? () => notifier.switchToVersion(release)
+                  : null,
+              icon: isDownloading || isChecking
+                  ? const AppCircularProgressIndicator(size: 20)
+                  : Icon(icon),
             ),
-            child: AppScrollbar(
-              controller: _scrollController,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                key: const ValueKey('changelog-info-scroll'),
-                controller: _scrollController,
-                primary: false,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 6,
-                  children: [
-                    Text(
-                      release.name.trim().isEmpty
-                          ? 'UniKM v${release.version}'
-                          : release.name,
+          ],
+        ),
+        // Each release opens at the top of its own notes.
+        _NotesPanel(
+          key: ValueKey(release.tagName),
+          theme: theme,
+          body: release.body,
+          header: [
+            Text(
+              release.name.trim().isEmpty
+                  ? 'UniKM v${release.version}'
+                  : release.name,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            // The date, then how this release relates to the app.
+            Text.rich(
+              TextSpan(
+                text: DateFormat.yMMMd().format(release.publishedAt),
+                children: [
+                  for (final (label, color) in [
+                    if (isCurrent) ('Installed', theme.accent),
+                    if (release.isPrerelease) ('Pre-release', theme.secondary),
+                    if (isSkipped) ('Skipped', theme.textSecondary),
+                  ]) ...[
+                    const TextSpan(text: '  ·  '),
+                    TextSpan(
+                      text: label,
                       style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 17,
+                        color: color,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    // The date, then how this release relates to the app.
-                    Text.rich(
-                      TextSpan(
-                        text: DateFormat.yMMMd().format(release.publishedAt),
-                        children: [
-                          for (final (label, color) in [
-                            if (isCurrent) ('Installed', theme.accent),
-                            if (release.isPrerelease)
-                              ('Pre-release', theme.secondary),
-                            if (isSkipped) ('Skipped', theme.textSecondary),
-                          ]) ...[
-                            const TextSpan(text: '  ·  '),
-                            TextSpan(
-                              text: label,
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
+                  ],
+                ],
+              ),
+              style: TextStyle(color: theme.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// A release's notes under their [header], scrolling within a share of the
+/// window and shrinking to short notes.
+///
+/// They open with only the part in view, so a long changelog opens without
+/// a stall. Once the dialog has opened, the rest is laid out a slice per
+/// frame, so the scrollbar soon knows their full height instead of
+/// estimating it from the blocks seen so far.
+class _NotesPanel extends StatefulWidget {
+  const _NotesPanel({
+    super.key,
+    required this.theme,
+    required this.header,
+    required this.body,
+  });
+
+  final AppThemeData theme;
+  final List<Widget> header;
+  final String body;
+
+  @override
+  State<_NotesPanel> createState() => _NotesPanelState();
+}
+
+class _NotesPanelState extends State<_NotesPanel> {
+  final _controller = ScrollController();
+
+  /// How far past the view the notes are laid out.
+  double _cacheExtent = 250;
+
+  @override
+  void initState() {
+    super.initState();
+    _layOutMore();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Lays out another slice after this frame, until all of the notes are.
+  /// Nothing more is laid out while the dialog is still opening.
+  void _layOutMore() => WidgetsBinding.instance
+    ..addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final position = _controller.position;
+      final opening = ModalRoute.of(context)?.animation?.isCompleted == false;
+      if (!opening) {
+        if (_cacheExtent >=
+            position.maxScrollExtent + position.viewportDimension) {
+          return;
+        }
+        setState(() => _cacheExtent += 2000);
+      }
+      _layOutMore();
+    })
+    ..scheduleFrame();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    TextStyle text(double size, {bool bold = false, Color? color}) => TextStyle(
+      color: color ?? theme.textPrimary,
+      fontSize: size,
+      fontWeight: bold ? FontWeight.bold : null,
+    );
+    return Container(
+      key: const ValueKey('changelog-info-panel'),
+      constraints: BoxConstraints(
+        maxHeight: math.max(160, MediaQuery.sizeOf(context).height * 0.35),
+      ),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        border: Border.all(color: theme.border),
+      ),
+      child: AppScrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        child: CustomScrollView(
+          key: const ValueKey('changelog-info-scroll'),
+          controller: _controller,
+          primary: false,
+          shrinkWrap: true,
+          scrollCacheExtent: ScrollCacheExtent.pixels(_cacheExtent),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 6,
+                  children: [
+                    ...widget.header,
                     Divider(height: 8, color: theme.border),
-                    MarkdownBody(
-                      data: release.body.trim().isEmpty
-                          ? 'No release notes were provided for this version.'
-                          : release.body,
-                      styleSheet: _releaseMarkdownStyleSheet(theme),
-                      onTapLink: (_, href, _) async {
-                        final uri = Uri.tryParse(href ?? '');
-                        if (uri != null &&
-                            (uri.scheme == 'https' || uri.scheme == 'http')) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
-                    ),
                   ],
                 ),
               ),
             ),
-          ),
-        ],
-      ],
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              sliver: _SliverMarkdown(
+                data: widget.body.trim().isEmpty
+                    ? 'No release notes were provided for this version.'
+                    : widget.body,
+                styleSheet: MarkdownStyleSheet(
+                  p: text(13),
+                  h1: text(16, bold: true),
+                  h2: text(14, bold: true),
+                  h3: text(13, bold: true),
+                  code: text(
+                    12,
+                    color: theme.accent,
+                  ).copyWith(fontFamily: 'monospace'),
+                  blockquote: text(13, color: theme.textSecondary),
+                  listBullet: text(13),
+                ),
+                onTapLink: (_, href, _) async {
+                  final uri = Uri.tryParse(href ?? '');
+                  if (uri != null &&
+                      (uri.scheme == 'https' || uri.scheme == 'http')) {
+                    await _openExternal(uri);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+}
+
+/// Markdown as a sliver list, so only the blocks in view are built and laid
+/// out. Each block keeps its own width, as in [MarkdownBody].
+class _SliverMarkdown extends MarkdownWidget {
+  const _SliverMarkdown({
+    required super.data,
+    super.styleSheet,
+    super.onTapLink,
+  }) : super(styleSheetTheme: null, fitContent: true);
+
+  @override
+  Widget build(BuildContext context, List<Widget>? children) => SliverList.list(
+    children: [
+      for (final child in children ?? const <Widget>[])
+        Align(alignment: AlignmentDirectional.centerStart, child: child),
+    ],
+  );
 }

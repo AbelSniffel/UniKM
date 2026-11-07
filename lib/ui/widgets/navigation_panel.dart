@@ -72,6 +72,7 @@ class NavigationPanel extends ConsumerWidget {
     required this.gradientAnimation,
     this.forceCollapsed = false,
     this.lockedIndices = const {},
+    this.pageCount = 2,
   });
 
   final List<NavItem> items;
@@ -83,6 +84,11 @@ class NavigationPanel extends ConsumerWidget {
   final GradientAnimation gradientAnimation;
   final bool forceCollapsed;
   final Set<int> lockedIndices;
+
+  /// How many of the first [items] are pages. They make the first button
+  /// group when the buttons are split, and the rest, with the More button,
+  /// the second.
+  final int pageCount;
 
   bool get _isHorizontal =>
       position == NavBarPosition.top || position == NavBarPosition.bottom;
@@ -146,14 +152,10 @@ class NavigationPanel extends ConsumerWidget {
                         (forceCollapsed ? 48 : 88) -
                         kElementHSpacing * (isSplit ? 2 : 1))
                     .clamp(0.0, double.infinity);
-            // The More button takes a share of its group's space.
+            // Each button, the More button included, takes an equal share.
             Widget buildGroup(List<int> indices) => ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: items.isEmpty
-                    ? 0
-                    : groupSpace *
-                          (indices.length + (_holdsMenu(indices) ? 1 : 0)) /
-                          (items.length + 1),
+                maxWidth: groupSpace * indices.length / (items.length + 1),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -209,22 +211,21 @@ class NavigationPanel extends ConsumerWidget {
     ];
   }
 
-  List<int> get _leadingGroupIndices {
-    final limit = items.length < 2 ? items.length : 2;
-    return [for (var i = 0; i < limit; i++) i];
-  }
+  /// The More menu button's place among the indices, after every page.
+  int get _menuIndex => items.length;
 
-  List<int> get _allGroupIndices => [for (var i = 0; i < items.length; i++) i];
+  int get _leadingCount => pageCount.clamp(0, items.length);
 
-  /// The group holding the last page (Settings) also holds the More menu
-  /// button, just before it.
-  bool _holdsMenu(List<int> indices) =>
-      indices.isNotEmpty && indices.last == items.length - 1;
+  List<int> get _leadingGroupIndices => [
+    for (var i = 0; i < _leadingCount; i++) i,
+  ];
 
-  List<int> get _trailingGroupIndices {
-    if (items.length <= 2) return const [];
-    return [for (var i = 2; i < items.length; i++) i];
-  }
+  List<int> get _allGroupIndices => [for (var i = 0; i <= _menuIndex; i++) i];
+
+  /// The buttons after the pages, then the More menu button.
+  List<int> get _trailingGroupIndices => [
+    for (var i = _leadingCount; i <= _menuIndex; i++) i,
+  ];
 
   Widget _buildPageButtonContainer({
     required List<int> indices,
@@ -235,11 +236,16 @@ class NavigationPanel extends ConsumerWidget {
     theme: theme,
     isHorizontal: isHorizontal,
     children: [
-      for (final index in indices) ...[
-        if (index == items.length - 1)
-          NavigationMoreMenuButton(theme: theme, position: position),
-        _buildIndexedNavButton(index, isHorizontal, isCollapsed, expansionMode),
-      ],
+      for (final index in indices)
+        if (index == _menuIndex)
+          NavigationMoreMenuButton(theme: theme, position: position)
+        else
+          _buildIndexedNavButton(
+            index,
+            isHorizontal,
+            isCollapsed,
+            expansionMode,
+          ),
     ],
   );
 

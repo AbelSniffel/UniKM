@@ -30,6 +30,7 @@ import 'pages/settings_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
 import 'widgets/navigation_panel_overlay.dart';
 import 'widgets/app_page_stack.dart';
+import 'widgets/app_progress_indicator.dart';
 import 'widgets/focus_anchor.dart';
 import 'widgets/dev_window.dart';
 import 'widgets/app_title_bar.dart';
@@ -518,6 +519,9 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         : nav_panel.kNavigationPanelExpandedWidth;
     const navPanelHorizontalExtent = nav_panel.kNavigationPanelHorizontalExtent;
 
+    final updateAvailable = ref.watch(
+      pageNotificationsProvider.select((s) => s.contains(NavItem.updates)),
+    );
     final navItems = [
       for (final item in NavItem.pages)
         nav_panel.NavItem(
@@ -525,6 +529,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           tooltipLabel: item == NavItem.addGames ? 'Add Games' : null,
           icon: item.unselectedIcon,
           selectedIcon: item.selectedIcon,
+          hasNotification: item == NavItem.updates && updateAvailable,
+          iconBuilder: item == NavItem.updates
+              ? (color, size) => _UpdateNavIcon(color: color, size: size)
+              : null,
         ),
     ];
 
@@ -550,7 +558,11 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         );
         return;
       }
-      ref.read(currentNavProvider.notifier).set(targetNav);
+      if (targetNav == NavItem.updates) {
+        ref.read(updateDialogOpenProvider.notifier).set(true);
+      } else {
+        ref.read(currentNavProvider.notifier).set(targetNav);
+      }
     }
 
     // Returns a NavigationPanel fixed to [pos]. All four instances share the
@@ -570,6 +582,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           lockedIndices: batchFetchActive
               ? {NavItem.pages.indexOf(NavItem.addGames)}
               : {},
+          // Updates opens a dialog, so it groups with the More button.
+          pageCount: NavItem.pages.indexOf(NavItem.updates),
         );
 
     final pagesStack = _buildPagesStack(
@@ -910,4 +924,36 @@ class _LinuxResizeFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Stack(children: [for (final edge in ResizeEdge.values) _handle(edge)]);
+}
+
+/// The Updates button's icon: a spinner while checking or downloading, and
+/// the accent while an update is available or ready to install.
+class _UpdateNavIcon extends ConsumerWidget {
+  const _UpdateNavIcon({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (:busy, :ready) = ref.watch(
+      updateProvider.select(
+        (s) => (
+          busy: s.isChecking || s.isDownloading,
+          ready: s.downloadedFilePath != null,
+        ),
+      ),
+    );
+    final available = ref.watch(
+      pageNotificationsProvider.select((s) => s.contains(NavItem.updates)),
+    );
+    if (busy) {
+      return AppCircularProgressIndicator.icon(size: size);
+    }
+    return Icon(
+      ready ? Icons.file_download_done : Icons.download_rounded,
+      size: size,
+      color: ready || available ? ref.watch(themeProvider).accent : color,
+    );
+  }
 }
