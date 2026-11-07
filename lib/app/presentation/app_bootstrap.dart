@@ -510,7 +510,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const AppCircularProgressIndicator(),
+                    const AppCircularProgressIndicator.page(),
                     const SizedBox(height: 16),
                     Text(
                       'Loading Database…',

@@ -665,6 +665,7 @@ class GameStat extends StatelessWidget {
     this.detail,
     this.tooltip,
     this.trailing,
+    this.maxLines = 1,
   });
 
   /// How long ago [date] was, with the day under it and the exact time on
@@ -684,10 +685,13 @@ class GameStat extends StatelessWidget {
   );
 
   /// The Steam review score with its rating and count, given any reviews.
+  /// [compact] leaves the count to the tooltip, so the rating fits beside
+  /// another figure on a phone.
   factory GameStat.reviews({
     required AppThemeData theme,
     required int score,
     required int count,
+    bool compact = false,
   }) => GameStat(
     theme: theme,
     label: 'Reviews',
@@ -695,6 +699,8 @@ class GameStat extends StatelessWidget {
     fallback: 'No reviews',
     detail: count == 0
         ? null
+        : compact
+        ? Game.reviewRatingFor(score)
         : '${Game.reviewRatingFor(score)} · '
               '${NumberFormat.compact().format(count)}',
     tooltip: count == 0 ? null : '$count reviews',
@@ -744,6 +750,9 @@ class GameStat extends StatelessWidget {
   final String? tooltip;
   final Widget? trailing;
 
+  /// Lines the value may take before it is cut short, for names.
+  final int maxLines;
+
   @override
   Widget build(BuildContext context) {
     final column = Column(
@@ -767,7 +776,7 @@ class GameStat extends StatelessWidget {
             Flexible(
               child: Text(
                 value ?? fallback,
-                maxLines: 1,
+                maxLines: maxLines,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: value == null ? theme.textHint : theme.textPrimary,

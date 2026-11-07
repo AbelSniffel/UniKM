@@ -482,17 +482,15 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
       child: SizedBox(
         height: 36,
         child: Row(
-          spacing: 8,
+          spacing: 5,
           children: [
-            Icon(Icons.tune, size: 16, color: theme.accent),
+            Icon(Icons.tune, color: theme.accent),
             Expanded(
               child: Text(
                 'Dev Tools',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: theme.textPrimary,
-                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -502,7 +500,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             IconButton(
               tooltip: 'Close Dev Tools',
               onPressed: widget.onClose,
-              icon: Icon(Icons.close, size: 16, color: theme.textSecondary),
+              icon: Icon(Icons.close, color: theme.textSecondary),
               style: IconButton.styleFrom(
                 minimumSize: const Size.square(28),
                 padding: EdgeInsets.zero,

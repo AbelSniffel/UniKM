@@ -45,7 +45,7 @@ class TintedCard extends StatelessWidget {
     this.onHighlightChanged,
     this.backdrop,
     this.shadows,
-    this.bottomEdge,
+    this.background,
     this.liveRegion = false,
   });
 
@@ -98,8 +98,9 @@ class TintedCard extends StatelessWidget {
   final Color? backdrop;
   final List<BoxShadow>? shadows;
 
-  /// Drawn flush along the card's bottom edge, outside its padding.
-  final Widget? bottomEdge;
+  /// Fills the card behind its content, over the tint, such as a
+  /// notification's countdown.
+  final Widget? background;
 
   /// Announces the title when it changes.
   final bool liveRegion;
@@ -210,7 +211,7 @@ class TintedCard extends StatelessWidget {
         ?trailing,
       ],
     );
-    final edge = large ? 10.0 : 8.0;
+    final edge = large ? 8.0 : 8.0;
     Widget content = Padding(
       // Text alone starts further in, matching a trailing control's inset.
       padding: EdgeInsets.all(edge).copyWith(
@@ -224,11 +225,12 @@ class TintedCard extends StatelessWidget {
               children: [row, ...children],
             ),
     );
-    if (bottomEdge != null) {
-      content = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [content, bottomEdge!],
+    if (background != null) {
+      content = Stack(
+        children: [
+          Positioned.fill(child: background!),
+          content,
+        ],
       );
     }
     if (onTap != null || onHover != null || onHighlightChanged != null) {
@@ -242,9 +244,7 @@ class TintedCard extends StatelessWidget {
     final radius = BorderRadius.circular(theme.cornerRadius);
     final card = Material(
       color: backdrop == null ? tint : Color.alphaBlend(tint, backdrop!),
-      shape: RoundedRectangleBorder(
-        borderRadius: radius
-      ),
+      shape: RoundedRectangleBorder(borderRadius: radius),
       clipBehavior: Clip.antiAlias,
       child: content,
     );

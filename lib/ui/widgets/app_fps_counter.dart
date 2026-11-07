@@ -55,8 +55,8 @@ class _AppFpsCounterState extends State<AppFpsCounter>
     '${_fps > 0 ? _fps : '--'} FPS',
     style: TextStyle(
       color: widget.theme.textSecondary,
-      fontSize: 11,
-      fontWeight: FontWeight.w500,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
     ),
   );
 }

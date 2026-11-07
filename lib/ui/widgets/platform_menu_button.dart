@@ -220,7 +220,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
             borderRadius: radius,
             onTap: enabled ? _toggleMenu : null,
             onHover: (hovered) => setState(() => _hovered = hovered),
-            padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+            padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
             builder: (context, color) => Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,

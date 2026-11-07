@@ -425,11 +425,9 @@ class _RibbonBar extends StatelessWidget {
     tint: destructive ? theme.secondary : null,
     padding: const EdgeInsets.all(6),
     minWidth: _button,
+    // A busy button is disabled, but its spinner keeps the accent.
     iconBuilder: (context, color, size) => busy
-        ? SizedBox.square(
-            dimension: size - 4,
-            child: AppCircularProgressIndicator(color: color, strokeWidth: 2),
-          )
+        ? AppCircularProgressIndicator.icon(size: size)
         : Icon(
             icon,
             size: size,

@@ -162,7 +162,7 @@ class _AppPageStackState extends State<AppPageStack>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppCircularProgressIndicator(),
+                    AppCircularProgressIndicator.page(),
                     SizedBox(height: 16),
                     Text('Preparing pages…'),
                   ],

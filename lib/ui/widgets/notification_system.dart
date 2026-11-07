@@ -641,7 +641,7 @@ class _NotificationToastState extends State<NotificationToast>
   /// The way a swipe threw the toast, for its exit; a tap exits rightwards.
   Offset _exitDirection = const Offset(1, 0);
 
-  /// Runs the countdown line while an auto-dismiss is scheduled.
+  /// Runs the countdown fill while an auto-dismiss is scheduled.
   late final _countdown = AnimationController(vsync: this);
 
   @override
@@ -794,8 +794,8 @@ class _NotificationToastState extends State<NotificationToast>
   /// The update dialog's status card, floating: the type's icon (a spinner
   /// while it shows progress) beside the title, or the type, over the
   /// message, with the progress figure at the end. Progress and actions run
-  /// across the card under them, and a countdown line runs along the bottom
-  /// while it is set to close by itself.
+  /// across the card under them. While it is set to close by itself, a
+  /// lighter fill behind it all shrinks toward the start as time runs out.
   Widget _buildSurface(double maxWidth) {
     final theme = widget.theme;
     final notification = widget.notification;
@@ -827,19 +827,17 @@ class _NotificationToastState extends State<NotificationToast>
             offset: const Offset(0, 6),
           ),
         ],
-        bottomEdge: notification.autoDismiss == null
+        background: notification.autoDismiss == null
             ? null
             : RepaintBoundary(
                 child: AnimatedBuilder(
                   animation: _countdown,
-                  builder: (context, _) => Align(
+                  builder: (context, _) => FractionallySizedBox(
                     alignment: AlignmentDirectional.centerStart,
-                    child: FractionallySizedBox(
-                      widthFactor: 1 - _countdown.value,
-                      child: ColoredBox(
-                        color: color,
-                        child: const SizedBox(height: 3),
-                      ),
+                    widthFactor: 1 - _countdown.value,
+                    heightFactor: 1,
+                    child: ColoredBox(
+                      color: color.withValues(alpha: TintedCard.fillAlpha),
                     ),
                   ),
                 ),

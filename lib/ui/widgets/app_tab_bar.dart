@@ -68,7 +68,7 @@ class AppTabBar extends StatelessWidget {
                     onTap: () => _select(context, index),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 10,
+                      vertical: 8,
                     ),
                     builder: (context, color) => Row(
                       mainAxisAlignment: MainAxisAlignment.center,

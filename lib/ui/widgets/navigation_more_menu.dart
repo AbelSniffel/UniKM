@@ -163,7 +163,7 @@ class _UpdateIcon extends ConsumerWidget {
     final available = ref.watch(
       pageNotificationsProvider.select((s) => s.contains(NavItem.updates)),
     );
-    if (busy) return const AppCircularProgressIndicator(size: 18);
+    if (busy) return const AppCircularProgressIndicator.icon(size: 18);
     return Icon(
       ready ? Icons.file_download_done : Icons.download_rounded,
       size: 18,

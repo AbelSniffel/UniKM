@@ -684,7 +684,8 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
               ],
               theme: theme,
               allSelected: true,
-              maxHeight: 96,
+              // Whole rows, so none is cut in half.
+              maxRows: 3,
             ),
           ],
         ),
@@ -692,29 +693,39 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         spacing: 36,
         runSpacing: 16,
         children: [
+          // The review count is in the tooltip, so the AppID fits beside
+          // the rating on a phone.
           GameStat.reviews(
             theme: theme,
             score: result.reviewScore ?? 0,
             count: result.reviewCount ?? 0,
+            compact: true,
           ),
+          GameStat.steamAppId(theme: theme, appId: result.appId),
           GameStat(
             theme: theme,
             label: 'Developer',
             value: developer == null || developer.isEmpty ? null : developer,
             fallback: 'Unknown',
+            maxLines: 2,
           ),
-          GameStat.steamAppId(theme: theme, appId: result.appId),
-          // A fresh match was cached as it was fetched.
-          GameStat.date(
-            theme: theme,
-            label: 'Cached',
-            date: _fromCache ? cachedAt : null,
-            fallback: _fromCache ? 'Unknown' : 'Just now',
-          ),
+          // Only a cached match has an age worth showing.
+          if (_fromCache)
+            GameStat.date(
+              theme: theme,
+              label: 'Cached',
+              date: cachedAt,
+              fallback: 'Unknown',
+            ),
           // The title looked up, when the match goes by another.
           if (result.name.trim().toLowerCase() !=
               widget.title.trim().toLowerCase())
-            GameStat(theme: theme, label: 'Searched', value: widget.title),
+            GameStat(
+              theme: theme,
+              label: 'Searched',
+              value: widget.title,
+              maxLines: 2,
+            ),
         ],
       ),
     ];

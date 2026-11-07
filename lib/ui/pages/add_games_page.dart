@@ -504,7 +504,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                       onPressed: _isFetchingSteamData ? null : _fetchSteamData,
                       color: theme.accent,
                       icon: _isFetchingSteamData
-                          ? const AppCircularProgressIndicator(size: 18)
+                          ? const AppCircularProgressIndicator.icon()
                           : const Icon(Icons.cloud_download_outlined),
                     ),
                     IconButton(
