@@ -26,6 +26,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import 'app_tag_button.dart';
 import 'app_action_button.dart';
+import 'app_scrollbar.dart';
 import 'app_progress_indicator.dart';
 
 /// A performant, reusable tag list that supports selection, scrolling, and
@@ -41,7 +42,6 @@ class TagList extends StatefulWidget {
     this.onTagToggled,
     this.maxHeight,
     this.maxRows,
-    this.scrollable = false,
   });
 
   /// Tags to display.
@@ -69,11 +69,6 @@ class TagList extends StatefulWidget {
   /// Shows at most this many rows of tags and scrolls past them; fewer tags
   /// take only the height they need.
   final int? maxRows;
-
-  /// When true, the tag list scrolls inside whatever height the parent provides.
-  /// Use this when the parent already constrains the height (e.g. via
-  /// [Expanded]) and no explicit [maxHeight] is needed.
-  final bool scrollable;
 
   @override
   State<TagList> createState() => _TagListState();
@@ -106,6 +101,10 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   // One controller for all chips = zero overhead during normal rebuilds.
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
+  final _scrollController = ScrollController();
+
+  /// Room kept beside the rows for the scrollbar, while the list scrolls.
+  static const double _scrollbarGutter = 16;
 
   @override
   void initState() {
@@ -125,6 +124,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   void dispose() {
     _resizeDebounce?.cancel();
     _fadeController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -163,7 +163,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
       );
     }
 
-    if (widget.scrollable || widget.maxRows != null) {
+    if (widget.maxRows != null) {
       return _buildScrollableContent(tags);
     }
 
@@ -215,22 +215,27 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
             );
           }
 
-          final rows = _layoutRows(context, tags, width);
-          final contentHeight =
-              _rowHeights.fold(0.0, (sum, height) => sum + height) +
-              math.max(0, rows.length - 1) * _runSpacing;
           // Give the viewport a finite height without shrinkWrap: shrinkWrap
           // would lay out every row and recreate the offscreen button cost.
           final maxRows = widget.maxRows;
-          final double rowsHeight = maxRows == null || rows.length <= maxRows
-              ? double.infinity
-              : _rowHeights.take(maxRows).fold(0.0, (sum, h) => sum + h) +
-                    (maxRows - 1) * _runSpacing;
-          final height = contentHeight
-              .clamp(
-                constraints.minHeight,
-                math.min(constraints.maxHeight, rowsHeight),
-              )
+          var rows = _layoutRows(context, tags, width);
+          double contentHeight() =>
+              _rowHeights.fold(0.0, (sum, height) => sum + height) +
+              math.max(0, rows.length - 1) * _runSpacing;
+          double limit() => math.min(
+            constraints.maxHeight,
+            maxRows == null || rows.length <= maxRows
+                ? double.infinity
+                : _rowHeights.take(maxRows).fold(0.0, (sum, h) => sum + h) +
+                      (maxRows - 1) * _runSpacing,
+          );
+          // A list that scrolls wraps clear of its scrollbar.
+          final scrolls = contentHeight() > limit();
+          if (scrolls) {
+            rows = _layoutRows(context, tags, width - _scrollbarGutter);
+          }
+          final height = contentHeight()
+              .clamp(constraints.minHeight, limit())
               .toDouble();
           // The placeholder shown while resizing keeps the height on screen,
           // not the whole list's, so a capped list does not jump open.
@@ -239,21 +244,34 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
             opacity: _fadeAnimation,
             child: SizedBox(
               height: height,
-              child: ListView.custom(
-                padding: EdgeInsets.zero,
-                scrollCacheExtent: ScrollCacheExtent.pixels(
-                  _rowHeight + _runSpacing,
-                ),
-                childrenDelegate: _TagRowDelegate(
-                  totalExtent: contentHeight,
-                  childCount: rows.length,
-                  builder: (context, index) => Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == rows.length - 1 ? 0 : _runSpacing,
+              // Always shown while the list scrolls, track included.
+              child: AppScrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
+                  child: ListView.custom(
+                    controller: _scrollController,
+                    padding: EdgeInsets.zero,
+                    scrollCacheExtent: ScrollCacheExtent.pixels(
+                      _rowHeight + _runSpacing,
                     ),
-                    child: Wrap(
-                      spacing: _spacing,
-                      children: rows[index].map(_buildButton).toList(),
+                    childrenDelegate: _TagRowDelegate(
+                      totalExtent: contentHeight(),
+                      childCount: rows.length,
+                      builder: (context, index) => Padding(
+                        padding: EdgeInsetsDirectional.only(
+                          end: scrolls ? _scrollbarGutter : 0,
+                          bottom: index == rows.length - 1 ? 0 : _runSpacing,
+                        ),
+                        child: Wrap(
+                          spacing: _spacing,
+                          children: rows[index].map(_buildButton).toList(),
+                        ),
+                      ),
                     ),
                   ),
                 ),

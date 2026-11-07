@@ -12,6 +12,7 @@ class AppScrollbar extends RawScrollbar {
     required super.child,
     super.controller,
     super.thumbVisibility,
+    super.trackVisibility,
   });
 
   @override
@@ -65,7 +66,11 @@ class _AppScrollbarState extends RawScrollbarState<AppScrollbar> {
             _emphasis.value,
           ) ??
           const Color(0x66BCBCBC)
-      ..trackColor = track.withValues(alpha: track.a * _emphasis.value)
+      // A shown track keeps its hovered colour; otherwise it fades in on
+      // hover.
+      ..trackColor = widget.trackVisibility ?? false
+          ? track
+          : track.withValues(alpha: track.a * _emphasis.value)
       ..trackBorderColor = Colors.transparent
       ..radius = theme.radius
       ..trackRadius = theme.radius

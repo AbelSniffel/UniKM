@@ -7,12 +7,11 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../core/constants/legacy_default_tag_names.dart';
 import '../../../core/settings/settings_model.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/game.dart';
-import '../../dialogs/add_tags_dialog.dart';
 import '../../dialogs/custom_tag_dialogs.dart';
 import '../../../providers/app_providers.dart';
+import '../../widgets/add_tag_field.dart';
 import '../../widgets/tag_list.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/notification_system.dart';
@@ -47,11 +46,7 @@ class TagsSection extends ConsumerStatefulWidget {
   static const SettingsSearchGroup customTagsSearchGroup = SettingsSearchGroup(
     title: 'Custom Tags',
     settings: [customTagsInputSpec],
-    extraTexts: [
-      'Add Tag',
-      'Delete All Custom Tags',
-      'No custom tags created yet',
-    ],
+    extraTexts: ['Add', 'Delete All Custom Tags', 'No custom tags created yet'],
   );
 
   static const SettingsSearchGroup steamTagsSearchGroup = SettingsSearchGroup(
@@ -76,12 +71,6 @@ class TagsSection extends ConsumerStatefulWidget {
 }
 
 class _TagsSectionState extends ConsumerState<TagsSection> {
-  Future<void> _showAddTagsDialog() => showAppDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AddTagsDialog(theme: widget.theme),
-  );
-
   Future<void> _deleteTag(int tagId, String tagName) async {
     try {
       final deleted = await deleteTagWithConfirmation(
@@ -257,31 +246,32 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
+        // Its own box, above the custom tags it adds to.
+        SectionGroupEntry(
+          visible: matches(TagsSection.customTagsSearchGroup),
+          builder: (position, isAlternate) => SectionGroupBox(
+            title: 'Add Tag',
+            showTitle: false,
+            theme: theme,
+            groupPosition: position,
+            alternateBackground: isAlternate,
+            child: AddTagField(theme: theme),
+          ),
+        ),
         tagGroup(
           TagsSection.customTagsSearchGroup,
           Icons.label,
           customTags,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            spacing: kElementHSpacing,
-            children: [
-              _iconButton(
-                'Add Tag',
-                Icons.add,
-                theme.accent,
-                _showAddTagsDialog,
-              ),
-              if (customTags.isNotEmpty)
-                _iconButton(
+          trailing: customTags.isEmpty
+              ? null
+              : _iconButton(
                   'Delete All Custom Tags',
                   Icons.delete,
                   theme.error,
                   _deleteAllCustomTags,
                 ),
-            ],
-          ),
           emptyText: 'No custom tags created yet',
-          maxHeight: 300,
+          maxHeight: 200,
           onTagToggled: (tagId) {
             final tag = customTags.firstWhere((t) => t.id == tagId);
             _deleteTag(tag.id, tag.name);

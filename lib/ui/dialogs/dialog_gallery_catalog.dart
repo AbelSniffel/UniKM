@@ -20,7 +20,6 @@ import '../pages/settings_sections/database_section.dart';
 import '../pages/settings_sections/settings_theme_editor.dart';
 import '../widgets/cover_image_card.dart';
 import '../widgets/dialog_helpers.dart';
-import 'add_tags_dialog.dart';
 import 'backup_dialogs.dart';
 import 'copy_actions_dialog.dart';
 import 'library_stats_dialog.dart';
@@ -157,11 +156,6 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
       currentDate: galleryDate,
       initialDate: galleryGame.deadlineDate,
     ),
-  ),
-  DialogGalleryEntry(
-    'add-tags',
-    'Add tags',
-    (c) => _widget(c, (_) => AddTagsDialog(theme: _theme(c))),
   ),
   DialogGalleryEntry(
     'duplicate-keys',

@@ -30,6 +30,7 @@ import 'pages/settings_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
 import 'widgets/navigation_panel_overlay.dart';
 import 'widgets/app_page_stack.dart';
+import 'widgets/focus_anchor.dart';
 import 'widgets/dev_window.dart';
 import 'widgets/app_title_bar.dart';
 import 'widgets/dialog_helpers.dart';
@@ -621,17 +622,26 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
               bottom: navPanelHorizontalExtent,
             ),
           };
-    return Focus(
-      autofocus: true,
+    return FocusAnchor(
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            HardwareKeyboard.instance.isControlPressed &&
-            HardwareKeyboard.instance.isAltPressed &&
-            event.logicalKey == LogicalKeyboardKey.keyD) {
-          DevWindowOverlay.toggle(context);
-          return KeyEventResult.handled;
+        final keyboard = HardwareKeyboard.instance;
+        if (event is! KeyDownEvent ||
+            !keyboard.isControlPressed ||
+            !keyboard.isAltPressed) {
+          return KeyEventResult.ignored;
         }
-        return KeyEventResult.ignored;
+        switch (event.logicalKey) {
+          // Ctrl+Alt+D: the developer window.
+          case LogicalKeyboardKey.keyD:
+            DevWindowOverlay.toggle(context);
+          // Ctrl+Alt+G: the dialog gallery, opened or closed.
+          case LogicalKeyboardKey.keyG:
+            final gallery = ref.read(dialogGalleryVisibleProvider.notifier);
+            gallery.set(!ref.read(dialogGalleryVisibleProvider));
+          default:
+            return KeyEventResult.ignored;
+        }
+        return KeyEventResult.handled;
       },
       child: Scaffold(
         backgroundColor: theme.background,

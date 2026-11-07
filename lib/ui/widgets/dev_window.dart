@@ -375,11 +375,14 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             ),
           ]),
         section('Dialogs', [
-          action('Open dialog gallery', Icons.grid_view_rounded, () {
-            final navigatorContext = context;
-            widget.onClose();
-            showDialogGallery(navigatorContext);
-          }),
+          Tooltip(
+            message: 'Shortcut: Ctrl+Alt+G',
+            child: action('Open dialog gallery', Icons.grid_view_rounded, () {
+              final navigatorContext = context;
+              widget.onClose();
+              showDialogGallery(navigatorContext);
+            }),
+          ),
         ]),
       ],
     };

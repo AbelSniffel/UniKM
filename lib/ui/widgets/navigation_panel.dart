@@ -152,7 +152,7 @@ class NavigationPanel extends ConsumerWidget {
                 maxWidth: items.isEmpty
                     ? 0
                     : groupSpace *
-                          (indices.length + (_endsWithMenu(indices) ? 1 : 0)) /
+                          (indices.length + (_holdsMenu(indices) ? 1 : 0)) /
                           (items.length + 1),
               ),
               child: SingleChildScrollView(
@@ -216,8 +216,9 @@ class NavigationPanel extends ConsumerWidget {
 
   List<int> get _allGroupIndices => [for (var i = 0; i < items.length; i++) i];
 
-  /// The More menu button ends the group holding the last page.
-  bool _endsWithMenu(List<int> indices) =>
+  /// The group holding the last page (Settings) also holds the More menu
+  /// button, just before it.
+  bool _holdsMenu(List<int> indices) =>
       indices.isNotEmpty && indices.last == items.length - 1;
 
   List<int> get _trailingGroupIndices {
@@ -234,10 +235,11 @@ class NavigationPanel extends ConsumerWidget {
     theme: theme,
     isHorizontal: isHorizontal,
     children: [
-      for (final index in indices)
+      for (final index in indices) ...[
+        if (index == items.length - 1)
+          NavigationMoreMenuButton(theme: theme, position: position),
         _buildIndexedNavButton(index, isHorizontal, isCollapsed, expansionMode),
-      if (_endsWithMenu(indices))
-        NavigationMoreMenuButton(theme: theme, position: position),
+      ],
     ],
   );
 

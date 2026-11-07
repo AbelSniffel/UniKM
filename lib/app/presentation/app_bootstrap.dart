@@ -19,6 +19,7 @@ import '../../providers/app_providers.dart';
 import '../../ui/dialogs/database_unlock_dialog.dart';
 import '../../ui/dialogs/encryption_dialogs.dart';
 import '../../ui/widgets/app_privacy_guard.dart';
+import '../../ui/widgets/focus_anchor.dart';
 import '../../ui/widgets/app_progress_indicator.dart';
 import '../../ui/widgets/app_scrollbar.dart';
 import '../../ui/widgets/navigation_panel_overlay.dart';
@@ -488,7 +489,11 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
               : Duration(minutes: autoLockMinutes),
           onLock: _lock,
           hideInRecents: hideInRecents,
-          child: NotificationHost(theme: theme, child: child!),
+          // Every text field, dialogs' included.
+          child: Actions(
+            actions: {EditableTextTapOutsideIntent: DeferredTapOutsideAction()},
+            child: NotificationHost(theme: theme, child: child!),
+          ),
         ),
       ),
       home: Builder(
