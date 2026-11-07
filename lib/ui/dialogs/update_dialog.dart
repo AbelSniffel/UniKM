@@ -22,7 +22,6 @@ import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
 import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/segmented_bar.dart';
-import '../widgets/settings_header_actions.dart';
 import '../widgets/tinted_card.dart';
 import '../widgets/update_status_icons.dart';
 
@@ -65,43 +64,42 @@ class UpdateDialog extends ConsumerWidget {
         theme: theme,
       ),
       titleActions: [
-        SettingsHeaderActions(
-          theme: theme,
-          children: [
-            // A check would replace the release being downloaded or installed.
-            if (!state.isDownloading && state.downloadedFilePath == null)
-              SettingsHeaderAction(
-                key: const ValueKey('update-check-button'),
-                theme: theme,
-                icon: Icons.refresh,
-                tooltip: state.isChecking
-                    ? 'Checking for updates'
-                    : state.hasChecked
-                    ? 'Recheck Updates'
-                    : 'Check for Updates',
-                onTap: state.isChecking ? null : notifier.checkForUpdates,
-              ),
-            if (skipped > 0)
-              SettingsHeaderAction(
-                theme: theme,
-                icon: Icons.block,
-                tooltip: 'Skipped Versions',
-                badgeCount: skipped,
-                onTap: () => showAppDialog<void>(
-                  context: context,
-                  builder: (_) => SkippedVersionsDialog(theme: theme),
-                ),
-              ),
-            SettingsHeaderAction(
-              theme: theme,
-              icon: Icons.open_in_new,
-              tooltip: 'GitHub Releases',
-              onTap: () => launchUrl(
-                Uri.parse('https://github.com/$repo/releases'),
-                mode: LaunchMode.externalApplication,
-              ),
+        // A check would replace the release being downloaded or installed.
+        if (!state.isDownloading && state.downloadedFilePath == null)
+          IconButton(
+            key: const ValueKey('update-check-button'),
+            tooltip: state.isChecking
+                ? 'Checking for updates'
+                : state.hasChecked
+                ? 'Recheck Updates'
+                : 'Check for Updates',
+            onPressed: state.isChecking ? null : notifier.checkForUpdates,
+            color: theme.accent,
+            icon: const Icon(Icons.refresh),
+          ),
+        if (skipped > 0)
+          IconButton(
+            tooltip: 'Skipped Versions',
+            onPressed: () => showAppDialog<void>(
+              context: context,
+              builder: (_) => SkippedVersionsDialog(theme: theme),
             ),
-          ],
+            color: theme.accent,
+            icon: Badge.count(
+              count: skipped,
+              backgroundColor: theme.accent,
+              textColor: theme.onAccentText,
+              child: const Icon(Icons.block),
+            ),
+          ),
+        IconButton(
+          tooltip: 'GitHub Releases',
+          onPressed: () => launchUrl(
+            Uri.parse('https://github.com/$repo/releases'),
+            mode: LaunchMode.externalApplication,
+          ),
+          color: theme.accent,
+          icon: const Icon(Icons.open_in_new),
         ),
       ],
       contentSpacing: 12,

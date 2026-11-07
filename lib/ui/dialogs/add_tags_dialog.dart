@@ -10,7 +10,6 @@ import '../../providers/app_providers.dart';
 import '../widgets/app_search_field.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/tag_list.dart';
-import '../widgets/tinted_tiles.dart';
 import 'custom_tag_dialogs.dart';
 
 class AddTagsDialog extends ConsumerStatefulWidget {
@@ -169,77 +168,52 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
                   Text(_error!, style: TextStyle(color: theme.error)),
               ],
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 8,
-              children: [
-                TintedHeading(
-                  theme: theme,
-                  title: 'Custom Tags',
-                  trailing: '${tags.length}',
-                  // Keep the heading's height as the first or last tag
-                  // comes and goes.
-                  action: Visibility(
-                    visible: tags.isNotEmpty,
-                    maintainSize: true,
-                    maintainState: true,
-                    maintainAnimation: true,
-                    child: IconButton(
-                      tooltip: 'Delete All Custom Tags',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _saving || tags.isEmpty
-                          ? null
-                          : _deleteAllCustomTags,
-                      icon: const Icon(Icons.delete),
-                      color: theme.error,
-                    ),
-                  ),
-                ),
-                Container(
-                  key: const ValueKey('custom-tags-panel'),
-                  height: 220,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.surface,
-                    borderRadius: BorderRadius.circular(theme.cornerRadius),
-                    border: Border.all(color: theme.border),
-                  ),
-                  child: tags.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            spacing: 8,
-                            children: [
-                              Icon(
-                                Icons.label_off_outlined,
-                                color: theme.textHint,
-                                size: 32,
-                              ),
-                              Text(
-                                'No custom tags created yet',
-                                style: TextStyle(color: theme.textHint),
-                              ),
-                            ],
+            Container(
+              key: const ValueKey('custom-tags-panel'),
+              height: 220,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.surface,
+                borderRadius: BorderRadius.circular(theme.cornerRadius),
+                border: Border.all(color: theme.border),
+              ),
+              child: tags.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            Icons.label_off_outlined,
+                            color: theme.textHint,
+                            size: 32,
                           ),
-                        )
-                      : TagList(
-                          tags: tags,
-                          theme: theme,
-                          allSelected: true,
-                          deleteOnTap: true,
-                          scrollable: true,
-                          onTagToggled: (tagId) {
-                            final tag = tags.firstWhere(
-                              (tag) => tag.id == tagId,
-                            );
-                            _deleteTag(tag.id, tag.name);
-                          },
-                        ),
-                ),
-              ],
+                          Text(
+                            'No custom tags created yet',
+                            style: TextStyle(color: theme.textHint),
+                          ),
+                        ],
+                      ),
+                    )
+                  : TagList(
+                      tags: tags,
+                      theme: theme,
+                      allSelected: true,
+                      deleteOnTap: true,
+                      scrollable: true,
+                      onTagToggled: (tagId) {
+                        final tag = tags.firstWhere((tag) => tag.id == tagId);
+                        _deleteTag(tag.id, tag.name);
+                      },
+                    ),
             ),
           ],
           actions: [
+            ElevatedButton(
+              onPressed: _saving || tags.isEmpty ? null : _deleteAllCustomTags,
+              style: themedFilledButtonStyle(theme, destructive: true),
+              child: const Text('Delete All'),
+            ),
             ElevatedButton(
               onPressed: _saving ? null : () => Navigator.of(context).pop(),
               child: const Text('Done'),
