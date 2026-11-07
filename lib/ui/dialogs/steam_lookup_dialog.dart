@@ -2,153 +2,84 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/steam/application/apply_steam_metadata.dart';
-export '../../features/steam/application/apply_steam_metadata.dart'
-    show SteamApplyOptions;
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
 import '../../core/constants/app_constants.dart';
-import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
+import '../widgets/game_editor_layout.dart'
+    show GameBannerBackdrop, GameBannerHero, GameStat;
 import '../widgets/notification_system.dart';
 import '../widgets/segmented_bar.dart';
-import '../widgets/tinted_card.dart';
-import '../widgets/tinted_tiles.dart';
 import '../widgets/game_cover_image.dart';
 import '../widgets/steam_lookup_info_menu.dart';
 import '../../core/services/logging.dart';
 
-/// Show Steam lookup dialog for a game
-Future<bool?> showSteamLookupDialog(
-  BuildContext context,
-  Game game, {
-  bool forceRefresh = false,
-  SteamSearchResult? initialResult,
-  SteamApplyOptions initialOptions = SteamApplyOptions.defaults,
-}) => showAppDialog<bool>(
-  context: context,
-  builder: (ctx) => SteamLookupDialog(
-    game: game,
-    forceRefresh: forceRefresh,
-    initialResult: initialResult,
-    initialOptions: initialOptions,
-  ),
-);
+/// What Save confirmed in a Steam lookup: the match shown, and whether it
+/// was the cached match (cached at [cachedAt], if known) rather than one
+/// fetched fresh.
+typedef SteamLookupChoice = ({
+  SteamSearchResult result,
+  bool usedCache,
+  DateTime? cachedAt,
+});
 
-/// Both fetch choices and result previews edit the same immutable options.
-class _SteamOptionsGrid extends StatelessWidget {
-  const _SteamOptionsGrid({
-    required this.theme,
-    required this.options,
-    required this.onChanged,
-    this.result,
-  });
+/// Shows the Steam match for [title]: the cached one when there is one,
+/// which Fetch Fresh replaces from Steam, else a fresh search. Returns null
+/// when closed without saving.
+Future<SteamLookupChoice?> showSteamLookupDialog(
+  BuildContext context, {
+  required String title,
+}) => _showLookup<SteamLookupChoice>(context, title: title);
 
-  final AppThemeData theme;
-  final SteamApplyOptions options;
-  final ValueChanged<SteamApplyOptions> onChanged;
-  final SteamSearchResult? result;
+/// Asks whether a batch of [gameCount] games, shown by the first, [title],
+/// uses cached data where a game has some, without searching Steam. Returns
+/// true to use the cache, false to fetch fresh, or null when closed.
+Future<bool?> showSteamBatchLookupDialog(
+  BuildContext context, {
+  required String title,
+  required int gameCount,
+}) => _showLookup<bool>(context, title: title, gameCount: gameCount);
 
-  @override
-  Widget build(BuildContext context) {
-    final result = this.result;
-    final reviews = [
-      if (result?.reviewScore != null) '${result!.reviewScore}% positive',
-      if (result?.reviewCount != null)
-        '${NumberFormat.compact().format(result!.reviewCount)} reviews',
-    ].join(' · ');
-    Widget option(
-      IconData icon,
-      String label,
-      String description,
-      bool value,
-      SteamApplyOptions Function(bool) update,
-    ) => SettingsToggleCard(
-      theme: theme,
-      icon: icon,
-      label: label,
-      description: description,
-      value: value,
-      onChanged: (value) => onChanged(update(value)),
-    );
-    return SettingsControlWrap(
-      minimumCardWidth:
-          kInteractionCardMinWidth *
-          MediaQuery.textScalerOf(context).scale(14) /
-          14,
-      children: [
-        option(
-          Icons.pin_outlined,
-          'AppID',
-          result == null ? 'Save Steam AppID' : 'Save AppID ${result.appId}',
-          options.applyAppId,
-          (v) => options.copyWith(applyAppId: v),
-        ),
-        if (result == null || result.tags.isNotEmpty)
-          option(
-            Icons.label_outline,
-            'Tags',
-            result == null
-                ? 'Add Steam tags'
-                : 'Add ${result.tags.length} Steam tags',
-            options.applyTags,
-            (v) => options.copyWith(applyTags: v),
-          ),
-        option(
-          Icons.image_outlined,
-          'Cover Image',
-          result == null
-              ? 'Download Steam header image'
-              : 'Steam header artwork',
-          options.applyImage,
-          (v) => options.copyWith(applyImage: v),
-        ),
-        option(
-          Icons.business_outlined,
-          'Developer',
-          result == null
-              ? 'Add game developer name'
-              : result.developer?.trim().isNotEmpty == true
-              ? result.developer!
-              : 'No developer supplied',
-          options.applyDeveloper,
-          (v) => options.copyWith(applyDeveloper: v),
-        ),
-        if (result == null || reviews.isNotEmpty)
-          option(
-            Icons.thumb_up_outlined,
-            'Reviews',
-            result == null ? 'Score and review count' : reviews,
-            options.applyReviews,
-            (v) => options.copyWith(applyReviews: v),
-          ),
-      ],
-    );
-  }
+Future<T?> _showLookup<T>(
+  BuildContext context, {
+  required String title,
+  int gameCount = 1,
+}) async {
+  final preview = AppDialogPreviewScope.maybeOf(context);
+  final cached = preview != null
+      ? preview.steamResult
+      : await getCachedResultForTitle(title);
+  final cachedAt = cached == null
+      ? null
+      : preview != null
+      ? preview.steamCachedAt
+      : await getCachedAtForTitle(title);
+  if (!context.mounted) return null;
+  return showAppDialog<T>(
+    context: context,
+    builder: (ctx) => SteamLookupDialog(
+      title: title,
+      gameCount: gameCount,
+      result: cached,
+      fromCache: cached != null,
+      cachedAt: cachedAt,
+    ),
+  );
 }
 
-List<Tag> _steamPreviewTags(List<String> names) => List.generate(
-  names.length,
-  (index) => Tag(
-    id: -(index + 1),
-    name: names[index],
-    colorHex: '#000000',
-    isSteamTag: true,
-  ),
-);
-
-/// Apply a SteamSearchResult to a game with the given options.
+/// Apply everything in a SteamSearchResult to a game.
 /// Returns null on success or an error message on failure.
 ///
 /// The cover is the match's artwork even when one is saved under the
@@ -157,8 +88,7 @@ List<Tag> _steamPreviewTags(List<String> names) => List.generate(
 Future<String?> applySteamResultToGame(
   ProviderContainer container,
   Game game,
-  SteamSearchResult result,
-  SteamApplyOptions options, {
+  SteamSearchResult result, {
   int? expectedRevision,
   bool Function()? isCancelled,
   bool refreshCover = true,
@@ -185,7 +115,7 @@ Future<String?> applySteamResultToGame(
             refreshCover ||
             (game.steamAppId.isNotEmpty && game.steamAppId != appId),
       ),
-    ).apply(game.id, result, options);
+    ).apply(game.id, result);
     await persistEncryptedDbIfNeeded(container, database: db);
     return null;
   } catch (e) {
@@ -193,146 +123,7 @@ Future<String?> applySteamResultToGame(
   }
 }
 
-/// A confirmed fetch choice. [cached] is set when the user chose cached data.
-typedef SteamFetchChoice = ({
-  SteamSearchResult? cached,
-  DateTime? cachedAt,
-  SteamApplyOptions options,
-});
-
-/// Show Steam fetch options, including a cache choice when cached data exists.
-/// With [onlyWhenCached] nothing is asked unless there is cached data to
-/// choose. Returns null when cancelled.
-Future<SteamFetchChoice?> showSteamFetchOptionsDialog(
-  BuildContext context, {
-  required String title,
-  bool onlyWhenCached = false,
-}) async {
-  final container = ProviderScope.containerOf(context);
-
-  // Only use title-based cache/lookups. AppID-based lookups are removed for consistency.
-  final preview = AppDialogPreviewScope.maybeOf(context);
-  final cached = preview != null
-      ? preview.steamResult
-      : await getCachedResultForTitle(title);
-  final cachedAt = preview != null
-      ? preview.steamCachedAt
-      : await getCachedAtForTitle(title);
-
-  if ((cached == null && onlyWhenCached) || !context.mounted) {
-    return (
-      cached: null,
-      cachedAt: cachedAt,
-      options: SteamApplyOptions.defaults,
-    );
-  }
-
-  final theme = container.read(themeProvider);
-
-  var options = SteamApplyOptions.defaults;
-  final useCache = await showAppDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx2, setState2) => ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.cloud_download,
-          title: cached != null ? 'Steam Data Cache' : 'Steam Data Options',
-          theme: theme,
-        ),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 16,
-            children: [
-              cached != null
-                  ? TintedCard(
-                      theme: theme,
-                      size: TintedCardSize.large,
-                      icon: Icons.history,
-                      title: 'Cached data found',
-                      subtitle:
-                          '"$title"  ·  Cached ${cachedAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(cachedAt) : 'at an unknown time'}',
-                    )
-                  : TintedCard(
-                      theme: theme,
-                      size: TintedCardSize.large,
-                      icon: Icons.cloud_download_outlined,
-                      title: 'Fetch from Steam',
-                      subtitle: 'No cached data for "$title"',
-                    ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 8,
-                children: [
-                  TintedHeading(theme: theme, title: 'Apply'),
-                  _SteamOptionsGrid(
-                    theme: theme,
-                    options: options,
-                    onChanged: (value) => setState2(() => options = value),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          if (cached != null)
-            OutlinedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Use Cache'),
-            ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(cached != null ? 'Fetch Fresh' : 'Fetch'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  if (useCache == null) return null;
-  return (
-    cached: useCache ? cached : null,
-    cachedAt: cachedAt,
-    options: options,
-  );
-}
-
-/// The data a single fetch resolved to; [cachedAt] is when the cache entry
-/// was written, whether or not it was used.
-typedef SteamFetchResolution = ({
-  SteamSearchResult? result,
-  bool usedCache,
-  DateTime? cachedAt,
-  SteamApplyOptions options,
-});
-
-/// Asks whether to use cached data and what to apply, when there is cached
-/// data, then resolves the result. Returns null when cancelled.
-Future<SteamFetchResolution?> resolveSteamResultForTitle(
-  BuildContext context, {
-  required String title,
-  required SteamService steamService,
-}) async {
-  final choice = await showSteamFetchOptionsDialog(
-    context,
-    title: title,
-    onlyWhenCached: true,
-  );
-  if (choice == null) return null;
-  final cached = choice.cached;
-  return (
-    result: cached ?? await steamService.searchGame(title, forceRefresh: true),
-    usedCache: cached != null,
-    cachedAt: choice.cachedAt,
-    options: choice.options,
-  );
-}
-
+/// Looks [game] up on Steam and applies what the lookup saves.
 Future<void> performSingleSteamLookup(
   BuildContext context,
   WidgetRef ref,
@@ -342,55 +133,26 @@ Future<void> performSingleSteamLookup(
   final batchNotifier = ref.read(batchFetchProvider.notifier);
   batchNotifier.startBatch([game.id]);
   batchNotifier.setProcessing(game.id);
-
-  final steamService = ref.read(steamServiceProvider);
   try {
-    final resolution = await resolveSteamResultForTitle(
-      context,
-      title: game.title,
-      steamService: steamService,
-    );
+    final choice = await showSteamLookupDialog(context, title: game.title);
     if (!context.mounted ||
-        resolution == null ||
+        choice == null ||
         ref.read(databaseNotifierProvider).revision != sessionRevision) {
       return;
     }
-
-    final result = resolution.result;
-    if (result == null) {
-      NotificationManager.instance.info(
-        'No Steam data found for "${game.title}"',
-      );
-      return;
-    }
-
-    // Chosen cached data is applied as picked; only fresh data is previewed.
-    if (resolution.usedCache) {
-      final error = await applySteamResultToGame(
-        ProviderScope.containerOf(context, listen: false),
-        game,
-        result,
-        resolution.options,
-        expectedRevision: sessionRevision,
-      );
-      if (error == null) {
-        NotificationManager.instance.success(
-          'Updated "${game.title}" with Steam data',
-        );
-      } else {
-        NotificationManager.instance.error(
-          'Failed to apply Steam data: $error',
-        );
-      }
-      return;
-    }
-
-    await showSteamLookupDialog(
-      context,
+    final error = await applySteamResultToGame(
+      ProviderScope.containerOf(context, listen: false),
       game,
-      initialResult: result,
-      initialOptions: resolution.options,
+      choice.result,
+      expectedRevision: sessionRevision,
     );
+    if (error == null) {
+      NotificationManager.instance.success(
+        'Updated "${game.title}" with Steam data',
+      );
+    } else {
+      NotificationManager.instance.error('Failed to apply Steam data: $error');
+    }
   } finally {
     batchNotifier.endBatch();
   }
@@ -401,11 +163,11 @@ Future<void> performSingleSteamLookup(
 /// This central helper is used by individual game cards and by the
 /// selection action bar so both paths share the exact same behaviour,
 /// notifications and cancellation handling.
-/// The first confirmed fetch choice and apply options are reused for the batch.
+/// The first game's lookup asks whether the batch uses cached data.
 Future<void> performSteamBatchLookup(
   BuildContext context,
   List<Game> targets, {
-  bool promptForOptions = true,
+  bool prompt = true,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final sessionRevision = container.read(databaseNotifierProvider).revision;
@@ -420,6 +182,22 @@ Future<void> performSteamBatchLookup(
     return;
   }
   final total = steamTargets.length;
+
+  // Whether to use cached data, asked with the first game; without a prompt
+  // every game is fetched fresh.
+  var useCache = false;
+  if (prompt && context.mounted) {
+    final choice = await showSteamBatchLookupDialog(
+      context,
+      title: steamTargets.first.title,
+      gameCount: total,
+    );
+    if (choice == null ||
+        container.read(databaseNotifierProvider).revision != sessionRevision) {
+      return;
+    }
+    useCache = choice;
+  }
 
   // Start batch fetch tracking
   batchNotifier.startBatch([for (final g in steamTargets) g.id]);
@@ -442,9 +220,6 @@ Future<void> performSteamBatchLookup(
   int notFound = 0;
   int failed = 0;
   final freshResultCache = <String, SteamSearchResult>{};
-
-  // The first confirmed choice applies to the rest of the batch.
-  SteamFetchChoice? choiceForAll;
 
   for (var i = 0; i < total; i++) {
     final target = steamTargets[i];
@@ -479,31 +254,9 @@ Future<void> performSteamBatchLookup(
       ),
     );
 
-    // Without a prompt (or a mounted context) the batch fetches fresh data.
-    SteamSearchResult? cached;
-    var options = SteamApplyOptions.defaults;
-    final chosen = choiceForAll;
-    if (chosen != null) {
-      options = chosen.options;
-      if (chosen.cached != null) {
-        cached = await getCachedResultForTitle(gameTitle);
-        if (stopped()) break;
-      }
-    } else if (promptForOptions && context.mounted) {
-      final selection = await showSteamFetchOptionsDialog(
-        context,
-        title: gameTitle,
-      );
-      if (stopped()) break;
-      if (selection == null) {
-        batchNotifier.cancelBatch();
-        handle.update(message: 'Cancelled', clearAction: true);
-        break;
-      }
-      cached = selection.cached;
-      options = selection.options;
-      choiceForAll = selection;
-    }
+    // Cached data, where a game has some, when the lookup chose it.
+    final cached = useCache ? await getCachedResultForTitle(gameTitle) : null;
+    if (stopped()) break;
 
     // Fetch the current game state from provider just before applying
     final game = container
@@ -543,7 +296,6 @@ Future<void> performSteamBatchLookup(
       container,
       game,
       result,
-      options,
       expectedRevision: sessionRevision,
       isCancelled: () => batchNotifier.isCancelled,
       // Only re-matched games download artwork again.
@@ -591,119 +343,128 @@ Future<void> performSteamBatchLookup(
   }
 }
 
-/// Steam lookup dialog
+/// A Steam match for a title, with what to save from it. It opens on a
+/// cached match, which Fetch Fresh replaces from Steam, or searches Steam
+/// when it is given none. Save closes it with a [SteamLookupChoice]; a
+/// batch's never searches, closing with whether to use the cache.
 class SteamLookupDialog extends ConsumerStatefulWidget {
   const SteamLookupDialog({
     super.key,
-    required this.game,
-    this.forceRefresh = false,
-    this.initialResult,
-    this.initialOptions = SteamApplyOptions.defaults,
+    required this.title,
+    this.gameCount = 1,
+    this.result,
+    this.fromCache = false,
+    this.cachedAt,
   });
 
-  final Game game;
-  final bool forceRefresh;
-  final SteamSearchResult? initialResult;
-  final SteamApplyOptions initialOptions;
+  /// The title looked up.
+  final String title;
+
+  /// The games sharing these choices; more than one is a batch, shown by
+  /// its first game.
+  final int gameCount;
+
+  /// The match shown at first; without one Steam is searched.
+  final SteamSearchResult? result;
+
+  /// Whether [result] is the cached match, cached at [cachedAt] if known.
+  final bool fromCache;
+  final DateTime? cachedAt;
 
   @override
   ConsumerState<SteamLookupDialog> createState() => _SteamLookupDialogState();
 }
 
 class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
-  late final int _sessionRevision;
-  bool _isSearching = false;
-  bool _isApplying = false;
-  SteamSearchResult? _result;
-  final _coverDownloads = <String, Future<String?>>{};
+  late SteamSearchResult? _result = widget.result;
+  late bool _fromCache = widget.fromCache;
+  // A batch never searches: it only chooses between cache and fresh data.
+  late bool _isSearching = _result == null && !_isBatch;
   String? _error;
 
-  late var _options = widget.initialOptions;
+  /// One cover download per match, so rebuilds never restart it.
+  final _coverDownloads = <String, Future<String?>>{};
+
+  /// The shown match's downloaded cover, blurred in behind the banner.
+  final _backdrop = TextEditingController();
+
+  bool get _isBatch => widget.gameCount > 1;
 
   @override
   void initState() {
     super.initState();
-    _sessionRevision = ref.read(databaseNotifierProvider).revision;
-    if (widget.initialResult != null) {
-      _result = widget.initialResult;
-      _isSearching = false;
-    } else {
-      _searchSteam(forceRefresh: widget.forceRefresh);
-    }
+    _isSearching ? _searchSteam() : _showBackdrop(_result);
   }
 
-  Future<void> _searchSteam({bool forceRefresh = false}) async {
+  @override
+  void dispose() {
+    _backdrop.dispose();
+    super.dispose();
+  }
+
+  /// Replaces what is shown with a fresh match from Steam. A cached match
+  /// comes back, with a notice, when the fresh search finds nothing.
+  Future<void> _searchSteam() async {
+    final cached = _fromCache ? _result : null;
+    _showBackdrop(null);
     setState(() {
       _isSearching = true;
       _error = null;
       _result = null;
+      _fromCache = false;
     });
-
+    SteamSearchResult? result;
+    String? failure;
     try {
-      final steamService = ref.read(steamServiceProvider);
-
-      // Always search by title (no AppID-based lookup)
-      final result = await steamService.searchGame(
-        widget.game.title,
-        forceRefresh: forceRefresh,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _result = result;
-        _isSearching = false;
-        if (result == null) _error = 'No matching game found on Steam';
-      });
+      result = await ref
+          .read(steamServiceProvider)
+          .searchGame(widget.title, forceRefresh: true);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isSearching = false;
-      });
+      failure = e.toString();
     }
+    if (!mounted) return;
+    setState(() {
+      _result = result ?? cached;
+      _fromCache = result == null && cached != null;
+      _error = switch (result) {
+        _? => null,
+        null when cached != null =>
+          '${failure == null ? 'No match on Steam' : 'Search failed'}'
+              ' · Using cached data',
+        null => failure ?? 'No matching game found on Steam',
+      };
+      _isSearching = false;
+    });
+    _showBackdrop(_result);
   }
 
-  Future<void> _applyData() async {
-    if (_result == null) return;
-
-    setState(() => _isApplying = true);
-
-    try {
-      final error = await applySteamResultToGame(
-        ProviderScope.containerOf(context, listen: false),
-        widget.game,
-        _result!,
-        _options,
-        expectedRevision: _sessionRevision,
+  /// [result]'s cover download; a dialog preview shows its URL.
+  Future<String?> _coverFor(SteamSearchResult result) =>
+      _coverDownloads.putIfAbsent(
+        result.appId,
+        () => AppDialogPreviewScope.maybeOf(context) != null
+            ? Future.value(result.imageUrl)
+            : ref
+                  .read(steamServiceProvider)
+                  .downloadImage(result.appId, imageUrl: result.imageUrl),
       );
 
-      if (error != null) {
-        NotificationManager.instance.error(
-          'Failed to apply Steam data: $error',
-        );
-        if (mounted) setState(() => _isApplying = false);
-        return;
-      }
-
-      NotificationManager.instance.success(
-        'Updated "${widget.game.title}" with Steam data',
-      );
-
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } catch (e) {
-      NotificationManager.instance.error('Failed to apply Steam data: $e');
-      if (mounted) setState(() => _isApplying = false);
-    }
+  /// Blurs [result]'s cover in behind the banner once it has downloaded.
+  void _showBackdrop(SteamSearchResult? result) {
+    _backdrop.clear();
+    if (result == null) return;
+    _coverFor(result).then((path) {
+      if (mounted && _result == result) _backdrop.text = path ?? '';
+    }, onError: (_) {});
   }
 
   /// The match's store page, or a Steam search for the game until there is
   /// one, as in the Game Editor.
   Future<void> _openSteamPage() async {
-    final appId = _isSearching ? null : _result?.appId;
+    final appId = _result?.appId;
     final url = appId != null && appId.isNotEmpty
         ? steamAppPageUrl(appId)
-        : steamSearchPageUrl(widget.game.title);
+        : steamSearchPageUrl(widget.title);
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -714,169 +475,249 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-
+    final result = _isSearching ? null : _result;
+    final divider = Divider(
+      height: 40,
+      indent: 16,
+      endIndent: 16,
+      color: theme.border,
+    );
     return ThemedAlertDialog(
       theme: theme,
-      title: DialogHeader(
-        icon: Icons.cloud_download,
-        title: 'Steam Lookup',
-        theme: theme,
+      showCloseButton: false,
+      // The banner reaches the edges; the buttons keep the dialog's padding.
+      bleedContent: true,
+      // The banner's art runs on behind the buttons, so the dialog has no
+      // edge where its content ends.
+      backdrop: GameBannerBackdrop(theme: theme, coverController: _backdrop),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHero(theme, result),
+          for (final section in _buildSections(theme, result)) ...[
+            divider,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: section,
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
       ),
-      titleActions: [
-        IconButton(
-          tooltip: 'Steam Page',
-          onPressed: _openSteamPage,
-          color: theme.accent,
-          icon: const Icon(Icons.open_in_new),
-        ),
-        if (_result case final result? when !_isSearching)
-          SteamLookupInfoMenu(
-            theme: theme,
-            searchedTitle: widget.game.title,
-            result: result,
-          ),
-      ],
-      contentChildren: [
-        if (_isSearching)
-          _buildSearchingState(theme)
-        else if (_error != null)
-          _buildErrorState(theme)
-        else if (_result != null)
-          _buildResultState(theme),
-      ],
       actions: [
-        if (_result != null && !_isSearching)
+        // Fetch Fresh replaces a single game's cached match in place; a
+        // batch closes with its choice, fetched for every game once it
+        // starts.
+        if (_fromCache)
+          OutlinedButton(
+            onPressed: _isBatch
+                ? () => Navigator.pop<bool>(context, false)
+                : _searchSteam,
+            child: const Text('Fetch Fresh'),
+          ),
+        if (_isBatch)
           ElevatedButton(
-            onPressed: _isApplying ? null : _applyData,
-            child: _isApplying
-                ? const AppCircularProgressIndicator(size: 20)
-                : const Text('Save'),
+            onPressed: () => Navigator.pop<bool>(context, _fromCache),
+            child: Text(
+              _fromCache ? 'Use Cache' : 'Fetch ${widget.gameCount} Games',
+            ),
+          )
+        else if (result != null)
+          ElevatedButton(
+            onPressed: () => Navigator.pop<SteamLookupChoice>(context, (
+              result: result,
+              usedCache: _fromCache,
+              cachedAt: _fromCache ? widget.cachedAt : null,
+            )),
+            child: const Text('Save'),
           ),
       ],
     );
   }
 
-  Widget _buildSearchingState(AppThemeData theme) => TintedCard(
-    theme: theme,
-    size: TintedCardSize.large,
-    busy: true,
-    title: 'Searching Steam',
-    subtitle: widget.game.title,
-  );
-
-  Widget _buildErrorState(AppThemeData theme) => TintedCard(
-    theme: theme,
-    size: TintedCardSize.large,
-    color: theme.error,
-    icon: Icons.error_outline,
-    title: 'Search failed',
-    subtitle: '${widget.game.title}  ·  $_error',
-    trailing: IconButton(
-      tooltip: 'Try Again',
-      onPressed: _searchSteam,
-      icon: const Icon(Icons.refresh),
-    ),
-  );
-
-  Widget _buildResultState(AppThemeData theme) {
-    final result = _result!;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 16,
-      children: [
-        _buildGameSummary(theme, result),
-        if (result.tags.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              TintedHeading(
-                theme: theme,
-                title: 'Steam Tags',
-                trailing: '${result.tags.length}',
-              ),
-              TagList(
-                tags: _steamPreviewTags(result.tags),
-                theme: theme,
-                allSelected: true,
-                maxHeight: 96,
-              ),
-            ],
+  /// The match's cover beside its name, or the search's progress or failure
+  /// until there is one. A batch says what its buttons do there.
+  Widget _buildHero(AppThemeData theme, SteamSearchResult? result) {
+    final count = widget.gameCount;
+    return LayoutBuilder(
+      builder: (context, constraints) => GameBannerHero(
+        theme: theme,
+        // Cached data is named as such until Fetch Fresh replaces it.
+        heading: _fromCache ? 'Steam Cache' : 'Steam Lookup',
+        actions: [
+          // Hidden while searching, until there is a match (or a failed
+          // search, which opens a Steam search) to show.
+          if (!_isSearching)
+            IconButton(
+              tooltip: 'Steam Page',
+              onPressed: _openSteamPage,
+              color: theme.accent,
+              icon: const Icon(Icons.open_in_new),
+            ),
+          // The lookup's details describe a fresh search, so not the cache.
+          if (result != null && !_fromCache)
+            SteamLookupInfoMenu(
+              theme: theme,
+              searchedTitle: widget.title,
+              result: result,
+            ),
+          IconButton(
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
           ),
+        ],
+        wide: constraints.maxWidth >= 480,
+        coverWidth: math.min(260, constraints.maxWidth * 0.45),
+        cover: ClipRRect(
+          borderRadius: BorderRadius.circular(theme.cornerRadius),
+          // A Steam header's shape.
+          child: AspectRatio(
+            aspectRatio: 460 / 215,
+            child: result != null
+                ? _LoadingCover(theme: theme, cover: _coverFor(result))
+                : ColoredBox(
+                    color: theme.cardCoverPlaceholder,
+                    child: Center(
+                      child: _isSearching
+                          ? const AppCircularProgressIndicator(size: 24)
+                          : Icon(
+                              // A batch's cache-less first game, or a failed
+                              // search.
+                              _isBatch
+                                  ? Icons.cloud_download_outlined
+                                  : Icons.search_off,
+                              color: theme.textHint,
+                              size: 32,
+                            ),
+                    ),
+                  ),
+          ),
+        ),
+        info: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 6,
+          children: [
+            Text(
+              result?.name ?? widget.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (result?.isDlc ?? false)
+              TintedChip(theme: theme, color: theme.secondary, label: 'DLC'),
+            if (_isBatch)
+              Text(
+                _fromCache
+                    ? 'First of $count games · Cached data found'
+                    : 'No cached data found',
+                style: TextStyle(color: theme.textSecondary),
+              ),
+            if (_isSearching)
+              Text(
+                'Searching Steam...',
+                style: TextStyle(color: theme.textSecondary),
+              ),
+            if (_error case final error?)
+              Row(
+                spacing: 4,
+                children: [
+                  Flexible(
+                    child: Text(error, style: TextStyle(color: theme.error)),
+                  ),
+                  IconButton(
+                    tooltip: 'Try Again',
+                    onPressed: _searchSteam,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The match's tags, then its figures as in the Game Editor, each under a
+  /// divider; none until there is a match.
+  List<Widget> _buildSections(AppThemeData theme, SteamSearchResult? result) {
+    if (result == null) return const [];
+    final cachedAt = widget.cachedAt;
+    final developer = result.developer?.trim();
+    return [
+      if (result.tags.isNotEmpty)
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 8,
+          spacing: 10,
           children: [
-            TintedHeading(theme: theme, title: 'Save Info'),
-            _SteamOptionsGrid(
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Steam Tags',
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${result.tags.length}',
+                  style: TextStyle(color: theme.textHint),
+                ),
+              ],
+            ),
+            TagList(
+              tags: [
+                for (final (index, name) in result.tags.indexed)
+                  Tag(
+                    id: -(index + 1),
+                    name: name,
+                    colorHex: '#000000',
+                    isSteamTag: true,
+                  ),
+              ],
               theme: theme,
-              options: _options,
-              result: result,
-              onChanged: (value) => setState(() => _options = value),
+              allSelected: true,
+              maxHeight: 96,
             ),
           ],
         ),
-      ],
-    );
-  }
-
-  /// The match: its cover beside a card with its name, developer and
-  /// whether it is a DLC.
-  Widget _buildGameSummary(AppThemeData theme, SteamSearchResult result) {
-    final developer = result.developer?.trim();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final coverWidth = (constraints.maxWidth * 0.35).clamp(0.0, 140.0);
-        return Row(
-          spacing: 12,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(theme.cornerRadius),
-              child: SizedBox(
-                width: coverWidth,
-                // A Steam header's shape.
-                height: coverWidth * 215 / 460,
-                child: _LoadingCover(
-                  theme: theme,
-                  // One future per match, so rebuilds never restart it.
-                  cover: _coverDownloads.putIfAbsent(
-                    result.appId,
-                    () => AppDialogPreviewScope.maybeOf(context) != null
-                        ? Future.value(result.imageUrl)
-                        : ref
-                              .read(steamServiceProvider)
-                              .downloadImage(
-                                result.appId,
-                                imageUrl: result.imageUrl,
-                              ),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: ConstrainedBox(
-                // At least as tall as the cover beside it.
-                constraints: BoxConstraints(minHeight: coverWidth * 215 / 460),
-                child: TintedCard(
-                  theme: theme,
-                  size: TintedCardSize.large,
-                  title: result.name,
-                  subtitle: developer?.isNotEmpty == true ? developer : null,
-                  trailing: result.isDlc
-                      ? TintedChip(
-                          theme: theme,
-                          color: theme.secondary,
-                          label: 'DLC',
-                        )
-                      : null,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+      Wrap(
+        spacing: 36,
+        runSpacing: 16,
+        children: [
+          GameStat.reviews(
+            theme: theme,
+            score: result.reviewScore ?? 0,
+            count: result.reviewCount ?? 0,
+          ),
+          GameStat(
+            theme: theme,
+            label: 'Developer',
+            value: developer == null || developer.isEmpty ? null : developer,
+            fallback: 'Unknown',
+          ),
+          GameStat.steamAppId(theme: theme, appId: result.appId),
+          // A fresh match was cached as it was fetched.
+          GameStat.date(
+            theme: theme,
+            label: 'Cached',
+            date: _fromCache ? cachedAt : null,
+            fallback: _fromCache ? 'Unknown' : 'Just now',
+          ),
+          // The title looked up, when the match goes by another.
+          if (result.name.trim().toLowerCase() !=
+              widget.title.trim().toLowerCase())
+            GameStat(theme: theme, label: 'Searched', value: widget.title),
+        ],
+      ),
+    ];
   }
 }
 

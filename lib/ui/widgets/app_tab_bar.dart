@@ -48,13 +48,6 @@ class AppTabBar extends StatelessWidget {
     final labelStyle = Theme.of(
       context,
     ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.bold);
-    final restColor = Color.alphaBlend(
-      theme.accent.withValues(alpha: 0.45),
-      theme.navBackground,
-    );
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : kTabTransition;
     Widget buildRow(bool showIcons) => FocusTraversalGroup(
       child: IntrinsicHeight(
         child: Row(
@@ -68,76 +61,31 @@ class AppTabBar extends StatelessWidget {
                   label: tabs[index].label,
                   excludeSemantics: true,
                   onTap: () => _select(context, index),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(
-                      begin: index == selected ? 1 : 0,
-                      end: index == selected ? 1 : 0,
+                  child: AppTabSurface(
+                    theme: theme,
+                    selected: index == selected,
+                    borderRadius: _radiusFor(index, radius, context),
+                    onTap: () => _select(context, index),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
                     ),
-                    duration: duration,
-                    curve: kTabTransitionCurve,
-                    builder: (context, amount, _) {
-                      final tabRadius = _radiusFor(index, radius, context);
-                      final background = Color.lerp(
-                        restColor,
-                        theme.tabSelected,
-                        amount,
-                      )!;
-                      return Material(
-                        color: background,
-                        animationDuration: Duration.zero,
-                        borderRadius: tabRadius,
-                        clipBehavior: Clip.antiAlias,
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            gradient: SurfaceDepth.gradient(background),
-                          ),
-                          child: InkWell(
-                            borderRadius: tabRadius,
-                            hoverColor: theme.navItemHover,
-                            splashColor: theme.navItemHover,
-                            highlightColor: theme.tabSelected,
-                            onTap: () => _select(context, index),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (showIcons &&
-                                      tabs[index].icon != null) ...[
-                                    Icon(
-                                      tabs[index].icon,
-                                      size: 16,
-                                      color: Color.lerp(
-                                        theme.textSecondary,
-                                        theme.primaryButtonText,
-                                        amount,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  ],
-                                  Flexible(
-                                    child: Text(
-                                      tabs[index].label,
-                                      textAlign: TextAlign.center,
-                                      style: labelStyle.copyWith(
-                                        color: Color.lerp(
-                                          theme.textSecondary,
-                                          theme.primaryButtonText,
-                                          amount,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                    builder: (context, color) => Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (showIcons && tabs[index].icon != null) ...[
+                          Icon(tabs[index].icon, size: 16, color: color),
+                          const SizedBox(width: 6),
+                        ],
+                        Flexible(
+                          child: Text(
+                            tabs[index].label,
+                            textAlign: TextAlign.center,
+                            style: labelStyle.copyWith(color: color),
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -153,7 +101,7 @@ class AppTabBar extends StatelessWidget {
         boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
       ),
       child: Material(
-        color: restColor,
+        color: theme.tabUnselected,
         borderRadius: BorderRadius.all(radius),
         clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(
@@ -190,6 +138,69 @@ class AppTabBar extends StatelessWidget {
         radius: radius.x,
         textDirection: Directionality.of(context),
       );
+}
+
+/// One tab's surface: the unselected tab fill easing into the selected one
+/// (with the text color) as [selected] changes, the tab's depth gradient, and
+/// its hover, splash and press highlights. [builder] gets the text color.
+class AppTabSurface extends StatelessWidget {
+  const AppTabSurface({
+    super.key,
+    required this.theme,
+    required this.selected,
+    required this.borderRadius,
+    required this.onTap,
+    required this.builder,
+    this.padding = EdgeInsets.zero,
+    this.onHover,
+  });
+
+  final AppThemeData theme;
+  final bool selected;
+  final BorderRadius borderRadius;
+  final VoidCallback? onTap;
+  final ValueChanged<bool>? onHover;
+  final EdgeInsetsGeometry padding;
+  final Widget Function(BuildContext context, Color color) builder;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: selected ? 1 : 0, end: selected ? 1 : 0),
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : kTabTransition,
+    curve: kTabTransitionCurve,
+    builder: (context, amount, _) {
+      final background = Color.lerp(
+        theme.tabUnselected,
+        theme.tabSelected,
+        amount,
+      )!;
+      final color = onTap == null
+          ? theme.primaryButtonDisabledText
+          : Color.lerp(theme.textSecondary, theme.primaryButtonText, amount)!;
+      return Material(
+        color: background,
+        animationDuration: Duration.zero,
+        borderRadius: borderRadius,
+        clipBehavior: Clip.antiAlias,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: SurfaceDepth.gradient(background),
+          ),
+          child: InkWell(
+            borderRadius: borderRadius,
+            hoverColor: theme.navItemHover,
+            splashColor: theme.navItemHover,
+            highlightColor: theme.tabSelected,
+            onTap: onTap,
+            onHover: onHover,
+            child: Padding(padding: padding, child: builder(context, color)),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// Slides index-driven tab content like [TabBarView]: the previous tab slides

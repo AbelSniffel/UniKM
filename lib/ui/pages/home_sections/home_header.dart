@@ -19,7 +19,6 @@ import '../../dialogs/library_stats_dialog.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
-import '../../widgets/app_tab_bar.dart';
 import '../../widgets/device_sync_icon.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/platform_menu_button.dart';
@@ -106,8 +105,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   late final AnimationController _filterPanelController;
   String _tagSearchQuery = '';
 
-  /// The filter panel's tab on very narrow layouts: 0 Tags, 1 Show only.
-  int _filterTab = 0;
   final _tagSearchController = TextEditingController();
 
   @override
@@ -369,8 +366,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         theme: theme,
         expanded: expanded,
         tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
-        // Always lit, so both read as active choices.
-        highlighted: true,
+        // Tabs in the filters panel; the default style on the toolbar.
+        tabStyle: expanded,
         icon: (color, size) => selectedPlatform == null
             ? Icon(Icons.videogame_asset_outlined, color: color, size: size)
             : platformIcon(selectedPlatform, color, size),
@@ -392,8 +389,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
         theme: theme,
         expanded: expanded,
         tooltip: 'Sort: ${sortMode.displayName}',
-        // Always lit, so both read as active choices.
-        highlighted: true,
+        tabStyle: expanded,
         icon: (color, size) =>
             Icon(_sortIconFor(sortMode), color: color, size: size),
         value: sortMode,
@@ -580,8 +576,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     );
 
     // Tags spans the full width, with Show only below it. Very narrow
-    // toolbars leave platform and sort to share a row above tabs that show
-    // the tags or the options.
+    // toolbars leave platform and sort to share a row above them.
     final narrow = widget.isVeryNarrowLayout;
     final panel = Column(
       key: const ValueKey('home-filter-panel'),
@@ -603,16 +598,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
                     ),
                 ],
               ),
-              AppTabBar(
-                theme: theme,
-                tabs: const [AppTab('Tags'), AppTab('Show only')],
-                selectedIndex: _filterTab,
-                onChanged: (index) => setState(() => _filterTab = index),
-              ),
-              AppTabTransition(
-                index: _filterTab,
-                child: _filterTab == 0 ? tagsGroup : optionsGroup,
-              ),
+              tagsGroup,
+              optionsGroup,
             ]
           : [tagsGroup, optionsGroup],
     );

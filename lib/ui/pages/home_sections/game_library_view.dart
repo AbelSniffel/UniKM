@@ -19,6 +19,7 @@ import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_card.dart';
 import '../../widgets/selection_overlay.dart' as app_selection_overlay;
 import 'animated_game_card.dart';
+import 'game_card_placeholder.dart';
 
 class GameLibraryView extends ConsumerStatefulWidget {
   const GameLibraryView({
@@ -248,6 +249,11 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     final listSpacing = slimList ? kSlimListCardSpacing : kListCardSpacing;
     final listItemExtent =
         (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
+    final placeholder = GameCardPlaceholder(
+      theme: theme,
+      viewMode: viewMode,
+      slim: slimList,
+    );
 
     // NOTE: selectedGameIds is intentionally NOT watched here.
     // The shell owns the selection ribbon, so selection changes do not
@@ -273,7 +279,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               ),
               itemCount: gameIds.length,
               itemBuilder: (context, index) =>
-                  _revealCard(gameIds[index], viewMode),
+                  _revealCard(gameIds[index], viewMode, placeholder),
             )
           : ListView.builder(
               scrollCacheExtent: ScrollCacheExtent.pixels(listItemExtent * 2),
@@ -284,7 +290,11 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               addAutomaticKeepAlives: false,
               itemCount: gameIds.length,
               itemBuilder: (context, index) {
-                final revealed = _revealCard(gameIds[index], viewMode);
+                final revealed = _revealCard(
+                  gameIds[index],
+                  viewMode,
+                  placeholder,
+                );
                 return slimList
                     ? revealed
                     : Padding(
@@ -302,8 +312,13 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
         : library;
   }
 
-  /// The card for [gameId], revealed by an entry animation when enabled.
-  Widget _revealCard(int gameId, GameListViewMode viewMode) {
+  /// The card for [gameId], revealed by an entry animation when enabled,
+  /// with [placeholder] in its place until then.
+  Widget _revealCard(
+    int gameId,
+    GameListViewMode viewMode,
+    Widget placeholder,
+  ) {
     final card = _LibraryGameCard(
       key: ValueKey(gameId),
       gameId: gameId,
@@ -315,6 +330,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
             key: ValueKey('anim_$gameId'),
             gameId: gameId,
             coordinator: _revealCoordinator,
+            placeholder: placeholder,
             child: card,
           )
         : card;

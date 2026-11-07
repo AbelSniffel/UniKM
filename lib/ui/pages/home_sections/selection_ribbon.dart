@@ -274,7 +274,7 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 240),
                   child: Tooltip(
-                    message: 'Deselect ${game.title}',
+                    message: 'Deselect',
                     child: TintedChip(
                       key: ValueKey('selection-chip-${game.id}'),
                       theme: theme,
@@ -352,10 +352,6 @@ class _RibbonBar extends StatelessWidget {
     child: Container(
       key: const ValueKey('selection-count'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
       child: Text(text, maxLines: 1, softWrap: false, style: style),
     ),
   );

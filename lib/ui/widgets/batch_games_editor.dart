@@ -397,7 +397,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
             horizontal: 6,
             vertical: 12,
           ),
-          border: widget.theme.resolveInputBorder(showTopBorder: true),
+          border: widget.theme.resolveFramedInputBorder(),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) => ListenableBuilder(

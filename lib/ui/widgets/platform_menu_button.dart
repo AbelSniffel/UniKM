@@ -5,6 +5,8 @@ import '../../providers/ui_state_providers.dart' show kAutoDetectPlatformValue;
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/surface_depth.dart';
+import 'app_tab_bar.dart' show AppTabSurface;
 import 'platform_icon.dart';
 import 'popup_menu_helpers.dart';
 
@@ -69,8 +71,8 @@ class IconMenuButton<T> extends StatefulWidget {
     required this.onSelected,
     required this.icon,
     required this.choices,
-    this.highlighted = false,
     this.expanded = false,
+    this.tabStyle = false,
   });
 
   final AppThemeData theme;
@@ -82,12 +84,13 @@ class IconMenuButton<T> extends StatefulWidget {
   final Widget Function(Color color, double size) icon;
   final List<(T, String, Widget)> choices;
 
-  /// Shows the button selected, such as while a filter is active.
-  final bool highlighted;
-
   /// Fills the width offered, naming the current choice beside its icon
   /// whenever the whole name fits.
   final bool expanded;
+
+  /// A standalone tab, selected while the menu is open, in place of the
+  /// navigation style; the icon still grows on hover and while open.
+  final bool tabStyle;
 
   @override
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
@@ -96,6 +99,7 @@ class IconMenuButton<T> extends StatefulWidget {
 class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
   final _menu = MenuController();
   final _focusNode = FocusNode(skipTraversal: true);
+  var _hovered = false;
 
   @override
   void dispose() {
@@ -200,16 +204,59 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
           painter.width + 10 + kIconSize + 6 + 20 + 6 <= constraints.maxWidth;
       painter.dispose();
     }
+    if (widget.tabStyle) {
+      final radius = BorderRadius.circular(theme.cornerRadius * 1.25);
+      final grow = enabled && (_hovered || controller.isOpen);
+      return Tooltip(
+        message: widget.tooltip,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
+          ),
+          child: AppTabSurface(
+            theme: theme,
+            selected: controller.isOpen,
+            borderRadius: radius,
+            onTap: enabled ? _toggleMenu : null,
+            onHover: (hovered) => setState(() => _hovered = hovered),
+            padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+            builder: (context, color) => Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TweenAnimationBuilder(
+                  tween: Tween(end: grow ? 1.2 : 1.0),
+                  duration: const Duration(milliseconds: 100),
+                  builder: (context, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
+                  child: widget.icon(color, kIconSize),
+                ),
+                SizedBox(width: named ? 6 : 1),
+                if (named)
+                  Flexible(
+                    child: Text(
+                      label!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, color: color),
+                    ),
+                  ),
+                Icon(Icons.keyboard_arrow_down, color: color, size: 20),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return AppNavigationButton(
       theme: theme,
-      isSelected: widget.highlighted || controller.isOpen,
+      isSelected: controller.isOpen,
       isEnabled: enabled,
       isHorizontal: true,
       onTap: _toggleMenu,
       tooltipMessage: widget.tooltip,
       selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
-      // A lit button's icon grows only on hover or while its menu is open.
-      growWhenSelected: !widget.highlighted || controller.isOpen,
       // The chevron's glyph has its own side margin, so the icon side gets
       // more padding to look even.
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),

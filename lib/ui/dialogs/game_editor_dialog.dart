@@ -3,6 +3,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,14 +16,12 @@ import '../../providers/app_providers.dart';
 import 'delete_games_dialog.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/cover_image_card.dart';
+import '../widgets/game_editor_layout.dart';
 import '../widgets/deadline_chip.dart';
 import '../widgets/game_options_row.dart';
-import '../widgets/game_editor_layout.dart';
-import '../widgets/game_metadata_panel.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/platform_menu_button.dart';
-import '../widgets/section_groupbox.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/key_privacy.dart';
 import '../../core/services/steam_service.dart';
@@ -65,7 +64,6 @@ class GameEditorDialog extends ConsumerStatefulWidget {
 }
 
 class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
-  final _editorLayoutKey = GlobalKey<GameEditorLayoutState>();
   final _fields = GameEditorFields();
 
   late Game _currentGame;
@@ -78,6 +76,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   late bool _isDlc;
   late bool _isUsed;
   late Set<int> _selectedTagIds;
+
+  /// The tags as last loaded or saved, to tell real edits from undone ones.
+  late Set<int> _savedTagIds;
 
   late final int _sessionRevision;
   bool _isKeyVisible = false; // Will be set from settings in initState
@@ -123,9 +124,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         ref.read(allGamesProvider).firstWhere((g) => g.id == currentId);
 
     _initializeFromGame();
-    _fields.title.addListener(() {
-      if (mounted) setState(() {});
-    });
     _scheduleViewedGameNotification();
   }
 
@@ -143,6 +141,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   void _initializeFromGame() {
+    _steamStash = null;
     _fields.load(
       title: _currentGame.title,
       gameKey: _currentGame.gameKey,
@@ -157,10 +156,13 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     _steamDeveloper = _currentGame.developer;
     _loadSteamState(_currentGame);
     _hasChanges = false;
-
-    // Load cache timestamp if present
     _loadSteamCacheAt();
   }
+
+  bool get _isSteam => _platform == 'Steam';
+
+  Set<int> _steamTagIds() =>
+      ref.read(steamTagsProvider).map((tag) => tag.id).toSet();
 
   @override
   void dispose() {
@@ -174,12 +176,15 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     _steamAppId = game.steamAppId;
     _isDlc = game.isDlc;
     _selectedTagIds = game.tagIds.toSet();
+    _savedTagIds = {..._selectedTagIds};
     _fetchedReviewScore = hasReviews ? game.reviewScore : null;
     _fetchedReviewCount = hasReviews ? game.reviewCount : null;
     _lastUpdatedAt = game.updatedAt;
   }
 
   void _markChanged() => setState(() => _hasChanges = true);
+
+  VoidCallback? get _saveAction => _hasChanges && !_isSaving ? _save : null;
 
   /// Applies [change] as an unsaved edit.
   void _edit(VoidCallback change) => setState(() {
@@ -196,14 +201,13 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     setState(() => _isSaving = true);
 
     try {
-      // Ensure Steam-specific metadata and Steam tags are removed when platform is not Steam
-      final steamTags = ref.read(steamTagsProvider);
-      final steamTagIds = steamTags.map((t) => t.id).toSet();
+      // Off Steam, the Steam tags and figures are dropped.
+      final steam = _isSteam;
+      final steamTagIds = _steamTagIds();
       final selectedTagIds = _selectedTagIds
-          .where((id) => _platform == 'Steam' || !steamTagIds.contains(id))
+          .where((id) => steam || !steamTagIds.contains(id))
           .toList();
-
-      // Ensure we have logic to merge with current state properly
+      // The provider's copy holds the latest fetched reviews.
       final currentGameState =
           ref.read(gameByIdProvider(_currentGame.id)) ?? _currentGame;
 
@@ -217,10 +221,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         deadlineDate: _hasDeadline ? _deadlineDate : null,
         isDlc: _isDlc,
         isUsed: _isUsed,
-        steamAppId: _platform == 'Steam' ? _steamAppId : '',
-        // Preserve any fetched review info (from provider) when platform is Steam; otherwise clear
-        reviewScore: _platform == 'Steam' ? currentGameState.reviewScore : 0,
-        reviewCount: _platform == 'Steam' ? currentGameState.reviewCount : 0,
+        steamAppId: steam ? _steamAppId : '',
+        reviewScore: steam ? currentGameState.reviewScore : 0,
+        reviewCount: steam ? currentGameState.reviewCount : 0,
       );
 
       final ok = await ref
@@ -232,6 +235,8 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
       // Update local state to match saved
       _currentGame = updatedGame;
       _hasChanges = false;
+      _saved = true;
+      _savedTagIds = selectedTagIds.toSet();
 
       NotificationManager.instance.success(
         'Game updated: ${updatedGame.title}',
@@ -267,32 +272,20 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
 
   /// Fetch Steam AppID, tags and DLC status and apply them to this game
   Future<void> _fetchSteamData() async {
-    if (_platform != 'Steam') {
+    if (!_isSteam) {
       NotificationManager.instance.info(
         'Fetch is only available when Platform is set to Steam',
       );
       return;
     }
-
-    // Otherwise fetch fresh data
     setState(() => _isFetching = true);
     try {
-      final steamService = ref.read(steamServiceProvider);
-
-      final resolution = await resolveSteamResultForTitle(
+      final choice = await showSteamLookupDialog(
         context,
         title: _fields.title.text.trim(),
-        steamService: steamService,
       );
-      if (!mounted || resolution == null) return;
-
-      final result = resolution.result;
-      if (result == null) {
-        NotificationManager.instance.info('No Steam data found for this game');
-        return;
-      }
-
-      await _applySteamResult(result, resolution.options);
+      if (!mounted || choice == null) return;
+      await _applySteamResult(choice.result);
     } catch (e) {
       NotificationManager.instance.error('Failed to fetch Steam data: $e');
     } finally {
@@ -301,16 +294,12 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   /// Apply a SteamSearchResult to this game (tags, image, appId, reviews)
-  Future<void> _applySteamResult(
-    SteamSearchResult result,
-    SteamApplyOptions options,
-  ) async {
+  Future<void> _applySteamResult(SteamSearchResult result) async {
     try {
       final applyError = await applySteamResultToGame(
         ProviderScope.containerOf(context, listen: false),
         _currentGame,
         result,
-        options,
         expectedRevision: _sessionRevision,
       );
 
@@ -327,19 +316,13 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
           ref.read(databaseNotifierProvider).revision != _sessionRevision) {
         return;
       }
-      final updated =
+      final updated = _currentGame =
           ref.read(gameByIdProvider(_currentGame.id)) ?? _currentGame;
-
-      // Update local tracking
-      _currentGame = updated;
-
       setState(() {
         _loadSteamState(updated);
         _steamDeveloper = result.developer;
         _fields.coverImage.text = updated.coverImage;
       });
-
-      // reload cache timestamp
       _loadSteamCacheAt();
 
       NotificationManager.instance.success('Applied Steam data');
@@ -349,7 +332,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   }
 
   Future<void> _loadSteamCacheAt() async {
-    // Use title-only cache lookup
     final preview = AppDialogPreviewScope.maybeOf(context);
     final cached = preview != null
         ? preview.steamCachedAt
@@ -357,172 +339,187 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     if (mounted) setState(() => _steamCacheAt = cached);
   }
 
-  Future<void> _navigate(int delta) async {
-    if (_hasChanges) {
-      final theme = ref.read(themeProvider);
-      final shouldSave = await showUnsavedGameChangesDialog(
+  /// Whether the edits differ from the saved game. Edits undone by hand,
+  /// such as switching the platform away and back, are no difference.
+  bool get _isDirty {
+    if (!_hasChanges) return false;
+    final game = _currentGame;
+    return _fields.title.text.trim() != game.title ||
+        _fields.gameKey.text.trim() != game.gameKey ||
+        _fields.notes.text.trim() != game.notes ||
+        _fields.coverImage.text.trim() != game.coverImage ||
+        _platform != game.platform ||
+        _hasDeadline != game.hasDeadline ||
+        (_hasDeadline && _deadlineDate != game.deadlineDate) ||
+        _isDlc != game.isDlc ||
+        _isUsed != game.isUsed ||
+        (_isSteam ? _steamAppId : '') != game.steamAppId ||
+        !setEquals(_selectedTagIds, _savedTagIds);
+  }
+
+  bool _confirmingDiscard = false;
+
+  /// Whether any game was saved while the editor was open.
+  bool _saved = false;
+
+  /// Asks whether to save edits that differ from the saved game. True when
+  /// the editor may move on: nothing differed, they were discarded, or saved.
+  Future<bool> _resolveUnsavedChanges() async {
+    if (!_isDirty) return true;
+    if (_confirmingDiscard) return false;
+    _confirmingDiscard = true;
+    try {
+      final choice = await showUnsavedGameChangesDialog(
         context,
-        theme,
+        ref.read(themeProvider),
         _currentGame.title,
       );
-
-      if (shouldSave == null || shouldSave == 'cancel') return;
-      if (shouldSave == 'save') {
+      if (!mounted || choice == null) return false;
+      if (choice == 'save') {
         await _save(close: false);
-        if (_hasChanges) return; // Save failed
+        return !_hasChanges; // False when the save failed.
       }
-    }
-
-    // Move to next
-    final newIndex = _currentIndex + delta;
-    if (newIndex >= 0 && newIndex < _gameIds.length) {
-      setState(() {
-        _currentIndex = newIndex;
-        _currentGame =
-            ref.read(gameByIdProvider(_gameIds[newIndex])) ?? _currentGame;
-        _initializeFromGame();
-      });
-      _scheduleViewedGameNotification();
+      return true;
+    } finally {
+      _confirmingDiscard = false;
     }
   }
 
-  void _dismissDialog() => Navigator.pop(context, false);
+  Future<void> _navigate(int delta) async {
+    final newIndex = _currentIndex + delta;
+    if (newIndex < 0 || newIndex >= _gameIds.length) return;
+    if (!await _resolveUnsavedChanges()) return;
+    setState(() {
+      _currentIndex = newIndex;
+      _currentGame =
+          ref.read(gameByIdProvider(_gameIds[newIndex])) ?? _currentGame;
+      _initializeFromGame();
+    });
+    _scheduleViewedGameNotification();
+  }
+
+  /// Every way out (the close button, Escape, a click outside, Back) asks
+  /// first when the edits differ from the saved game.
+  void _dismissDialog() => Navigator.maybePop(context, false);
+
+  Future<void> _onPopBlocked() async {
+    if (!await _resolveUnsavedChanges() || !mounted) return;
+    // Saving reports a change to the library; discarding does not.
+    Navigator.pop(context, _saved);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final tags = ref.watch(tagsProvider);
-    final showGameDetailsSkmId = ref.watch(
+    final showSkmId = ref.watch(
       settingsProvider.select(
         (settings) =>
             (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
             DefaultSettings.showGameDetailsSkmId,
       ),
     );
-    // Information and Options join the Details tab only when they do not fit
-    // beside the cover, as on the Add page.
-    Widget buildDetails({Widget? information, Widget? options}) => _DetailsTab(
-      information: information,
-      options: options,
-      theme: theme,
-      game: _currentGame,
-      showGameDetailsSkmId: showGameDetailsSkmId,
-      platform: _platform,
-      steamAppId: _steamAppId,
-      steamDeveloper: _steamDeveloper,
-      steamCacheAt: _steamCacheAt,
-      lastUpdatedAt: _lastUpdatedAt,
-      steamReviewScore: _fetchedReviewScore,
-      steamReviewCount: _fetchedReviewCount,
-    );
-    return DialogInteractionScope(
-      onPrimaryAction: _hasChanges && !_isSaving ? _save : null,
-      onDismiss: _dismissDialog,
-      // No page pattern shows through the dialog.
-      child: RaisedGroupBoxes(
+    return PopScope<bool>(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onPopBlocked();
+      },
+      child: DialogInteractionScope(
+        onPrimaryAction: _saveAction,
+        onDismiss: _dismissDialog,
         child: ThemedAlertDialog(
-          maxWidth: 1200,
+          maxWidth: 1100,
           showCloseButton: false,
-          body: GameEditorLayout(
-            key: _editorLayoutKey,
-            theme: theme,
-            titleController: _fields.title,
-            cover: _buildCover(theme),
-            trailing: _buildHeaderActions(theme),
-            notesController: _fields.notes,
-            onNotesChanged: _markChanged,
-            information: GameEditorInformation(
-              theme: theme,
-              platformSelector: PlatformMenuButton(
-                theme: theme,
-                value: _platform,
-                tooltip: 'Selected platform: $_platform. Choose platform',
-                includeAutoDetect: false,
-                onSelected: _changePlatform,
-              ),
-              titleController: _fields.title,
-              keyController: _fields.gameKey,
-              isKeyVisible: _isKeyVisible,
-              onKeyVisibilityChanged: (value) =>
-                  setState(() => _isKeyVisible = value),
-              onCopyKey: _copyKey,
-              onTitleChanged: (_) => _markChanged(),
-              onKeyChanged: (_) => _markChanged(),
+          // The banner reaches the edges; the buttons keep the dialog's padding.
+          bleedContent: true,
+          // Sized to its content, scrolling once it outgrows the window.
+          content: _buildContent(theme, showSkmId),
+          actions: [
+            ElevatedButton(
+              onPressed: _confirmDelete,
+              style: themedFilledButtonStyle(theme, destructive: true),
+              child: const Text('Delete'),
             ),
-            options: _buildOptions(theme),
-            wideDetails: buildDetails(),
-            detailsBuilder: (information) => buildDetails(
-              information: information,
-              options: _buildOptions(theme),
+            ElevatedButton(
+              onPressed: _saveAction,
+              child: _isSaving
+                  ? const AppCircularProgressIndicator(size: 18)
+                  : const Text('Save'),
             ),
-            tags: GameEditorTags(
-              theme: theme,
-              customTags: tags.where((tag) => !tag.isSteamTag).toList(),
-              selectedTagIds: _selectedTagIds,
-              steamTags: tags
-                  .where(
-                    (tag) => tag.isSteamTag && _selectedTagIds.contains(tag.id),
-                  )
-                  .toList(),
-              onTagToggled: (tagId) => _edit(() {
-                if (!_selectedTagIds.remove(tagId)) _selectedTagIds.add(tagId);
-              }),
-            ),
-          ),
-          actions: [_buildFooter(theme)],
+          ],
           below: _gameIds.length > 1 ? _buildNavigationBar(theme) : null,
         ),
       ),
     );
   }
 
-  Widget _buildCover(AppThemeData theme) => CoverImageCard(
-    theme: theme,
-    isDlc: _isDlc,
-    isUsed: _isUsed,
-    hasDeadline: _hasDeadline,
-    deadlineDate: _deadlineDate,
-    controller: _fields.coverImage,
-    onChanged: _markChanged,
-  );
+  /// The game's Steam figures and dates, under the notes and tags.
+  List<Widget> _buildStats(AppThemeData theme, bool showSkmId) {
+    final game = _currentGame;
+    final added = game.createdAt;
+    final updated = _lastUpdatedAt ?? game.updatedAt;
+    final developer = _steamDeveloper;
+    return [
+      if (_isSteam)
+        GameStat.reviews(
+          theme: theme,
+          score: _fetchedReviewScore ?? game.reviewScore,
+          count: _fetchedReviewCount ?? 0,
+        ),
+      if (developer != null && developer.isNotEmpty)
+        GameStat(theme: theme, label: 'Developer', value: developer),
+      if (_isSteam) GameStat.steamAppId(theme: theme, appId: _steamAppId),
+      GameStat.date(theme: theme, label: 'Added', date: added),
+      GameStat.date(
+        theme: theme,
+        label: 'Updated',
+        date: updated.isAfter(added.add(const Duration(minutes: 1)))
+            ? updated
+            : null,
+        fallback: 'Unchanged',
+      ),
+      if (_isSteam)
+        GameStat.date(
+          theme: theme,
+          label: 'Cached',
+          date: _steamCacheAt,
+          fallback: 'Not cached',
+        ),
+      if (showSkmId)
+        GameStat(theme: theme, label: 'SKM-ID', value: '${game.id}'),
+    ];
+  }
+
+  /// The Steam AppID and tags set aside by switching away from Steam, put
+  /// back if Steam is chosen again before saving, so a slip of the platform
+  /// menu needs no new fetch.
+  ({String appId, Set<int> tagIds})? _steamStash;
 
   void _changePlatform(String platform) => _edit(() {
-    final wasSteam = _platform == 'Steam';
+    final wasSteam = _isSteam;
     _platform = platform;
-    if (wasSteam && platform != 'Steam') {
+    if (wasSteam && !_isSteam) {
+      final steamTagIds = _steamTagIds();
+      _steamStash = (
+        appId: _steamAppId,
+        tagIds: _selectedTagIds.where(steamTagIds.contains).toSet(),
+      );
       _steamAppId = '';
-      final steamTagIds = ref
-          .read(steamTagsProvider)
-          .map((tag) => tag.id)
-          .toSet();
       _selectedTagIds.removeWhere(steamTagIds.contains);
+    } else if (!wasSteam && _isSteam) {
+      if (_steamStash case final stash?) {
+        _steamAppId = stash.appId;
+        _selectedTagIds.addAll(stash.tagIds);
+      }
+      _steamStash = null;
     }
   });
 
-  Widget _buildOptions(AppThemeData theme) => GameEditorOptions(
-    theme: theme,
-    child: GameOptionsRow(
-      theme: theme,
-      isDlc: _isDlc,
-      onDlcChanged: (value) => _edit(() => _isDlc = value),
-      deadline: DeadlineChip(
-        theme: theme,
-        hasDeadline: _hasDeadline,
-        date: _deadlineDate,
-        firstDate: DateTime(2020),
-        onEnabledChanged: (value) => _edit(() => _hasDeadline = value),
-        onDateChanged: (value) => _edit(() => _deadlineDate = value),
-      ),
-      isUsed: _isUsed,
-      onUsedChanged: (value) => _edit(() => _isUsed = value),
-    ),
-  );
-
   Future<void> _openSteamPage() async {
-    final title = _fields.title.text.trim();
-    final Uri url = _steamAppId.isNotEmpty
-        ? Uri.parse(steamAppPageUrl(_steamAppId))
-        : Uri.parse(steamSearchPageUrl(title));
+    final url = Uri.parse(
+      _steamAppId.isNotEmpty
+          ? steamAppPageUrl(_steamAppId)
+          : steamSearchPageUrl(_fields.title.text.trim()),
+    );
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -530,34 +527,92 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   }
 
-  /// The Steam actions beside the close button.
-  Widget _buildHeaderActions(AppThemeData theme) => Row(
-    mainAxisSize: MainAxisSize.min,
-    spacing: kElementHSpacing,
-    children: [
-      if (_platform == 'Steam') ...[
+  Widget _buildContent(AppThemeData theme, bool showSkmId) {
+    final tags = ref.watch(tagsProvider);
+    return GameEditorLayout(
+      theme: theme,
+      cornerRadius: theme.cornerRadius,
+      heading: 'Game Editor',
+      cover: CoverImageCard(
+        theme: theme,
+        isDlc: _isDlc,
+        isUsed: _isUsed,
+        hasDeadline: _hasDeadline,
+        deadlineDate: _deadlineDate,
+        controller: _fields.coverImage,
+        onChanged: _markChanged,
+        showPath: false,
+      ),
+      coverController: _fields.coverImage,
+      actions: [
+        if (_isSteam) ...[
+          IconButton(
+            tooltip: 'Fetch Steam data',
+            onPressed: _isFetching ? null : _fetchSteamData,
+            color: theme.accent,
+            icon: _isFetching
+                ? const AppCircularProgressIndicator(size: 18)
+                : const Icon(Icons.cloud_download_outlined),
+          ),
+          IconButton(
+            tooltip: 'Steam Page',
+            onPressed: _openSteamPage,
+            color: theme.accent,
+            icon: const Icon(Icons.open_in_new),
+          ),
+        ],
         IconButton(
-          tooltip: 'Fetch Steam data',
-          onPressed: _isFetching ? null : _fetchSteamData,
-          color: theme.accent,
-          icon: _isFetching
-              ? const AppCircularProgressIndicator(size: 18)
-              : const Icon(Icons.cloud_download_outlined),
-        ),
-        IconButton(
-          tooltip: 'Steam Page',
-          onPressed: _openSteamPage,
-          color: theme.accent,
-          icon: const Icon(Icons.open_in_new),
+          tooltip: 'Close Game Editor',
+          icon: Icon(Icons.close, color: theme.textPrimary),
+          onPressed: _dismissDialog,
         ),
       ],
-      IconButton(
-        tooltip: 'Close Game Editor',
-        icon: Icon(Icons.close, color: theme.textSecondary),
-        onPressed: _dismissDialog,
+      titleController: _fields.title,
+      onTitleChanged: (_) => _markChanged(),
+      keyField: GameKeyField(
+        theme: theme,
+        controller: _fields.gameKey,
+        onChanged: (_) => _markChanged(),
+        isVisible: _isKeyVisible,
+        onVisibilityChanged: (value) => setState(() => _isKeyVisible = value),
+        onCopy: _copyKey,
+        playfulHints: true,
       ),
-    ],
-  );
+      platform: PlatformMenuButton(
+        theme: theme,
+        value: _platform,
+        tooltip: 'Selected platform: $_platform. Choose platform',
+        includeAutoDetect: false,
+        onSelected: _changePlatform,
+      ),
+      options: GameOptionsRow(
+        theme: theme,
+        isDlc: _isDlc,
+        onDlcChanged: (value) => _edit(() => _isDlc = value),
+        deadline: DeadlineChip(
+          theme: theme,
+          hasDeadline: _hasDeadline,
+          date: _deadlineDate,
+          firstDate: DateTime(2020),
+          onEnabledChanged: (value) => _edit(() => _hasDeadline = value),
+          onDateChanged: (value) => _edit(() => _deadlineDate = value),
+        ),
+        isUsed: _isUsed,
+        onUsedChanged: (value) => _edit(() => _isUsed = value),
+      ),
+      notesController: _fields.notes,
+      onNotesChanged: _markChanged,
+      customTags: tags.where((tag) => !tag.isSteamTag).toList(),
+      selectedTagIds: _selectedTagIds,
+      onTagToggled: (tagId) => _edit(() {
+        if (!_selectedTagIds.remove(tagId)) _selectedTagIds.add(tagId);
+      }),
+      steamTags: tags
+          .where((tag) => tag.isSteamTag && _selectedTagIds.contains(tag.id))
+          .toList(),
+      stats: _buildStats(theme, showSkmId),
+    );
+  }
 
   /// Two filled arrow buttons around a darker tinted label, on a raised
   /// strip, so it is hard to miss.
@@ -570,6 +625,18 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
       disabledForegroundColor: theme.primaryButtonDisabledText,
       shape: RoundedRectangleBorder(borderRadius: radius),
     );
+    Widget arrow(IconData icon, String tooltip, int delta) {
+      final target = _currentIndex + delta;
+      return IconButton(
+        style: arrowStyle,
+        icon: Icon(icon),
+        tooltip: tooltip,
+        onPressed: target >= 0 && target < _gameIds.length
+            ? () => _navigate(delta)
+            : null,
+      );
+    }
+
     return Center(
       child: Material(
         color: theme.surface,
@@ -584,12 +651,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             spacing: 4,
             children: [
-              IconButton(
-                style: arrowStyle,
-                icon: const Icon(Icons.chevron_left),
-                tooltip: 'Previous Game',
-                onPressed: _currentIndex > 0 ? () => _navigate(-1) : null,
-              ),
+              arrow(Icons.chevron_left, 'Previous Game', -1),
               Flexible(
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -611,100 +673,10 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
                   ),
                 ),
               ),
-              IconButton(
-                style: arrowStyle,
-                icon: const Icon(Icons.chevron_right),
-                tooltip: 'Next Game',
-                onPressed: _currentIndex < _gameIds.length - 1
-                    ? () => _navigate(1)
-                    : null,
-              ),
+              arrow(Icons.chevron_right, 'Next Game', 1),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFooter(AppThemeData theme) => Row(
-    children: [
-      IconButton(
-        tooltip: 'Delete',
-        onPressed: _confirmDelete,
-        icon: const Icon(Icons.delete),
-        color: theme.secondary,
-      ),
-      const Spacer(),
-      ElevatedButton.icon(
-        onPressed: _hasChanges && !_isSaving ? _save : null,
-        icon: _isSaving
-            ? const AppCircularProgressIndicator(size: 18)
-            : const Icon(Icons.save),
-        label: const Text('Save'),
-      ),
-    ],
-  );
-}
-
-/// Details tab: Information and Options on narrow screens, then metadata.
-class _DetailsTab extends StatelessWidget {
-  const _DetailsTab({
-    required this.theme,
-    required this.information,
-    required this.options,
-    required this.game,
-    required this.showGameDetailsSkmId,
-    required this.platform,
-    required this.steamAppId,
-    this.steamCacheAt,
-    this.lastUpdatedAt,
-    this.steamReviewScore,
-    this.steamReviewCount,
-    this.steamDeveloper,
-  });
-
-  final AppThemeData theme;
-  final Widget? information;
-  final Widget? options;
-  final Game game;
-  final bool showGameDetailsSkmId;
-  final String platform;
-
-  // Steam fetch props
-  final String steamAppId;
-  final String? steamDeveloper;
-
-  // Fetched review preview (may be null)
-  final DateTime? steamCacheAt;
-  final DateTime? lastUpdatedAt;
-  final int? steamReviewScore;
-  final int? steamReviewCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final steam = platform == 'Steam';
-    final score = steamReviewScore ?? game.reviewScore;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
-          if (information != null) ...[information!, const SizedBox(height: 8)],
-          if (options != null) ...[options!, const SizedBox(height: 8)],
-          GameMetadataPanel(
-            theme: theme,
-            steam: steam,
-            headingTrailing: showGameDetailsSkmId ? 'SKM-ID ${game.id}' : null,
-            added: game.createdAt,
-            updated: lastUpdatedAt ?? game.updatedAt,
-            cachedAt: steamCacheAt,
-            developer: steamDeveloper,
-            reviewScore: score,
-            reviewCount: steamReviewCount,
-            steamAppId: steamAppId,
-          ),
-        ],
       ),
     );
   }

@@ -143,6 +143,7 @@ class DialogHeader extends StatelessWidget {
     required this.theme,
     this.iconColor,
     this.iconSize,
+    this.titleColor,
     this.showCloseButton = false,
   });
 
@@ -156,6 +157,9 @@ class DialogHeader extends StatelessWidget {
 
   /// Defaults to 28 when [showCloseButton] is true, else platform default.
   final double? iconSize;
+
+  /// Defaults to [theme.textPrimary].
+  final Color? titleColor;
 
   /// If true, adds a themed close `IconButton` at the trailing edge.
   final bool showCloseButton;
@@ -173,7 +177,7 @@ class DialogHeader extends StatelessWidget {
           child: Text(
             title,
             style: TextStyle(
-              color: theme.textPrimary,
+              color: titleColor ?? theme.textPrimary,
               fontSize: 18,
               fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
             ),
@@ -373,6 +377,8 @@ class ThemedAlertDialog extends StatelessWidget {
     this.titleActions,
     this.backgroundColor,
     this.padding = kDialogContentPadding,
+    this.bleedContent = false,
+    this.backdrop,
     this.spacing = 8.0,
     this.maxWidth = 600.0,
     this.maxHeight,
@@ -414,6 +420,14 @@ class ThemedAlertDialog extends StatelessWidget {
   /// Defaults to [kDialogContentPadding].
   final EdgeInsetsGeometry padding;
 
+  /// Lets [content] reach the dialog's edges, such as a banner, while the
+  /// title and actions keep [padding].
+  final bool bleedContent;
+
+  /// Painted behind the whole dialog from its top, actions included, such
+  /// as a banner's art fading out; it sets its own height.
+  final Widget? backdrop;
+
   /// Vertical gap inserted between title → content and content → actions rows.
   final double spacing;
 
@@ -444,60 +458,72 @@ class ThemedAlertDialog extends StatelessWidget {
                 spacing: contentSpacing,
                 children: children,
               ));
+    final inset = padding.resolve(Directionality.of(context));
+    Widget padded(Widget row, {required bool top}) => bleedContent
+        ? Padding(
+            padding: top ? inset.copyWith(bottom: 0) : inset.copyWith(top: 0),
+            child: row,
+          )
+        : row;
+    final actionRow = actions.length == 1
+        ? SizedBox(width: double.infinity, child: actions.first)
+        : actions.length == 2
+        ? Row(
+            children: [
+              Expanded(child: actions[0]),
+              const SizedBox(width: kElementHSpacing),
+              Expanded(child: actions[1]),
+            ],
+          )
+        : actions.isNotEmpty
+        ? Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: kElementHSpacing,
+              runSpacing: kElementVSpacing,
+              alignment: WrapAlignment.end,
+              children: actions,
+            ),
+          )
+        : null;
     final rows = <Widget>[
       if (title != null)
-        Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: Row(
-            spacing: kElementHSpacing,
-            children: [
-              Expanded(child: title!),
-              ...?titleActions,
-              if (showCloseButton)
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.pop(context),
-                ),
-            ],
+        padded(
+          top: true,
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Row(
+              spacing: kElementHSpacing,
+              children: [
+                Expanded(child: title!),
+                ...?titleActions,
+                if (showCloseButton)
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+              ],
+            ),
           ),
         ),
       if (content != null)
         Flexible(child: SingleChildScrollView(child: content)),
       if (body != null) Expanded(child: body!),
-      if (actions.length == 1)
-        SizedBox(width: double.infinity, child: actions.first)
-      else if (actions.length == 2)
-        Row(
-          children: [
-            Expanded(child: actions[0]),
-            const SizedBox(width: kElementHSpacing),
-            Expanded(child: actions[1]),
-          ],
-        )
-      else if (actions.isNotEmpty)
-        Align(
-          alignment: Alignment.centerRight,
-          child: Wrap(
-            spacing: kElementHSpacing,
-            runSpacing: kElementVSpacing,
-            alignment: WrapAlignment.end,
-            children: actions,
-          ),
-        ),
+      if (actionRow != null) padded(top: false, actionRow),
     ];
 
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(theme.cornerRadius),
     );
 
-    final dialogBox = ConstrainedBox(
+    Widget dialogBox = ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: fullscreen ? double.infinity : maxWidth,
         maxHeight: effectiveMaxHeight,
       ),
       child: Padding(
-        padding: padding,
+        padding: bleedContent ? EdgeInsets.zero : padding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: body != null ? MainAxisSize.max : MainAxisSize.min,
@@ -506,6 +532,18 @@ class ThemedAlertDialog extends StatelessWidget {
         ),
       ),
     );
+    if (backdrop case final backdrop?) {
+      // Cut to the dialog's shape, so it ends with the dialog.
+      dialogBox = ClipRRect(
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        child: Stack(
+          children: [
+            Positioned(left: 0, top: 0, right: 0, child: backdrop),
+            dialogBox,
+          ],
+        ),
+      );
+    }
 
     if (fullscreen) {
       return Dialog.fullscreen(

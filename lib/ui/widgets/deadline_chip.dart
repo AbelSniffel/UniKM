@@ -18,6 +18,7 @@ class DeadlineChip extends StatelessWidget {
     required this.onEnabledChanged,
     required this.onDateChanged,
     this.firstDate,
+    this.expand = false,
   });
 
   final AppThemeData theme;
@@ -26,6 +27,10 @@ class DeadlineChip extends StatelessWidget {
   final ValueChanged<bool> onEnabledChanged;
   final ValueChanged<DateTime> onDateChanged;
   final DateTime? firstDate;
+
+  /// Fills the width offered, the date stretching across it, in place of
+  /// staying compact.
+  final bool expand;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy');
 
@@ -54,7 +59,7 @@ class DeadlineChip extends StatelessWidget {
         : ((theme.cornerRadius - 4) / theme.cornerRadius).clamp(0.0, 1.0);
     final insetRadius = theme.cornerRadius * insetCornerMultiplier;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
+      constraints: BoxConstraints(maxWidth: expand ? double.infinity : 260),
       child: Semantics(
         toggled: hasDeadline,
         child: ButtonThemeSync(
@@ -77,12 +82,18 @@ class DeadlineChip extends StatelessWidget {
                         theme: theme,
                         selected: hasDeadline,
                         gap: 6,
+                        // Expanded, the label stays at the start and the
+                        // mark at the end.
+                        alwaysShown: expand,
                       ),
                 ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
               children: [
+                // Expanded, the label keeps its width and the date takes
+                // all the rest.
                 Flexible(
+                  flex: expand ? 0 : 1,
                   child: Tooltip(
                     message: hasDeadline
                         ? 'Disable deadline'
@@ -98,39 +109,46 @@ class DeadlineChip extends StatelessWidget {
                 SizedBox(width: hasDeadline ? 6 : 0),
                 Flexible(
                   flex: hasDeadline ? 2 : 0,
+                  fit: expand && hasDeadline ? FlexFit.tight : FlexFit.loose,
                   child: Align(
                     widthFactor: hasDeadline ? 1 : 0,
                     heightFactor: 1,
-                    child: Visibility(
-                      visible: hasDeadline,
-                      maintainState: true,
-                      maintainSize: true,
-                      maintainAnimation: true,
-                      child: Tooltip(
-                        message: date != null
-                            ? 'Change deadline: $label'
-                            : 'Choose deadline date',
-                        child: Material(
-                          color: insetColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(insetRadius),
-                          ),
-                          child: InkWell(
-                            key: const ValueKey('deadline-date'),
-                            onTap: () => _chooseDate(context),
-                            borderRadius: BorderRadius.circular(insetRadius),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 24),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
+                    // Expanded, the date stretches across the rest.
+                    child: SizedBox(
+                      width: expand && hasDeadline ? double.infinity : null,
+                      child: Visibility(
+                        visible: hasDeadline,
+                        maintainState: true,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        child: Tooltip(
+                          message: date != null
+                              ? 'Change deadline: $label'
+                              : 'Choose deadline date',
+                          child: Material(
+                            color: insetColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(insetRadius),
+                            ),
+                            child: InkWell(
+                              key: const ValueKey('deadline-date'),
+                              onTap: () => _chooseDate(context),
+                              borderRadius: BorderRadius.circular(insetRadius),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 24,
                                 ),
-                                child: Text(
-                                  label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: theme.textPrimary),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 4,
+                                  ),
+                                  child: Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: theme.textPrimary),
+                                  ),
                                 ),
                               ),
                             ),

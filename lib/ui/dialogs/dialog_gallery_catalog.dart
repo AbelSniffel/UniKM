@@ -200,21 +200,29 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     (c) => _widget(
       c,
       (_) => SteamLookupDialog(
-        game: galleryGame,
-        initialResult: gallerySteamResult,
+        title: galleryGame.title,
+        result: gallerySteamResult,
       ),
     ),
   ),
   DialogGalleryEntry(
-    'steam-options',
-    'Steam fetch options',
-    (c) => showSteamFetchOptionsDialog(c, title: galleryGame.title),
+    'steam-cache',
+    'Steam lookup from cache',
+    (c) => showSteamLookupDialog(c, title: galleryGame.title),
+    cachedSteam: true,
   ),
   DialogGalleryEntry(
-    'steam-cache',
-    'Steam cached data',
-    (c) => showSteamFetchOptionsDialog(c, title: galleryGame.title),
+    'steam-batch',
+    'Steam lookup for a batch',
+    (c) =>
+        showSteamBatchLookupDialog(c, title: galleryGame.title, gameCount: 3),
     cachedSteam: true,
+  ),
+  DialogGalleryEntry(
+    'steam-batch-fresh',
+    'Steam lookup for an uncached batch',
+    (c) =>
+        showSteamBatchLookupDialog(c, title: galleryGame.title, gameCount: 3),
   ),
   DialogGalleryEntry(
     'create-database',

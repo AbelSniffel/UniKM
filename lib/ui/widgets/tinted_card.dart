@@ -243,9 +243,7 @@ class TintedCard extends StatelessWidget {
     final card = Material(
       color: backdrop == null ? tint : Color.alphaBlend(tint, backdrop!),
       shape: RoundedRectangleBorder(
-        borderRadius: radius,
-        // side:
-        //     side ?? (highlighted ? BorderSide(color: color) : BorderSide.none),
+        borderRadius: radius
       ),
       clipBehavior: Clip.antiAlias,
       child: content,

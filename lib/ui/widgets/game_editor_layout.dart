@@ -1,162 +1,294 @@
+/// The layout both game editors share, styled like a store page.
+library;
+
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'app_tab_bar.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/settings/settings_model.dart' show SectionTitleLocation;
 import '../../models/game.dart';
-import '../../providers/settings_providers.dart';
-import 'navigation_panel.dart' show isVeryNarrowAppLayout;
 import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
-import 'section_groupbox.dart';
+import 'game_cover_image.dart';
+import 'notification_system.dart';
 import 'tag_list.dart';
 
-/// Minimum content width for three cover-sized panels and their spacing.
-const kGameEditorNotesBreakpoint =
-    CoverImageCard.preferredWidth * 3 + kDialogSpacing * 2;
+/// How long ago [date] was, in whole days, months or years.
+String daysAgoLabel(DateTime date) {
+  final days = DateUtils.dateOnly(
+    DateTime.now(),
+  ).difference(DateUtils.dateOnly(date)).inDays;
+  String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'} ago';
+  return switch (days) {
+    <= 0 => 'Today',
+    1 => 'Yesterday',
+    < 30 => plural(days, 'day'),
+    < 365 => plural(days ~/ 30, 'month'),
+    _ => plural(days ~/ 365, 'year'),
+  };
+}
 
-/// Responsive cover/information/notes placement shared by both game editors.
-class GameEditorLayout extends ConsumerStatefulWidget {
+/// A banner with the cover, title, key and status pills over the cover's
+/// blurred art, then the notes beside the tags and a strip of [stats].
+class GameEditorLayout extends StatelessWidget {
   const GameEditorLayout({
     super.key,
     required this.theme,
-    required this.titleController,
     required this.cover,
-    required this.information,
-    required this.detailsBuilder,
-    required this.tags,
+    required this.coverController,
+    required this.actions,
+    this.heading,
+    required this.titleController,
+    required this.onTitleChanged,
+    this.titleValidator,
+    required this.keyField,
+    required this.platform,
+    required this.options,
     required this.notesController,
     required this.onNotesChanged,
-    this.options,
-    this.wideDetails,
-    this.trailing,
+    required this.customTags,
+    required this.selectedTagIds,
+    required this.onTagToggled,
+    required this.steamTags,
+    this.stats = const [],
+    this.cornerRadius = 0,
   });
 
   final AppThemeData theme;
-  final TextEditingController titleController;
+
+  /// The cover card, and the path its art is drawn from behind the banner.
   final Widget cover;
-  final Widget information;
-  final Widget Function(Widget? information) detailsBuilder;
+  final TextEditingController coverController;
 
-  /// When supplied, stack Options under Information beside the cover.
-  final Widget? options;
+  /// Buttons for the top right of the banner.
+  final List<Widget> actions;
 
-  /// Optional remaining Details content after both groups move to the header.
-  final Widget? wideDetails;
-  final Widget tags;
+  /// The dialog's name, at the left of [actions].
+  final String? heading;
+  final TextEditingController titleController;
+  final ValueChanged<String> onTitleChanged;
+  final FormFieldValidator<String>? titleValidator;
+  final Widget keyField;
+  final Widget platform;
+  final Widget options;
   final TextEditingController notesController;
   final VoidCallback onNotesChanged;
-  final Widget? trailing;
+  final List<Tag> customTags;
+  final Set<int> selectedTagIds;
+  final ValueChanged<int> onTagToggled;
+  final List<Tag> steamTags;
+
+  /// Figures under the notes and tags, such as [GameStat]s.
+  final List<Widget> stats;
+
+  /// Rounds the backdrop's top corners to the container's.
+  final double cornerRadius;
+
+  /// Width at which the cover sits beside the title, and the notes beside
+  /// the tags.
+  static const wideBreakpoint = 760.0;
+
+  /// The column's natural height beside the cover at the default text size:
+  /// the button row, the title line, the key field and the pills.
+  static const _heroInfoHeight = 184.0;
 
   @override
-  ConsumerState<GameEditorLayout> createState() => GameEditorLayoutState();
-}
-
-class GameEditorLayoutState extends ConsumerState<GameEditorLayout>
-    with TickerProviderStateMixin {
-  late TabController _controller = TabController(
-    length: 3,
-    vsync: this,
-    animationDuration: kTabTransition,
-  );
-  List<String> _tabs = ['Details', 'Tags', 'Notes'];
-  final _notesKey = GlobalKey();
-
-  void showDetails() {
-    final index = _tabs.indexOf('Details');
-    if (index >= 0) _controller.animateTo(index);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final navigation = ref.watch(
-      appShellSettingsProvider.select(
-        (settings) => (settings.navBarPosition, settings.navBarAppearance),
-      ),
-    );
-    final informationBesideCover = !isVeryNarrowAppLayout(
-      MediaQuery.sizeOf(context).width,
-      position: navigation.$1,
-      appearance: navigation.$2,
-    );
-    final information = widget.information;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final notesBesideInformation =
-            informationBesideCover &&
-            constraints.maxWidth >= kGameEditorNotesBreakpoint;
-        final optionsBesideCover =
-            informationBesideCover && widget.options != null;
-        final scaler = MediaQuery.textScalerOf(context);
-        final headerBudget =
-            constraints.maxHeight - scaler.scale(72) - 20 - 160;
-        final details = optionsBesideCover
-            ? widget.wideDetails
-            : widget.detailsBuilder(
-                informationBesideCover ? null : information,
-              );
-        final tabs = [
-          if (details != null) 'Details',
-          'Tags',
-          if (!notesBesideInformation) 'Notes',
-        ];
-        if (!listEquals(_tabs, tabs)) {
-          final selected = _tabs[_controller.index];
-          final index = tabs.indexOf(selected);
-          _controller.dispose();
-          _controller = TabController(
-            animationDuration: kTabTransition,
-            length: tabs.length,
-            initialIndex: index < 0 ? 0 : index,
-            vsync: this,
-          );
-          _tabs = tabs;
-        }
-        final notes = GameEditorNotes(
-          key: _notesKey,
-          theme: widget.theme,
-          controller: widget.notesController,
-          onChanged: widget.onNotesChanged,
-          padding: notesBesideInformation
-              ? EdgeInsets.zero
-              : const EdgeInsets.only(top: 16),
-        );
-        return Column(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final wide = constraints.maxWidth >= wideBreakpoint;
+      final divider = Divider(
+        height: 40,
+        indent: 16,
+        endIndent: 16,
+        color: theme.border,
+      );
+      return GameBanner(
+        theme: theme,
+        coverController: coverController,
+        cornerRadius: cornerRadius,
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GameEditorHeader(
-              theme: widget.theme,
-              titleController: widget.titleController,
-              cover: widget.cover,
-              trailing: widget.trailing,
-              information: informationBesideCover ? information : null,
-              options: optionsBesideCover ? widget.options : null,
-              maxPanelHeight: optionsBesideCover
-                  ? math.max(scaler.scale(44) + 136, headerBudget)
-                  : null,
-              notes: notesBesideInformation ? notes : null,
+            _buildHero(context, wide),
+            divider,
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, stats.isEmpty ? 20 : 0),
+              child: _buildBody(context, wide),
             ),
-            const SizedBox(height: kDialogSpacing),
-            Expanded(
-              child: GameEditorTabs(
-                theme: widget.theme,
-                controller: _controller,
-                details: details,
-                tags: widget.tags,
-                notes: notesBesideInformation ? null : notes,
+            if (stats.isNotEmpty) ...[
+              divider,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                child: Wrap(spacing: 36, runSpacing: 16, children: stats),
               ),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+
+  Widget _buildHero(BuildContext context, bool wide) => GameBannerHero(
+    theme: theme,
+    heading: heading,
+    actions: actions,
+    wide: wide,
+    // The cover keeps its 2:1 shape and ends about level with the pills,
+    // growing with the text size.
+    coverWidth: math.max(
+      CoverImageCard.preferredWidth,
+      MediaQuery.textScalerOf(context).scale(_heroInfoHeight) * 2,
+    ),
+    spacing: 28,
+    cover: cover,
+    info: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          key: const ValueKey('game-editor-title'),
+          controller: titleController,
+          maxLines: 2,
+          minLines: 1,
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
+          decoration: const InputDecoration(hintText: 'Title', isDense: true),
+          validator: titleValidator,
+          onChanged: onTitleChanged,
+          onFieldSubmitted: (value) {
+            final trimmed = value.trim();
+            if (trimmed == value) return;
+            titleController.text = trimmed;
+            onTitleChanged(trimmed);
+          },
+        ),
+        const SizedBox(height: 10),
+        Row(
+          spacing: 8,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: keyField),
+            platform,
+          ],
+        ),
+        const SizedBox(height: 14),
+        Align(alignment: Alignment.centerLeft, child: options),
+      ],
+    ),
+  );
+
+  /// A titled part of the body. An [expand]ed one fills the height it is
+  /// given.
+  Widget _section(String title, Widget child, {bool expand = false}) => Column(
+    mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: 10,
+    children: [
+      Text(
+        title,
+        style: TextStyle(
+          color: theme.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      if (expand) Expanded(child: child) else child,
+    ],
+  );
+
+  /// The notes beside the tags; narrow, the notes come first.
+  Widget _buildBody(BuildContext context, bool wide) {
+    // Beside the tags, the notes fill the height down to the tags' bottom;
+    // stacked, they start at five lines and grow as they are typed.
+    Widget notesSection({required bool expand}) => _section(
+      'Notes',
+      expand: expand,
+      TextField(
+        controller: notesController,
+        minLines: expand ? null : 5,
+        maxLines: null,
+        expands: expand,
+        textAlignVertical: TextAlignVertical.top,
+        style: TextStyle(color: theme.textPrimary, height: 1.4),
+        decoration: InputDecoration(
+          hintText: 'Add notes about this game...',
+          hintStyle: TextStyle(color: theme.textHint),
+          // Framed like the Multiple Games paste box.
+          filled: true,
+          fillColor: theme.inputBackground,
+          constraints: const BoxConstraints(),
+          contentPadding: const EdgeInsets.all(12),
+          border: theme.resolveFramedInputBorder(),
+        ),
+        onChanged: (_) => onNotesChanged(),
+      ),
+    );
+    final tagSection = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 24,
+      children: [
+        _section(
+          'Tags',
+          customTags.isEmpty
+              ? Text(
+                  'No custom tags created yet',
+                  style: TextStyle(color: theme.textHint),
+                )
+              : TagList(
+                  tags: customTags,
+                  theme: theme,
+                  selectedTagIds: selectedTagIds,
+                  maxRows: 5,
+                  onTagToggled: onTagToggled,
+                ),
+        ),
+        if (steamTags.isNotEmpty)
+          _section(
+            'Steam Tags',
+            TagList(
+              tags: steamTags,
+              theme: theme,
+              allSelected: true,
+              maxRows: 5,
+            ),
+          ),
+      ],
+    );
+    if (!wide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 28,
+        children: [notesSection(expand: false), tagSection],
+      );
+    }
+    // The tags set the height and the notes fill it beside them, with room
+    // for at least a few lines.
+    final minHeight = MediaQuery.textScalerOf(context).scale(180);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 40.0;
+        final leftWidth = (constraints.maxWidth - gap) * 3 / 5;
+        return Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: leftWidth + gap),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: minHeight),
+                child: tagSection,
+              ),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: leftWidth,
+              child: notesSection(expand: true),
             ),
           ],
         );
@@ -165,409 +297,497 @@ class GameEditorLayoutState extends ConsumerState<GameEditorLayout>
   }
 }
 
-/// Shared title and cover placement for adding and editing a game.
-class GameEditorHeader extends StatelessWidget {
-  const GameEditorHeader({
+/// The top of a banner: [heading] and [actions] in a row of their own,
+/// [info] under them, and [cover] with a drop shadow. Wide, the cover rises
+/// beside them to the banner's top; narrow, it sits between them.
+class GameBannerHero extends StatelessWidget {
+  const GameBannerHero({
     super.key,
     required this.theme,
-    required this.titleController,
+    this.heading,
+    required this.actions,
     required this.cover,
-    this.information,
-    this.options,
-    this.maxPanelHeight,
-    this.notes,
-    this.trailing,
+    required this.info,
+    required this.wide,
+    required this.coverWidth,
+    this.spacing = 20,
   });
 
   final AppThemeData theme;
-  final TextEditingController titleController;
+
+  /// The dialog's name, at the left of [actions].
+  final String? heading;
+  final List<Widget> actions;
   final Widget cover;
-  final Widget? information;
-  final Widget? options;
-  final double? maxPanelHeight;
-  final Widget? notes;
-  final Widget? trailing;
+  final Widget info;
+  final bool wide;
+
+  /// The cover's width, and its gap to [info], when [wide].
+  final double coverWidth;
+  final double spacing;
 
   @override
   Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    final panelHeight = CoverImageCard.preferredWidth / 2 + scaler.scale(40);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 32),
-          child: Row(
-            children: [
-              Expanded(
-                child: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: titleController,
-                  builder: (context, value, _) => Text(
-                    value.text.trim().isEmpty ? 'New Game' : value.text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+    final actionRow = BannerHeadingRow(
+      theme: theme,
+      heading: heading,
+      actions: actions,
+    );
+    final coverBox = DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: cover,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 0),
+      child: wide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: spacing,
+              children: [
+                SizedBox(width: coverWidth, child: coverBox),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [actionRow, const SizedBox(height: 4), info],
                   ),
                 ),
-              ),
-              ?trailing,
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (information != null && options != null)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columnWidth =
-                  (constraints.maxWidth -
-                      CoverImageCard.preferredWidth -
-                      kDialogSpacing * (notes == null ? 1 : 2)) /
-                  (notes == null ? 1 : 2);
-              // Only the field stack determines this Stack's natural height.
-              // The cover and Notes fill it without imposing a height of their own.
-              return Stack(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: CoverImageCard.preferredWidth + kDialogSpacing,
-                      right: notes == null ? 0 : columnWidth + kDialogSpacing,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: maxPanelHeight ?? double.infinity,
-                      ),
-                      child: SingleChildScrollView(
-                        primary: false,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          spacing: kDialogSpacing,
-                          children: [information!, options!],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: CoverImageCard.preferredWidth,
-                    child: cover,
-                  ),
-                  if (notes != null)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: columnWidth,
-                      child: notes!,
-                    ),
-                ],
-              );
-            },
-          )
-        else
-          SizedBox(
-            height: panelHeight,
-            child: information == null && notes == null
-                ? ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: CoverImageCard.preferredWidth,
-                    ),
-                    child: cover,
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: kDialogSpacing,
-                    children: [
-                      SizedBox(
-                        width: CoverImageCard.preferredWidth,
-                        child: cover,
-                      ),
-                      if (information != null) Expanded(child: information!),
-                      if (notes != null) Expanded(child: notes!),
-                    ],
-                  ),
-          ),
-      ],
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                actionRow,
+                const SizedBox(height: 4),
+                coverBox,
+                const SizedBox(height: 12),
+                info,
+              ],
+            ),
     );
   }
 }
 
-class GameEditorTabs extends StatelessWidget {
-  const GameEditorTabs({
-    super.key,
-    required this.theme,
-    required this.controller,
-    required this.details,
-    required this.tags,
-    required this.notes,
-  });
-
-  final AppThemeData theme;
-  final TabController controller;
-  final Widget? details;
-  final Widget tags;
-  final Widget? notes;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      AppTabBar(
-        theme: theme,
-        controller: controller,
-        tabs: [
-          if (details != null) const AppTab('Details'),
-          const AppTab('Tags'),
-          if (notes != null) const AppTab('Notes'),
-        ],
-      ),
-      Expanded(
-        child: AppTabView(
-          controller: controller,
-          children: [?details, tags, ?notes],
-        ),
-      ),
-    ],
-  );
-}
-
-class GameEditorInformation extends StatelessWidget {
-  const GameEditorInformation({
-    super.key,
-    required this.theme,
-    required this.titleController,
-    required this.keyController,
-    this.platformSelector,
-    this.isKeyVisible = true,
-    this.onKeyVisibilityChanged,
-    this.onCopyKey,
-    required this.onTitleChanged,
-    required this.onKeyChanged,
-    this.enabled = true,
-    this.titleLabel = 'Title',
-    this.keyLabel = 'Game Key',
-    this.titleValidator,
-    this.keyValidator,
-  });
-
-  final AppThemeData theme;
-  final TextEditingController titleController;
-  final TextEditingController keyController;
-  final Widget? platformSelector;
-  final bool isKeyVisible;
-  final bool enabled;
-  final ValueChanged<bool>? onKeyVisibilityChanged;
-  final VoidCallback? onCopyKey;
-  final ValueChanged<String> onTitleChanged;
-  final ValueChanged<String> onKeyChanged;
-  final String titleLabel;
-  final String keyLabel;
-  final FormFieldValidator<String>? titleValidator;
-  final FormFieldValidator<String>? keyValidator;
-
-  @override
-  Widget build(BuildContext context) => SectionGroupBox(
-    title: 'Information',
-    theme: theme,
-    titleIcon: Icons.info,
-    titleLocation: SectionTitleLocation.top,
-    headerCrossAxisAlignment: CrossAxisAlignment.center,
-    trailing: platformSelector,
-    child: SingleChildScrollView(
-      child: Column(
-        children: [
-          TextFormField(
-            controller: titleController,
-            enabled: enabled,
-            style: TextStyle(color: theme.textPrimary),
-            decoration: InputDecoration(labelText: titleLabel),
-            validator: titleValidator,
-            onChanged: onTitleChanged,
-            onFieldSubmitted: (value) {
-              final trimmed = value.trim();
-              if (trimmed != value) titleController.text = trimmed;
-              onTitleChanged(trimmed);
-            },
-          ),
-          const SizedBox(height: kDialogSpacing),
-          TextFormField(
-            controller: keyController,
-            enabled: enabled,
-            obscureText: !isKeyVisible,
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontFamily: 'monospace',
-              letterSpacing: 1.5,
-            ),
-            decoration: InputDecoration(
-              labelText: keyLabel,
-              suffixIcon: onKeyVisibilityChanged == null && onCopyKey == null
-                  ? null
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (onKeyVisibilityChanged != null)
-                          IconButton(
-                            icon: Icon(
-                              isKeyVisible
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: theme.textSecondary,
-                            ),
-                            tooltip: isKeyVisible ? 'Hide key' : 'Show key',
-                            onPressed: () =>
-                                onKeyVisibilityChanged!(!isKeyVisible),
-                          ),
-                        if (onCopyKey != null)
-                          IconButton(
-                            icon: Icon(Icons.copy, color: theme.accent),
-                            tooltip: 'Copy key',
-                            onPressed: onCopyKey,
-                          ),
-                      ],
-                    ),
-            ),
-            validator: keyValidator,
-            onChanged: onKeyChanged,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-/// The Options group both game editors show under Information.
-class GameEditorOptions extends StatelessWidget {
-  const GameEditorOptions({
+/// [child] over a [GameBannerBackdrop] that runs on under it.
+class GameBanner extends StatelessWidget {
+  const GameBanner({
     super.key,
     required this.theme,
     required this.child,
+    this.coverController,
+    this.cornerRadius = 0,
   });
 
   final AppThemeData theme;
   final Widget child;
+  final TextEditingController? coverController;
+
+  /// Rounds the backdrop's top corners to the container's.
+  final double cornerRadius;
 
   @override
-  Widget build(BuildContext context) => SectionGroupBox(
-    title: 'Options',
-    theme: theme,
-    titleIcon: Icons.tune,
-    alternateBackground: true,
-    child: SingleChildScrollView(child: child),
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Positioned(
+        left: 0,
+        top: 0,
+        right: 0,
+        child: ClipRRect(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(cornerRadius),
+          ),
+          child: GameBannerBackdrop(
+            theme: theme,
+            coverController: coverController,
+          ),
+        ),
+      ),
+      child,
+    ],
   );
 }
 
-class GameEditorTags extends StatelessWidget {
-  const GameEditorTags({
+/// A banner's backdrop: the cover's art blurred and tinted with the accent
+/// (so an empty cover still has some colour), fading out over its [height]
+/// so it has no edge of its own.
+class GameBannerBackdrop extends StatelessWidget {
+  const GameBannerBackdrop({
     super.key,
     required this.theme,
-    required this.customTags,
-    required this.selectedTagIds,
-    required this.onTagToggled,
-    required this.steamTags,
+    this.coverController,
   });
 
   final AppThemeData theme;
-  final List<Tag> customTags;
-  final Set<int> selectedTagIds;
-  final ValueChanged<int> onTagToggled;
-  final List<Tag> steamTags;
 
-  Widget _placeholder(String text) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Text(
-      text,
-      style: TextStyle(color: theme.textHint),
-      textAlign: TextAlign.center,
-    ),
-  );
+  /// The cover whose art is blurred in; without one only the tint shows.
+  final TextEditingController? coverController;
+
+  /// How far the backdrop reaches down before it has faded out; past it
+  /// nothing shows, so nothing is blurred or painted there.
+  static const height = 480.0;
 
   @override
-  Widget build(BuildContext context) {
-    final chosen = customTags
-        .where((tag) => selectedTagIds.contains(tag.id))
-        .length;
-    return ListView(
-      padding: const EdgeInsets.only(top: 16),
-      children: [
-        // Titled like the settings tag groups: the selected custom tags, all Steam tags.
-        SectionGroupBox(
-          title: 'Custom Tags ($chosen)',
-          theme: theme,
-          titleIcon: Icons.label,
-          plainTitle: true,
-          child: customTags.isEmpty
-              ? _placeholder('No custom tags created yet')
-              : TagList(
-                  tags: customTags,
-                  theme: theme,
-                  selectedTagIds: selectedTagIds,
-                  onTagToggled: onTagToggled,
-                  maxHeight: 120,
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    // The enlarged, blurred art would spill past the fade otherwise.
+    child: ClipRect(
+      child: RepaintBoundary(
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          // Full strength behind the header, then an eased fade to nothing.
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              for (final alpha in [1.0, 1.0, 0.75, 0.4, 0.15, 0.0])
+                Colors.white.withValues(alpha: alpha),
+            ],
+            stops: [
+              for (final y in [0, 80, 180, 280, 380, 480]) y / height,
+            ],
+          ).createShader(bounds),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (coverController case final cover?)
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: cover,
+                  builder: (context, value, _) => value.text.trim().isEmpty
+                      ? const SizedBox.shrink()
+                      : ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                          child: Transform.scale(
+                            scale: 1.4,
+                            child: GameCoverImage(
+                              theme: theme,
+                              coverImage: value.text.trim(),
+                            ),
+                          ),
+                        ),
                 ),
+              // Dims the art so text stays readable over it.
+              ColoredBox(color: theme.background.withValues(alpha: 0.55)),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      theme.accent.withValues(alpha: 0.28),
+                      theme.accent.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: kDialogSpacing),
-        SectionGroupBox(
-          title: 'Steam Tags (${steamTags.length})',
-          theme: theme,
-          titleIcon: FontAwesomeIcons.steam.data,
-          plainTitle: true,
-          alternateBackground: true,
-          child: steamTags.isEmpty
-              ? _placeholder('No Steam tags imported yet')
-              : TagList(tags: steamTags, theme: theme, allSelected: true),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 }
 
-class GameEditorNotes extends StatelessWidget {
-  const GameEditorNotes({
+/// A banner's heading in the accent color, with its buttons at the end. Kept
+/// at a button's height when empty, so the content below stays put.
+class BannerHeadingRow extends StatelessWidget {
+  const BannerHeadingRow({
+    super.key,
+    required this.theme,
+    required this.actions,
+    this.heading,
+  });
+
+  final AppThemeData theme;
+  final String? heading;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 40),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      spacing: 8,
+      children: [
+        if (heading case final heading?)
+          Expanded(
+            child: DialogHeader(
+              title: heading,
+              theme: theme,
+              titleColor: theme.accent,
+            ),
+          ),
+        ...actions,
+      ],
+    ),
+  );
+}
+
+/// The game key's field, its placeholder "Key", or with [playfulHints] a
+/// playful line that changes each time the field is emptied.
+class GameKeyField extends StatefulWidget {
+  const GameKeyField({
     super.key,
     required this.theme,
     required this.controller,
     required this.onChanged,
-    this.enabled = true,
-    this.padding = const EdgeInsets.only(top: 16),
+    this.validator,
+    this.isVisible = true,
+    this.onVisibilityChanged,
+    this.onCopy,
+    this.playfulHints = false,
   });
 
   final AppThemeData theme;
   final TextEditingController controller;
-  final VoidCallback onChanged;
-  final bool enabled;
-  final EdgeInsetsGeometry padding;
+  final ValueChanged<String> onChanged;
+  final FormFieldValidator<String>? validator;
+  final bool isVisible;
+
+  /// Shows a show/hide button when set.
+  final ValueChanged<bool>? onVisibilityChanged;
+
+  /// Shows a copy button when set.
+  final VoidCallback? onCopy;
+
+  /// Rotates through [hints] in place of the plain "Key" placeholder.
+  final bool playfulHints;
+
+  static const hints = [
+    'Where did my key go?',
+    'No key, no game',
+    'XXXXX-XXXXX-XXXXX',
+    'Snack? I mean, key please',
+    '._.',
+  ];
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: padding,
-    child: SectionGroupBox(
-      title: 'Notes',
-      theme: theme,
-      titleIcon: Icons.notes,
-      child: TextField(
-        controller: controller,
-        enabled: enabled,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        style: TextStyle(color: theme.textPrimary),
-        decoration: InputDecoration(
-          constraints: const BoxConstraints(),
-          filled: true,
-          fillColor: theme.inputBackground,
-          hintText: 'Add notes about this game...',
-          hintStyle: TextStyle(color: theme.textHint),
-          border: theme.resolveInputBorder(showTopBorder: true),
-        ),
-        onChanged: (_) => onChanged(),
+  State<GameKeyField> createState() => _GameKeyFieldState();
+}
+
+class _GameKeyFieldState extends State<GameKeyField> {
+  final _random = math.Random();
+  late String _hint =
+      GameKeyField.hints[_random.nextInt(GameKeyField.hints.length)];
+  late bool _empty = widget.controller.text.isEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void didUpdateWidget(GameKeyField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onText);
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onText);
+    super.dispose();
+  }
+
+  /// A key just cleared, by hand or by loading another game, shows a new
+  /// placeholder, never the one it had.
+  void _onText() {
+    final empty = widget.controller.text.isEmpty;
+    if (empty && !_empty) {
+      final others = [...GameKeyField.hints]..remove(_hint);
+      setState(() => _hint = others[_random.nextInt(others.length)]);
+    }
+    _empty = empty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final visible = widget.isVisible;
+    return TextFormField(
+      key: const ValueKey('game-editor-key'),
+      controller: widget.controller,
+      obscureText: !visible,
+      style: TextStyle(
+        color: theme.textPrimary,
+        fontFamily: 'monospace',
+        letterSpacing: 1.5,
       ),
-    ),
+      decoration: InputDecoration(
+        hintText: widget.playfulHints ? _hint : 'Key',
+        hintStyle: TextStyle(color: theme.textHint, letterSpacing: 0),
+        suffixIcon: widget.onVisibilityChanged == null && widget.onCopy == null
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.onVisibilityChanged case final onChanged?)
+                    IconButton(
+                      icon: Icon(
+                        visible ? Icons.visibility_off : Icons.visibility,
+                        color: theme.textSecondary,
+                      ),
+                      tooltip: visible ? 'Hide key' : 'Show key',
+                      onPressed: () => onChanged(!visible),
+                    ),
+                  if (widget.onCopy != null)
+                    IconButton(
+                      icon: Icon(Icons.copy, color: theme.accent),
+                      tooltip: 'Copy key',
+                      onPressed: widget.onCopy,
+                    ),
+                ],
+              ),
+      ),
+      validator: widget.validator,
+      onChanged: widget.onChanged,
+    );
+  }
+}
+
+/// One figure in the stat strip: an overline, the value and a detail.
+class GameStat extends StatelessWidget {
+  const GameStat({
+    super.key,
+    required this.theme,
+    required this.label,
+    required this.value,
+    this.fallback = '',
+    this.detail,
+    this.tooltip,
+    this.trailing,
+  });
+
+  /// How long ago [date] was, with the day under it and the exact time on
+  /// hover.
+  factory GameStat.date({
+    required AppThemeData theme,
+    required String label,
+    required DateTime? date,
+    String fallback = '',
+  }) => GameStat(
+    theme: theme,
+    label: label,
+    value: date == null ? null : daysAgoLabel(date),
+    fallback: fallback,
+    detail: date == null ? null : _day.format(date),
+    tooltip: date == null ? null : _exact.format(date),
   );
+
+  /// The Steam review score with its rating and count, given any reviews.
+  factory GameStat.reviews({
+    required AppThemeData theme,
+    required int score,
+    required int count,
+  }) => GameStat(
+    theme: theme,
+    label: 'Reviews',
+    value: count == 0 ? null : '$score%',
+    fallback: 'No reviews',
+    detail: count == 0
+        ? null
+        : '${Game.reviewRatingFor(score)} · '
+              '${NumberFormat.compact().format(count)}',
+    tooltip: count == 0 ? null : '$count reviews',
+  );
+
+  /// The Steam AppID, with a button to copy it.
+  factory GameStat.steamAppId({
+    required AppThemeData theme,
+    required String appId,
+  }) => GameStat(
+    theme: theme,
+    label: 'Steam AppID',
+    value: appId.isEmpty ? null : appId,
+    fallback: 'Not set',
+    trailing: appId.isEmpty
+        ? null
+        : IconButton(
+            icon: const Icon(Icons.copy, size: 15),
+            color: theme.textSecondary,
+            // Kept to the value's line height.
+            style: IconButton.styleFrom(
+              fixedSize: const Size.square(22),
+              minimumSize: const Size.square(22),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            tooltip: 'Copy AppID',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: appId));
+              NotificationManager.instance.success(
+                'Steam AppID copied to clipboard',
+              );
+            },
+          ),
+  );
+
+  static final _day = DateFormat('d MMM yyyy');
+  static final _exact = DateFormat('dd/MM/yyyy HH:mm');
+
+  final AppThemeData theme;
+  final String label;
+
+  /// The figure, or null to show [fallback] muted.
+  final String? value;
+  final String fallback;
+  final String? detail;
+  final String? tooltip;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final column = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 4,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: theme.textHint,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.9,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 4,
+          children: [
+            Flexible(
+              child: Text(
+                value ?? fallback,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: value == null ? theme.textHint : theme.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+        if (detail != null)
+          Text(detail!, style: TextStyle(color: theme.textHint, fontSize: 12)),
+      ],
+    );
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 110),
+      child: tooltip == null
+          ? column
+          : Tooltip(message: tooltip, child: column),
+    );
+  }
 }

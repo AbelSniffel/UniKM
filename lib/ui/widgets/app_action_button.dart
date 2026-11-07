@@ -57,6 +57,7 @@ class AppActionButton extends StatelessWidget {
   /// centred over the empty slot. Being on, hovered, pressed or focused moves
   /// the label back to its place and grows the mark in. The label moves by
   /// paint only, so the button keeps its size and never re-lays out.
+  /// [alwaysShown] keeps the mark showing and the label in its place.
   static Widget withStatus(
     BuildContext context,
     Set<WidgetState> states,
@@ -66,9 +67,11 @@ class AppActionButton extends StatelessWidget {
     Color? accentColor,
     bool deleteOnHover = false,
     double gap = statusSpacing,
+    bool alwaysShown = false,
   }) {
     final hovered = states.contains(WidgetState.hovered);
     final shown =
+        alwaysShown ||
         selected ||
         hovered ||
         states.contains(WidgetState.pressed) ||

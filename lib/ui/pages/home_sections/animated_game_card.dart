@@ -144,11 +144,16 @@ class AnimatedGameCard extends StatefulWidget {
     required this.gameId,
     required this.coordinator,
     required this.child,
+    this.placeholder,
   });
 
   final int gameId;
   final GameCardRevealCoordinator coordinator;
   final Widget child;
+
+  /// Holds the card's place, at its full size, until it shows, fading out
+  /// as the card fades in. It animates only while the card is in view.
+  final Widget? placeholder;
 
   @override
   State<AnimatedGameCard> createState() => _AnimatedGameCardState();
@@ -166,8 +171,13 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     parent: _controller,
     curve: Curves.easeOutCubic,
   );
+  late final _placeholderFade = ReverseAnimation(_animation);
   bool _started = false;
-  bool _visible = false;
+
+  /// In view, waiting for or running its reveal.
+  final _inView = ValueNotifier(false);
+  bool get _visible => _inView.value;
+  set _visible(bool value) => _inView.value = value;
   Timer? _startTimer;
   Timer? _coverTimer;
   final _loadingCovers = <Object>{};
@@ -295,6 +305,7 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     widget.coordinator._detach(this);
     _startTimer?.cancel();
     _coverTimer?.cancel();
+    _inView.dispose();
     _animation.dispose();
     _controller.dispose();
     super.dispose();
@@ -309,13 +320,38 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
       // Fade in while growing from the card's centre, like an app opening.
       // A hidden card paints nothing; the card's own repaint boundary keeps
       // its contents from repainting while it scales.
-      builder: (context, child) => Opacity(
-        opacity: _animation.value,
-        child: Transform.scale(
-          scale: _startScale + (1 - _startScale) * _animation.value,
-          child: child,
-        ),
-      ),
+      builder: (context, child) {
+        final card = Opacity(
+          opacity: _animation.value,
+          child: Transform.scale(
+            scale: _startScale + (1 - _startScale) * _animation.value,
+            child: child,
+          ),
+        );
+        final placeholder = widget.placeholder;
+        if (placeholder == null) return card;
+        return Stack(
+          fit: StackFit.passthrough,
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: _animation.value == 1
+                  ? const SizedBox.shrink()
+                  // Out of view, its animation pauses.
+                  : ValueListenableBuilder(
+                      valueListenable: _inView,
+                      builder: (context, inView, child) =>
+                          TickerMode(enabled: inView, child: child!),
+                      child: FadeTransition(
+                        opacity: _placeholderFade,
+                        child: placeholder,
+                      ),
+                    ),
+            ),
+            card,
+          ],
+        );
+      },
       child: CoverLoadScope(listener: this, child: widget.child),
     ),
   );

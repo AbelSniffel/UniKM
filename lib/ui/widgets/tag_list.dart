@@ -40,6 +40,7 @@ class TagList extends StatefulWidget {
     this.deleteOnTap = false,
     this.onTagToggled,
     this.maxHeight,
+    this.maxRows,
     this.scrollable = false,
   });
 
@@ -64,6 +65,10 @@ class TagList extends StatefulWidget {
   /// Maximum height for the tag list scroll area. When set, the widget wraps
   /// itself in a [ConstrainedBox] and enables scrolling automatically.
   final double? maxHeight;
+
+  /// Shows at most this many rows of tags and scrolls past them; fewer tags
+  /// take only the height they need.
+  final int? maxRows;
 
   /// When true, the tag list scrolls inside whatever height the parent provides.
   /// Use this when the parent already constrains the height (e.g. via
@@ -158,7 +163,9 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
       );
     }
 
-    if (widget.scrollable) return _buildScrollableContent(tags);
+    if (widget.scrollable || widget.maxRows != null) {
+      return _buildScrollableContent(tags);
+    }
 
     return _buildWrap(tags);
   }
@@ -212,13 +219,22 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
           final contentHeight =
               _rowHeights.fold(0.0, (sum, height) => sum + height) +
               math.max(0, rows.length - 1) * _runSpacing;
-          _lastKnownHeight = contentHeight;
           // Give the viewport a finite height without shrinkWrap: shrinkWrap
           // would lay out every row and recreate the offscreen button cost.
-          final height = contentHeight.clamp(
-            constraints.minHeight,
-            constraints.maxHeight,
-          );
+          final maxRows = widget.maxRows;
+          final double rowsHeight = maxRows == null || rows.length <= maxRows
+              ? double.infinity
+              : _rowHeights.take(maxRows).fold(0.0, (sum, h) => sum + h) +
+                    (maxRows - 1) * _runSpacing;
+          final height = contentHeight
+              .clamp(
+                constraints.minHeight,
+                math.min(constraints.maxHeight, rowsHeight),
+              )
+              .toDouble();
+          // The placeholder shown while resizing keeps the height on screen,
+          // not the whole list's, so a capped list does not jump open.
+          _lastKnownHeight = height;
           return FadeTransition(
             opacity: _fadeAnimation,
             child: SizedBox(

@@ -236,10 +236,6 @@ class _AddTagsDialogState extends ConsumerState<AddTagsDialog> {
                           },
                         ),
                 ),
-                Text(
-                  'Tap a tag to delete it.',
-                  style: TextStyle(color: theme.textHint, fontSize: 12),
-                ),
               ],
             ),
           ],

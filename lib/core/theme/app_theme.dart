@@ -324,6 +324,10 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     buttonGroupBackground,
   );
 
+  /// Resting fill for unselected tabs and tab-colored buttons.
+  Color get tabUnselected =>
+      Color.alphaBlend(baseAccent.withValues(alpha: 0.45), navBackground);
+
   /// Selected popup menu item background
   Color get popupMenuItemSelected => baseAccent.withValues(alpha: 0.16);
 
@@ -618,34 +622,50 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     );
   }
 
-  WidgetStateInputBorder resolveInputBorder({bool showTopBorder = false}) =>
-      WidgetStateInputBorder.resolveWith(
-        (states) => buildInputBorder(states, showTopBorder: showTopBorder),
-      );
+  WidgetStateInputBorder resolveInputBorder() =>
+      WidgetStateInputBorder.resolveWith(buildInputBorder);
 
-  InputBorder buildInputBorder(
-    Set<WidgetState> states, {
-    bool showTopBorder = false,
-  }) {
-    final isFocused = states.contains(WidgetState.focused);
-    final (color, width, glowColor, glowExtent, wrapExtent) = isFocused
+  InputBorder buildInputBorder(Set<WidgetState> states) {
+    final (
+      color,
+      width,
+      glowColor,
+      glowExtent,
+      wrapExtent,
+    ) = states.contains(WidgetState.focused)
         ? (inputFocusedBorder, 2.5, inputFocusGlow, 18.0, inputBorderWrapFocus)
         : states.contains(WidgetState.hovered)
         ? (inputHoverBorder, 1.5, inputHoverGlow, 12.0, inputBorderWrapHover)
         : (border, 1.0, Colors.transparent, 0.0, inputBorderWrapDefault);
-
     return BottomGlowInputBorder(
       borderRadius: BorderRadius.circular(cornerRadius),
       borderSide: BorderSide(color: color, width: width),
       glowColor: glowColor,
       glowExtent: glowExtent,
       wrapExtent: wrapExtent,
-      showTopBorder: showTopBorder,
-      connection: showTopBorder && isFocused ? 1.0 : 0.0,
     );
   }
+
+  /// The border of multiline boxes such as the paste box and Notes: a whole
+  /// outline that lights up on hover, and turns thicker with a stronger
+  /// inward glow on focus.
+  WidgetStateInputBorder resolveFramedInputBorder() =>
+      WidgetStateInputBorder.resolveWith((states) {
+        final (color, width, glowColor) = states.contains(WidgetState.focused)
+            ? (inputFocusedBorder, 2.5, inputFocusGlow)
+            : states.contains(WidgetState.hovered)
+            ? (inputHoverBorder, 1.5, inputHoverGlow)
+            : (border, 1.0, Colors.transparent);
+        return FramedInputBorder(
+          borderRadius: BorderRadius.circular(cornerRadius),
+          borderSide: BorderSide(color: color, width: width),
+          glowColor: glowColor,
+        );
+      });
 }
 
+/// An outline drawn as an underline that wraps up the corners by
+/// [wrapExtent], with a glow rising from it.
 class BottomGlowInputBorder extends OutlineInputBorder {
   const BottomGlowInputBorder({
     super.borderSide = const BorderSide(),
@@ -654,17 +674,11 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     required this.glowColor,
     this.glowExtent = 0.0,
     this.wrapExtent = 0.0,
-    this.showTopBorder = false,
-    this.connection = 0.0,
   });
 
   final Color glowColor;
   final double glowExtent;
   final double wrapExtent;
-  final bool showTopBorder;
-
-  /// Focus joins the two growing edges, including in tall multiline fields.
-  final double connection;
 
   @override
   bool operator ==(Object other) =>
@@ -674,9 +688,7 @@ class BottomGlowInputBorder extends OutlineInputBorder {
       other.gapPadding == gapPadding &&
       other.glowColor == glowColor &&
       other.glowExtent == glowExtent &&
-      other.wrapExtent == wrapExtent &&
-      other.showTopBorder == showTopBorder &&
-      other.connection == connection;
+      other.wrapExtent == wrapExtent;
 
   @override
   int get hashCode => Object.hash(
@@ -686,15 +698,11 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor,
     glowExtent,
     wrapExtent,
-    showTopBorder,
-    connection,
   );
 
   @override
-  EdgeInsetsGeometry get dimensions => EdgeInsets.only(
-    top: showTopBorder ? borderSide.width : 0.0,
-    bottom: borderSide.width,
-  );
+  EdgeInsetsGeometry get dimensions =>
+      EdgeInsets.only(bottom: borderSide.width);
 
   @override
   BottomGlowInputBorder copyWith({
@@ -704,8 +712,6 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     Color? glowColor,
     double? glowExtent,
     double? wrapExtent,
-    bool? showTopBorder,
-    double? connection,
   }) => BottomGlowInputBorder(
     borderSide: borderSide ?? this.borderSide,
     borderRadius: borderRadius ?? this.borderRadius,
@@ -713,8 +719,6 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: glowColor ?? this.glowColor,
     glowExtent: glowExtent ?? this.glowExtent,
     wrapExtent: wrapExtent ?? this.wrapExtent,
-    showTopBorder: showTopBorder ?? this.showTopBorder,
-    connection: connection ?? this.connection,
   );
 
   @override
@@ -725,13 +729,11 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: glowColor.withValues(alpha: glowColor.a * t),
     glowExtent: glowExtent * t,
     wrapExtent: wrapExtent * t,
-    showTopBorder: showTopBorder,
-    connection: connection * t,
   );
 
   /// A plain outline border as a glow border with no glow, so both lerp
   /// directions share one interpolation.
-  BottomGlowInputBorder _asGlowBorder(OutlineInputBorder border) =>
+  static BottomGlowInputBorder _asGlowBorder(OutlineInputBorder border) =>
       border is BottomGlowInputBorder
       ? border
       : BottomGlowInputBorder(
@@ -739,7 +741,6 @@ class BottomGlowInputBorder extends OutlineInputBorder {
           borderRadius: border.borderRadius,
           gapPadding: border.gapPadding,
           glowColor: Colors.transparent,
-          showTopBorder: showTopBorder,
         );
 
   static BottomGlowInputBorder _lerp(
@@ -753,8 +754,6 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: Color.lerp(a.glowColor, b.glowColor, t)!,
     glowExtent: lerpDouble(a.glowExtent, b.glowExtent, t)!,
     wrapExtent: lerpDouble(a.wrapExtent, b.wrapExtent, t)!,
-    showTopBorder: t < 0.5 ? a.showTopBorder : b.showTopBorder,
-    connection: lerpDouble(a.connection, b.connection, t)!,
   );
 
   @override
@@ -776,122 +775,152 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     double gapPercentage = 0.0,
     TextDirection? textDirection,
   }) {
-    final resolvedRadius = borderRadius.resolve(textDirection);
-    final outerRRect = resolvedRadius.toRRect(rect);
-    final effectiveWrapExtent = lerpDouble(
-      math.max(wrapExtent, borderSide.width),
-      math.max(rect.height / 2, wrapExtent),
-      showTopBorder ? connection : 0.0,
-    )!;
-
-    final borderPaint = borderSide.toPaint();
-    final strokeInset = borderSide.width / 2;
-    final strokeRRect = outerRRect.deflate(strokeInset);
-    final clipTop = rect.bottom - effectiveWrapExtent - borderSide.width;
-
-    final edgeClip = Path()
-      ..addRect(
-        Rect.fromLTRB(
-          rect.left - borderSide.width,
-          clipTop,
-          rect.right + borderSide.width,
-          rect.bottom + borderSide.width,
-        ),
-      );
-    if (showTopBorder) {
-      final clipBottom = rect.top + effectiveWrapExtent + borderSide.width;
-      edgeClip.addRect(
-        Rect.fromLTRB(
-          rect.left - borderSide.width,
-          rect.top - borderSide.width,
-          rect.right + borderSide.width,
-          clipBottom,
-        ),
-      );
-    }
-
+    final outerRRect = borderRadius.resolve(textDirection).toRRect(rect);
     if (glowExtent > 0.0 && glowColor.a > 0.0) {
-      final clampedGlowExtent = math.min(glowExtent, rect.height);
       final glowRect = Rect.fromLTRB(
         rect.left,
-        rect.bottom - clampedGlowExtent,
+        rect.bottom - math.min(glowExtent, rect.height),
         rect.right,
         rect.bottom,
       );
-      // A vertical glow over [rect]; [alphas] are scaled by 1 - connection.
-      Paint glowPaint(Rect rect, List<double> alphas, List<double> stops) =>
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                for (final alpha in alphas)
-                  glowColor.withValues(alpha: alpha * (1 - connection)),
-              ],
-              stops: stops,
-            ).createShader(rect)
-            ..style = PaintingStyle.fill;
-
       canvas.save();
-      final innerRRect = outerRRect.deflate(borderSide.width);
-      canvas.clipRRect(innerRRect);
+      canvas.clipRRect(outerRRect.deflate(borderSide.width));
       canvas.drawRect(
         glowRect,
-        glowPaint(glowRect, const [0.0, 0.15, 0.25], const [0.0, 0.6, 1.0]),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              for (final alpha in const [0.0, 0.15, 0.25])
+                glowColor.withValues(alpha: alpha),
+            ],
+            stops: const [0.0, 0.6, 1.0],
+          ).createShader(glowRect),
       );
-
-      if (showTopBorder) {
-        final topGlowRect = Rect.fromLTRB(
-          rect.left,
-          rect.top,
-          rect.right,
-          rect.top + clampedGlowExtent,
-        );
-        canvas.drawRect(
-          topGlowRect,
-          glowPaint(
-            topGlowRect,
-            const [0.25, 0.15, 0.0],
-            const [0.0, 0.45, 1.0],
-          ),
-        );
-
-        // Inset rounded contours keep the connected glow rounded as well.
-        if (connection > 0) {
-          final depth = math.min(
-            clampedGlowExtent,
-            math.min(innerRRect.width, innerRRect.height) / 2,
-          );
-          for (var inset = 0.5; inset < depth; inset += 1) {
-            final alpha = 0.25 * connection * math.pow(1 - inset / depth, 2);
-            Radius contour(Radius r) => Radius.elliptical(
-              math.max(r.x - inset * 0.35, r.x * 0.5),
-              math.max(r.y - inset * 0.35, r.y * 0.5),
-            );
-            canvas.drawRRect(
-              RRect.fromRectAndCorners(
-                innerRRect.outerRect.deflate(inset),
-                topLeft: contour(innerRRect.tlRadius),
-                topRight: contour(innerRRect.trRadius),
-                bottomLeft: contour(innerRRect.blRadius),
-                bottomRight: contour(innerRRect.brRadius),
-              ),
-              Paint()
-                ..color = glowColor.withValues(alpha: alpha)
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.0,
-            );
-          }
-        }
-      }
-
       canvas.restore();
     }
-
+    final edge = math.max(wrapExtent, borderSide.width) + borderSide.width;
     canvas.save();
-    canvas.clipPath(edgeClip);
-    canvas.drawRRect(strokeRRect, borderPaint);
+    canvas.clipRect(
+      Rect.fromLTRB(
+        rect.left - borderSide.width,
+        rect.bottom - edge,
+        rect.right + borderSide.width,
+        rect.bottom + borderSide.width,
+      ),
+    );
+    canvas.drawRRect(
+      outerRRect.deflate(borderSide.width / 2),
+      borderSide.toPaint(),
+    );
     canvas.restore();
+  }
+}
+
+/// A box's whole outline, with [glowColor] glowing inward from every side.
+/// Between states the color, width and glow blend; nothing grows.
+class FramedInputBorder extends OutlineInputBorder {
+  const FramedInputBorder({
+    super.borderSide = const BorderSide(),
+    super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
+    required this.glowColor,
+  });
+
+  final Color glowColor;
+
+  static const _glowDepth = 18.0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FramedInputBorder &&
+      other.borderSide == borderSide &&
+      other.borderRadius == borderRadius &&
+      other.glowColor == glowColor;
+
+  @override
+  int get hashCode => Object.hash(borderSide, borderRadius, glowColor);
+
+  @override
+  FramedInputBorder copyWith({
+    BorderSide? borderSide,
+    BorderRadius? borderRadius,
+    double? gapPadding,
+  }) => FramedInputBorder(
+    borderSide: borderSide ?? this.borderSide,
+    borderRadius: borderRadius ?? this.borderRadius,
+    glowColor: glowColor,
+  );
+
+  @override
+  FramedInputBorder scale(double t) => FramedInputBorder(
+    borderSide: borderSide.scale(t),
+    borderRadius: borderRadius * t,
+    glowColor: glowColor.withValues(alpha: glowColor.a * t),
+  );
+
+  static FramedInputBorder _lerp(
+    FramedInputBorder a,
+    FramedInputBorder b,
+    double t,
+  ) => FramedInputBorder(
+    borderSide: BorderSide.lerp(a.borderSide, b.borderSide, t),
+    borderRadius: BorderRadius.lerp(a.borderRadius, b.borderRadius, t)!,
+    glowColor: Color.lerp(a.glowColor, b.glowColor, t)!,
+  );
+
+  @override
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) =>
+      a is FramedInputBorder ? _lerp(a, this, t) : super.lerpFrom(a, t);
+
+  @override
+  ShapeBorder? lerpTo(ShapeBorder? b, double t) =>
+      b is FramedInputBorder ? _lerp(this, b, t) : super.lerpTo(b, t);
+
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    final outerRRect = borderRadius.resolve(textDirection).toRRect(rect);
+    // The inward glow: rounded contours fading in from every side.
+    if (glowColor.a > 0) {
+      final inner = outerRRect.deflate(borderSide.width);
+      final depth = math.min(
+        _glowDepth,
+        math.min(inner.width, inner.height) / 2,
+      );
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      for (var inset = 0.5; inset < depth; inset += 1) {
+        Radius contour(Radius r) => Radius.elliptical(
+          math.max(r.x - inset * 0.35, r.x * 0.5),
+          math.max(r.y - inset * 0.35, r.y * 0.5),
+        );
+        paint.color = glowColor.withValues(
+          alpha: glowColor.a * 0.75 * math.pow(1 - inset / depth, 2),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndCorners(
+            inner.outerRect.deflate(inset),
+            topLeft: contour(inner.tlRadius),
+            topRight: contour(inner.trRadius),
+            bottomLeft: contour(inner.blRadius),
+            bottomRight: contour(inner.brRadius),
+          ),
+          paint,
+        );
+      }
+    }
+    canvas.drawRRect(
+      outerRRect.deflate(borderSide.width / 2),
+      borderSide.toPaint(),
+    );
   }
 }
 
@@ -925,7 +954,6 @@ class AppNavigationButton extends StatefulWidget {
     this.hasNotification = false,
     this.tint,
     this.trailing,
-    this.growWhenSelected = true,
   });
 
   final AppThemeData theme;
@@ -964,10 +992,6 @@ class AppNavigationButton extends StatefulWidget {
   /// as a menu chevron.
   final Widget? trailing;
 
-  /// False keeps a selected button's icon at its size, growing only on
-  /// hover, for buttons that stay lit.
-  final bool growWhenSelected;
-
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
 }
@@ -988,14 +1012,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     reverseDuration: const Duration(milliseconds: 100),
     value: widget.isSelected ? 1.0 : 0.0,
   );
-  // Eases the selected icon size in and out as [growWhenSelected] changes,
-  // such as when a lit menu button's menu closes away from the pointer.
-  late final AnimationController _growController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 100),
-    reverseDuration: const Duration(milliseconds: 100),
-    value: widget.growWhenSelected ? 1.0 : 0.0,
-  );
   late final AnimationController _labelVisibilityController =
       AnimationController(
         vsync: this,
@@ -1010,11 +1026,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       widget.isSelected
           ? _selectionController.forward()
           : _selectionController.reverse();
-    }
-    if (oldWidget.growWhenSelected != widget.growWhenSelected) {
-      widget.growWhenSelected
-          ? _growController.forward()
-          : _growController.reverse();
     }
     if (oldWidget.isEnabled && !widget.isEnabled) _hoverController.reverse();
     if (oldWidget.labelFadeDuration != widget.labelFadeDuration) {
@@ -1036,7 +1047,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   void dispose() {
     _hoverController.dispose();
     _selectionController.dispose();
-    _growController.dispose();
     _labelVisibilityController.dispose();
     super.dispose();
   }
@@ -1148,7 +1158,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
       animation: Listenable.merge([
         _hoverController,
         _selectionController,
-        _growController,
         _labelVisibilityController,
       ]),
       builder: (context, child) {
@@ -1187,9 +1196,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
           color: _foreground(widget.theme.textPrimary, selectionT),
         );
         final iconScale = widget.isEnabled
-            ? 1 +
-                  math.max(selectionT * _growController.value, hoverT) *
-                      _hoverIconBoost
+            ? 1 + math.max(selectionT, hoverT) * _hoverIconBoost
             : 1.0;
 
         return MouseRegion(

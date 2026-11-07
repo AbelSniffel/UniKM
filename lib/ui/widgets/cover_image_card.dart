@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/constants/app_constants.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';
 import 'dialog_helpers.dart';
@@ -30,6 +31,7 @@ class CoverImageCard extends StatefulWidget {
     this.isUsed = false,
     this.hasDeadline = false,
     this.deadlineDate,
+    this.showPath = true,
   });
 
   final AppThemeData theme;
@@ -40,6 +42,10 @@ class CoverImageCard extends StatefulWidget {
   final bool isUsed;
   final bool hasDeadline;
   final DateTime? deadlineDate;
+
+  /// Shows the path under the image. Without it, hovering the image names
+  /// the path and offers to clear it.
+  final bool showPath;
 
   static const preferredWidth = 320.0;
 
@@ -161,37 +167,40 @@ class _CoverImageCardState extends State<CoverImageCard> {
                           aspectRatio: 2,
                           child: _buildPreview(theme, image, hovered),
                         ),
-                      Tooltip(
-                        message: label,
-                        child: InkWell(
-                          onTap: _editPath,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Text(
-                                    label,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 12,
+                      if (widget.showPath)
+                        Tooltip(
+                          message: label,
+                          child: InkWell(
+                            onTap: _editPath,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Text(
+                                      label,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              if (path.isNotEmpty)
-                                IconButton(
-                                  tooltip: 'Clear selection',
-                                  style: theme.compactIconButtonStyle,
-                                  onPressed: _editing ? null : _clearSelection,
-                                  icon: const Icon(Icons.close, size: 18),
-                                ),
-                            ],
+                                if (path.isNotEmpty)
+                                  IconButton(
+                                    tooltip: 'Clear selection',
+                                    style: theme.compactIconButtonStyle,
+                                    onPressed: _editing
+                                        ? null
+                                        : _clearSelection,
+                                    icon: const Icon(Icons.close, size: 18),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -208,11 +217,18 @@ class _CoverImageCardState extends State<CoverImageCard> {
     children: [
       image,
       if (widget.isUsed)
-        LayoutBuilder(
-          builder: (context, constraints) => UsedOverlay(
+        // Past the clipped edge by a pixel, so no sliver of the image shows
+        // around it; a fixed pattern size keeps the watermark still while
+        // the cover resizes. Both as on the grid cards.
+        Positioned(
+          left: -1,
+          top: -1,
+          right: -1,
+          bottom: -1,
+          child: UsedOverlay(
             key: const ValueKey('cover-used-overlay'),
             theme: theme,
-            patternSize: constraints.biggest,
+            patternSize: const Size(kGridCardWidth, kGridCardHeight),
             gridView: true,
           ),
         ),
