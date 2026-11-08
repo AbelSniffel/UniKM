@@ -6,6 +6,7 @@ import '../../../providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_card_inset.dart';
 import '../../widgets/settings_card_indicator.dart';
 import '../../widgets/settings_card_layout.dart';
@@ -53,10 +54,14 @@ class SettingsControlWrap extends StatelessWidget {
 }
 
 class SettingsChoice<T> {
-  const SettingsChoice(this.value, this.label);
+  const SettingsChoice(this.value, this.label, {this.icon});
 
   final T value;
   final String label;
+
+  /// What a [SettingsButtonGroupCard] button shows; the label becomes its
+  /// tooltip.
+  final Widget? icon;
 }
 
 class SettingsToggleCard extends ConsumerWidget {
@@ -103,8 +108,7 @@ class SettingsToggleCard extends ConsumerWidget {
         description: description,
         icon: icon,
         active: value,
-        isToggle: true,
-        indicatorStyle: style,
+        toggleIndicator: style,
         enabled: onChanged != null,
         onTap: onChanged == null ? null : () => onChanged!(!value),
         trailing: style != SettingsCardIndicatorStyle.switchControl
@@ -112,7 +116,6 @@ class SettingsToggleCard extends ConsumerWidget {
             : ExcludeSemantics(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
                   // Switch animations can repaint without redrawing the card shading.
                   child: RepaintBoundary(
                     child: AppToggleSwitch(
@@ -243,26 +246,18 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
         .where((choice) => choice.value == widget.value)
         .firstOrNull;
     final selectedLabel = selected?.label ?? widget.value.toString();
-    final selectedChoice = Align(
-      widthFactor: 1,
-      heightFactor: 1,
-      alignment: Alignment.centerRight,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              selectedLabel,
-              style: TextStyle(
-                color: theme.accent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 3),
-            Icon(Icons.arrow_drop_down, color: theme.textSecondary),
-          ],
-        ),
+    final selectedChoice = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            selectedLabel,
+            style: TextStyle(color: theme.accent, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 3),
+          Icon(Icons.arrow_drop_down, color: theme.textSecondary),
+        ],
       ),
     );
     return AppMenuAnchor(
@@ -300,6 +295,126 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
   }
 }
 
+/// A card with its choices as a row of buttons, in the navigation panel's
+/// button group like settings headers' actions, the selected one highlighted.
+/// Only the buttons take taps, so the card itself never lights up.
+class SettingsButtonGroupCard<T> extends StatelessWidget {
+  const SettingsButtonGroupCard({
+    super.key,
+    required this.theme,
+    required this.label,
+    required this.value,
+    required this.choices,
+    required this.onChanged,
+    this.description,
+    this.icon,
+    this.buttonBuilder,
+  });
+
+  final AppThemeData theme;
+  final String label;
+  final String? description;
+
+  /// Shown in a tinted square before the label.
+  final IconData? icon;
+
+  final T value;
+
+  /// One button each, showing its icon.
+  final List<SettingsChoice<T>> choices;
+  final ValueChanged<T>? onChanged;
+
+  /// Draws a choice's own control in place of its button, given whether it
+  /// is selected and what picks it (null while the card is disabled).
+  final Widget Function(
+    SettingsChoice<T> choice,
+    bool selected,
+    VoidCallback? choose,
+  )?
+  buttonBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final buttons = [for (final choice in choices) _button(choice)];
+    return Semantics(
+      container: true,
+      enabled: onChanged != null,
+      child: _SettingsControlCard(
+        theme: theme,
+        label: label,
+        description: description,
+        icon: icon,
+        active: choices.any((choice) => choice.value == value),
+        enabled: onChanged != null,
+        fitTrailingBesideLabel: true,
+        // Button animations can repaint without redrawing the card.
+        trailing: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: RepaintBoundary(
+            // Settings header actions' button group, or the choices' own
+            // controls side by side.
+            child: buttonBuilder == null
+                ? NavButtonGroup(
+                    theme: theme,
+                    isHorizontal: true,
+                    children: buttons,
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: buttons,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _button(SettingsChoice<T> choice) {
+    final selected = choice.value == value;
+    final choose = onChanged == null
+        ? null
+        : () {
+            if (!selected) onChanged!(choice.value);
+          };
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: onChanged != null,
+      inMutuallyExclusiveGroup: true,
+      selected: selected,
+      label: choice.label,
+      excludeSemantics: true,
+      onTap: choose,
+      child: buttonBuilder != null
+          ? Tooltip(
+              message: choice.label,
+              child: buttonBuilder!(choice, selected, choose),
+            )
+          // The navigation panel's selectable button, as settings headers
+          // use it.
+          : SizedBox(
+              height: 28,
+              child: AppNavigationButton(
+                theme: theme,
+                isSelected: selected,
+                isEnabled: choose != null,
+                isHorizontal: true,
+                onTap: choose,
+                tooltipMessage: choice.label,
+                iconBuilder: (context, color, size) => IconTheme.merge(
+                  data: IconThemeData(color: color, size: size),
+                  child: choice.icon ?? const SizedBox.shrink(),
+                ),
+                iconSize: 18,
+                padding: const EdgeInsets.all(5),
+                minWidth: 28,
+              ),
+            ),
+    );
+  }
+}
+
 class _SettingsControlCard extends StatefulWidget {
   const _SettingsControlCard({
     required this.theme,
@@ -310,8 +425,8 @@ class _SettingsControlCard extends StatefulWidget {
     required this.trailing,
     this.icon,
     this.onTap,
-    this.isToggle = false,
-    this.indicatorStyle = SettingsCardIndicatorStyle.switchControl,
+    this.toggleIndicator,
+    this.fitTrailingBesideLabel = false,
   });
 
   final AppThemeData theme;
@@ -321,9 +436,18 @@ class _SettingsControlCard extends StatefulWidget {
   final bool enabled;
   final Widget trailing;
   final IconData? icon;
-  final bool isToggle;
-  final SettingsCardIndicatorStyle indicatorStyle;
+
+  /// A toggle card's indicator; the other cards leave it null and rest flat
+  /// instead of raised while off.
+  final SettingsCardIndicatorStyle? toggleIndicator;
+
+  /// Without it, the card takes no taps or hover itself and leaves them to
+  /// its controls.
   final VoidCallback? onTap;
+
+  /// Shrinks a trailing control that scales down into the room beside the
+  /// label's one line, down to a third of the row.
+  final bool fitTrailingBesideLabel;
 
   @override
   State<_SettingsControlCard> createState() => _SettingsControlCardState();
@@ -338,10 +462,12 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final radius = BorderRadius.circular(theme.cornerRadius);
+    final isToggle = widget.toggleIndicator != null;
     final miniDot =
-        widget.isToggle &&
-        widget.indicatorStyle == SettingsCardIndicatorStyle.miniDot;
-    final highlighted = widget.enabled && (_hovered || _pressed || _focused);
+        widget.toggleIndicator == SettingsCardIndicatorStyle.miniDot;
+    // Only a card that takes taps lights up; a disabled one takes none.
+    final highlighted =
+        widget.onTap != null && (_hovered || _pressed || _focused);
     // A settings search lights the card whose label it matches.
     final query = SettingsSearchScope.queryOf(context);
     final matched =
@@ -356,12 +482,23 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
       fontSize: 12,
     );
     // Built outside the layout callback, so a width change does not rebuild it.
+    final labelStyle = TextStyle(
+      color: theme.textPrimary,
+      fontWeight: FontWeight.w600,
+    );
+    // The label's one line with the icon square and both gaps, for a
+    // trailing control that fits beside them.
+    final besideLabel = widget.fitTrailingBesideLabel
+        ? _lineWidth(context, widget.label, labelStyle) +
+              (icon == null ? 0 : 38) +
+              12
+        : null;
     final label = Expanded(
       child: Text.rich(
         searchHighlightSpan(
           widget.label,
           matched ? query : '',
-          TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w600),
+          labelStyle,
           searchMarkStyle(theme.accent),
         ),
       ),
@@ -401,18 +538,14 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
       ),
       child: InkWell(
         borderRadius: radius,
-        mouseCursor: widget.enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.forbidden,
-        onHover: widget.enabled
-            ? (value) => setState(() => _hovered = value)
-            : null,
-        onHighlightChanged: widget.enabled
-            ? (value) => setState(() => _pressed = value)
-            : null,
-        onFocusChange: widget.enabled
-            ? (value) => setState(() => _focused = value)
-            : null,
+        mouseCursor: !widget.enabled
+            ? SystemMouseCursors.forbidden
+            : widget.onTap == null
+            ? MouseCursor.defer
+            : SystemMouseCursors.click,
+        onHover: (value) => setState(() => _hovered = value),
+        onHighlightChanged: (value) => setState(() => _pressed = value),
+        onFocusChange: (value) => setState(() => _focused = value),
         onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -427,26 +560,33 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 LayoutBuilder(
-                  builder: (context, constraints) => ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: widget.isToggle && description == null
-                          ? kElementHeight
-                          : 0,
-                    ),
-                    child: Row(
-                      children: [
-                        ?iconSquare,
-                        label,
-                        const SizedBox(width: 12),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: constraints.maxWidth * 0.65,
+                  builder: (context, constraints) {
+                    final row = constraints.maxWidth;
+                    // A third of the row at least beside a long label.
+                    final trailingWidth = besideLabel == null
+                        ? row * 0.65
+                        : (row - besideLabel).clamp(row / 3, row * 0.65);
+                    return ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: isToggle && description == null
+                            ? kElementHeight
+                            : 0,
+                      ),
+                      child: Row(
+                        children: [
+                          ?iconSquare,
+                          label,
+                          const SizedBox(width: 12),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: trailingWidth,
+                            ),
+                            child: widget.trailing,
                           ),
-                          child: widget.trailing,
-                        ),
-                      ],
-                    ),
-                  ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 if (description != null)
                   Text(description, style: descriptionStyle),
@@ -459,7 +599,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     return RepaintBoundary(
       child: SettingsCardInset(
         active: widget.active && widget.enabled,
-        raisedWhenInactive: widget.isToggle && widget.enabled,
+        raisedWhenInactive: isToggle && widget.enabled,
         surfaceColor: theme.background,
         borderRadius: theme.cornerRadius,
         overlay: miniDot
@@ -478,4 +618,20 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
       ),
     );
   }
+}
+
+/// [text]'s width on one line in [style], as a [Text] here would draw it.
+double _lineWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: DefaultTextStyle.of(context).style.merge(style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width.ceilToDouble();
+  painter.dispose();
+  return width;
 }

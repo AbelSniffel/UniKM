@@ -8,7 +8,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_slider_theme.dart';
 import '../../../core/utils/color_utils.dart';
@@ -17,7 +16,6 @@ import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/theme_icon_menu.dart';
 import '../../widgets/tinted_tiles.dart';
-import 'settings_control_cards.dart';
 import '../../../core/constants/app_constants.dart';
 
 // ---------------------------------------------------------------------------
@@ -48,7 +46,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Hex color of each slot.
   final _hex = <_ColorSlot, String>{};
   late String _workingThemeId;
-  late NavPanelOverlayStyle _navPanelOverlayStyle;
   late double _cornerRadius;
   int? _selectedIconCodePoint;
   bool _isEditing = false;
@@ -89,7 +86,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _hex['background'] = colorToHex(source.baseBackground);
     _hex['secondary'] = colorToHex(source.baseSecondary);
     _hex['accent'] = colorToHex(source.baseAccent);
-    _navPanelOverlayStyle = source.navPanelOverlayStyle;
     _cornerRadius = source.cornerRadius.clamp(
       _minCornerRadius,
       _maxCornerRadius,
@@ -187,7 +183,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     baseSecondary: parseHexColor(_hex['secondary']!),
     baseAccent: parseHexColor(_hex['accent']!),
     cornerRadius: _cornerRadius,
-    navPanelOverlayStyle: _navPanelOverlayStyle,
     iconData: _selectedIconCodePoint != null
         ? themeIconFromCodePoint(_selectedIconCodePoint!)
         : null,
@@ -285,16 +280,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 _section(
                   previewTheme,
                   'Style',
-                  _panel(
-                    previewTheme,
-                    Column(
-                      spacing: 8,
-                      children: [
-                        _buildCornerRadiusSlider(previewTheme),
-                        _buildOverlayStylePicker(previewTheme),
-                      ],
-                    ),
-                  ),
+                  _panel(previewTheme, _buildCornerRadiusSlider(previewTheme)),
                 ),
               ],
             ),
@@ -753,22 +739,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // ---------------------------------------------------------------------------
   // Style
   // ---------------------------------------------------------------------------
-
-  Widget _buildOverlayStylePicker(AppThemeData theme) =>
-      SettingsChoiceCard<NavPanelOverlayStyle>(
-        theme: theme,
-        label: 'Nav Overlay',
-        icon: Icons.texture,
-        value: _navPanelOverlayStyle,
-        choices: [
-          for (final style in NavPanelOverlayStyle.values)
-            SettingsChoice(style, style.displayName),
-        ],
-        onChanged: (style) {
-          setState(() => _navPanelOverlayStyle = style);
-          _updatePreview();
-        },
-      );
 
   Widget _buildCornerRadiusSlider(AppThemeData theme) {
     final roundedRadius = _cornerRadius.roundToDouble();

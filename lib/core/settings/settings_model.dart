@@ -58,11 +58,11 @@ enum NavBarAppearance {
 /// Background pattern styles, drawn behind panels and pages.
 enum NavPanelOverlayStyle {
   none('None'),
-  gradient('Gradient', usesAngle: true),
   diagonalStripes('Lines', usesAngle: true),
   crosshatch('Crosshatch'),
-  dots('Dots', usesAngle: true),
-  cubes('Cubes');
+  stars('Stars'),
+  halloween('Halloween'),
+  christmas('Christmas');
 
   const NavPanelOverlayStyle(this.displayName, {this.usesAngle = false});
 
@@ -224,7 +224,10 @@ class SettingsKeys {
   static const String navPanelOverlayStyle = 'nav_panel_overlay_style';
   // How strongly the background pattern shows, and whether pages show it.
   static const String patternStrength = 'pattern_strength';
-  static const String pagePattern = 'page_pattern';
+  // Shows Halloween in October and Christmas in December.
+  static const String seasonalPattern = 'seasonal_pattern';
+  // Dev Tools: lists the seasonal patterns among the pattern choices.
+  static const String showSeasonalPatterns = 'show_seasonal_patterns';
   static const String patternAngle = 'pattern_angle';
   static const String patternWave = 'pattern_wave';
 
@@ -343,9 +346,9 @@ class DefaultSettings {
   static const NavPanelOverlayStyle navPanelOverlayStyle =
       NavPanelOverlayStyle.none;
   static const double patternStrength = 1;
-  static const bool pagePattern = true;
-  // Degrees clockwise: the stripes' slant from vertical, and the direction
-  // the gradient runs.
+  static const bool seasonalPattern = true;
+  static const bool showSeasonalPatterns = false;
+  // Degrees clockwise: the Lines' slant from vertical.
   static const int patternAngle = 30;
   // How the Lines style sways: 0 straight, 0.5 smooth waves, 1 zigzag.
   static const double patternWave = 0;
@@ -435,7 +438,8 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
   SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
   SettingsKeys.patternStrength: DefaultSettings.patternStrength,
-  SettingsKeys.pagePattern: DefaultSettings.pagePattern,
+  SettingsKeys.seasonalPattern: DefaultSettings.seasonalPattern,
+  SettingsKeys.showSeasonalPatterns: DefaultSettings.showSeasonalPatterns,
   SettingsKeys.patternAngle: DefaultSettings.patternAngle,
   SettingsKeys.patternWave: DefaultSettings.patternWave,
   SettingsKeys.viewedNewGameIds: const <String>[],

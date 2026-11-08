@@ -20,6 +20,7 @@ import '../../widgets/app_action_button.dart';
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/device_sync_icon.dart';
+import '../../widgets/background_pattern.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/platform_menu_button.dart';
 import '../../widgets/popup_menu_helpers.dart';
@@ -180,78 +181,87 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     // panel scrolls below the toolbar, which stays put, so the library always
     // keeps room on short or large-text screens.
     final maxHeight = MediaQuery.sizeOf(context).height * 0.55;
-    // Sits on the page background like the settings page header, without a
-    // raised surface or shadow, and lets the page pattern show through; a
-    // bottom border separates it from the library.
-    return Material(
-      key: const ValueKey('home-header-surface'),
-      color: ref.watch(pagePatternProvider)
-          ? Colors.transparent
-          : theme.background,
-      // Keep the inherited text style, as the raised bar did.
-      textStyle: DefaultTextStyle.of(context).style,
-      animationDuration: Duration.zero,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: theme.border)),
-        ),
-        child: Padding(
-          // 6px of the side and bottom insets sit inside the toolbar and the
-          // scrolling panel, so groupbox shadows are never clipped.
-          padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: math.max(0, maxHeight - 14)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => _buildToolbar(
-                      theme,
-                      filters,
-                      platformFilter: platformFilter,
-                      showSync: showSync,
-                      width: constraints.maxWidth,
-                    ),
-                  ),
-                ),
-                Flexible(
-                  child: AppScrollbar(
-                    controller: _filtersScrollController,
-                    child: SingleChildScrollView(
-                      controller: _filtersScrollController,
-                      primary: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizeTransition(
-                            sizeFactor: _filterPanelController,
-                            alignment: Alignment.topCenter,
-                            child: FadeTransition(
-                              opacity: _filterPanelController,
-                              child: ValueListenableBuilder(
-                                valueListenable: _showFiltersPanel,
-                                builder: (context, show, panel) =>
-                                    IgnorePointer(
-                                      ignoring: !show,
-                                      child: panel,
-                                    ),
-                                child: _buildFiltersPanel(
-                                  theme,
-                                  filters,
-                                  platformFilter,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+    // Styled like the settings section list: the navigation panel's color
+    // and pattern, a little stronger than the page's, with a bottom border
+    // and a soft shadow over the library.
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: theme.border)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.border.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: PanelPatternSurface(
+        strength: PanelPatternSurface.sidePanelStrength,
+        child: Material(
+          key: const ValueKey('home-header-surface'),
+          type: MaterialType.transparency,
+          // Keep the inherited text style, as the raised bar did.
+          textStyle: DefaultTextStyle.of(context).style,
+          child: Padding(
+            // 6px of the side and bottom insets sit inside the toolbar and the
+            // scrolling panel, so groupbox shadows are never clipped.
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: math.max(0, maxHeight - 14),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => _buildToolbar(
+                        theme,
+                        filters,
+                        platformFilter: platformFilter,
+                        showSync: showSync,
+                        width: constraints.maxWidth,
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Flexible(
+                    child: AppScrollbar(
+                      controller: _filtersScrollController,
+                      child: SingleChildScrollView(
+                        controller: _filtersScrollController,
+                        primary: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizeTransition(
+                              sizeFactor: _filterPanelController,
+                              alignment: Alignment.topCenter,
+                              child: FadeTransition(
+                                opacity: _filterPanelController,
+                                child: ValueListenableBuilder(
+                                  valueListenable: _showFiltersPanel,
+                                  builder: (context, show, panel) =>
+                                      IgnorePointer(
+                                        ignoring: !show,
+                                        child: panel,
+                                      ),
+                                  child: _buildFiltersPanel(
+                                    theme,
+                                    filters,
+                                    platformFilter,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

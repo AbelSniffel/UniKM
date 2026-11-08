@@ -13,7 +13,7 @@ import '../../core/utils/steam_tag_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
-import '../widgets/section_groupbox.dart';
+import '../widgets/background_pattern.dart';
 import '../widgets/tinted_card.dart';
 import '../widgets/tinted_tiles.dart';
 import '../widgets/platform_menu_button.dart';
@@ -594,18 +594,9 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
             ),
           ),
         ),
-        Container(
+        _ActionRibbon(
           key: const ValueKey('single-entry-footer'),
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          // Tinted like the group boxes while the page pattern shows.
-          decoration: BoxDecoration(
-            color: SectionGroupBox.background(
-              theme,
-              tinted: ref.watch(pagePatternProvider),
-            ),
-            border: Border(top: BorderSide(color: theme.border)),
-          ),
+          theme: theme,
           child: Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -972,17 +963,9 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
           ),
         ),
         // Pinned Import buttons at bottom
-        Container(
+        _ActionRibbon(
           key: const ValueKey('batch-footer'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          decoration: BoxDecoration(
-            color: SectionGroupBox.background(
-              theme,
-              tinted: ref.watch(pagePatternProvider),
-            ),
-            border: Border(top: BorderSide(color: theme.border)),
-          ),
-          width: double.infinity,
+          theme: theme,
           child: Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -1009,4 +992,36 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
       ],
     );
   }
+}
+
+/// A pinned action bar styled like the settings section list: the
+/// navigation panel's color and pattern, a little stronger than the page's,
+/// with a top border and a soft shadow.
+class _ActionRibbon extends StatelessWidget {
+  const _ActionRibbon({super.key, required this.theme, required this.child});
+
+  final AppThemeData theme;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: theme.border)),
+      boxShadow: [
+        BoxShadow(
+          color: theme.border.withValues(alpha: 0.06),
+          blurRadius: 8,
+          offset: const Offset(0, -4),
+        ),
+      ],
+    ),
+    child: PanelPatternSurface(
+      strength: PanelPatternSurface.sidePanelStrength,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        child: child,
+      ),
+    ),
+  );
 }

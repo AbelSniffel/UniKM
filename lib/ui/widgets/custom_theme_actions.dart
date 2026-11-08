@@ -15,7 +15,7 @@ Future<void> deleteCustomThemeWithConfirmation(
   if (ref.read(builtInThemeIdsProvider).contains(id)) return;
   // The initiating menu/header may unmount while the dialog is displayed.
   final notifier = ref.read(themeProvider.notifier);
-  final theme = ref.read(effectiveThemeProvider);
+  final theme = ref.read(themeProvider);
   final confirmed = await showConfirmDialog(
     context: context,
     theme: theme,

@@ -50,7 +50,7 @@ class _NavigationThemeMenuButtonState
   void _openEditor({AppThemeData? existing}) {
     // Capture the theme before closing the picker. Responsive navigation can
     // replace this button while the editor's route is still open.
-    final theme = ref.read(effectiveThemeProvider);
+    final theme = ref.read(themeProvider);
     _controller.close();
     showAppDialog<void>(
       context: context,
@@ -194,10 +194,9 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
   @override
   Widget build(BuildContext context) {
     ref.watch(customThemesJsonProvider);
-    final theme = ref.watch(effectiveThemeProvider);
+    final theme = ref.watch(themeProvider);
     final current = ref.watch(themeProvider);
     final builtInIds = ref.watch(builtInThemeIdsProvider);
-    final builtInOverlay = ref.watch(navPanelOverlayStyleSettingProvider);
     final selectedTab = ref.watch(navigationThemeMenuTabProvider);
     final custom = ref
         .read(themeProvider.notifier)
@@ -343,12 +342,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                                                 ),
                                                 height: null,
                                                 data: data,
-                                                preview: builtIn
-                                                    ? data.copyWith(
-                                                        navPanelOverlayStyle:
-                                                            builtInOverlay,
-                                                      )
-                                                    : data,
                                                 selected: data.id == current.id,
                                                 theme: theme,
                                                 onTap: () =>

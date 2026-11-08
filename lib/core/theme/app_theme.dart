@@ -14,7 +14,6 @@ import 'app_slider_theme.dart';
 import 'button_depth.dart';
 import 'button_notification_pulse.dart';
 import 'package:flutter/foundation.dart';
-import '../settings/settings_model.dart';
 import '../utils/color_utils.dart';
 
 /// App theme configuration with 3 base colors
@@ -32,7 +31,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     this.inputPaddingVertical = 10.0,
     this.inputPaddingHorizontal = 12.0,
     this.progressIndicatorStrokeWidth = 3.0,
-    this.navPanelOverlayStyle = NavPanelOverlayStyle.none,
   });
 
   final String id;
@@ -47,7 +45,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   final double inputPaddingHorizontal;
   final double inputPaddingVertical;
   final double progressIndicatorStrokeWidth;
-  final NavPanelOverlayStyle navPanelOverlayStyle;
 
   /// Compact info-style actions, with 3px of padding around their icons.
   /// Leave width flexible so text actions can also share this style.
@@ -111,11 +108,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       cornerRadius: (json['corner_radius'] as num?)?.toDouble() ?? 8.0,
       useThemeToggleRadius: (json['use_theme_toggle_radius'] as bool?) ?? false,
       scrollbarRadius: (json['scrollbar_radius'] as num?)?.toDouble() ?? 8.0,
-      navPanelOverlayStyle: NavPanelOverlayStyle.values.firstWhere(
-        (style) =>
-            style.name == (json['nav_panel_overlay_style'] as String? ?? ''),
-        orElse: () => NavPanelOverlayStyle.none,
-      ),
     );
   }
 
@@ -130,7 +122,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     'corner_radius': cornerRadius,
     'use_theme_toggle_radius': useThemeToggleRadius,
     'scrollbar_radius': scrollbarRadius,
-    'nav_panel_overlay_style': navPanelOverlayStyle.name,
   };
 
   /// Copy with new values
@@ -149,7 +140,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     double? inputPaddingHorizontal,
     double? inputPaddingVertical,
     double? progressIndicatorStrokeWidth,
-    NavPanelOverlayStyle? navPanelOverlayStyle,
   }) => AppThemeData(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -165,7 +155,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     inputPaddingVertical: inputPaddingVertical ?? this.inputPaddingVertical,
     progressIndicatorStrokeWidth:
         progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
-    navPanelOverlayStyle: navPanelOverlayStyle ?? this.navPanelOverlayStyle,
   );
 
   @override

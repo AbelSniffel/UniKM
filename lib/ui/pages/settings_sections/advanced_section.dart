@@ -12,7 +12,6 @@ import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/dev_window.dart';
 import '../../widgets/section_groupbox.dart';
-import '../../widgets/tinted_tiles.dart';
 import '../../widgets/toggle_switch.dart';
 import 'settings_card_style_section.dart';
 import 'settings_common.dart';
@@ -34,10 +33,7 @@ class AdvancedSection extends ConsumerWidget {
   static const SettingTextSpec toggleStyleSpec = SettingTextSpec(
     label: 'Toggle Style',
     description: 'Choose how toggle switches appear throughout the app',
-  );
-  static const SettingTextSpec cardIndicatorStyleSpec = SettingTextSpec(
-    label: 'Settings card indicator',
-    description: 'Choose the indicator used when interaction cards are enabled',
+    icon: Icons.toggle_on_outlined,
   );
   static SettingsSearchGroup get controlStylesSearchGroup =>
       SettingsSearchGroup(
@@ -47,7 +43,7 @@ class AdvancedSection extends ConsumerWidget {
       );
   static SettingsSearchGroup get cardStylesSearchGroup => SettingsSearchGroup(
     title: 'Settings Card Style',
-    settings: [cardIndicatorStyleSpec],
+    settings: [SettingsCardStyleSection.indicatorStyleSpec],
     extraTexts: [
       for (final style in SettingsCardIndicatorStyle.values) style.displayName,
     ],
@@ -217,31 +213,30 @@ class _ControlStylesSection extends ConsumerWidget {
       searchQuery: searchQuery,
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
+      // One card whose buttons are the styles' own switches, the chosen
+      // one switched on.
+      child: SettingsButtonGroupCard<ToggleStyle>(
+        theme: theme,
+        label: AdvancedSection.toggleStyleSpec.label,
+        icon: AdvancedSection.toggleStyleSpec.icon,
+        description: currentStyle.description,
+        value: currentStyle,
+        choices: [
           for (final style in ToggleStyle.values)
-            TintedOptionTile(
-              key: ValueKey(style),
-              theme: theme,
-              // The style itself, switched on while chosen.
-              indicator: AppToggleSwitch(
-                value: currentStyle == style,
-                onChanged: (_) {},
-                theme: theme,
-                style: style,
-                // The switch alone, without its On/Off word.
-                label: '',
-              ),
-              title: style.displayName,
-              subtitle: style.description,
-              selected: currentStyle == style,
-              onTap: () => ref
-                  .read(settingsProvider.notifier)
-                  .setSetting(SettingsKeys.toggleStyle, style),
-            ),
+            SettingsChoice(style, style.displayName),
         ],
+        onChanged: (style) => ref
+            .read(settingsProvider.notifier)
+            .setSetting(SettingsKeys.toggleStyle, style),
+        buttonBuilder: (choice, selected, choose) => AppToggleSwitch(
+          key: ValueKey(choice.value),
+          value: selected,
+          onChanged: choose == null ? null : (_) => choose(),
+          theme: theme,
+          style: choice.value,
+          // The switch alone, without its On/Off word.
+          label: '',
+        ),
       ),
     );
   }

@@ -18,7 +18,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/custom_theme_actions.dart';
 import '../../widgets/preview_card.dart';
-import '../../widgets/navigation_panel_overlay.dart';
+import '../../widgets/background_pattern.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
@@ -56,10 +56,10 @@ class AppearanceSection extends ConsumerWidget {
   static const SettingTextSpec lineShapeSpec = SettingTextSpec(
     label: 'Line shape',
   );
-  static const SettingTextSpec pagePatternSpec = SettingTextSpec(
-    label: 'Translucent background',
-    description: 'Show the pattern faintly behind pages',
-    icon: Icons.wallpaper,
+  static const SettingTextSpec seasonalPatternSpec = SettingTextSpec(
+    label: 'Automatic Seasonal Backgrounds',
+    description: 'Halloween and Christmas',
+    icon: Icons.celebration_outlined,
   );
   static const SettingsSearchGroup themeSearchGroup = SettingsSearchGroup(
     title: 'Theme',
@@ -86,15 +86,14 @@ class AppearanceSection extends ConsumerWidget {
         settings: [
           backgroundPatternSpec,
           patternStrengthSpec,
-          pagePatternSpec,
+          seasonalPatternSpec,
           patternAngleSpec,
           lineShapeSpec,
         ],
         extraTexts: [
           for (final style in NavPanelOverlayStyle.values) style.displayName,
           'Overlay',
-          'Navigation panel background',
-          'Panel pattern',
+          'Background',
           'Settings section list',
           'Selection ribbon',
           'Direction',
@@ -113,7 +112,6 @@ class AppearanceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(customThemesJsonProvider);
     final current = ref.watch(themeProvider);
-    final builtInOverlayStyle = ref.watch(navPanelOverlayStyleSettingProvider);
     final builtInThemes = AppThemeData.builtInThemes;
     final themeNotifier = ref.read(themeProvider.notifier);
     final allThemes = themeNotifier.getAllThemes();
@@ -202,12 +200,6 @@ class AppearanceSection extends ConsumerWidget {
                                 key: ValueKey(themeData.id),
                                 data: themeData,
                                 theme: theme,
-                                preview: builtInIds.contains(themeData.id)
-                                    ? themeData.copyWith(
-                                        navPanelOverlayStyle:
-                                            builtInOverlayStyle,
-                                      )
-                                    : themeData,
                                 selected: current.id == themeData.id,
                                 onDoubleTap: builtInIds.contains(themeData.id)
                                     ? null
@@ -275,7 +267,7 @@ void _openThemeEditor(
 }) {
   // Capture before opening: resizing may replace the footer while the editor
   // stays open, so its route builder must not read the initiating widget ref.
-  final theme = ref.read(effectiveThemeProvider);
+  final theme = ref.read(themeProvider);
   showAppDialog<void>(
     context: context,
     builder: (_) => ThemeEditorDialog(theme: theme, existingTheme: existing),
@@ -421,33 +413,20 @@ class _BackgroundPatternSectionState
   /// The Line shape steps' names, from straight to zigzag.
   static const _lineShapes = ['Straight', 'Gentle', 'Wavy', 'Sharp', 'Zigzag'];
 
-  /// Built-in themes keep the pattern as a setting; custom themes save it.
-  Future<void> _apply(NavPanelOverlayStyle style) async {
-    if (ref.read(effectiveNavPanelOverlayStyleProvider) == style) return;
-    if (ref.read(currentThemeIsBuiltInProvider)) {
-      await ref
-          .read(settingsProvider.notifier)
-          .setSetting(SettingsKeys.navPanelOverlayStyle, style);
-      return;
-    }
-    await ref
-        .read(themeProvider.notifier)
-        .saveCustomTheme(
-          ref.read(themeProvider).copyWith(navPanelOverlayStyle: style),
-        );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final currentTheme = ref.watch(themeProvider);
-    final effectiveTheme = ref.watch(effectiveThemeProvider);
+    final pattern = ref.watch(backgroundPatternProvider);
+    final saved = ref.watch(savedBackgroundPatternProvider);
+    final seasonal = ref.watch(seasonalPatternProvider);
+    final showSeasonal = ref.watch(showSeasonalPatternsProvider);
     final strength = ref.watch(patternStrengthProvider);
     final angle = ref.watch(patternAngleProvider);
     final wave = ref.watch(patternWaveProvider);
     final shape = _lineShapes[(wave * 4).round()];
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    const pagesSpec = AppearanceSection.pagePatternSpec;
+    const seasonalSpec = AppearanceSection.seasonalPatternSpec;
     final percent = '${(strength * 100).round()}%';
 
     return SectionGroupBox(
@@ -487,7 +466,7 @@ class _BackgroundPatternSectionState
             theme: theme,
             title: AppearanceSection.patternAngleSpec.label,
             value: '$angle°',
-            // Points the way the gradient runs, across the stripes.
+            // Points across the stripes.
             icon: Transform.rotate(
               angle: angle * math.pi / 180,
               child: Icon(
@@ -555,48 +534,55 @@ class _BackgroundPatternSectionState
           PreviewCardWrap(
             children: [
               for (final style in NavPanelOverlayStyle.values)
-                // While a popover highlights some styles, the rest fade back.
-                AnimatedOpacity(
-                  key: ValueKey(style),
-                  opacity: _highlighted.isEmpty || _highlighted.contains(style)
-                      ? 1
-                      : 0.35,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  child: PreviewCard(
-                    name: style.displayName,
-                    theme: theme,
-                    isSelected: effectiveTheme.navPanelOverlayStyle == style,
-                    onTap: () => _apply(style),
-                    backgroundBuilder: (context, _) => ColoredBox(
-                      color: effectiveTheme.navBackground,
-                      child: CustomPaint(
-                        painter: BackgroundPatternPainter(
-                          theme: currentTheme.copyWith(
-                            navPanelOverlayStyle: style,
+                // Seasonal ones only once Dev Tools lists them, or while
+                // still chosen from before.
+                if (showSeasonal ||
+                    style == saved ||
+                    !kSeasonalPatterns.contains(style))
+                  // While a popover highlights some styles, the rest fade back.
+                  AnimatedOpacity(
+                    key: ValueKey(style),
+                    opacity:
+                        _highlighted.isEmpty || _highlighted.contains(style)
+                        ? 1
+                        : 0.35,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                    child: PreviewCard(
+                      name: style.displayName,
+                      theme: theme,
+                      isSelected: saved == style,
+                      onTap: () => settingsNotifier.setSetting(
+                        SettingsKeys.navPanelOverlayStyle,
+                        style,
+                      ),
+                      backgroundBuilder: (context, _) => ColoredBox(
+                        color: currentTheme.navBackground,
+                        child: CustomPaint(
+                          painter: BackgroundPatternPainter(
+                            theme: currentTheme,
+                            style: style,
+                            angle: angle,
+                            wave: wave,
+                            strength: strength,
+                            preview: true,
                           ),
-                          angle: angle,
-                          wave: wave,
-                          strength: strength,
-                          preview: true,
                         ),
                       ),
                     ),
                   ),
-                ),
             ],
           ),
           SettingsToggleCard(
             theme: theme,
-            label: pagesSpec.label,
-            description: pagesSpec.description,
-            icon: pagesSpec.icon,
-            value: ref.watch(pagePatternProvider),
-            // Without a pattern there is nothing to show on pages.
-            onChanged:
-                effectiveTheme.navPanelOverlayStyle == NavPanelOverlayStyle.none
-                ? null
-                : settingsNotifier.setter(SettingsKeys.pagePattern),
+            label: seasonalSpec.label,
+            // Names the pattern standing in for the chosen one.
+            description: seasonal && pattern != saved
+                ? 'Showing ${pattern.displayName} this month'
+                : seasonalSpec.description,
+            icon: seasonalSpec.icon,
+            value: seasonal,
+            onChanged: settingsNotifier.setter(SettingsKeys.seasonalPattern),
           ),
         ],
       ),

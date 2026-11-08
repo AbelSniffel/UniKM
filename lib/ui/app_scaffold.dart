@@ -28,7 +28,7 @@ import 'pages/home_page.dart';
 import 'pages/home_sections/selection_ribbon_host.dart';
 import 'pages/settings_page.dart';
 import 'widgets/navigation_panel.dart' as nav_panel;
-import 'widgets/navigation_panel_overlay.dart';
+import 'widgets/background_pattern.dart';
 import 'widgets/app_page_stack.dart';
 import 'widgets/focus_anchor.dart';
 import 'widgets/dev_window.dart';
@@ -651,31 +651,35 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
               children: [
                 if (_hasDesktopWindowControls) AppTitleBar(theme: theme),
 
-                // Main content with configurable navigation
+                // Main content with configurable navigation. Panels showing
+                // the pattern line it up across this content, below the
+                // title bar.
                 Expanded(
-                  child: DialogGalleryHost(
-                    child: ClipRect(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: AnimatedPadding(
-                              key: const ValueKey('page-navigation-insets'),
-                              duration: navLayoutAnimationDuration,
-                              curve: kNavPanelMotionCurve,
-                              padding: pageInsets,
-                              child: SelectionRibbonHost(
-                                visible: showSelectionRibbon,
-                                atTop: false,
-                                // A fainter copy of the panels' pattern.
-                                child: PanelPatternSurface(
-                                  page: true,
-                                  child: pagesStack,
+                  child: PanelPatternWindow(
+                    child: DialogGalleryHost(
+                      child: ClipRect(
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: AnimatedPadding(
+                                key: const ValueKey('page-navigation-insets'),
+                                duration: navLayoutAnimationDuration,
+                                curve: kNavPanelMotionCurve,
+                                padding: pageInsets,
+                                child: SelectionRibbonHost(
+                                  visible: showSelectionRibbon,
+                                  atTop: false,
+                                  // A fainter copy of the panels' pattern.
+                                  child: PanelPatternSurface(
+                                    page: true,
+                                    child: pagesStack,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          ...NavBarPosition.values.map(buildNavSlot),
-                        ],
+                            ...NavBarPosition.values.map(buildNavSlot),
+                          ],
+                        ),
                       ),
                     ),
                   ),

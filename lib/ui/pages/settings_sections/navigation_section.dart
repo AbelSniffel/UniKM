@@ -31,12 +31,15 @@ class NavigationSection extends ConsumerWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec navPositionSpec = SettingTextSpec(
-    label: 'Position',
+    label: 'Panel Position',
     icon: Icons.view_sidebar_outlined,
   );
   // Horizontal and vertical panels keep separate placements with one label.
   static const SettingTextSpec navButtonArrangementHorizontalSpec =
-      SettingTextSpec(label: 'Buttons', icon: Icons.smart_button_outlined);
+      SettingTextSpec(
+        label: 'Button Placement',
+        icon: Icons.smart_button_outlined,
+      );
   static const navButtonArrangementVerticalSpec =
       navButtonArrangementHorizontalSpec;
   static const SettingTextSpec gradientSwapSpec = SettingTextSpec(
@@ -53,11 +56,15 @@ class NavigationSection extends ConsumerWidget {
     extraTexts: [
       'Layout',
       'Navigation Button Placement',
+      'Navigation Panel Position',
       'Left',
       'Right',
       'Top',
       'Bottom',
       'Split',
+      'Panel',
+      'Position',
+      'Button',
     ],
     info: 'Where the bar sits and where its page buttons go.',
   );
@@ -114,20 +121,28 @@ class NavigationSection extends ConsumerWidget {
           group: navigationSearchGroup,
           titleIcon: Icons.view_sidebar,
           searchQuery: searchQuery,
-          childBuilder: () => SettingsControlWrap(
+          // Each on its own full row: side by side, their buttons crowd
+          // the names on narrow windows.
+          childBuilder: () => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
             children: [
-              SettingsChoiceCard<NavBarPosition>(
+              SettingsButtonGroupCard<NavBarPosition>(
                 theme: theme,
                 label: navPositionSpec.label,
                 icon: navPositionSpec.icon,
                 value: navBarPosition,
                 choices: [
                   for (final position in NavBarPosition.values)
-                    SettingsChoice(position, position.displayName),
+                    SettingsChoice(
+                      position,
+                      position.displayName,
+                      icon: Icon(_arrowTowards(position)),
+                    ),
                 ],
                 onChanged: settingsNotifier.setter(SettingsKeys.navBarPosition),
               ),
-              SettingsChoiceCard<NavButtonArrangement>(
+              SettingsButtonGroupCard<NavButtonArrangement>(
                 theme: theme,
                 label: navButtonArrangementHorizontalSpec.label,
                 icon: navButtonArrangementHorizontalSpec.icon,
@@ -137,6 +152,10 @@ class NavigationSection extends ConsumerWidget {
                     SettingsChoice(
                       arrangement,
                       arrangement.displayName(isHorizontal: isHorizontalPanel),
+                      icon: _arrangementIcon(
+                        arrangement,
+                        isHorizontal: isHorizontalPanel,
+                      ),
                     ),
                 ],
                 onChanged: (value) => settingsNotifier.setSetting(
@@ -162,6 +181,32 @@ class NavigationSection extends ConsumerWidget {
     );
   }
 }
+
+/// An arrow towards [position]'s side of the window.
+IconData _arrowTowards(NavBarPosition position) => switch (position) {
+  NavBarPosition.left => Icons.west_rounded,
+  NavBarPosition.right => Icons.east_rounded,
+  NavBarPosition.top => Icons.north_rounded,
+  NavBarPosition.bottom => Icons.south_rounded,
+};
+
+/// An arrow towards the end the buttons gather at, or arrows out to both ends
+/// when they split, along the panel.
+Widget _arrangementIcon(
+  NavButtonArrangement arrangement, {
+  required bool isHorizontal,
+}) => switch (arrangement) {
+  NavButtonArrangement.start => Icon(
+    isHorizontal ? Icons.west_rounded : Icons.north_rounded,
+  ),
+  NavButtonArrangement.end => Icon(
+    isHorizontal ? Icons.east_rounded : Icons.south_rounded,
+  ),
+  NavButtonArrangement.split => RotatedBox(
+    quarterTurns: isHorizontal ? 1 : 0,
+    child: const Icon(Icons.expand_rounded),
+  ),
+};
 
 // ---------------------------------------------------------------------------
 // Gradient animation selector

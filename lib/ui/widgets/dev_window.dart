@@ -170,6 +170,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         DefaultSettings.showGameDetailsSkmId;
     final showSyncDeviceId = ref.watch(showSyncDeviceIdProvider);
     final showSyncStatus = ref.watch(showSyncStatusProvider);
+    final showSeasonal = ref.watch(showSeasonalPatternsProvider);
     // Plain outlined buttons in the app theme's style.
     Widget action(String label, IconData icon, VoidCallback? onTap) =>
         OutlinedButton.icon(
@@ -319,6 +320,12 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
             Icons.tag,
             SettingsKeys.showGameDetailsSkmId,
             showId,
+          ),
+          settingToggle(
+            'Seasonal patterns',
+            Icons.celebration_outlined,
+            SettingsKeys.showSeasonalPatterns,
+            showSeasonal,
           ),
         ]),
         section('Library · ${selectedGames.length} selected', [
@@ -490,9 +497,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                 'Dev Tools',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
             // Always measured while Dev Tools is open.

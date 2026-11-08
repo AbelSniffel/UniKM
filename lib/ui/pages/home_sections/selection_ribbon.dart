@@ -15,7 +15,7 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_selection_actions.dart';
 import '../../widgets/nav_button_group.dart';
-import '../../widgets/navigation_panel_overlay.dart';
+import '../../widgets/background_pattern.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/segmented_bar.dart';
 

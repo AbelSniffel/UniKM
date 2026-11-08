@@ -13,7 +13,7 @@ import '../../providers/app_providers.dart';
 import 'animated_gradient_bar.dart';
 import 'nav_button_group.dart';
 import 'navigation_more_menu.dart';
-import 'navigation_panel_overlay.dart';
+import 'background_pattern.dart';
 import 'navigation_theme_menu.dart';
 
 const kNavigationPanelCollapsedWidth = 64.0;
@@ -89,7 +89,7 @@ class NavigationPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final effectiveTheme = ref.watch(effectiveThemeProvider);
+    final effectiveTheme = ref.watch(themeProvider);
     final expansionMode = ref.watch(
       appShellSettingsProvider.select((settings) => settings.navExpansionMode),
     );

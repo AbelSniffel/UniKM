@@ -13,14 +13,12 @@ class ThemePreviewCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.onDoubleTap,
-    this.preview,
     this.height = PreviewCard.defaultHeight,
     this.tapKey,
   });
 
   final AppThemeData data;
   final AppThemeData theme;
-  final AppThemeData? preview;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback? onDoubleTap;
@@ -28,19 +26,16 @@ class ThemePreviewCard extends StatelessWidget {
   final Key? tapKey;
 
   @override
-  Widget build(BuildContext context) {
-    final background = preview ?? data;
-    return PreviewCard(
-      name: data.name,
-      theme: theme,
-      isSelected: selected,
-      height: height,
-      tapKey: tapKey,
-      onTap: onTap,
-      onDoubleTap: onDoubleTap,
-      icon: data.icon,
-      backgroundIconColor: background.surface.withValues(alpha: 0.25),
-      backgroundBuilder: (_, _) => ThemePreviewBackground(theme: background),
-    );
-  }
+  Widget build(BuildContext context) => PreviewCard(
+    name: data.name,
+    theme: theme,
+    isSelected: selected,
+    height: height,
+    tapKey: tapKey,
+    onTap: onTap,
+    onDoubleTap: onDoubleTap,
+    icon: data.icon,
+    backgroundIconColor: data.surface.withValues(alpha: 0.25),
+    backgroundBuilder: (_, _) => ThemePreviewBackground(theme: data),
+  );
 }

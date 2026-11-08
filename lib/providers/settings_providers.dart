@@ -155,9 +155,46 @@ final navButtonArrangementVProvider = _setting<NavButtonArrangement>(
   SettingsKeys.navButtonArrangementV,
 );
 
-final navPanelOverlayStyleSettingProvider = _setting<NavPanelOverlayStyle>(
+/// The chosen background pattern; [backgroundPatternProvider] is the one
+/// shown.
+final savedBackgroundPatternProvider = _setting<NavPanelOverlayStyle>(
   SettingsKeys.navPanelOverlayStyle,
 );
+
+final seasonalPatternProvider = _setting<bool>(SettingsKeys.seasonalPattern);
+
+/// Whether the pattern choices list the seasonal patterns, from Dev Tools.
+/// Hidden, they still show through [seasonalPatternProvider].
+final showSeasonalPatternsProvider = _setting<bool>(
+  SettingsKeys.showSeasonalPatterns,
+);
+
+/// The patterns [seasonalPatternFor] picks between.
+const kSeasonalPatterns = {
+  NavPanelOverlayStyle.halloween,
+  NavPanelOverlayStyle.christmas,
+};
+
+/// The month the seasonal patterns follow, 1 for January. Read when the
+/// pattern settings change, so it is current again by the app's next start
+/// at the latest.
+final currentMonthProvider = Provider<int>((ref) => DateTime.now().month);
+
+/// The seasonal pattern for [month] (Halloween in October, Christmas in
+/// December), or null outside those months.
+NavPanelOverlayStyle? seasonalPatternFor(int month) => switch (month) {
+  DateTime.october => NavPanelOverlayStyle.halloween,
+  DateTime.december => NavPanelOverlayStyle.christmas,
+  _ => null,
+};
+
+/// The background pattern every theme shows: the chosen one, or the
+/// season's while seasonal patterns are on.
+final backgroundPatternProvider = Provider<NavPanelOverlayStyle>((ref) {
+  final saved = ref.watch(savedBackgroundPatternProvider);
+  if (!ref.watch(seasonalPatternProvider)) return saved;
+  return seasonalPatternFor(ref.watch(currentMonthProvider)) ?? saved;
+});
 
 /// The background pattern strength slider's range, as multipliers.
 const kMinPatternStrength = 0.25;
@@ -182,10 +219,6 @@ final patternAngleProvider = _settingsSlice(
   (settings) =>
       readSetting<int>(settings, SettingsKeys.patternAngle).clamp(0, 180),
 );
-
-/// The saved Translucent background choice; [pagePatternProvider] turns it off while
-/// no pattern is chosen.
-final pagePatternSettingProvider = _setting<bool>(SettingsKeys.pagePattern);
 
 final gradientAnimationSpeedProvider = _setting<GradientAnimationSpeed>(
   SettingsKeys.gradientAnimationSpeed,

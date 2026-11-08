@@ -122,16 +122,25 @@ class CardDisplaySection extends ConsumerWidget {
           group: listViewSearchGroup,
           titleIcon: Icons.view_list_outlined,
           searchQuery: searchQuery,
-          childBuilder: () => SettingsChoiceCard<ListViewDensityMode>(
+          childBuilder: () => SettingsButtonGroupCard<ListViewDensityMode>(
             theme: theme,
             label: listViewModeSpec.label,
             icon: listViewModeSpec.icon,
             value: resolveListViewDensityMode(
               slimListView: cardSettings.slimListView,
             ),
+            // The More menu's list view icons.
             choices: const [
-              SettingsChoice(ListViewDensityMode.regular, 'Regular'),
-              SettingsChoice(ListViewDensityMode.slim, 'Slim'),
+              SettingsChoice(
+                ListViewDensityMode.regular,
+                'Regular',
+                icon: Icon(Icons.view_list),
+              ),
+              SettingsChoice(
+                ListViewDensityMode.slim,
+                'Slim',
+                icon: Icon(Icons.view_headline),
+              ),
             ],
             onChanged: (value) =>
                 settingsNotifier.setMany(listViewDensityModeSettings(value)),

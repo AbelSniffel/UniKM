@@ -6,8 +6,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/settings_card_indicator.dart';
-import '../../widgets/tinted_tiles.dart';
 import '../../widgets/toggle_switch.dart';
+import 'settings_common.dart';
+import 'settings_control_cards.dart';
 
 class SettingsCardStyleSection extends ConsumerWidget {
   const SettingsCardStyleSection({
@@ -17,6 +18,12 @@ class SettingsCardStyleSection extends ConsumerWidget {
     required this.groupPosition,
     required this.isAlternate,
   });
+
+  static const SettingTextSpec indicatorStyleSpec = SettingTextSpec(
+    label: 'Indicator Style',
+    description: 'Choose the indicator used when interaction cards are enabled',
+    icon: Icons.tune,
+  );
 
   final AppThemeData theme;
   final String searchQuery;
@@ -34,36 +41,47 @@ class SettingsCardStyleSection extends ConsumerWidget {
       groupPosition: groupPosition,
       alternateBackground: isAlternate,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
+      // One card whose buttons are the indicators themselves, the chosen one
+      // switched on.
+      child: SettingsButtonGroupCard<SettingsCardIndicatorStyle>(
+        theme: theme,
+        label: indicatorStyleSpec.label,
+        icon: indicatorStyleSpec.icon,
+        description: selected.description,
+        value: selected,
+        choices: [
           for (final style in SettingsCardIndicatorStyle.values)
-            TintedOptionTile(
-              key: ValueKey(style),
-              theme: theme,
-              // The indicator itself, switched on while chosen.
-              indicator: switch (style) {
-                SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
-                  value: selected == style,
-                  onChanged: (_) {},
-                  theme: theme,
-                  label: '',
-                ),
-                SettingsCardIndicatorStyle.miniDot => SettingsCardMiniDot(
-                  theme: theme,
-                  value: selected == style,
-                  enabled: true,
-                ),
-              },
-              title: style.displayName,
-              subtitle: style.description,
-              selected: selected == style,
-              onTap: () => ref
-                  .read(settingsProvider.notifier)
-                  .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
-            ),
+            SettingsChoice(style, style.displayName),
         ],
+        onChanged: (style) => ref
+            .read(settingsProvider.notifier)
+            .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
+        buttonBuilder: (choice, on, choose) => switch (choice.value) {
+          SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
+            key: ValueKey(choice.value),
+            value: on,
+            onChanged: choose == null ? null : (_) => choose(),
+            theme: theme,
+            // The switch alone, without its On/Off word.
+            label: '',
+          ),
+          // The dot only shows; a click anywhere on it picks it.
+          SettingsCardIndicatorStyle.miniDot => MouseRegion(
+            key: ValueKey(choice.value),
+            cursor: choose == null
+                ? MouseCursor.defer
+                : SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: choose,
+              child: SettingsCardMiniDot(
+                theme: theme,
+                value: on,
+                enabled: choose != null,
+              ),
+            ),
+          ),
+        },
       ),
     );
   }

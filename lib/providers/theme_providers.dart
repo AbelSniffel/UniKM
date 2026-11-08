@@ -64,7 +64,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
       a.baseBackground == b.baseBackground &&
       a.baseSecondary == b.baseSecondary &&
       a.baseAccent == b.baseAccent &&
-      a.navPanelOverlayStyle == b.navPanelOverlayStyle &&
       a.iconData?.codePoint == b.iconData?.codePoint &&
       a.cornerRadius == b.cornerRadius &&
       a.useThemeToggleRadius == b.useThemeToggleRadius &&
@@ -240,36 +239,11 @@ final builtInThemeIdsProvider = Provider<Set<String>>(
   (ref) => AppThemeData.builtInThemes.map((theme) => theme.id).toSet(),
 );
 
-final currentThemeIsBuiltInProvider = Provider<bool>((ref) {
-  final activeThemeId = ref.watch(themeProvider.select((theme) => theme.id));
-  final builtInIds = ref.watch(builtInThemeIdsProvider);
-  return builtInIds.contains(activeThemeId);
-});
-
-final effectiveNavPanelOverlayStyleProvider = Provider<NavPanelOverlayStyle>((
-  ref,
-) {
-  final theme = ref.watch(themeProvider);
-  return ref.watch(currentThemeIsBuiltInProvider)
-      ? ref.watch(navPanelOverlayStyleSettingProvider)
-      : theme.navPanelOverlayStyle;
-});
-
-/// Whether pages show a fainter copy of the background pattern: off while no
-/// pattern is chosen, and the saved choice again once one is.
+/// Whether pages show a fainter copy of the background pattern, with
+/// translucent group boxes: whenever a pattern is chosen.
 final pagePatternProvider = Provider<bool>(
-  (ref) =>
-      ref.watch(effectiveNavPanelOverlayStyleProvider) !=
-          NavPanelOverlayStyle.none &&
-      ref.watch(pagePatternSettingProvider),
+  (ref) => ref.watch(backgroundPatternProvider) != NavPanelOverlayStyle.none,
 );
-
-final effectiveThemeProvider = Provider<AppThemeData>((ref) {
-  final theme = ref.watch(themeProvider);
-  final overlayStyle = ref.watch(effectiveNavPanelOverlayStyleProvider);
-  if (overlayStyle == theme.navPanelOverlayStyle) return theme;
-  return theme.copyWith(navPanelOverlayStyle: overlayStyle);
-});
 
 /// Cache recent Material themes within this provider's lifetime. Live color
 /// previews can produce thousands of variants, so retain at most 16 of them.
@@ -298,7 +272,6 @@ class _ThemeDataNotifier extends Notifier<ThemeData> {
       theme.inputPaddingHorizontal,
       theme.inputPaddingVertical,
       theme.progressIndicatorStrokeWidth,
-      theme.navPanelOverlayStyle,
       defaultTargetPlatform,
     );
     final cached = _cache.remove(key);

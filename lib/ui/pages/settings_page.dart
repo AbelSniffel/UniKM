@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../widgets/nav_button_group.dart';
 import '../widgets/navigation_panel.dart' show isVeryNarrowAppLayout;
-import '../widgets/navigation_panel_overlay.dart';
+import '../widgets/background_pattern.dart';
 import '../widgets/platform_menu_button.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
@@ -294,7 +294,7 @@ class _SettingsSectionRail extends ConsumerWidget {
         // The navigation panel's background and pattern, lined up with it,
         // with the pattern just a little stronger than behind pages.
         child: PanelPatternSurface(
-          strength: PanelPatternSurface.pageStrength + 0.1,
+          strength: PanelPatternSurface.sidePanelStrength,
           child: ListView(
             key: const ValueKey('settings-section-navigation'),
             padding: const EdgeInsets.all(_settingsRailOuterPadding),

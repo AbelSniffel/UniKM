@@ -32,7 +32,7 @@ class UpdatesSection extends ConsumerStatefulWidget {
     icon: Icons.science_outlined,
   );
   static const SettingTextSpec autoCheckSpec = SettingTextSpec(
-    label: 'Automatic',
+    label: 'Update Checker',
     icon: Icons.update,
   );
   static const SettingTextSpec repositorySpec = SettingTextSpec(
@@ -46,7 +46,7 @@ class UpdatesSection extends ConsumerStatefulWidget {
 
   static const List<SettingsSearchGroup> searchGroups = [
     SettingsSearchGroup(
-      title: 'Update Checks',
+      title: 'Update Settings',
       settings: [autoCheckSpec, includePrereleaseSpec],
       extraTexts: [
         'Next check in',
@@ -54,6 +54,7 @@ class UpdatesSection extends ConsumerStatefulWidget {
         'Disable',
         'Update Preferences',
         'beta',
+        'Automatic Update Checks',
       ],
     ),
     SettingsSearchGroup(
