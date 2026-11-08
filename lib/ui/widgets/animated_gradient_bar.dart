@@ -65,8 +65,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   double _frameBudgetAccumulator = 0.0;
   double _unpublishedTime = 0.0;
   bool _onScreen = true;
-  bool _visibilityCheckQueued = false;
-  ScrollPosition? _scrollPosition;
+  bool _visibilityWatched = false;
   double _speedMultiplier = 1.0;
   _SpiralMesh? _spiralMesh;
   _HelixMesh? _helixMesh;
@@ -94,31 +93,25 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   }
 
   // Auto-pause checks the bar against the screen and its scroll view after
-  // layout, whenever that view scrolls or the window changes size. It does
+  // every frame, without asking for frames itself: whatever moves the bar on
+  // or off screen draws frames, from scrolling and resizing to an ancestor
+  // sliding it, like the navigation panel when it changes position. It does
   // not use VisibilityDetector: that never reports a bar mounted offscreen,
   // and inside the clipped preview cards it never reported them visible
   // either, so the eight previews in Settings > All animated unseen.
-  void _watchScrollPosition() {
-    final position = widget.autoPauseWhenNotVisible
-        ? Scrollable.maybeOf(context)?.position
-        : null;
-    if (identical(position, _scrollPosition)) return;
-    _scrollPosition?.removeListener(_queueVisibilityCheck);
-    _scrollPosition = position?..addListener(_queueVisibilityCheck);
-  }
-
-  void _queueVisibilityCheck() {
-    if (!widget.autoPauseWhenNotVisible || _visibilityCheckQueued) return;
-    _visibilityCheckQueued = true;
+  void _watchVisibility() {
+    if (!widget.autoPauseWhenNotVisible || _visibilityWatched) return;
+    _visibilityWatched = true;
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _visibilityCheckQueued = false;
+      _visibilityWatched = false;
+      if (!mounted) return;
       _checkVisibility();
+      _watchVisibility();
     });
-    SchedulerBinding.instance.ensureVisualUpdate();
   }
 
   void _checkVisibility() {
-    if (!mounted || !widget.autoPauseWhenNotVisible) return;
+    if (!widget.autoPauseWhenNotVisible) return;
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return;
     Rect globalRect(RenderBox box) => MatrixUtils.transformRect(
@@ -126,8 +119,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
       Offset.zero & box.size,
     );
     var visibleArea = Offset.zero & MediaQuery.sizeOf(context);
-    final scrollBox = _scrollPosition?.context.notificationContext
-        ?.findRenderObject();
+    final scrollBox = Scrollable.maybeOf(context)?.context.findRenderObject();
     if (scrollBox is RenderBox && scrollBox.attached && scrollBox.hasSize) {
       visibleArea = visibleArea.intersect(globalRect(scrollBox));
     }
@@ -138,13 +130,9 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   }
 
   @override
-  void didChangeMetrics() => _queueVisibilityCheck();
-
-  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _watchScrollPosition();
-    _queueVisibilityCheck();
+    _watchVisibility();
     _syncTickerState();
   }
 
@@ -165,8 +153,7 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
       _unpublishedTime = 0.0;
     }
     if (oldWidget.autoPauseWhenNotVisible != widget.autoPauseWhenNotVisible) {
-      _watchScrollPosition();
-      _queueVisibilityCheck();
+      _watchVisibility();
     }
     if (oldWidget.isPlaying != widget.isPlaying ||
         oldWidget.autoPauseWhenNotVisible != widget.autoPauseWhenNotVisible ||
@@ -245,7 +232,6 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _scrollPosition?.removeListener(_queueVisibilityCheck);
     _ticker.dispose();
     _elapsed.dispose();
     _spiralMesh?.dispose();
@@ -1016,7 +1002,11 @@ class _HelixMesh {
         // The normalized noise is bounded: this smooth range needs no hard
         // clipping that would introduce corners in the changing outline.
         final factor = 1.325 + noise * 0.475;
-        final width = (_source.positions[offset] - center).abs() * factor;
+        // Plus 2 px across, 1 px a side, so even thin sections keep body;
+        // less on bars too thin to spare it without closing the gaps.
+        final width =
+            (_source.positions[offset] - center).abs() * factor +
+            math.min(1 / height, 0.04);
         // Keep the fringe near one physical pixel as the ribbon broadens,
         // with a solid core preserved when a randomized section is thin.
         final feather = math.min(_edgeFeathers![row], width * 0.38);
