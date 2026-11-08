@@ -291,8 +291,10 @@ class _SettingsSectionRail extends ConsumerWidget {
             ),
           ],
         ),
-        // The navigation panel's background and pattern, lined up with it.
+        // The navigation panel's background and pattern, lined up with it,
+        // with the pattern just a little stronger than behind pages.
         child: PanelPatternSurface(
+          strength: PanelPatternSurface.pageStrength + 0.1,
           child: ListView(
             key: const ValueKey('settings-section-navigation'),
             padding: const EdgeInsets.all(_settingsRailOuterPadding),

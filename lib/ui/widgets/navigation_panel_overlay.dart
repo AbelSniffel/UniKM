@@ -36,10 +36,15 @@ class PanelPatternSurface extends ConsumerWidget {
   const PanelPatternSurface({
     super.key,
     this.page = false,
+    this.strength = 1,
     required this.child,
   });
 
   final bool page;
+
+  /// How strongly a panel shows the pattern, relative to the navigation
+  /// panel; it applies whether or not pages show the pattern too.
+  final double strength;
   final Widget child;
 
   /// How much fainter the pattern is behind pages than on panels.
@@ -48,7 +53,7 @@ class PanelPatternSurface extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(effectiveThemeProvider);
-    final strength = ref.watch(patternStrengthProvider);
+    final patternStrength = ref.watch(patternStrengthProvider);
     final showOnPage = ref.watch(pagePatternProvider);
     return _PanelPatternSurface(
       color: page ? theme.background : theme.navBackground,
@@ -57,9 +62,9 @@ class PanelPatternSurface extends ConsumerWidget {
         angle: ref.watch(patternAngleProvider),
         wave: ref.watch(patternWaveProvider),
         strength: !page
-            ? strength
+            ? patternStrength * strength
             : showOnPage
-            ? strength * pageStrength
+            ? patternStrength * pageStrength
             : 0,
       ),
       windowSize: MediaQuery.sizeOf(context),
