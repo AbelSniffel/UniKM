@@ -72,7 +72,6 @@ class NavigationPanel extends ConsumerWidget {
     required this.gradientAnimation,
     this.forceCollapsed = false,
     this.lockedIndices = const {},
-    this.pageCount = 2,
   });
 
   final List<NavItem> items;
@@ -84,11 +83,6 @@ class NavigationPanel extends ConsumerWidget {
   final GradientAnimation gradientAnimation;
   final bool forceCollapsed;
   final Set<int> lockedIndices;
-
-  /// How many of the first [items] are pages. They make the first button
-  /// group when the buttons are split, and the rest, with the More button,
-  /// the second.
-  final int pageCount;
 
   bool get _isHorizontal =>
       position == NavBarPosition.top || position == NavBarPosition.bottom;
@@ -214,7 +208,8 @@ class NavigationPanel extends ConsumerWidget {
   /// The More menu button's place among the indices, after every page.
   int get _menuIndex => items.length;
 
-  int get _leadingCount => pageCount.clamp(0, items.length);
+  /// Library and Add make the first group when the buttons are split.
+  int get _leadingCount => items.length < 2 ? items.length : 2;
 
   List<int> get _leadingGroupIndices => [
     for (var i = 0; i < _leadingCount; i++) i,
@@ -222,7 +217,7 @@ class NavigationPanel extends ConsumerWidget {
 
   List<int> get _allGroupIndices => [for (var i = 0; i <= _menuIndex; i++) i];
 
-  /// The buttons after the pages, then the More menu button.
+  /// The rest (Settings), then the More menu button.
   List<int> get _trailingGroupIndices => [
     for (var i = _leadingCount; i <= _menuIndex; i++) i,
   ];
