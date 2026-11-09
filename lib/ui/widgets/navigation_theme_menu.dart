@@ -193,16 +193,11 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(customThemesJsonProvider);
     final theme = ref.watch(themeProvider);
     final current = ref.watch(themeProvider);
     final builtInIds = ref.watch(builtInThemeIdsProvider);
     final selectedTab = ref.watch(navigationThemeMenuTabProvider);
-    final custom = ref
-        .read(themeProvider.notifier)
-        .getAllThemes()
-        .where((data) => !builtInIds.contains(data.id))
-        .toList();
+    final custom = ref.watch(customThemesProvider);
     final themes = selectedTab == 0 ? kBuiltInThemes : custom;
     final canManageCurrent =
         selectedTab == 1 && !builtInIds.contains(current.id);

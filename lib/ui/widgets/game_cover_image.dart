@@ -100,8 +100,18 @@ class GameCoverImage extends StatelessWidget {
         key: ValueKey(raw),
         gaplessPlayback: true,
         fit: BoxFit.cover,
-        frameBuilder: (context, child, frame, _) =>
-            _CoverLoadReport(loading: frame == null, child: child),
+        // The loading tone shows under the picture until its first frame; a
+        // picture kept while a larger one loads stays on top of it.
+        frameBuilder: (context, child, frame, _) => _CoverLoadReport(
+          loading: frame == null,
+          child: frame == null
+              ? Stack(
+                  fit: StackFit.passthrough,
+                  alignment: Alignment.center,
+                  children: [_buildPlaceholder(), child],
+                )
+              : child,
+        ),
         errorBuilder: (context, error, stackTrace) => _imageError(),
       );
 

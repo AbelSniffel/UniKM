@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +20,53 @@ import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_card.dart';
 import '../../widgets/selection_overlay.dart' as app_selection_overlay;
 import 'animated_game_card.dart';
-import 'game_card_placeholder.dart';
+
+/// The library's scroll controller. A layout switch keeps the scroll offset,
+/// which can lie past the end of a shorter layout: the library then starts
+/// at that layout's end at once, instead of springing back to it over an
+/// empty page.
+class LibraryScrollController extends ScrollController {
+  LibraryScrollController({super.initialScrollOffset});
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _LibraryScrollPosition(
+    physics: physics,
+    context: context,
+    initialPixels: initialScrollOffset,
+    keepScrollOffset: keepScrollOffset,
+    oldPosition: oldPosition,
+    debugLabel: debugLabel,
+  );
+}
+
+class _LibraryScrollPosition extends ScrollPositionWithSingleContext {
+  _LibraryScrollPosition({
+    required super.physics,
+    required super.context,
+    super.initialPixels,
+    super.keepScrollOffset,
+    super.oldPosition,
+    super.debugLabel,
+  });
+
+  @override
+  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    // Past the end without scrolling there, as after a layout switch or when
+    // the last games leave: lay out again at the end. A correction sends no
+    // scroll notification, so the cards there reveal as for a new layout.
+    if (hasPixels &&
+        pixels > maxScrollExtent &&
+        !(activity?.isScrolling ?? false)) {
+      correctPixels(math.max(minScrollExtent, maxScrollExtent));
+      return false;
+    }
+    return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
+  }
+}
 
 class GameLibraryView extends ConsumerStatefulWidget {
   const GameLibraryView({
@@ -43,19 +90,33 @@ class GameLibraryView extends ConsumerStatefulWidget {
   ConsumerState<GameLibraryView> createState() => _GameLibraryViewState();
 }
 
-class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
+class _GameLibraryViewState extends ConsumerState<GameLibraryView>
+    with WidgetsBindingObserver {
   var _revealCoordinator = GameCardRevealCoordinator();
   Object? _database;
   (GameListViewMode, bool)? _layout;
   static const double _gridCacheExtent = kGridCardHeight + kGridCardSpacing;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Heard before the frame the new size builds, which is when a card the
+  // size brings into view would otherwise first be drawn unrevealed.
+  @override
+  void didChangeMetrics() => _revealCoordinator.onWindowResize();
+
+  @override
   Widget build(BuildContext context) {
     final database = ref.watch(databaseProvider);
-    if (!identical(database, _database)) {
-      _database = database;
-      _revealCoordinator = GameCardRevealCoordinator();
-    }
     final theme = ref.watch(themeProvider);
     // Use select to watch specific parts of state relevant to the list
     final isLoading = ref.watch(gamesProvider.select((s) => s.isLoading));
@@ -63,15 +124,19 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     // Metadata changes are observed by each card without rebuilding the list.
     final gameIds = ref.watch(filteredGameIdsProvider);
     final viewMode = ref.watch(viewModeProvider);
-    final slimList = ref.watch(
-      gameCardSettingsProvider.select((s) => s.slimListView),
-    );
-    // Every layout switch reveals the cards anew, even ones seen before.
+    // The slim setting stays on in grid view, which it does not change.
+    final slimList =
+        viewMode == GameListViewMode.list &&
+        ref.watch(gameCardSettingsProvider.select((s) => s.slimListView));
+    // Every layout switch reveals the cards anew, even ones seen before. The
+    // slim list has no covers to fade in, so only its layout reveals, not
+    // scrolling: its cards are plain, as light to scroll as can be.
     final layout = (viewMode, slimList);
-    if (_layout != null && _layout != layout) {
-      _revealCoordinator = GameCardRevealCoordinator();
+    if (!identical(database, _database) || _layout != layout) {
+      _database = database;
+      _layout = layout;
+      _revealCoordinator = GameCardRevealCoordinator(scrollReveals: !slimList);
     }
-    _layout = layout;
 
     if (isLoading) return _buildLoadingState(theme);
     if (error != null) return _buildErrorState(theme, error);
@@ -246,15 +311,14 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
     bool slimList,
   ) {
     final scrollController = widget.scrollController;
+    final coverWidth = viewMode == GameListViewMode.grid
+        ? double.infinity
+        : slimList
+        ? 0.0
+        : kListCardImageWidth;
     final listSpacing = slimList ? kSlimListCardSpacing : kListCardSpacing;
     final listItemExtent =
         (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
-    final placeholder = GameCardPlaceholder(
-      theme: theme,
-      viewMode: viewMode,
-      slim: slimList,
-    );
-
     // NOTE: selectedGameIds is intentionally NOT watched here.
     // The shell owns the selection ribbon, so selection changes do not
     // rebuild the grid/list.
@@ -279,7 +343,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
               ),
               itemCount: gameIds.length,
               itemBuilder: (context, index) =>
-                  _revealCard(gameIds[index], viewMode, placeholder),
+                  _revealCard(gameIds[index], viewMode, coverWidth),
             )
           : ListView.builder(
               scrollCacheExtent: ScrollCacheExtent.pixels(listItemExtent * 2),
@@ -293,7 +357,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
                 final revealed = _revealCard(
                   gameIds[index],
                   viewMode,
-                  placeholder,
+                  coverWidth,
                 );
                 return slimList
                     ? revealed
@@ -312,13 +376,9 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
         : library;
   }
 
-  /// The card for [gameId], revealed by an entry animation when enabled,
-  /// with [placeholder] in its place until then.
-  Widget _revealCard(
-    int gameId,
-    GameListViewMode viewMode,
-    Widget placeholder,
-  ) {
+  /// The card for [gameId], revealed by an entry animation when enabled;
+  /// [coverWidth] is how much of its left side its cover covers.
+  Widget _revealCard(int gameId, GameListViewMode viewMode, double coverWidth) {
     final card = _LibraryGameCard(
       key: ValueKey(gameId),
       gameId: gameId,
@@ -330,7 +390,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView> {
             key: ValueKey('anim_$gameId'),
             gameId: gameId,
             coordinator: _revealCoordinator,
-            placeholder: placeholder,
+            coverWidth: coverWidth,
             child: card,
           )
         : card;

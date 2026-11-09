@@ -50,7 +50,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   void initState() {
     super.initState();
     _syncSearchController(ref.read(gamesProvider).searchQuery);
-    _scrollController = ScrollController(
+    _scrollController = LibraryScrollController(
       initialScrollOffset: ref.read(gameLibraryScrollOffsetProvider),
     )..addListener(_saveScrollOffset);
   }

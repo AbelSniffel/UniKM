@@ -30,13 +30,13 @@ class ThemeImportResult {
 class ThemeNotifier extends Notifier<AppThemeData> {
   /// Store the original theme for preview mode
   AppThemeData? _previewOriginalTheme;
-  List<String>? _cachedCustomThemesJson;
-  List<AppThemeData>? _cachedAllThemes;
 
   @override
   AppThemeData build() {
     final token = ref.watch(activeThemeNameProvider);
-    final allThemes = getAllThemes();
+    // Read, not watched: a custom theme saved or deleted elsewhere must not
+    // reset a theme being previewed.
+    final allThemes = ref.read(allThemesProvider);
     // Settings store the theme ID; older settings may still store its name.
     return allThemes.where((t) => t.id == token).firstOrNull ??
         allThemes.where((t) => t.name == token).firstOrNull ??
@@ -53,24 +53,10 @@ class ThemeNotifier extends Notifier<AppThemeData> {
   /// Call cancelPreview() to restore the original theme
   /// Call savePreviewTheme() to persist the preview theme
   void startPreview(AppThemeData previewTheme) {
-    if (_themeEquals(state, previewTheme)) return;
+    if (state.equalityKey == previewTheme.equalityKey) return;
     _previewOriginalTheme ??= state;
     state = previewTheme;
   }
-
-  bool _themeEquals(AppThemeData a, AppThemeData b) =>
-      a.id == b.id &&
-      a.name == b.name &&
-      a.baseBackground == b.baseBackground &&
-      a.baseSecondary == b.baseSecondary &&
-      a.baseAccent == b.baseAccent &&
-      a.iconData?.codePoint == b.iconData?.codePoint &&
-      a.cornerRadius == b.cornerRadius &&
-      a.useThemeToggleRadius == b.useThemeToggleRadius &&
-      a.scrollbarRadius == b.scrollbarRadius &&
-      a.inputPaddingHorizontal == b.inputPaddingHorizontal &&
-      a.inputPaddingVertical == b.inputPaddingVertical &&
-      a.progressIndicatorStrokeWidth == b.progressIndicatorStrokeWidth;
 
   /// Cancel preview and restore the original theme
   void cancelPreview() {
@@ -85,7 +71,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
   /// Set the active theme
   Future<void> setTheme(AppThemeData theme) async {
-    if (_themeEquals(state, theme)) return;
+    if (state.equalityKey == theme.equalityKey) return;
 
     _previewOriginalTheme = null; // Clear preview state
     state = theme;
@@ -165,7 +151,8 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     });
 
     if (lastImportedId != null) {
-      final activatedTheme = getAllThemes()
+      final activatedTheme = ref
+          .read(allThemesProvider)
           .where((t) => t.id == lastImportedId)
           .firstOrNull;
       if (activatedTheme != null) state = activatedTheme;
@@ -194,39 +181,14 @@ class ThemeNotifier extends Notifier<AppThemeData> {
       await settings.setMany(_activeTheme(kDarkTheme.id));
     }
   }
+}
 
-  // Malformed saved entries are ignored for display and retained during edits.
-  AppThemeData? _decodeCustomTheme(String json) {
-    try {
-      return AppThemeData.fromJson(jsonDecode(json) as Map<String, dynamic>);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Get all available themes (built-in + custom). The list is rebuilt only
-  /// when the stored custom theme JSON changes.
-  List<AppThemeData> getAllThemes() {
-    final customThemesJson = ref.read(customThemesJsonProvider);
-
-    if (_cachedCustomThemesJson != null &&
-        const ListEquality<String>().equals(
-          _cachedCustomThemesJson!,
-          customThemesJson,
-        )) {
-      return _cachedAllThemes!;
-    }
-
-    final customThemes = customThemesJson
-        .map(_decodeCustomTheme)
-        .whereType<AppThemeData>();
-
-    _cachedCustomThemesJson = List<String>.unmodifiable(customThemesJson);
-    _cachedAllThemes = List<AppThemeData>.unmodifiable([
-      ...kBuiltInThemes,
-      ...customThemes,
-    ]);
-    return _cachedAllThemes!;
+// Malformed saved entries are ignored for display and retained during edits.
+AppThemeData? _decodeCustomTheme(String json) {
+  try {
+    return AppThemeData.fromJson(jsonDecode(json) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -238,6 +200,26 @@ final themeProvider = NotifierProvider<ThemeNotifier, AppThemeData>(
 final builtInThemeIdsProvider = Provider<Set<String>>(
   (ref) => AppThemeData.builtInThemes.map((theme) => theme.id).toSet(),
 );
+
+/// Every theme: the built-in ones, then the saved custom ones. Decoded again
+/// only when the saved custom themes change.
+final allThemesProvider = Provider<List<AppThemeData>>(
+  (ref) => List.unmodifiable([
+    ...kBuiltInThemes,
+    ...ref
+        .watch(customThemesJsonProvider)
+        .map(_decodeCustomTheme)
+        .whereType<AppThemeData>(),
+  ]),
+);
+
+/// The saved custom themes, without any that reuse a built-in theme's ID.
+final customThemesProvider = Provider<List<AppThemeData>>((ref) {
+  final builtInIds = ref.watch(builtInThemeIdsProvider);
+  return List.unmodifiable(
+    ref.watch(allThemesProvider).where((t) => !builtInIds.contains(t.id)),
+  );
+});
 
 /// Whether pages show a fainter copy of the background pattern, with
 /// translucent group boxes: whenever a pattern is chosen.
@@ -259,21 +241,7 @@ class _ThemeDataNotifier extends Notifier<ThemeData> {
     final theme = ref.watch(themeProvider);
     // Include every extension field and the platform's control sizing. A
     // cached ThemeData must expose the current AppThemeData extension too.
-    final key = (
-      theme.id,
-      theme.name,
-      theme.baseBackground,
-      theme.baseSecondary,
-      theme.baseAccent,
-      theme.iconData,
-      theme.cornerRadius,
-      theme.useThemeToggleRadius,
-      theme.scrollbarRadius,
-      theme.inputPaddingHorizontal,
-      theme.inputPaddingVertical,
-      theme.progressIndicatorStrokeWidth,
-      defaultTargetPlatform,
-    );
+    final key = (theme.equalityKey, defaultTargetPlatform);
     final cached = _cache.remove(key);
     if (_cache.length >= 16) _cache.remove(_cache.keys.first);
     return _cache[key] = cached ?? theme.toThemeData();

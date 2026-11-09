@@ -92,9 +92,9 @@ abstract final class GameSelectionActions {
     }
 
     for (final game in targets) {
-      final url = game.steamAppId.isNotEmpty
-          ? Uri.parse(steamAppPageUrl(game.steamAppId))
-          : Uri.parse(steamSearchPageUrl(game.title));
+      final url = Uri.parse(
+        steamPageUrl(appId: game.steamAppId, title: game.title),
+      );
 
       try {
         await launchUrl(url, mode: LaunchMode.externalApplication);

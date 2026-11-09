@@ -24,7 +24,7 @@ import '../widgets/cover_image_card.dart';
 import '../widgets/game_options_row.dart';
 import '../../core/services/steam_service.dart';
 import '../dialogs/steam_lookup_dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/steam_page.dart';
 import '../widgets/dialog_helpers.dart';
 import '../../models/game.dart';
 import '../controllers/game_editor_fields.dart';
@@ -453,19 +453,10 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     }
   }
 
-  Future<void> _openSteamPage() async {
-    final appId = _steamPreview?.appId ?? '';
-    final url = Uri.parse(
-      appId.isNotEmpty
-          ? steamAppPageUrl(appId)
-          : steamSearchPageUrl(_fields.title.text.trim()),
-    );
-    try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      NotificationManager.instance.error('Failed to open Steam page: $e');
-    }
-  }
+  Future<void> _openSteamPage() => openSteamPage(
+    appId: _steamPreview?.appId ?? '',
+    title: _fields.title.text.trim(),
+  );
 
   @override
   Widget build(BuildContext context) {

@@ -712,11 +712,13 @@ final activeFiltersProvider = Provider<ActiveFiltersState>(
 /// Selected games in selection order. Filters never hide a selected game, so
 /// the list always matches the selection count.
 final selectedGamesProvider = Provider<List<Game>>((ref) {
-  final (games, selectedIds) = ref.watch(
-    gamesProvider.select((s) => (s.games, s.selectedGameIds)),
+  final selectedIds = ref.watch(
+    gamesProvider.select((s) => s.selectedGameIds),
   );
   if (selectedIds.isEmpty) return const [];
-  final byId = {for (final game in games) game.id: game};
+  // Shared and rebuilt only when the games change, not on each selection
+  // change while dragging a selection across the library.
+  final byId = ref.watch(gamesByIdProvider);
   return [for (final id in selectedIds) ?byId[id]];
 });
 

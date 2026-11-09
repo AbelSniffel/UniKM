@@ -11,10 +11,9 @@ import '../../features/steam/application/apply_steam_metadata.dart';
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/steam_page.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../../core/constants/app_constants.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/tag_list.dart';
 import '../widgets/dialog_helpers.dart';
@@ -460,17 +459,8 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 
   /// The match's store page, or a Steam search for the game until there is
   /// one, as in the Game Editor.
-  Future<void> _openSteamPage() async {
-    final appId = _result?.appId;
-    final url = appId != null && appId.isNotEmpty
-        ? steamAppPageUrl(appId)
-        : steamSearchPageUrl(widget.title);
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (e) {
-      NotificationManager.instance.error('Failed to open Steam page: $e');
-    }
-  }
+  Future<void> _openSteamPage() =>
+      openSteamPage(appId: _result?.appId ?? '', title: widget.title);
 
   @override
   Widget build(BuildContext context) {

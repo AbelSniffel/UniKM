@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
@@ -22,7 +21,7 @@ import '../widgets/game_options_row.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/platform_menu_button.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/steam_page.dart';
 import '../../core/services/key_privacy.dart';
 import '../../core/services/steam_service.dart';
 import '../dialogs/steam_lookup_dialog.dart';
@@ -514,18 +513,8 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   });
 
-  Future<void> _openSteamPage() async {
-    final url = Uri.parse(
-      _steamAppId.isNotEmpty
-          ? steamAppPageUrl(_steamAppId)
-          : steamSearchPageUrl(_fields.title.text.trim()),
-    );
-    try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      NotificationManager.instance.error('Failed to open Steam page: $e');
-    }
-  }
+  Future<void> _openSteamPage() =>
+      openSteamPage(appId: _steamAppId, title: _fields.title.text.trim());
 
   Widget _buildContent(AppThemeData theme, bool showSkmId) {
     final tags = ref.watch(tagsProvider);

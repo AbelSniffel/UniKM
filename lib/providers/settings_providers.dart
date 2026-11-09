@@ -107,6 +107,12 @@ Provider<T> _settingsSlice<T>(T Function(Map<String, dynamic>) select) =>
 Provider<T> _setting<T>(String key) =>
     _settingsSlice((settings) => readSetting<T>(settings, key));
 
+/// A numeric setting held from [min] to [max], whatever was saved.
+Provider<T> _clampedSetting<T extends num>(String key, T min, T max) =>
+    _settingsSlice(
+      (settings) => readSetting<T>(settings, key).clamp(min, max) as T,
+    );
+
 /// Developer-only identity display; the sync identity itself is always retained.
 final showSyncDeviceIdProvider = _setting<bool>(SettingsKeys.showSyncDeviceId);
 
@@ -201,23 +207,23 @@ const kMinPatternStrength = 0.25;
 const kMaxPatternStrength = 1.25;
 
 /// How strongly the background pattern shows, as a multiplier.
-final patternStrengthProvider = _settingsSlice(
-  (settings) => readSetting<double>(
-    settings,
-    SettingsKeys.patternStrength,
-  ).clamp(kMinPatternStrength, kMaxPatternStrength),
+final patternStrengthProvider = _clampedSetting(
+  SettingsKeys.patternStrength,
+  kMinPatternStrength,
+  kMaxPatternStrength,
 );
 
 /// How the Lines pattern sways, from 0 (straight) to 1 (zigzag).
-final patternWaveProvider = _settingsSlice(
-  (settings) =>
-      readSetting<double>(settings, SettingsKeys.patternWave).clamp(0.0, 1.0),
-);
+final patternWaveProvider = _clampedSetting(SettingsKeys.patternWave, 0.0, 1.0);
 
-/// The background pattern's angle in degrees, from 0 to 359.
-final patternAngleProvider = _settingsSlice(
-  (settings) =>
-      readSetting<int>(settings, SettingsKeys.patternAngle).clamp(0, 180),
+/// The largest background pattern angle, in degrees: its slider's end.
+const kMaxPatternAngle = 180;
+
+/// The background pattern's angle in degrees, from 0 to [kMaxPatternAngle].
+final patternAngleProvider = _clampedSetting(
+  SettingsKeys.patternAngle,
+  0,
+  kMaxPatternAngle,
 );
 
 final gradientAnimationSpeedProvider = _setting<GradientAnimationSpeed>(

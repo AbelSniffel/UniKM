@@ -37,6 +37,7 @@ class UsedOverlay extends StatelessWidget {
             angleDegrees: -35,
             patternSize: patternSize,
             tileToCanvas: tileToCanvas,
+            devicePixelRatio: MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
           ),
           isComplex: true,
           child: const SizedBox.expand(),

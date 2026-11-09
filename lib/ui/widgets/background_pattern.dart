@@ -186,10 +186,12 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
     if (_watchingFrames) return;
     _watchingFrames = true;
     // A surface moved by an ancestor's layer is not repainted, so check
-    // after every frame that its recording still covers it.
+    // after every frame that its recording still covers it. This runs after
+    // the frame's paint, so frames with no recorded pattern skip the check.
     final scheduler = SchedulerBinding.instance;
-    scheduler.addPersistentFrameCallback(
-      (_) => scheduler.addPostFrameCallback((_) {
+    scheduler.addPersistentFrameCallback((_) {
+      if (!_surfaces.any((surface) => surface._recording != null)) return;
+      scheduler.addPostFrameCallback((_) {
         for (final surface in _surfaces) {
           if (surface._recording != null &&
               surface.hasSize &&
@@ -197,8 +199,8 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
             surface.markNeedsPaint();
           }
         }
-      }),
-    );
+      });
+    });
   }
 
   @override
@@ -372,7 +374,9 @@ class BackgroundPatternPainter extends CustomPainter {
   }) {
     const stripeW = 36.0;
     const period = stripeW + 20;
-    final colors = _stripeColors(alphaScale);
+    final paints = [
+      for (final color in _stripeColors(alphaScale)) Paint()..color = color,
+    ];
     canvas.save();
     final bounds = _rotate(canvas, area, degrees ?? angle.toDouble());
     // Swaying stripes move sideways along their length. Samples sit on a
@@ -392,7 +396,7 @@ class BackgroundPatternPainter extends CustomPainter {
       index <= (bounds.right / period).ceil();
       index++
     ) {
-      final paint = Paint()..color = colors[index % colors.length];
+      final paint = paints[index % paints.length];
       final left = index * period;
       if (sway == null) {
         canvas.drawRect(
@@ -882,5 +886,7 @@ class BackgroundPatternPainter extends CustomPainter {
       oldDelegate.wave != wave ||
       oldDelegate.theme.accent != theme.accent ||
       oldDelegate.theme.secondary != theme.secondary ||
+      // Halloween's silk and glow and Christmas's wire follow it.
+      oldDelegate.theme.isDark != theme.isDark ||
       oldDelegate.style != style;
 }

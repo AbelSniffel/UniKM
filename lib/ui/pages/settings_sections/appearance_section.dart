@@ -110,15 +110,10 @@ class AppearanceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(customThemesJsonProvider);
     final current = ref.watch(themeProvider);
     final builtInThemes = AppThemeData.builtInThemes;
-    final themeNotifier = ref.read(themeProvider.notifier);
-    final allThemes = themeNotifier.getAllThemes();
-    final builtInIds = builtInThemes.map((theme) => theme.id).toSet();
-    final customThemes = allThemes
-        .where((t) => !builtInIds.contains(t.id))
-        .toList();
+    final builtInIds = ref.watch(builtInThemeIdsProvider);
+    final customThemes = ref.watch(customThemesProvider);
     final isSearching = searchQuery.trim().isNotEmpty;
     final selectedTab = ref.watch(appearanceThemeTabProvider);
     List<AppThemeData> themesForTab(int tab) =>
@@ -490,8 +485,8 @@ class _BackgroundPatternSectionState
             // In 15° steps.
             slider: Slider(
               value: angle.toDouble(),
-              max: 180,
-              divisions: 12,
+              max: kMaxPatternAngle.toDouble(),
+              divisions: kMaxPatternAngle ~/ 15,
               label: '$angle°',
               onChanged: (value) => settingsNotifier.setSetting(
                 SettingsKeys.patternAngle,

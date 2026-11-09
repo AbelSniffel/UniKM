@@ -65,13 +65,9 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     headerTitle: 'Appearance',
     icon: Icons.palette,
     searchGroups: AppearanceSection.searchGroups,
-    extraMatch: (ref, matchesSearch) {
-      ref.watch(customThemesJsonProvider);
-      return ref
-          .read(themeProvider.notifier)
-          .getAllThemes()
-          .any((themeData) => matchesSearch(themeData.name));
-    },
+    extraMatch: (ref, matchesSearch) => ref
+        .watch(allThemesProvider)
+        .any((themeData) => matchesSearch(themeData.name)),
     builder: AppearanceSection.new,
   ),
   _SettingsSectionDefinition(

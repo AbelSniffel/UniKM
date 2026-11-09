@@ -46,6 +46,23 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   final double inputPaddingVertical;
   final double progressIndicatorStrokeWidth;
 
+  /// Every field, for comparing themes by value. `==` stays identity:
+  /// providers compare their states with it.
+  Record get equalityKey => (
+    id,
+    name,
+    baseBackground,
+    baseSecondary,
+    baseAccent,
+    iconData,
+    cornerRadius,
+    useThemeToggleRadius,
+    scrollbarRadius,
+    inputPaddingHorizontal,
+    inputPaddingVertical,
+    progressIndicatorStrokeWidth,
+  );
+
   /// Compact info-style actions, with 3px of padding around their icons.
   /// Leave width flexible so text actions can also share this style.
   ButtonStyle get compactIconButtonStyle => IconButton.styleFrom(

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -103,12 +104,17 @@ class CardGlowPainter extends CustomPainter {
 }
 
 /// Paints a diagonal tiled "USED" watermark text pattern.
+///
+/// The pattern is many rotated text runs, which cost the same again on every
+/// frame. It is drawn once into an image, shared by every card that needs the
+/// same one, and each paint only draws that image.
 class UsedPatternPainter extends CustomPainter {
   const UsedPatternPainter({
     required this.textColor,
     required this.angleDegrees,
     required this.patternSize,
     this.tileToCanvas = false,
+    this.devicePixelRatio = 1.0,
   });
 
   static const String _label = 'USED';
@@ -119,6 +125,9 @@ class UsedPatternPainter extends CustomPainter {
   final double angleDegrees;
   final Size patternSize;
   final bool tileToCanvas;
+
+  /// The pixel density the pattern's image is drawn at.
+  final double devicePixelRatio;
 
   TextPainter _resolveTextPainter(double fontSize) {
     final quantized = (fontSize * 2).round() / 2;
@@ -149,7 +158,16 @@ class UsedPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
+    canvas.drawImageRect(
+      _UsedPatternImages.of(this, size),
+      Offset.zero & (size * devicePixelRatio),
+      Offset.zero & size,
+      Paint()..filterQuality = FilterQuality.low,
+    );
+  }
 
+  /// Draws the tiles themselves, in the card's own coordinates.
+  void _paintTiles(Canvas canvas, Size size) {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
 
@@ -210,7 +228,45 @@ class UsedPatternPainter extends CustomPainter {
       old.textColor != textColor ||
       old.angleDegrees != angleDegrees ||
       old.patternSize != patternSize ||
-      old.tileToCanvas != tileToCanvas;
+      old.tileToCanvas != tileToCanvas ||
+      old.devicePixelRatio != devicePixelRatio;
+}
+
+/// The watermark images drawn so far, the latest few.
+abstract final class _UsedPatternImages {
+  static final _images =
+      <(Color, double, bool, double, Size, double), ui.Image>{};
+
+  static ui.Image of(UsedPatternPainter painter, Size size) {
+    // The pattern is fixed to the card's top left, so widths round up to 256
+    // and heights to 64, and resizing a card keeps its image. A compact row
+    // centres its words in its exact height.
+    final canvasSize = Size(
+      (size.width / 256).ceil() * 256,
+      painter.tileToCanvas ? size.height : (size.height / 64).ceil() * 64,
+    );
+    final ratio = painter.devicePixelRatio;
+    final key = (
+      painter.textColor,
+      painter.angleDegrees,
+      painter.tileToCanvas,
+      painter.patternSize.height,
+      canvasSize,
+      ratio,
+    );
+    final cached = _images[key];
+    if (cached != null) return cached;
+    if (_images.length >= 6) _images.remove(_images.keys.first)?.dispose();
+    final recorder = ui.PictureRecorder();
+    painter._paintTiles(Canvas(recorder)..scale(ratio), canvasSize);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(
+      (canvasSize.width * ratio).ceil(),
+      (canvasSize.height * ratio).ceil(),
+    );
+    picture.dispose();
+    return _images[key] = image;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

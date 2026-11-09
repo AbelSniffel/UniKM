@@ -110,6 +110,10 @@ String steamStoreUrl(String path) => '$kSteamStoreBase/$path';
 String steamAppPageUrl(String appId) => steamStoreUrl('app/$appId');
 String steamSearchPageUrl(String term) =>
     steamStoreUrl('search/?term=${Uri.encodeComponent(term)}');
+
+/// The store page for [appId], or a store search for [title] without one.
+String steamPageUrl({required String appId, required String title}) =>
+    appId.isNotEmpty ? steamAppPageUrl(appId) : steamSearchPageUrl(title);
 String steamRegisterKeyPageUrl(String key) =>
     steamStoreUrl('account/registerkey?key=${Uri.encodeComponent(key)}');
 
