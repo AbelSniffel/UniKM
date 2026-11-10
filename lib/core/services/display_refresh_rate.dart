@@ -3,8 +3,8 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
+import 'logging.dart';
 
 /// Android runs at 60 Hz unless the app asks for another display mode, so
 /// "auto" requests the highest refresh rate and a fixed rate picks the closest
@@ -30,6 +30,6 @@ Future<void> applyFrameRatePreference(String preference) async {
     );
     await FlutterDisplayMode.setPreferredMode(best);
   } catch (error) {
-    debugPrint('Could not set the display refresh rate: $error');
+    AppLog.w('Could not set the display refresh rate', error: error);
   }
 }

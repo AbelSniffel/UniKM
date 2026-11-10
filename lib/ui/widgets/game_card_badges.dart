@@ -18,6 +18,7 @@ import '../../providers/app_providers.dart';
 import '../widgets/app_progress_indicator.dart';
 import 'game_card_painters.dart';
 import 'platform_icon.dart';
+import '../../core/utils/format_utils.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants (formerly static fields of _GameCardState)
@@ -35,7 +36,6 @@ const EdgeInsets kSelectionIndicatorPadding = EdgeInsets.all(8.0);
 
 abstract final class GameCardBadges {
   static final NumberFormat _compactNumber = NumberFormat.compact();
-  static final DateFormat _deadlineFormat = DateFormat('dd/MM/yyyy');
 
   // ── Primitive builders ────────────────────────────────────────────────────
 
@@ -200,7 +200,7 @@ abstract final class GameCardBadges {
     final dueText = daysLeft == 0 ? 'Today' : '$daysLeft days';
     final date = deadlineDate == null
         ? null
-        : _deadlineFormat.format(deadlineDate);
+        : dayMonthYearFormat.format(deadlineDate);
     final (color, text) = switch (daysLeft) {
       < 0 => (theme.secondary, 'Expired'),
       <= 3 => (theme.deadlineUrgent, dueText),

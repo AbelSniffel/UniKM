@@ -2,7 +2,6 @@
 /// Provides functionality to search for games, fetch AppIDs, tags, images, and reviews
 library;
 
-import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:convert';
 import 'package:dio/dio.dart';
@@ -36,7 +35,7 @@ class SteamApi {
   static String appReviews(String appId) => steamStoreUrl('appreviews/$appId');
 }
 
-void _log(String message) => developer.log(message, name: 'SteamService');
+void _log(String message) => AppLog.i(message, name: 'SteamService');
 
 /// Disk cache helpers
 final _cacheKeyStripPattern = RegExp(r'[^a-z0-9]');
@@ -418,12 +417,6 @@ class SteamService {
     r'\b(dlc|expansion|expansions|season\s*pass|soundtrack|artbook|booster|bonus|pack|skin\s*pack|supporter\s*pack)\b',
   );
   static final _trademarkPattern = RegExp(r'[™®©]');
-  static final _whitespacePattern = RegExp(r'\s+');
-  static final _searchEditionPattern = RegExp(
-    r"\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition\s*",
-    caseSensitive: false,
-  );
-  static final _parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
 
   /// Words keys and Steam use interchangeably for an add-on, matched in a
   /// cleaned (lowercase, punctuation-free) title.
@@ -470,12 +463,15 @@ class SteamService {
   }
 
   Future<void> _throttle() async {
+    // Reserve the slot before waiting so concurrent callers queue up.
+    final now = DateTime.now();
     final last = _lastRequestAt;
-    if (last != null) {
-      final wait = _minRequestInterval - DateTime.now().difference(last);
-      if (wait > Duration.zero) await Future.delayed(wait);
-    }
-    _lastRequestAt = DateTime.now();
+    final start = last == null || now.difference(last) >= _minRequestInterval
+        ? now
+        : last.add(_minRequestInterval);
+    _lastRequestAt = start;
+    final wait = start.difference(now);
+    if (wait > Duration.zero) await Future<void>.delayed(wait);
   }
 
   bool _shouldRetryStatus(int? statusCode) =>
@@ -576,7 +572,10 @@ class SteamService {
           searchSourcesTried: List.unmodifiable(searchSourcesTried),
         );
         if (result != null) {
-          await _cacheResultSafely(normalizedTitle, result);
+          // An empty result is the fallback for a failed details request.
+          if (result.dataSources.isNotEmpty) {
+            await _cacheResultSafely(normalizedTitle, result);
+          }
           return result;
         }
       }
@@ -702,21 +701,27 @@ class SteamService {
     if (title == null) await File(preview).parent.create(recursive: true);
 
     // Resolve current artwork even for old cached results: newer apps use
-    // hashed store_item_assets paths rather than the legacy CDN layout.
+    // hashed store_item_assets paths rather than the legacy CDN layout. A
+    // caller-supplied non-legacy URL already is that artwork.
     final urls = <String>{};
+    final legacyHeader = SteamApi.headerImage(appId);
+    final hasCurrentUrl =
+        imageUrl != null && imageUrl.isNotEmpty && imageUrl != legacyHeader;
     if (!useLibraryImage) {
       try {
-        final response = await _getWithRetry(
-          SteamApi.appDetails,
-          queryParameters: {'appids': appId},
-        );
-        final header = response.data?[appId]?['data']?['header_image'];
-        if (header is String && header.isNotEmpty) urls.add(header);
+        if (!hasCurrentUrl) {
+          final response = await _getWithRetry(
+            SteamApi.appDetails,
+            queryParameters: {'appids': appId},
+          );
+          final header = response.data?[appId]?['data']?['header_image'];
+          if (header is String && header.isNotEmpty) urls.add(header);
+        }
       } catch (_) {
         // Cached artwork and legacy URLs remain usable when metadata is offline.
       }
       if (imageUrl != null && imageUrl.isNotEmpty) urls.add(imageUrl);
-      urls.add(SteamApi.headerImage(appId));
+      urls.add(legacyHeader);
     }
     urls.add(SteamApi.libraryImage(appId));
     for (final url in urls) {
@@ -774,16 +779,16 @@ class SteamService {
     // 2. Clean special characters
     final cleaned = original
         .replaceAll(_trademarkPattern, '')
-        .replaceAll(_whitespacePattern, ' ')
+        .replaceAll(whitespacePattern, ' ')
         .trim();
     if (cleaned != original) variants.add(cleaned);
 
     // 3. Remove edition names
-    final noEdition = cleaned.replaceAll(_searchEditionPattern, '').trim();
+    final noEdition = cleaned.replaceAll(editionSuffixPattern, '').trim();
     if (noEdition.isNotEmpty && noEdition != cleaned) variants.add(noEdition);
 
     // 4. Remove parenthetical content
-    final noParens = cleaned.replaceAll(_parentheticalPattern, ' ').trim();
+    final noParens = cleaned.replaceAll(parentheticalPattern, ' ').trim();
     if (noParens.isNotEmpty &&
         noParens != cleaned &&
         !variants.contains(noParens)) {
@@ -859,7 +864,7 @@ class SteamService {
     bool overlaps(String a, String b) => a.contains(b) || b.contains(a);
     String withoutAddonWords(String clean) => clean
         .replaceAll(_addonWordPattern, ' ')
-        .replaceAll(_whitespacePattern, ' ')
+        .replaceAll(whitespacePattern, ' ')
         .trim();
     // An add-on search ("… Expansion") also matches Steam's other wording
     // ("… DLC") before a base game whose name it merely contains.
@@ -935,8 +940,12 @@ class SteamService {
       final dataSources = <SteamDataSource>[];
       String? headerImage;
 
-      if (fetchTags) {
-        final steamspyTags = await _fetchSteamSpyTags(appId);
+      // One SteamSpy response serves both tags and the review fallback.
+      final spy = fetchTags || fetchReviews
+          ? await _fetchSteamSpy(appId)
+          : null;
+      if (fetchTags && spy != null) {
+        final steamspyTags = _steamSpyTags(spy);
         if (steamspyTags.isNotEmpty) {
           dataSources.add(SteamDataSource.steamSpy);
           _addTags(tags, steamspyTags);
@@ -1021,13 +1030,11 @@ class SteamService {
         }
         // The store's summary can be unavailable (it may answer with a
         // redirect instead of JSON); SteamSpy carries the same counts.
-        if (reviewScore == null) {
-          final spy = await _fetchSteamSpyReviews(appId);
-          if (spy != null) {
-            dataSources.add(SteamDataSource.reviews);
-            reviewCount = spy.count;
-            reviewScore = spy.score;
-          }
+        final spyReviews = spy == null ? null : _steamSpyReviews(spy);
+        if (reviewScore == null && spyReviews != null) {
+          dataSources.add(SteamDataSource.reviews);
+          reviewCount = spyReviews.count;
+          reviewScore = spyReviews.score;
         }
       }
 
@@ -1046,9 +1053,10 @@ class SteamService {
         dataSources: List.unmodifiable(dataSources),
       );
     } catch (e) {
-      // Return basic result without details
+      // Return a basic result without details. It is not cached, so a later
+      // lookup retries instead of reusing the empty fallback.
       _log('Failed to fetch details for AppID $appId: $e');
-      result = SteamSearchResult(
+      return SteamSearchResult(
         appId: appId,
         name: name ?? 'Unknown',
         imageUrl: SteamApi.headerImage(appId),
@@ -1073,49 +1081,36 @@ class SteamService {
     }
   }
 
-  Future<List<String>> _fetchSteamSpyTags(String appId) async {
-    try {
-      final response = await _getWithRetry(
-        SteamApi.steamSpy,
-        queryParameters: {'request': 'appdetails', 'appid': appId},
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data as Map<String, dynamic>;
-        final tagEntries = _parseSteamSpyTags(data['tags']);
-
-        if (tagEntries.isNotEmpty) {
-          tagEntries.sort((a, b) => b.score.compareTo(a.score));
-          final tags = <String>{};
-          _addTags(tags, tagEntries.map((entry) => _normalizeTag(entry.tag)));
-          return tags.toList();
-        }
-      }
-    } catch (e) {
-      _log('SteamSpy tags fetch failed for AppID $appId: $e');
-    }
-    return [];
-  }
-
-  Future<({int score, int count})?> _fetchSteamSpyReviews(String appId) async {
+  Future<Map<String, dynamic>?> _fetchSteamSpy(String appId) async {
     try {
       final response = await _getWithRetry(
         SteamApi.steamSpy,
         queryParameters: {'request': 'appdetails', 'appid': appId},
       );
       final data = response.data;
-      if (response.statusCode != 200 || data is! Map<String, dynamic>) {
-        return null;
+      if (response.statusCode == 200 && data is Map<String, dynamic>) {
+        return data;
       }
-      final positive = (data['positive'] as num?)?.toInt() ?? 0;
-      final negative = (data['negative'] as num?)?.toInt() ?? 0;
-      final total = positive + negative;
-      if (total <= 0) return null;
-      return (score: (positive / total * 100).round(), count: total);
     } catch (e) {
-      _log('SteamSpy reviews fetch failed for AppID $appId: $e');
-      return null;
+      _log('SteamSpy fetch failed for AppID $appId: $e');
     }
+    return null;
+  }
+
+  List<String> _steamSpyTags(Map<String, dynamic> data) {
+    final tagEntries = _parseSteamSpyTags(data['tags'])
+      ..sort((a, b) => b.score.compareTo(a.score));
+    final tags = <String>{};
+    _addTags(tags, tagEntries.map((entry) => _normalizeTag(entry.tag)));
+    return tags.toList();
+  }
+
+  ({int score, int count})? _steamSpyReviews(Map<String, dynamic> data) {
+    final positive = (data['positive'] as num?)?.toInt() ?? 0;
+    final negative = (data['negative'] as num?)?.toInt() ?? 0;
+    final total = positive + negative;
+    if (total <= 0) return null;
+    return (score: (positive / total * 100).round(), count: total);
   }
 
   List<({String tag, int score})> _parseSteamSpyTags(dynamic rawTags) {

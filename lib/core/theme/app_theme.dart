@@ -602,16 +602,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         linearTrackColor: surface,
       ),
 
-      popupMenuTheme: PopupMenuThemeData(
-        color: surface,
-        elevation: 12,
-        menuPadding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
-          side: BorderSide(color: border),
-        ),
-      ),
-
       switchTheme: SwitchThemeData(
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         splashRadius: 14,

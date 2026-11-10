@@ -18,7 +18,6 @@ import 'navigation_theme_menu.dart';
 
 const kNavigationPanelCollapsedWidth = 64.0;
 const kNavigationPanelExpandedWidth = 108.0;
-const kNavigationPanelGradientHeight = 48.0;
 
 /// Match the shell's narrow mode against the navigation panel's expanded size.
 /// Using the collapsed size would move the breakpoint during resizing.
@@ -338,10 +337,7 @@ class _ThemeSelector extends ConsumerWidget {
                         'Navigation button style: ${expansionMode.displayName}',
                     onPressed: () => ref
                         .read(settingsProvider.notifier)
-                        .setSetting(
-                          SettingsKeys.navExpansionMode,
-                          expansionMode.next,
-                        ),
+                        .set(SettingsKeys.navExpansionMode, expansionMode.next),
                     icon: switch (expansionMode) {
                       NavExpansionMode.automatic => Icons.dynamic_feed_rounded,
                       NavExpansionMode.expanded => Icons.unfold_more_rounded,

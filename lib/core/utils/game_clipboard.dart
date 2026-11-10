@@ -35,13 +35,12 @@ class GameClipboard {
     String Function(Game) format,
     String type,
   ) {
-    final text = targets
-        .where((game) => game.gameKey.isNotEmpty)
-        .map(format)
-        .join('\n');
+    final withKeys = targets.where((game) => game.gameKey.isNotEmpty).toList();
+    if (withKeys.isEmpty) return;
+    final text = withKeys.map(format).join('\n');
     if (text.isEmpty) return;
     KeyPrivacy.copy(text);
-    _notifyCopy(targets.length, type);
+    _notifyCopy(withKeys.length, type);
   }
 
   /// Copy redeem links for Steam and GOG keys.

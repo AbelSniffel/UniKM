@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -48,11 +49,11 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   /// Constructor for testing with custom executor
+  @visibleForTesting
   AppDatabase.forTesting(super.e);
 
   /// Constructor for opening a specific database file
-  AppDatabase.fromFile(File file)
-    : super(NativeDatabase.createInBackground(file));
+  AppDatabase.fromFile(File file) : super(_nativeConnection(file));
 
   @override
   int get schemaVersion => 9;
@@ -714,29 +715,6 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getGameTombstonesSinceRevision(
-    int revision,
-  ) async {
-    final rows = await customSelect(
-      'SELECT game_id, game_key, deleted_at, local_revision '
-      'FROM $_syncGameTombstonesTable '
-      'WHERE local_revision > ? '
-      'ORDER BY local_revision ASC, game_id ASC',
-      variables: [Variable.withInt(revision)],
-    ).get();
-
-    return rows
-        .map(
-          (row) => <String, dynamic>{
-            'id': row.data['game_id'],
-            'gameKey': row.data['game_key'],
-            'deletedAt': row.data['deleted_at'],
-            'localRevision': row.data['local_revision'],
-          },
-        )
-        .toList(growable: false);
-  }
-
   Future<Map<String, dynamic>?> getPeerSyncCheckpoint(String peerId) async {
     final trimmedPeerId = peerId.trim();
     if (trimmedPeerId.isEmpty) return null;
@@ -808,17 +786,6 @@ class AppDatabase extends _$AppDatabase {
   Future<GameEntry?> getGameById(int id) =>
       (select(games)..where((g) => g.id.equals(id))).getSingleOrNull();
 
-  /// Get a game's id by key.
-  Future<int?> getGameIdByKey(String key) async {
-    final query = selectOnly(games)
-      ..where(games.gameKey.equals(key))
-      ..orderBy([OrderingTerm.asc(games.id)])
-      ..limit(1);
-    query.addColumns([games.id]);
-    final row = await query.getSingleOrNull();
-    return row?.read(games.id);
-  }
-
   /// Supply the schema's declared defaults explicitly: legacy tables may have
   /// NOT NULL columns without the SQL defaults present in new databases.
   /// Caller-supplied values remain intact; updates don't use this helper.
@@ -839,11 +806,6 @@ class AppDatabase extends _$AppDatabase {
     final revision = await markLocalDataChanged();
     await recordGameUpsert(id, localRevision: revision);
     return id;
-  });
-
-  /// Insert multiple games in a batch
-  Future<void> insertGames(List<GamesCompanion> gamesList) => batch((b) {
-    b.insertAll(games, gamesList.map(gameInsertWithDefaults).toList());
   });
 
   /// Update a game
@@ -902,8 +864,6 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Delete games and their tag links atomically, retaining both sync journals.
-  Future<int> deleteGame(int id) => deleteGames([id]);
-
   Future<int> deleteGames(List<int> ids) {
     final uniqueIds = ids.where((id) => id > 0).toSet().toList();
     if (uniqueIds.isEmpty) return Future.value(0);
@@ -1016,9 +976,6 @@ class AppDatabase extends _$AppDatabase {
       isSteamTag: isSteamTag,
     );
   }
-
-  /// Insert a new tag
-  Future<int> insertTag(TagsCompanion tag) => into(tags).insert(tag);
 
   /// Update a tag
   Future<bool> updateTag(TagEntry tag) => update(tags).replace(tag);
@@ -1261,18 +1218,6 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ===========================================================================
-  // BACKUP OPERATIONS
-  // ===========================================================================
-
-  /// Get all backups
-  Future<List<BackupEntry>> getAllBackups() =>
-      (select(backups)..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
-
-  /// Insert a backup record
-  Future<int> insertBackup(BackupsCompanion backup) =>
-      into(backups).insert(backup);
-
-  // ===========================================================================
   // UTILITY METHODS
   // ===========================================================================
 
@@ -1311,5 +1256,13 @@ class AppDatabase extends _$AppDatabase {
 /// Open the database connection
 LazyDatabase _openConnection() => LazyDatabase(() async {
   final file = await AppDatabase.getDatabaseFile();
-  return NativeDatabase.createInBackground(file);
+  return _nativeConnection(file);
 });
+
+/// An encrypted save snapshots the file through a second connection
+/// (VACUUM INTO). Writes wait for it to finish instead of failing with
+/// "database is locked".
+QueryExecutor _nativeConnection(File file) => NativeDatabase.createInBackground(
+  file,
+  setup: (db) => db.execute('PRAGMA busy_timeout = 30000'),
+);

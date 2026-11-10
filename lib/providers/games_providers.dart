@@ -185,6 +185,7 @@ class GamesNotifier extends Notifier<GamesState> {
     _midnightTimer = Timer(next.difference(now), () {
       if (!ref.mounted) return;
       state = state.copyWith(sortMode: state.sortMode);
+      ref.invalidate(currentMonthProvider);
       _scheduleMidnight();
     });
   }
@@ -316,9 +317,6 @@ class GamesNotifier extends Notifier<GamesState> {
     }
   }
 
-  /// Public method to load games (for initial load)
-  Future<void> loadGames() => _loadGames();
-
   /// Refresh games from database
   Future<void> refresh() => _loadGames();
 
@@ -339,6 +337,8 @@ class GamesNotifier extends Notifier<GamesState> {
     int reviewCount = 0,
     List<int> tagIds = const [],
     int? replaceId,
+    // False lets a batch persist an encrypted database once at the end.
+    bool persist = true,
   }) async {
     final operationDatabase = _activeDatabase;
     try {
@@ -375,7 +375,7 @@ class GamesNotifier extends Notifier<GamesState> {
         return newGame;
       }
 
-      await persistEncryptedDbIfNeeded(ref, database: db);
+      if (persist) await persistEncryptedDbIfNeeded(ref, database: db);
       unawaited(_bumpSyncDbRevision(ref, db));
       return newGame;
     } catch (e) {
@@ -391,6 +391,7 @@ class GamesNotifier extends Notifier<GamesState> {
   Future<T> _mutate<T>(
     Future<T> Function(AppDatabase db) action, {
     required T failure,
+    bool persist = true,
   }) async {
     final operationDatabase = _activeDatabase;
     try {
@@ -399,7 +400,7 @@ class GamesNotifier extends Notifier<GamesState> {
       if (!ref.mounted || !identical(ref.read(databaseProvider), db)) {
         return failure;
       }
-      await persistEncryptedDbIfNeeded(ref, database: db);
+      if (persist) await persistEncryptedDbIfNeeded(ref, database: db);
       unawaited(_bumpSyncDbRevision(ref, db));
       return result;
     } catch (e) {
@@ -412,34 +413,41 @@ class GamesNotifier extends Notifier<GamesState> {
   }
 
   /// Update a game
-  Future<bool> updateGame(Game game, {List<int>? tagIds}) async =>
-      _mutate((db) async {
-        final updatedAt = DateTime.now();
+  Future<bool> updateGame(
+    Game game, {
+    List<int>? tagIds,
+    bool persist = true,
+  }) async => _mutate(
+    (db) async {
+      final updatedAt = DateTime.now();
 
-        await LibraryRepository(db).updateGame(
-          GameEntry(
-            id: game.id,
-            title: game.title,
-            gameKey: game.gameKey,
-            platform: game.platform,
-            dateAdded: game.dateAdded,
-            updatedAt: updatedAt,
-            notes: game.notes,
-            isUsed: game.isUsed,
-            coverImage: game.coverImage,
-            hasDeadline: game.hasDeadline,
-            deadlineDate: game.deadlineDate,
-            isDlc: game.isDlc,
-            steamAppId: game.steamAppId,
-            developer: game.developer,
-            reviewScore: game.reviewScore,
-            reviewCount: game.reviewCount,
-          ),
-          tagIds: tagIds,
-        );
+      await LibraryRepository(db).updateGame(
+        GameEntry(
+          id: game.id,
+          title: game.title,
+          gameKey: game.gameKey,
+          platform: game.platform,
+          dateAdded: game.dateAdded,
+          updatedAt: updatedAt,
+          notes: game.notes,
+          isUsed: game.isUsed,
+          coverImage: game.coverImage,
+          hasDeadline: game.hasDeadline,
+          deadlineDate: game.deadlineDate,
+          isDlc: game.isDlc,
+          steamAppId: game.steamAppId,
+          developer: game.developer,
+          reviewScore: game.reviewScore,
+          reviewCount: game.reviewCount,
+        ),
+        tagIds: tagIds,
+      );
 
-        return true;
-      }, failure: false);
+      return true;
+    },
+    failure: false,
+    persist: persist,
+  );
 
   /// Delete a single game
   Future<bool> deleteGame(int id) => deleteGames([id]);

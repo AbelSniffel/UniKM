@@ -5,11 +5,14 @@ library;
 
 import 'dart:math' as math;
 
+/// A trailing "(kind) Edition" such as "GOTY Edition" or "Deluxe Edition".
+final editionSuffixPattern = RegExp(
+  r'\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition',
+  caseSensitive: false,
+);
+
 final _editionPatterns = [
-  RegExp(
-    r'\s*(GOTY|Game of the Year|Deluxe|Premium|Gold|Complete|Enhanced|Remastered?|Definitive|Ultimate|Special|Collectors?|Anniversary)\s*Edition',
-    caseSensitive: false,
-  ),
+  editionSuffixPattern,
   RegExp(r'\s*[-:]?\s*Deluxe\s*(Edition)?', caseSensitive: false),
   RegExp(
     r'\s*[-:]?\s*(GOTY|Game of the Year)\s*(Edition)?',
@@ -22,9 +25,9 @@ final _editionPatterns = [
   RegExp(r'\s*[-:]?\s*Remaster(ed)?', caseSensitive: false),
 ];
 
-final _parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
+final parentheticalPattern = RegExp(r'\s*\([^)]*\)\s*');
 final _specialCharacterPattern = RegExp(r'[^a-zA-Z0-9\s]');
-final _whitespacePattern = RegExp(r'\s+');
+final whitespacePattern = RegExp(r'\s+');
 final _numberPattern = RegExp(r'^\d+$');
 final _romanPattern = RegExp(r'^[ivxlcdm]+$', caseSensitive: false);
 
@@ -38,12 +41,12 @@ String cleanTitleForSearch(String title) {
   }
 
   // Remove parenthetical content
-  clean = clean.replaceAll(_parentheticalPattern, ' ');
+  clean = clean.replaceAll(parentheticalPattern, ' ');
 
   // Remove special characters but keep alphanumeric, numbers and spaces
   clean = clean.replaceAll(_specialCharacterPattern, ' ');
   // Collapse multiple spaces
-  clean = clean.replaceAll(_whitespacePattern, ' ').trim();
+  clean = clean.replaceAll(whitespacePattern, ' ').trim();
   return clean;
 }
 

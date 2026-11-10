@@ -27,6 +27,7 @@ import 'sync_crypto.dart';
 import 'sync_entry_fingerprint.dart';
 import 'sync_frames.dart';
 import 'sync_payload_codec.dart';
+import 'logging.dart';
 
 export '../../features/sync/data/sync_firewall.dart'
     show WindowsFirewallCheckResult, LinuxFirewallCheckResult;
@@ -2102,7 +2103,7 @@ class DeviceSyncService {
   }
 
   Future<void> _setSetting<T>(String key, T value) =>
-      ref.read(settingsProvider.notifier).setSetting(key, value);
+      ref.read(settingsProvider.notifier).set(key, value);
 
   Future<String> _ensureDeviceId() async {
     final settings = ref.read(settingsProvider);
@@ -2162,7 +2163,7 @@ class DeviceSyncService {
               deviceId: deviceId,
             ).catchError(
               (Object error, StackTrace stack) =>
-                  debugPrint('Sync control packet ignored: $error'),
+                  AppLog.w('Sync control packet ignored', error: error, name: 'Sync'),
             ),
           );
           return;
@@ -2289,7 +2290,7 @@ class DeviceSyncService {
       }
       _reportTransfer('Incoming sync: waiting for data...');
       if (hello['v'] != 2) {
-        debugPrint('Sync: rejected non-v2 connection on encrypted channel.');
+        AppLog.w('Rejected non-v2 connection on encrypted channel', name: 'Sync');
         return;
       }
       final handshake = await _performServerHandshake(socket, hello);
@@ -2334,7 +2335,7 @@ class DeviceSyncService {
         }
       }
     } catch (e) {
-      debugPrint('Sync server receive error: $e');
+      AppLog.w('Sync server receive error', error: e, name: 'Sync');
       progress.fail('Sync failed: $e');
     } finally {
       await reader.cancel();
@@ -3530,7 +3531,10 @@ class DeviceSyncService {
         clientStaticPubB64 != expectedFingerprint ||
         (currentPeer.pairingId.isNotEmpty &&
             clientHello['pairingId'] != currentPeer.pairingId)) {
-      debugPrint('Sync: client identity verification failed for $clientPeerId');
+      AppLog.w(
+        'Client identity verification failed for $clientPeerId',
+        name: 'Sync',
+      );
       return null;
     }
 

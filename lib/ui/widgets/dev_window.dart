@@ -198,8 +198,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
           label: label,
           icon: icon,
           theme: theme,
-          onTap: () =>
-              ref.read(settingsProvider.notifier).setSetting(key, !value),
+          onTap: () => ref.read(settingsProvider.notifier).set(key, !value),
           selected: value,
         );
 
@@ -362,7 +361,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               'Grant access',
               Icons.shield_outlined,
               () => _firewallAction(
-                (sync) => sync.grantLinuxFirewallAccess(),
+                (sync) => sync.grantFirewallAccess(),
                 'Could not add firewall rules.',
                 command: 'sudo ufw allow 45871/udp && sudo ufw allow 45872/tcp',
                 success:

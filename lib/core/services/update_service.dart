@@ -1,6 +1,7 @@
 /// Update service for checking and downloading app updates from GitHub
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -126,10 +127,18 @@ class GitHubRelease {
 
 /// Result of an update check
 class UpdateCheckResult {
-  const UpdateCheckResult({required this.hasUpdate, this.release, this.error});
+  const UpdateCheckResult({
+    required this.hasUpdate,
+    this.release,
+    this.error,
+    this.releases = const [],
+  });
 
   final bool hasUpdate;
   final GitHubRelease? release;
+
+  /// Every release fetched by the check, for the changelog and version list.
+  final List<GitHubRelease> releases;
   final String? error;
 
   bool get isError => error != null;
@@ -162,19 +171,19 @@ class UpdateService {
   final String? _githubToken;
   final http.Client? _githubClient;
 
-  // Cancellation state for the active download.
+  // The active download's client; null (or another client) means cancelled.
   http.Client? _activeDownloadClient;
-  bool _downloadCancelled = false;
 
   /// Cancel an in-progress download.
   ///
   /// Closes the active HTTP connection. The [downloadUpdate] call will throw
   /// [DownloadCancelledException] and delete the partial file.
   void cancelActiveDownload() {
-    _downloadCancelled = true;
     _activeDownloadClient?.close();
     _activeDownloadClient = null;
   }
+
+  static const _requestTimeout = Duration(seconds: 20);
 
   /// Get the API URL for all releases
   String get _allReleasesUrl => 'https://api.github.com/repos/$_repo/releases';
@@ -204,7 +213,8 @@ class UpdateService {
 
     if (lowerMessage.contains('connection refused') ||
         lowerMessage.contains('network is unreachable') ||
-        lowerMessage.contains('timed out')) {
+        lowerMessage.contains('timed out') ||
+        error is TimeoutException) {
       return 'GitHub could not be reached. Check your connection and try again.';
     }
 
@@ -275,29 +285,22 @@ class UpdateService {
         skippedVersions: skippedVersions,
       );
 
-      return UpdateCheckResult(hasUpdate: release != null, release: release);
+      return UpdateCheckResult(
+        hasUpdate: release != null,
+        release: release,
+        releases: releases,
+      );
     } catch (e) {
       return UpdateCheckResult(hasUpdate: false, error: _formatCheckError(e));
-    }
-  }
-
-  /// Fetch all available releases from GitHub (for changelog/version switcher).
-  /// Includes both stable and pre-release entries.
-  Future<List<GitHubRelease>> fetchAllReleases() async {
-    try {
-      return await _fetchReleases();
-    } catch (_) {
-      return [];
     }
   }
 
   Future<List<GitHubRelease>> _fetchReleases() async {
     final client = _githubClient ?? http.Client();
     try {
-      final response = await client.get(
-        Uri.parse('$_allReleasesUrl?per_page=100'),
-        headers: _headers,
-      );
+      final response = await client
+          .get(Uri.parse('$_allReleasesUrl?per_page=100'), headers: _headers)
+          .timeout(_requestTimeout);
 
       if (response.statusCode != 200) {
         throw HttpException('Failed to fetch releases: ${response.statusCode}');
@@ -318,10 +321,12 @@ class UpdateService {
   Future<GitHubRelease?> fetchRelease(String tagName) async {
     final client = _githubClient ?? http.Client();
     try {
-      final response = await client.get(
-        Uri.parse('$_allReleasesUrl/tags/${Uri.encodeComponent(tagName)}'),
-        headers: _headers,
-      );
+      final response = await client
+          .get(
+            Uri.parse('$_allReleasesUrl/tags/${Uri.encodeComponent(tagName)}'),
+            headers: _headers,
+          )
+          .timeout(_requestTimeout);
       if (response.statusCode != 200) return null;
       return GitHubRelease.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
@@ -408,7 +413,6 @@ class UpdateService {
       return const UpdateDownloadResult.external();
     }
 
-    _downloadCancelled = false;
     final client = http.Client();
     _activeDownloadClient = client;
 
@@ -417,7 +421,10 @@ class UpdateService {
     try {
       // Include destination preparation in client cleanup if it fails.
       final url = Uri.parse(release.downloadUrl!);
-      final extension = p.extension(url.path);
+      final extension = p.extension(
+        url.path,
+        url.path.endsWith('.tar.gz') ? 2 : 1,
+      );
       final fileName = 'UniKM-${release.version}$extension';
       final downloadsDir = await _getDownloadsDirectory();
       final filePath = p.join(downloadsDir.path, fileName);
@@ -452,11 +459,11 @@ class UpdateService {
         }
       } catch (_) {
         // Stream broke — could be normal cancellation or a network error.
-        if (_downloadCancelled) await cancelled();
+        if (!identical(_activeDownloadClient, client)) await cancelled();
         rethrow;
       }
 
-      if (_downloadCancelled) await cancelled();
+      if (!identical(_activeDownloadClient, client)) await cancelled();
 
       await sink!.close();
       sink = null;
@@ -469,7 +476,9 @@ class UpdateService {
       rethrow;
     } finally {
       client.close();
-      _activeDownloadClient = null;
+      if (identical(_activeDownloadClient, client)) {
+        _activeDownloadClient = null;
+      }
     }
   }
 

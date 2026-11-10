@@ -75,7 +75,7 @@ class SettingsSearchScope extends InheritedWidget {
 
 /// Fades a settings search match in, holds it while it matches, and fades
 /// it out without unmounting it.
-class SearchHighlight extends StatefulWidget {
+class SearchHighlight extends StatelessWidget {
   const SearchHighlight({
     super.key,
     required this.query,
@@ -86,37 +86,10 @@ class SearchHighlight extends StatefulWidget {
   final Widget Function(BuildContext context, double value) builder;
 
   @override
-  State<SearchHighlight> createState() => _SearchHighlightState();
-}
-
-class _SearchHighlightState extends State<SearchHighlight>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: query.trim().isEmpty ? 0 : 1),
     duration: const Duration(milliseconds: 200),
-    value: _matches ? 1 : 0,
-  );
-
-  bool get _matches => widget.query.trim().isNotEmpty;
-
-  @override
-  void didUpdateWidget(covariant SearchHighlight oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _controller.animateTo(_matches ? 1 : 0);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, _) => widget.builder(
-      context,
-      Curves.easeOutCubic.transform(_controller.value),
-    ),
+    curve: Curves.easeOutCubic,
+    builder: (context, value, _) => builder(context, value),
   );
 }

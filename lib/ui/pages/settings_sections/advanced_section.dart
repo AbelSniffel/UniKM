@@ -227,7 +227,7 @@ class _ControlStylesSection extends ConsumerWidget {
         ],
         onChanged: (style) => ref
             .read(settingsProvider.notifier)
-            .setSetting(SettingsKeys.toggleStyle, style),
+            .set(SettingsKeys.toggleStyle, style),
         buttonBuilder: (choice, selected, choose) => AppToggleSwitch(
           key: ValueKey(choice.value),
           value: selected,

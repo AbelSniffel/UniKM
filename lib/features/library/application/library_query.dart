@@ -54,17 +54,19 @@ class LibraryQueryIndex {
     }
   }
 
-  static Object _sortKey(Game game, GameSortMode mode) => switch (mode) {
-    GameSortMode.titleAZ || GameSortMode.titleZA => game.title,
-    GameSortMode.platformAZ || GameSortMode.platformZA => game.platform,
-    GameSortMode.dateNewest || GameSortMode.dateOldest => game.dateAdded,
-    GameSortMode.ratingHigh || GameSortMode.ratingLow => game.reviewScore,
-    GameSortMode.deadlineFirst => (
-      game.hasDeadline,
-      game.deadlineDate,
-      game.title,
-    ),
-  };
+  // Every mode breaks ties by lowercase title (then id), so the title is
+  // part of every key.
+  static Object _sortKey(Game game, GameSortMode mode) => (
+    switch (mode) {
+      GameSortMode.titleAZ || GameSortMode.titleZA => null,
+      GameSortMode.platformAZ ||
+      GameSortMode.platformZA => game.platform.toLowerCase(),
+      GameSortMode.dateNewest || GameSortMode.dateOldest => game.dateAdded,
+      GameSortMode.ratingHigh || GameSortMode.ratingLow => game.reviewScore,
+      GameSortMode.deadlineFirst => (game.hasDeadline, game.deadlineDate),
+    },
+    game.title.toLowerCase(),
+  );
 
   final List<Game> games;
   final _titles = <int, String>{};
@@ -129,13 +131,21 @@ class LibraryQueryIndex {
     );
   }
 
-  static List<Game> _sortGames(
-    List<Game> games,
-    GameSortMode mode,
-    DateTime now,
-  ) {
-    final sorted = List<Game>.from(games);
+  List<Game> _sortGames(List<Game> games, GameSortMode mode, DateTime now) {
+    // Case-insensitive title, then id: a stable order for equal keys.
+    int byTitle(Game a, Game b) {
+      final c = _titles[a.id]!.compareTo(_titles[b.id]!);
+      return c != 0 ? c : a.id.compareTo(b.id);
+    }
 
+    int Function(Game, Game) thenTitle(int Function(Game, Game) primary) =>
+        (a, b) {
+          final c = primary(a, b);
+          return c != 0 ? c : byTitle(a, b);
+        };
+    String platform(Game g) => g.platform.toLowerCase();
+
+    final sorted = List<Game>.from(games);
     switch (mode) {
       case GameSortMode.deadlineFirst:
         // Compute calendar-day expiry once per game, rather than allocating
@@ -148,43 +158,43 @@ class LibraryQueryIndex {
                 calendarDay(game.deadlineDate!).isBefore(today))
               game.id,
         };
-        sorted.sort((a, b) {
-          // Games with deadlines come before games without deadlines
-          if (a.hasDeadline && !b.hasDeadline) return -1;
-          if (!a.hasDeadline && b.hasDeadline) return 1;
-
-          // If both have deadlines, prefer non-expired items first so
-          // "about to expire" games are pushed to the top. Expired
-          // games should appear after active deadlines but still before
-          // games without any deadline.
-          if (a.hasDeadline && b.hasDeadline) {
+        sorted.sort(
+          thenTitle((a, b) {
+            // Games with deadlines come before games without deadlines
+            if (a.hasDeadline != b.hasDeadline) return a.hasDeadline ? -1 : 1;
+            if (!a.hasDeadline) return 0;
+            // Active deadlines before expired ones, so "about to expire"
+            // games are at the top; expired games still precede games
+            // without any deadline.
             final aExpired = expired.contains(a.id);
-            final bExpired = expired.contains(b.id);
-            if (aExpired && !bExpired) return 1; // expired -> later
-            if (!aExpired && bExpired) return -1; // active -> earlier
-
-            // Both active or both expired: fall back to chronological order
+            if (aExpired != expired.contains(b.id)) return aExpired ? 1 : -1;
+            // Both active or both expired: chronological order.
             return (a.deadlineDate ?? now).compareTo(b.deadlineDate ?? now);
-          }
-
-          return a.title.compareTo(b.title);
-        });
+          }),
+        );
       case GameSortMode.titleAZ:
-        sorted.sort((a, b) => a.title.compareTo(b.title));
+        sorted.sort(byTitle);
       case GameSortMode.titleZA:
-        sorted.sort((a, b) => b.title.compareTo(a.title));
+        sorted.sort((a, b) {
+          final c = _titles[b.id]!.compareTo(_titles[a.id]!);
+          return c != 0 ? c : a.id.compareTo(b.id);
+        });
       case GameSortMode.platformAZ:
-        sorted.sort((a, b) => a.platform.compareTo(b.platform));
+        sorted.sort(thenTitle((a, b) => platform(a).compareTo(platform(b))));
       case GameSortMode.platformZA:
-        sorted.sort((a, b) => b.platform.compareTo(a.platform));
+        sorted.sort(thenTitle((a, b) => platform(b).compareTo(platform(a))));
       case GameSortMode.dateNewest:
-        sorted.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+        sorted.sort(thenTitle((a, b) => b.dateAdded.compareTo(a.dateAdded)));
       case GameSortMode.dateOldest:
-        sorted.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
+        sorted.sort(thenTitle((a, b) => a.dateAdded.compareTo(b.dateAdded)));
       case GameSortMode.ratingHigh:
-        sorted.sort((a, b) => b.reviewScore.compareTo(a.reviewScore));
+        sorted.sort(
+          thenTitle((a, b) => b.reviewScore.compareTo(a.reviewScore)),
+        );
       case GameSortMode.ratingLow:
-        sorted.sort((a, b) => a.reviewScore.compareTo(b.reviewScore));
+        sorted.sort(
+          thenTitle((a, b) => a.reviewScore.compareTo(b.reviewScore)),
+        );
     }
 
     return List.unmodifiable(sorted);

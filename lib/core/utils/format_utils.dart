@@ -1,6 +1,11 @@
 /// Shared formatting utilities
 library;
 
+import 'package:intl/intl.dart';
+
+/// Dates shown to the user, e.g. deadlines: 'dd/MM/yyyy'.
+final dayMonthYearFormat = DateFormat('dd/MM/yyyy');
+
 /// Format a byte count as a human-readable string (e.g. '1.5 MB').
 /// 
 /// Returns 'Unknown size' if [bytes] is null.

@@ -123,12 +123,6 @@ class Game {
     return negativeColor;
   }
 
-  /// Alias for dateAdded (createdAt)
-  DateTime get createdAt => dateAdded;
-
-  /// Get rating (alias for reviewScore for UI compatibility)
-  int get rating => reviewScore;
-
   /// Get tag IDs
   List<int> get tagIds => tags.map((t) => t.id).toList();
 

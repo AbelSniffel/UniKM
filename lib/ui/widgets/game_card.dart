@@ -12,7 +12,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
@@ -28,6 +27,7 @@ import 'game_cover_image.dart';
 import 'game_selection_actions.dart';
 import 'popup_menu_helpers.dart';
 import 'used_overlay.dart';
+import '../../core/utils/format_utils.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget
@@ -67,7 +67,6 @@ class _GameCardState extends ConsumerState<GameCard>
   // Large enough to cover the DLC banner on Steam's DLC header artwork.
   static const double _kGridDlcRibbonHeight = 42.0;
   static const double _kGridRibbonOffset = 12.0;
-  static final DateFormat _ribbonDateFormat = DateFormat('dd/MM/yyyy');
 
   // ── Per-card animation state ───────────────────────────────────────────────
   bool _isHovered = false;
@@ -833,7 +832,7 @@ class _GameCardState extends ConsumerState<GameCard>
         color: theme.secondary,
         textColor: theme.onSecondaryText,
         bandIndex: hasDlc ? 1 : 0,
-        addedDate: widget.game.createdAt,
+        addedDate: widget.game.dateAdded,
         large: large && hasDlc,
       ),
   ];
@@ -866,7 +865,7 @@ class _GameCardState extends ConsumerState<GameCard>
     Widget withTooltip(Widget child) => addedDate == null
         ? child
         : Tooltip(
-            message: 'Added ${_ribbonDateFormat.format(addedDate)}',
+            message: 'Added ${dayMonthYearFormat.format(addedDate)}',
             child: child,
           );
 
@@ -1030,7 +1029,7 @@ class _GameCardState extends ConsumerState<GameCard>
 
   bool _shouldShowNewBadge(bool hasBeenViewed) {
     if (hasBeenViewed) return false;
-    final age = DateTime.now().difference(widget.game.createdAt);
+    final age = DateTime.now().difference(widget.game.dateAdded);
     return !age.isNegative && age <= _newBadgeLifetime;
   }
 

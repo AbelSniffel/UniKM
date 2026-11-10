@@ -76,19 +76,22 @@ class AppTitleBar extends ConsumerWidget {
 
           // Window controls remain outside of the gesture area that handles
           // double taps so they are responsive immediately.
-          _WindowButton(
+          _TitleBarActionButton(
             icon: Icons.remove,
             theme: theme,
+            width: 46,
             onPressed: windowManager.minimize,
           ),
-          _WindowButton(
+          _TitleBarActionButton(
             icon: Icons.crop_square,
             theme: theme,
+            width: 46,
             onPressed: _toggleMaximized,
           ),
-          _WindowButton(
+          _TitleBarActionButton(
             icon: Icons.close,
             theme: theme,
+            width: 46,
             hoverColor: theme.secondary,
             onPressed: windowManager.close,
           ),
@@ -174,20 +177,27 @@ class _SyncButton extends ConsumerWidget {
   }
 }
 
-/// Shared pointer and hover handling for the title-bar menu and sync actions.
+/// Shared pointer and hover handling for the title-bar actions and the
+/// window buttons.
 class _TitleBarActionButton extends StatefulWidget {
   const _TitleBarActionButton({
     required this.theme,
     required this.icon,
     required this.onPressed,
+    this.width = 36,
     this.color,
+    this.hoverColor,
     this.hoverIconColor,
   });
 
   final AppThemeData theme;
   final IconData icon;
   final VoidCallback onPressed;
+  final double width;
   final Color? color;
+
+  /// Tints the hover background and, unless [hoverIconColor] is set, the icon.
+  final Color? hoverColor;
   final Color? hoverIconColor;
 
   @override
@@ -199,76 +209,37 @@ class _TitleBarActionButtonState extends State<_TitleBarActionButton> {
   bool _isPressed = false;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => _isHovered = true),
-    onExit: (_) => setState(() => _isHovered = false),
-    child: Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => setState(() => _isPressed = true),
-      onPointerUp: (_) {
-        if (_isPressed) widget.onPressed();
-        setState(() => _isPressed = false);
-      },
-      onPointerCancel: (_) => setState(() => _isPressed = false),
-      child: Container(
-        width: 36,
-        height: 32,
-        color: _isHovered
-            ? widget.theme.accent.withValues(alpha: 0.2)
-            : Colors.transparent,
-        child: Icon(
-          widget.icon,
-          size: 16,
-          color: _isHovered
-              ? widget.hoverIconColor ?? widget.theme.accent
-              : widget.color ?? widget.theme.textSecondary,
+  Widget build(BuildContext context) {
+    final hover = widget.hoverColor ?? widget.theme.accent;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => setState(() => _isPressed = true),
+        onPointerUp: (event) {
+          // Releasing outside the button cancels the press.
+          final box = context.findRenderObject()! as RenderBox;
+          final inside = box.paintBounds.contains(
+            box.globalToLocal(event.position),
+          );
+          if (_isPressed && inside) widget.onPressed();
+          setState(() => _isPressed = false);
+        },
+        onPointerCancel: (_) => setState(() => _isPressed = false),
+        child: Container(
+          width: widget.width,
+          height: 32,
+          color: _isHovered ? hover.withValues(alpha: 0.2) : Colors.transparent,
+          child: Icon(
+            widget.icon,
+            size: 16,
+            color: _isHovered
+                ? widget.hoverIconColor ?? hover
+                : widget.color ?? widget.theme.textSecondary,
+          ),
         ),
       ),
-    ),
-  );
-}
-
-/// Window control button
-class _WindowButton extends StatefulWidget {
-  const _WindowButton({
-    required this.icon,
-    required this.theme,
-    required this.onPressed,
-    this.hoverColor,
-  });
-
-  final IconData icon;
-  final AppThemeData theme;
-  final VoidCallback onPressed;
-  final Color? hoverColor;
-
-  @override
-  State<_WindowButton> createState() => _WindowButtonState();
-}
-
-class _WindowButtonState extends State<_WindowButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => _isHovered = true),
-    onExit: (_) => setState(() => _isHovered = false),
-    child: GestureDetector(
-      onTap: widget.onPressed,
-      child: Container(
-        width: 46,
-        height: 32,
-        color: _isHovered
-            ? (widget.hoverColor ?? widget.theme.accent).withValues(alpha: 0.2)
-            : Colors.transparent,
-        child: Icon(
-          widget.icon,
-          size: 16,
-          color: _isHovered
-              ? (widget.hoverColor ?? widget.theme.accent)
-              : widget.theme.textSecondary,
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }

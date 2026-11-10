@@ -45,7 +45,6 @@ class EncryptionManager {
       'pending_plaintext_deletion';
 
   final String dbPath;
-  final AesGcm _cipher = AesGcm.with256bits();
   String? _keyPassword;
   List<int>? _keySalt;
   Future<SecretKey>? _key;
@@ -151,16 +150,14 @@ class EncryptionManager {
     final nonce = data.sublist(saltEnd, nonceEnd);
     final macStart = data.length - 16;
     final ciphertext = data.sublist(nonceEnd, macStart);
-    final mac = Mac(data.sublist(macStart));
+    final mac = data.sublist(macStart);
 
     // Derive key
-    final key = await _deriveKey(password, salt);
+    final keyBytes = await (await _deriveKey(password, salt)).extractBytes();
 
-    // Decrypt
+    // Decrypt off the UI isolate: AES-GCM over the whole file is pure Dart.
     try {
-      final secretBox = SecretBox(ciphertext, nonce: nonce, mac: mac);
-      final plaintext = await _cipher.decrypt(secretBox, secretKey: key);
-      return Uint8List.fromList(plaintext);
+      return await _decryptInBackground(ciphertext, nonce, mac, keyBytes);
     } catch (e) {
       throw InvalidPasswordException('Incorrect password or corrupted data');
     }
@@ -328,6 +325,20 @@ final encryptionManagerProvider = Provider.family<EncryptionManager, String>(
 final encryptionStateProvider = sessionValueProvider(EncryptionState.unknown);
 
 /// Snapshot reading and full-file encryption run outside the UI isolate.
+/// Top-level, so the closure sent to the isolate captures only its inputs.
+Future<Uint8List> _decryptInBackground(
+  List<int> ciphertext,
+  List<int> nonce,
+  List<int> mac,
+  List<int> keyBytes,
+) => Isolate.run(() async {
+  final plaintext = await AesGcm.with256bits().decrypt(
+    SecretBox(ciphertext, nonce: nonce, mac: Mac(mac)),
+    secretKey: SecretKey(keyBytes),
+  );
+  return Uint8List.fromList(plaintext);
+});
+
 Future<Uint8List> _encryptSnapshot(
   String path,
   List<int> salt,

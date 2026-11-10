@@ -802,6 +802,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
               hasDeadline: game.deadline != null || _hasDeadline,
               deadlineDate:
                   game.deadline ?? (_hasDeadline ? _deadlineDate : null),
+              persist: false,
             );
         if (result != null) {
           imported++;
@@ -833,15 +834,17 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
               reviewScore: steamResult.reviewScore ?? result.reviewScore,
               reviewCount: steamResult.reviewCount ?? result.reviewCount,
               isDlc: steamResult.isDlc,
+              developer: steamResult.developer ?? result.developer,
             );
-            await ref.read(gamesProvider.notifier).updateGame(updated);
+            await ref
+                .read(gamesProvider.notifier)
+                .updateGame(updated, persist: false);
           }
         }
       }
 
       if (_steamResults.isNotEmpty) {
         await ref.read(tagsProvider.notifier).refresh();
-        await persistEncryptedDbIfNeeded(ref);
       }
 
       NotificationManager.instance.success(
@@ -849,7 +852,12 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
       );
       _clearBatchInput();
     } finally {
-      setState(() => _isImporting = false);
+      // One encrypted save for the whole batch, even after a failure.
+      try {
+        if (mounted) await persistEncryptedDbIfNeeded(ref);
+      } finally {
+        if (mounted) setState(() => _isImporting = false);
+      }
     }
   }
 

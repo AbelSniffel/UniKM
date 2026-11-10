@@ -356,8 +356,6 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
   Future<bool> openWindowsFirewallAdvancedSettings() =>
       ref.read(syncFirewallProvider).openWindowsFirewallAdvancedSettings();
 
-  Future<bool> grantLinuxFirewallAccess() => grantFirewallAccess();
-
   Future<bool> grantFirewallAccess() async {
     final firewall = ref.read(syncFirewallProvider);
     final granted = switch (defaultTargetPlatform) {

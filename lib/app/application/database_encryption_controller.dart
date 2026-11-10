@@ -146,7 +146,7 @@ class DatabaseEncryptionController {
       );
       await container
           .read(settingsProvider.notifier)
-          .setSetting(SettingsKeys.encryptionEnabled, manager.isEncrypted);
+          .set(SettingsKeys.encryptionEnabled, manager.isEncrypted);
       container.read(encryptionStateProvider.notifier).set(manager.state);
     } catch (_) {
       // A failed file operation keeps the existing file and password usable.

@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -445,10 +446,12 @@ class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
 }
 
 class _GameLibraryDragSelectionLayerState
-    extends ConsumerState<_GameLibraryDragSelectionLayer> {
+    extends ConsumerState<_GameLibraryDragSelectionLayer>
+    with SingleTickerProviderStateMixin {
   static const double _dragStartSlop = 6.0;
   static const double _contentPadding = 12.0;
-  static const Duration _autoScrollTick = Duration(milliseconds: 16);
+  /// The steps below are per 16 ms; ticks scale them by the real frame time.
+  static const _autoScrollTickMicros = 16000;
 
   // Marquee tuning knobs.
   static const double _autoScrollEdgeExtent = 72.0;
@@ -534,7 +537,9 @@ class _GameLibraryDragSelectionLayerState
   Offset? _marqueeCurrentLocal;
   bool _isShiftMarqueeActive = false;
   Set<int> _marqueeSelectedIds = const <int>{};
-  Timer? _autoScrollTimer;
+  // Follows the display refresh, so scrolling is even at 120 Hz and above.
+  late final Ticker _autoScrollTicker = createTicker(_autoScrollTick);
+  Duration _lastAutoScrollTick = Duration.zero;
   double _autoScrollStep = 0.0;
 
   RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
@@ -554,13 +559,12 @@ class _GameLibraryDragSelectionLayerState
 
   @override
   void dispose() {
-    _stopAutoScroll();
+    _autoScrollTicker.dispose();
     super.dispose();
   }
 
   void _stopAutoScroll() {
-    _autoScrollTimer?.cancel();
-    _autoScrollTimer = null;
+    if (_autoScrollTicker.isActive) _autoScrollTicker.stop();
     _autoScrollStep = 0.0;
   }
 
@@ -616,33 +620,42 @@ class _GameLibraryDragSelectionLayerState
     }
 
     _autoScrollStep = nextStep;
-    _autoScrollTimer ??= Timer.periodic(_autoScrollTick, (_) {
-      if (!_isShiftPressed || !_isShiftMarqueeActive) {
-        _stopAutoScroll();
-        return;
-      }
+    if (!_autoScrollTicker.isActive) {
+      _lastAutoScrollTick = Duration.zero;
+      _autoScrollTicker.start();
+    }
+  }
 
-      final scrollController = widget.scrollController;
-      final currentLocalPosition = _marqueeCurrentLocal;
-      if (!scrollController.hasClients || currentLocalPosition == null) {
-        _stopAutoScroll();
-        return;
-      }
+  void _autoScrollTick(Duration elapsed) {
+    if (!_isShiftPressed || !_isShiftMarqueeActive) {
+      _stopAutoScroll();
+      return;
+    }
 
-      final position = scrollController.position;
-      final currentOffset = scrollController.offset;
-      final nextOffset = (currentOffset + _autoScrollStep).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      if ((nextOffset - currentOffset).abs() < 0.01) {
-        _stopAutoScroll();
-        return;
-      }
+    final scrollController = widget.scrollController;
+    final currentLocalPosition = _marqueeCurrentLocal;
+    if (!scrollController.hasClients || currentLocalPosition == null) {
+      _stopAutoScroll();
+      return;
+    }
 
-      scrollController.jumpTo(nextOffset);
-      _refreshMarqueeSelection(currentLocalPosition);
-    });
+    final frameMicros = (elapsed - _lastAutoScrollTick).inMicroseconds;
+    _lastAutoScrollTick = elapsed;
+    if (frameMicros <= 0) return;
+    final position = scrollController.position;
+    final currentOffset = scrollController.offset;
+    final step = _autoScrollStep * frameMicros / _autoScrollTickMicros;
+    final nextOffset = (currentOffset + step).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((nextOffset - currentOffset).abs() < 0.01) {
+      _stopAutoScroll();
+      return;
+    }
+
+    scrollController.jumpTo(nextOffset);
+    _refreshMarqueeSelection(currentLocalPosition);
   }
 
   void _clearMarqueeTracking() {

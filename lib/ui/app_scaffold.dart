@@ -16,7 +16,6 @@ import '../core/services/deadline_notification_service.dart';
 import '../core/services/logging.dart';
 import '../core/services/update_service.dart';
 import '../core/settings/settings_model.dart';
-import '../core/theme/app_theme.dart';
 import '../app/application/update_controller.dart';
 import '../providers/app_providers.dart';
 import '../core/models/device_sync_models.dart';
@@ -52,6 +51,9 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
   Timer? _windowSaveDebounce;
   bool _applyingSavedWindowState = false;
   Timer? _autoBackupTimer;
+  // (database revision, library revision) of the last auto backup, so an
+  // unchanged library is not backed up again.
+  (int, int)? _lastAutoBackupMark;
   Timer? _autoUpdateTimer;
   bool _isClosingWindow = false;
   bool _windowMaximized = false;
@@ -152,7 +154,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
       setNextBackup(DateTime.now().add(interval));
       // Auto backups stay silent; developer mode reports successes.
       try {
+        final db = ref.read(databaseProvider);
+        if (db == null) return;
+        final dbRevision = ref.read(databaseNotifierProvider).revision;
+        final mark = (dbRevision, await db.getLocalSyncRevision());
+        if (!mounted || mark == _lastAutoBackupMark) return;
         final result = await ref.read(backupServiceProvider).createBackup();
+        if (result.success) _lastAutoBackupMark = mark;
         if (result.success &&
             ref.read(appShellSettingsProvider).developerMode) {
           NotificationManager.instance.info(
@@ -864,10 +872,6 @@ class _EdgeSlideTransition extends StatelessWidget {
     );
   }
 }
-
-/// Test harness for the shared title bar without constructing the full shell.
-Widget buildTitleBarForTest(AppThemeData theme) =>
-    Material(child: AppTitleBar(theme: theme));
 
 /// Transparent overlay that adds resize handles at window edges on Linux.
 ///

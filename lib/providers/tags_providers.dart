@@ -112,19 +112,6 @@ class TagsNotifier extends Notifier<List<Tag>> {
     }
   }
 
-  Future<Tag?> addTag(
-    String name,
-    String colorHex, {
-    bool isSteamTag = false,
-  }) => _edit<Tag?>((db) async {
-    final entry = await db.getOrCreateTag(
-      name,
-      color: colorHex,
-      isSteamTag: isSteamTag,
-    );
-    return Tag.fromEntry(entry);
-  }, failure: null);
-
   Future<bool> updateTag(Tag tag) => _edit((db) async {
     await db.updateTag(
       TagEntry(

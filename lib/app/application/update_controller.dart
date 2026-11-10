@@ -135,6 +135,9 @@ bool canShowUpdateAvailableNotification(UpdateState state) =>
 /// Update notifier using real GitHub API
 class UpdateNotifier extends Notifier<UpdateState> {
   late UpdateService _updateService;
+  // The service running the current download; [refreshRelease] and
+  // [checkForUpdates] may replace [_updateService] meanwhile.
+  UpdateService? _downloadService;
   NotificationHandle? _updateNotificationHandle;
   NotificationHandle? _downloadNotificationHandle;
 
@@ -321,18 +324,13 @@ class UpdateNotifier extends Notifier<UpdateState> {
       _updateService = _serviceFor(updatesSettings);
       final currentVersion = kAppVersion;
 
-      // Run update check and full release list fetch in parallel.
-      final results = await Future.wait([
-        _updateService.checkForUpdates(
-          currentVersion: currentVersion,
-          includePrerelease: updatesSettings.includePrerelease,
-          skippedVersions: updatesSettings.skippedVersions,
-        ),
-        _updateService.fetchAllReleases(),
-      ]);
-
-      final result = results[0] as UpdateCheckResult;
-      final allReleases = results[1] as List<GitHubRelease>;
+      // One release-list request serves the check and the version list.
+      final result = await _updateService.checkForUpdates(
+        currentVersion: currentVersion,
+        includePrerelease: updatesSettings.includePrerelease,
+        skippedVersions: updatesSettings.skippedVersions,
+      );
+      final allReleases = result.releases;
 
       // Persist updated release list to cache.
       if (allReleases.isNotEmpty) {
@@ -450,10 +448,18 @@ class UpdateNotifier extends Notifier<UpdateState> {
       _showDownloadProgressNotification(0, 0);
     }
 
+    final service = _downloadService = _updateService;
+    final progressClock = Stopwatch()..start();
     try {
-      final downloadResult = await _updateService.downloadUpdate(
+      final downloadResult = await service.downloadUpdate(
         release,
         onProgress: (received, total) {
+          // About ten updates a second; the last chunk always reports.
+          if ((total <= 0 || received < total) &&
+              progressClock.elapsedMilliseconds < 100) {
+            return;
+          }
+          progressClock.reset();
           final progress = total > 0 ? received / total : 0.0;
           state = state.copyWith(
             downloadProgress: progress,
@@ -503,6 +509,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
         error: 'Download failed: $e',
         switchingToVersion: null,
       );
+    } finally {
+      if (identical(_downloadService, service)) _downloadService = null;
     }
   }
 
@@ -548,7 +556,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         final updatedSkipped = [...currentSkipped, version];
         await ref
             .read(settingsProvider.notifier)
-            .setSetting(SettingsKeys.skippedVersions, updatedSkipped);
+            .set(SettingsKeys.skippedVersions, updatedSkipped);
       }
 
       state = state.copyWith(
@@ -569,7 +577,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
         .toList();
     await ref
         .read(settingsProvider.notifier)
-        .setSetting(SettingsKeys.skippedVersions, updated);
+        .set(SettingsKeys.skippedVersions, updated);
     NotificationManager.instance.success('Version $version unskipped');
   }
 
@@ -577,7 +585,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   Future<void> clearAllSkippedVersions() async {
     await ref
         .read(settingsProvider.notifier)
-        .setSetting(SettingsKeys.skippedVersions, <String>[]);
+        .set(SettingsKeys.skippedVersions, <String>[]);
     NotificationManager.instance.success('All skipped versions cleared');
   }
 
@@ -587,7 +595,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     if (compareVersions(release.version, '1.1.0') <= 0) {
       ref
           .read(settingsProvider.notifier)
-          .setSetting(SettingsKeys.toggleStyle, ToggleStyle.regular);
+          .set(SettingsKeys.toggleStyle, ToggleStyle.regular);
     }
 
     await _downloadRelease(
@@ -600,7 +608,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Cancel any in-progress download and reset download state.
   void cancelDownload() {
-    _updateService.cancelActiveDownload();
+    _downloadService?.cancelActiveDownload();
     _clearOffPageNotifications(update: false);
     state = state.copyWith(
       isDownloading: false,

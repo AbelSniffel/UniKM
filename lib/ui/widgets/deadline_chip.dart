@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../dialogs/deadline_picker_dialog.dart';
 import 'app_action_button.dart';
 import 'live_size_ink_ripple.dart';
 import 'button_theme_sync.dart';
+import '../../core/utils/format_utils.dart';
 
 /// One compact control for enabling a deadline and choosing its date.
 /// Turning it off keeps the last date available when enabled again.
@@ -32,7 +32,6 @@ class DeadlineChip extends StatelessWidget {
   /// staying compact.
   final bool expand;
 
-  static final _dateFormat = DateFormat('dd/MM/yyyy');
 
   Future<void> _chooseDate(BuildContext context) async {
     final selected = await showDeadlinePickerDialog(
@@ -48,7 +47,7 @@ class DeadlineChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = date == null ? 'Select date' : _dateFormat.format(date!);
+    final label = date == null ? 'Select date' : dayMonthYearFormat.format(date!);
     final insetColor = Color.alphaBlend(
       theme.accent.withValues(alpha: 0.10),
       theme.inputBackground,

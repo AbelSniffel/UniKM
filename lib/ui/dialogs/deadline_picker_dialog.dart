@@ -8,13 +8,13 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/time/calendar_date.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/tinted_card.dart';
+import '../../core/utils/format_utils.dart';
 
 const _deadlineExactDateFieldKey = ValueKey('deadline_exact_date_input');
 const _deadlineDaysFieldKey = ValueKey('deadline_days_input');
 // Date entry is reformatted on every keystroke; compile these once.
 final _nonDigitPattern = RegExp(r'\D');
 final _digitPattern = RegExp(r'\d');
-final _dateFormat = DateFormat('dd/MM/yyyy');
 
 Future<DateTime?> showDeadlinePickerDialog({
   required BuildContext context,
@@ -109,7 +109,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       );
 
   void _syncExactDateFromSelectedDate() =>
-      _setText(_exactDateController, _dateFormat.format(_selectedDate));
+      _setText(_exactDateController, dayMonthYearFormat.format(_selectedDate));
 
   DateTime get _currentDateOnly => DateUtils.dateOnly(widget.currentDate);
 
@@ -349,7 +349,7 @@ class _SelectedDateCard extends StatelessWidget {
       <= 7 => theme.deadlineSoon,
       _ => theme.deadlineNormal,
     };
-    final formatted = _dateFormat.format(date);
+    final formatted = dayMonthYearFormat.format(date);
     return Semantics(
       label: 'Selected deadline: $formatted',
       liveRegion: true,

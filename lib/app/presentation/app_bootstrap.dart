@@ -25,6 +25,7 @@ import '../../ui/widgets/app_scrollbar.dart';
 import '../../ui/widgets/notification_system.dart';
 import '../application/database_session_loader.dart';
 import '../unikm_app.dart';
+import '../../core/services/logging.dart';
 
 /// Bootstraps the database.
 ///
@@ -38,6 +39,7 @@ class UniKMBootstrap extends ConsumerStatefulWidget {
 }
 
 class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
+  ProviderSubscription<bool>? _firstDeadlineCheck;
   final _sessionLoader = const DatabaseSessionLoader();
   EncryptedDbSession? _encryptedSession;
   Object? _error;
@@ -173,12 +175,17 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           final f = File(pendingDelete);
           if (await f.exists()) {
             await f.delete();
-            debugPrint(
-              '[Encryption] Deleted pending plaintext DB on startup: $pendingDelete',
+            AppLog.d(
+              'Deleted pending plaintext DB on startup: $pendingDelete',
+              name: 'Encryption',
             );
           }
         } catch (e) {
-          debugPrint('[Encryption] Could not delete pending plaintext DB: $e');
+          AppLog.w(
+            'Could not delete pending plaintext DB',
+            error: e,
+            name: 'Encryption',
+          );
         } finally {
           await prefs.remove(EncryptionManager.pendingPlaintextDeletionKey);
         }
@@ -207,7 +214,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
             );
             await ref
                 .read(settingsProvider.notifier)
-                .setSetting(SettingsKeys.databasePath, selectedBasePath);
+                .set(SettingsKeys.databasePath, selectedBasePath);
 
             if (!mounted) return;
             await _restartBootstrap();
@@ -262,9 +269,23 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
   void _startDeadlineReminders() {
     DeadlineNotificationService.instance.startPeriodicCheck(ref);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) DeadlineNotificationService.instance.runCheck(ref);
-    });
+    // The first check waits for the library's first snapshot; a fixed delay
+    // could run before a large library has loaded.
+    _firstDeadlineCheck?.close();
+    _firstDeadlineCheck = null;
+    if (!ref.read(gamesProvider).isLoading) {
+      DeadlineNotificationService.instance.runCheck(ref);
+      return;
+    }
+    _firstDeadlineCheck = ref.listenManual<bool>(
+      gamesProvider.select((s) => s.isLoading),
+      (_, loading) {
+        if (loading) return;
+        _firstDeadlineCheck?.close();
+        _firstDeadlineCheck = null;
+        DeadlineNotificationService.instance.runCheck(ref);
+      },
+    );
   }
 
   Future<void> _addRecentDbPath(String baseDbPath) async {
@@ -277,10 +298,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
     recents.insert(0, baseDbPath);
     if (recents.length > 10) recents.removeRange(10, recents.length);
 
-    await settingsNotifier.setSetting(
-      SettingsKeys.recentDatabasePaths,
-      recents,
-    );
+    await settingsNotifier.set(SettingsKeys.recentDatabasePaths, recents);
   }
 
   /// Closes the open database, saving an encrypted one back to its file.
@@ -429,7 +447,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
       // Only persist settings after the new database has been opened.
       final settingsNotifier = ref.read(settingsProvider.notifier);
-      await settingsNotifier.setSetting(SettingsKeys.databasePath, baseDbPath);
+      await settingsNotifier.set(SettingsKeys.databasePath, baseDbPath);
       await _addRecentDbPath(baseDbPath);
 
       if (!mounted) return;

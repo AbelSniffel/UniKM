@@ -1,4 +1,5 @@
 import '../../../core/database/database.dart';
+import '../../../core/utils/steam_tag_utils.dart';
 import '../../../core/services/steam_service.dart';
 import '../../library/data/library_repository.dart';
 
@@ -42,11 +43,11 @@ class ApplySteamMetadata {
             .where((tag) => !tag.isSteamTag)
             .map((tag) => tag.id)
             .toList();
-        for (final name in result.tags) {
-          tagIds.add(
-            (await database.getOrCreateTag(name, isSteamTag: true)).id,
-          );
-        }
+        final steamTags = await SteamTagUtils.ensureSteamTags(
+          db: database,
+          tagNames: result.tags,
+        );
+        tagIds.addAll(steamTags.map((tag) => tag.id));
       }
       await LibraryRepository(database).updateGame(
         game.copyWith(

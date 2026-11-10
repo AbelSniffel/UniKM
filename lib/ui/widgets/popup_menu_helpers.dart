@@ -206,64 +206,6 @@ void showAppContextMenu({
   });
 }
 
-/// Clips item feedback to the menu shape, which PopupMenuTheme cannot configure.
-class AppPopupMenuButton<T> extends PopupMenuButton<T> {
-  const AppPopupMenuButton({
-    super.key,
-    required super.itemBuilder,
-    super.onSelected,
-    super.initialValue,
-    super.tooltip,
-    super.child,
-    super.icon,
-    super.borderRadius,
-    super.color,
-    super.elevation,
-    super.shape,
-    super.constraints,
-    super.popUpAnimationStyle,
-  }) : super(clipBehavior: Clip.antiAlias, menuPadding: EdgeInsets.zero);
-}
-
-/// A popup menu position for [rect], given in global coordinates.
-RelativeRect overlayMenuPosition(BuildContext context, Rect rect) =>
-    RelativeRect.fromRect(
-      rect,
-      Offset.zero &
-          (Overlay.of(context).context.findRenderObject()! as RenderBox).size,
-    );
-
-Future<T?> showAppMenu<T>({
-  required BuildContext context,
-  required RelativeRect position,
-  required List<PopupMenuEntry<T>> items,
-  T? initialValue,
-  Color? color,
-  double? elevation,
-  ShapeBorder? shape,
-  BoxConstraints? constraints,
-  AnimationStyle? popUpAnimationStyle,
-}) {
-  final theme = Theme.of(context).extension<AppThemeData>();
-  return showMenu<T>(
-    context: context,
-    position: position,
-    items: items,
-    menuPadding: EdgeInsets.zero,
-    initialValue: initialValue,
-    color: color ?? theme?.surface,
-    elevation: elevation,
-    shape:
-        shape ??
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(theme?.cornerRadius ?? 12),
-        ),
-    constraints: constraints,
-    popUpAnimationStyle: popUpAnimationStyle,
-    clipBehavior: Clip.antiAlias,
-  );
-}
-
 /// A [button] that opens a [panel] (not a list of items) under its left edge,
 /// on the app's menu surface. The panel may take up to [maxSize] of the screen.
 class AnchoredPanelMenu extends StatefulWidget {

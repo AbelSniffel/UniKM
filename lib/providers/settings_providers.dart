@@ -67,9 +67,6 @@ class SettingsNotifier extends Notifier<Map<String, dynamic>> {
     });
   }
 
-  /// Alias for set() - used by settings page
-  Future<void> setSetting<T>(String key, T value) => set(key, value);
-
   /// A change callback that stores each new value under [key].
   ValueChanged<T> setter<T>(String key) =>
       (value) => set(key, value);
@@ -181,9 +178,8 @@ const kSeasonalPatterns = {
   NavPanelOverlayStyle.christmas,
 };
 
-/// The month the seasonal patterns follow, 1 for January. Read when the
-/// pattern settings change, so it is current again by the app's next start
-/// at the latest.
+/// The month the seasonal patterns follow, 1 for January. The games
+/// provider's midnight timer invalidates it, so it follows month changes.
 final currentMonthProvider = Provider<int>((ref) => DateTime.now().month);
 
 /// The seasonal pattern for [month] (Halloween in October, Christmas in
@@ -264,7 +260,7 @@ Future<void> markGamesAsViewed(WidgetRef ref, Iterable<int> gameIds) async {
   final merged = mergedSet.toList()..sort();
   await ref
       .read(settingsProvider.notifier)
-      .setSetting(SettingsKeys.viewedNewGameIds, merged);
+      .set(SettingsKeys.viewedNewGameIds, merged);
 }
 
 final legacyDefaultTagsCleanupDoneProvider = _setting<bool>(

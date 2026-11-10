@@ -55,7 +55,7 @@ class SettingsCardStyleSection extends ConsumerWidget {
         ],
         onChanged: (style) => ref
             .read(settingsProvider.notifier)
-            .setSetting(SettingsKeys.settingsCardIndicatorStyle, style),
+            .set(SettingsKeys.settingsCardIndicatorStyle, style),
         buttonBuilder: (choice, on, choose) => switch (choice.value) {
           SettingsCardIndicatorStyle.switchControl => AppToggleSwitch(
             key: ValueKey(choice.value),

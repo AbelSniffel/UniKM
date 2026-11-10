@@ -91,24 +91,28 @@ abstract final class GameSelectionActions {
       return;
     }
 
+    final opened = <Game>[];
     for (final game in targets) {
       final url = Uri.parse(
         steamPageUrl(appId: game.steamAppId, title: game.title),
       );
 
       try {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        NotificationManager.instance.error(
-          'Failed to open Steam page for ${game.title}',
-        );
-      }
+        if (await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          opened.add(game);
+          continue;
+        }
+      } catch (_) {}
+      NotificationManager.instance.error(
+        'Failed to open Steam page for ${game.title}',
+      );
     }
 
+    if (opened.isEmpty) return;
     NotificationManager.instance.info(
-      targets.length == 1
-          ? 'Opened Steam page for ${targets.first.title}'
-          : 'Opened Steam pages for ${targets.length} games',
+      opened.length == 1
+          ? 'Opened Steam page for ${opened.first.title}'
+          : 'Opened Steam pages for ${opened.length} games',
     );
   }
 

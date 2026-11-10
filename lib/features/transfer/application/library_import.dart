@@ -59,6 +59,7 @@ List<ImportRecord> parseLibraryCsv(String content) {
     final key = field('Key');
     if (key.isEmpty) continue;
     final deadline = DateTime.tryParse(field('Deadline'));
+    final dateAdded = DateTime.tryParse(field('DateAdded'));
     records.add(
       ImportRecord(
         GamesCompanion.insert(
@@ -68,11 +69,14 @@ List<ImportRecord> parseLibraryCsv(String content) {
           notes: Value(field('Notes')),
           coverImage: Value(field('Cover')),
           steamAppId: Value(field('SteamAppId')),
+          developer: Value(field('Developer')),
           hasDeadline: Value(deadline != null),
           deadlineDate: Value(deadline),
           isUsed: Value(field('Used').toLowerCase() == 'yes'),
           isDlc: Value(field('DLC').toLowerCase() == 'yes'),
           reviewScore: Value(int.tryParse(field('Rating')) ?? 0),
+          reviewCount: Value(int.tryParse(field('ReviewCount')) ?? 0),
+          dateAdded: Value.absentIfNull(dateAdded),
           updatedAt: Value(DateTime.now()),
         ),
         columns.containsKey('Tags')
@@ -103,6 +107,7 @@ List<ImportRecord> parseLibraryJson(String content) {
       );
     }
     final deadline = DateTime.tryParse((raw['deadline'] as String?) ?? '');
+    final dateAdded = DateTime.tryParse((raw['date_added'] as String?) ?? '');
     records.add(
       ImportRecord(
         GamesCompanion.insert(
@@ -115,8 +120,11 @@ List<ImportRecord> parseLibraryJson(String content) {
           hasDeadline: Value(deadline != null),
           deadlineDate: Value(deadline),
           isDlc: Value((raw['is_dlc'] as bool?) ?? false),
-          steamAppId: Value((raw['steam_app_id'] as String?) ?? ''),
-          reviewScore: Value((raw['rating'] as int?) ?? 0),
+          steamAppId: Value(raw['steam_app_id']?.toString() ?? ''),
+          developer: Value((raw['developer'] as String?) ?? ''),
+          reviewScore: Value((raw['rating'] as num?)?.toInt() ?? 0),
+          reviewCount: Value((raw['review_count'] as num?)?.toInt() ?? 0),
+          dateAdded: Value.absentIfNull(dateAdded),
           updatedAt: Value(DateTime.now()),
         ),
         (raw['tags'] as List?)?.map((v) => v.toString()).toList(),
@@ -149,7 +157,7 @@ class LibraryImporter {
           .validateIntegrity(record.game, isInserting: true)
           .throwIfInvalid(record.game);
       for (final name in record.tagNames ?? const <String>[]) {
-        if (name.isEmpty || name.length > 100) {
+        if (name.trim().isEmpty || name.length > 100) {
           throw const FormatException(
             'Tag names must contain 1 to 100 characters',
           );

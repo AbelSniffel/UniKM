@@ -454,7 +454,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   /// The game's Steam figures and dates, under the notes and tags.
   List<Widget> _buildStats(AppThemeData theme, bool showSkmId) {
     final game = _currentGame;
-    final added = game.createdAt;
+    final added = game.dateAdded;
     final updated = _lastUpdatedAt ?? game.updatedAt;
     final developer = _steamDeveloper;
     return [

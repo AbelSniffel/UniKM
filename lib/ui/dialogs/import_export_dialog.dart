@@ -911,7 +911,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     await db.bumpLocalSyncRevision();
     await ref
         .read(settingsProvider.notifier)
-        .setSetting(
+        .set(
           SettingsKeys.syncDbRevisionId,
           DateTime.now().millisecondsSinceEpoch.toString(),
         );

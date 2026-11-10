@@ -4,6 +4,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -313,7 +314,7 @@ class BackupService {
         // Use the temp path if we have an encrypted session, otherwise use base path
         final sourcePath = session?.tempDbPath ?? basePath;
 
-        _snapshotDatabase(sourcePath, backupPath);
+        await _snapshotInBackground(sourcePath, backupPath);
       }
 
       // Get file size
@@ -396,15 +397,18 @@ class BackupService {
     return [for (final (backup, _) in backups) backup];
   }
 
-  /// Prune old backups, keeping only the most recent [maxBackupCount]
+  /// Prune old backups, keeping the newest [maxBackupCount] regular backups
+  /// and, separately, the newest [kMaxSafetyBackupCount] pre-sync and
+  /// pre-restore backups.
   Future<int> pruneOldBackups() async {
     final backups = await listBackups();
     var deletedCount = 0;
 
-    if (backups.length <= maxBackupCount) return 0;
-
-    // Delete oldest backups
-    final toDelete = backups.skip(maxBackupCount);
+    bool isRegular(BackupInfo b) => b.kind == BackupKind.regular;
+    final toDelete = [
+      ...backups.where(isRegular).skip(maxBackupCount),
+      ...backups.where((b) => !isRegular(b)).skip(kMaxSafetyBackupCount),
+    ];
     for (final backup in toDelete) {
       try {
         await File(backup.filePath).delete();
@@ -465,9 +469,9 @@ class BackupService {
         await File(backupPath).copy('$sourceBase.enc');
         final bytes = await EncryptionManager(sourceBase).decrypt(password!);
         await File(sourceBase).writeAsBytes(bytes, flush: true);
-        _snapshotDatabase(sourceBase, preparedPath);
+        await _snapshotInBackground(sourceBase, preparedPath);
       } else {
-        _snapshotDatabase(backupPath, preparedPath);
+        await _snapshotInBackground(backupPath, preparedPath);
       }
       final conversion = await convertLegacyDbToCurrentLayoutIfNeeded(
         preparedPath,
@@ -526,8 +530,13 @@ class BackupService {
     }
   }
 
+  /// Runs [_snapshotDatabase] off the UI isolate. Static, so the closure
+  /// sent to the isolate captures only the two paths.
+  static Future<void> _snapshotInBackground(String source, String dest) =>
+      Isolate.run(() => _snapshotDatabase(source, dest));
+
   /// Validate and snapshot SQLite, including committed data in its WAL file.
-  void _snapshotDatabase(String sourcePath, String destinationPath) {
+  static void _snapshotDatabase(String sourcePath, String destinationPath) {
     final source = sqlite3.sqlite3.open(
       sourcePath,
       mode: sqlite3.OpenMode.readOnly,

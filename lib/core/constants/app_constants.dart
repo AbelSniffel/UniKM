@@ -92,6 +92,9 @@ const String kDatabaseName = 'keys.db';
 // =============================================================================
 const int kDefaultMaxBackupCount = 10;
 
+/// Backups made before a sync or restore, kept apart from the regular limit.
+const int kMaxSafetyBackupCount = 5;
+
 // =============================================================================
 // UPDATE
 // =============================================================================

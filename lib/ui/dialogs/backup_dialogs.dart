@@ -293,6 +293,9 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     final theme = ref.watch(themeProvider);
     final backupSettings = ref.watch(backupSettingsProvider);
     final maxBackups = backupSettings.maxCount;
+    final regularCount = _backups
+        .where((b) => b.kind == BackupKind.regular)
+        .length;
 
     return ThemedAlertDialog(
       theme: theme,
@@ -309,7 +312,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
             theme: theme,
             controller: _tabController,
             tabs: [
-              AppTab('Backups (${_backups.length}/$maxBackups)'),
+              AppTab('Backups ($regularCount/$maxBackups)'),
               const AppTab('Restore from File'),
             ],
           ),
@@ -325,11 +328,12 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                     TintedHeading(
                       theme: theme,
                       title: 'Backups',
-                      trailing: '${_backups.length} of $maxBackups',
+                      trailing: '$regularCount of $maxBackups',
                       action: Tooltip(
                         key: _backupInfoKey,
                         message:
-                            'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted.',
+                            'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted. '
+                            'Backups made before a sync or restore are kept separately (newest $kMaxSafetyBackupCount).',
                         child: IconButton(
                           style: theme.compactIconButtonStyle,
                           icon: const Icon(Icons.info_outline, size: 20),

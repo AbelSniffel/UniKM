@@ -360,11 +360,8 @@ class DeadlineNotificationService {
     required String title,
     required String body,
   }) async {
-    String safe(String text) => text.replaceAll("'", ' ').replaceAll('\n', ' ');
-    final safeTitle = safe(title);
-    final safeBody = safe(body);
-
-    final script =
+    // Text travels through the environment, never into the script source.
+    const script =
         "[Windows.UI.Notifications.ToastNotificationManager,"
         "Windows.UI.Notifications,ContentType=WindowsRuntime]|Out-Null;"
         "[Windows.Data.Xml.Dom.XmlDocument,"
@@ -372,19 +369,17 @@ class DeadlineNotificationService {
         r"$xml=[Windows.UI.Notifications.ToastNotificationManager]::"
         "GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
         r"$n=$xml.GetElementsByTagName('text');"
-        "\$n.Item(0).InnerText='$safeTitle';"
-        "\$n.Item(1).InnerText='$safeBody';"
+        r"$n.Item(0).InnerText=$env:UNIKM_TOAST_TITLE;"
+        r"$n.Item(1).InnerText=$env:UNIKM_TOAST_BODY;"
         r"$t=[Windows.UI.Notifications.ToastNotification]::new($xml);"
         "[Windows.UI.Notifications.ToastNotificationManager]::"
         r"CreateToastNotifier('UniKM').Show($t);";
 
-    await Process.run('powershell', [
-      '-WindowStyle',
-      'Hidden',
-      '-NonInteractive',
-      '-Command',
-      script,
-    ]);
+    await Process.run(
+      'powershell',
+      ['-WindowStyle', 'Hidden', '-NonInteractive', '-Command', script],
+      environment: {'UNIKM_TOAST_TITLE': title, 'UNIKM_TOAST_BODY': body},
+    );
   }
 
   /// Linux/macOS/Android/iOS notification via flutter_local_notifications plugin.

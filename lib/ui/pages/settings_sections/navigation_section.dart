@@ -158,7 +158,7 @@ class NavigationSection extends ConsumerWidget {
                       ),
                     ),
                 ],
-                onChanged: (value) => settingsNotifier.setSetting(
+                onChanged: (value) => settingsNotifier.set(
                   isHorizontalPanel
                       ? SettingsKeys.navButtonArrangementH
                       : SettingsKeys.navButtonArrangementV,
@@ -250,7 +250,7 @@ class _GradientAnimationSection extends ConsumerWidget {
         children: [
           IconButton(
             tooltip: 'Swap primary and accent colors',
-            onPressed: () => settingsNotifier.setSetting(
+            onPressed: () => settingsNotifier.set(
               SettingsKeys.swapGradientColors,
               !swapGradientColors,
             ),
@@ -294,7 +294,7 @@ class _GradientAnimationSection extends ConsumerWidget {
               label: speed.displayName,
               semanticFormatterCallback: (value) =>
                   GradientAnimationSpeed.values[value.round()].displayName,
-              onChanged: (value) => settingsNotifier.setSetting(
+              onChanged: (value) => settingsNotifier.set(
                 SettingsKeys.gradientAnimationSpeed,
                 GradientAnimationSpeed.values[value.round()],
               ),
@@ -314,7 +314,7 @@ class _GradientAnimationSection extends ConsumerWidget {
                   theme: theme,
                   isSelected: effect == currentAnimation,
                   isPlaying: previewAnimationsPlaying,
-                  onTap: () => settingsNotifier.setSetting(
+                  onTap: () => settingsNotifier.set(
                     SettingsKeys.gradientAnimation,
                     effect,
                   ),

@@ -451,7 +451,7 @@ class _BackgroundPatternSectionState
               max: kMaxPatternStrength,
               divisions: 4,
               label: percent,
-              onChanged: (value) => settingsNotifier.setSetting(
+              onChanged: (value) => settingsNotifier.set(
                 SettingsKeys.patternStrength,
                 (value * 4).round() / 4,
               ),
@@ -476,7 +476,7 @@ class _BackgroundPatternSectionState
             action: TextButton(
               onPressed: angle == DefaultSettings.patternAngle
                   ? null
-                  : () => settingsNotifier.setSetting(
+                  : () => settingsNotifier.set(
                       SettingsKeys.patternAngle,
                       DefaultSettings.patternAngle,
                     ),
@@ -488,7 +488,7 @@ class _BackgroundPatternSectionState
               max: kMaxPatternAngle.toDouble(),
               divisions: kMaxPatternAngle ~/ 15,
               label: '$angle°',
-              onChanged: (value) => settingsNotifier.setSetting(
+              onChanged: (value) => settingsNotifier.set(
                 SettingsKeys.patternAngle,
                 value.round(),
               ),
@@ -514,7 +514,7 @@ class _BackgroundPatternSectionState
               value: wave,
               divisions: 4,
               label: shape,
-              onChanged: (value) => settingsNotifier.setSetting(
+              onChanged: (value) => settingsNotifier.set(
                 SettingsKeys.patternWave,
                 (value * 4).round() / 4,
               ),
@@ -547,7 +547,7 @@ class _BackgroundPatternSectionState
                       name: style.displayName,
                       theme: theme,
                       isSelected: saved == style,
-                      onTap: () => settingsNotifier.setSetting(
+                      onTap: () => settingsNotifier.set(
                         SettingsKeys.navPanelOverlayStyle,
                         style,
                       ),

@@ -11,8 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import '../dialogs/game_editor_dialog.dart';
-import '../widgets/notification_system.dart';
+import 'game_selection_actions.dart';
 
 /// Mixin that adds pointer-tracking and selection-orchestration logic to any
 /// [ConsumerState].  The host state must implement [cardGame].
@@ -72,36 +71,22 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
   }
 
   void handleDoubleTap() {
-    if (ref.read(deviceSyncServiceProvider).isReceiverSyncInFlight) {
-      NotificationManager.instance.warning(
-        'Cannot edit games while device sync is in progress',
-      );
-      return;
-    }
-    if (ref.read(batchFetchProvider).isActive) {
-      NotificationManager.instance.warning(
-        'Cannot edit games while Steam data fetch is in progress',
-      );
-      return;
-    }
     final allGames = ref.read(gamesProvider.select((s) => s.filteredGames));
     final selectedIds = ref.read(
       gamesProvider.select((s) => s.selectedGameIds),
     );
-
-    final idsToPass =
-        selectedIds.contains(cardGame.id) && selectedIds.length > 1
+    // A double-tap inside a multi-selection opens all of it.
+    final targets = selectedIds.contains(cardGame.id) && selectedIds.length > 1
         ? [
             for (final game in allGames)
-              if (selectedIds.contains(game.id)) game.id,
+              if (selectedIds.contains(game.id)) game,
           ]
-        : [cardGame.id];
-
-    showGameEditorDialog(
+        : [cardGame];
+    GameSelectionActions.openDetails(
       context,
-      cardGame,
-      gameIds: idsToPass,
-      onViewedGame: (gameId) => markGameAsViewed(ref, gameId),
+      ref,
+      targets: targets,
+      initialGame: cardGame,
     );
   }
 

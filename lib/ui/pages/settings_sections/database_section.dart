@@ -878,7 +878,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
     if (!recents.remove(baseDbPath)) return;
     await widget.container
         .read(settingsProvider.notifier)
-        .setSetting(SettingsKeys.recentDatabasePaths, recents);
+        .set(SettingsKeys.recentDatabasePaths, recents);
   }
 
   String _formatBytes(int bytes) {
@@ -1006,25 +1006,19 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
 
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onSecondaryTapDown: (details) async {
-                              final selected = await showAppMenu<String>(
-                                context: context,
-                                position: overlayMenuPosition(
-                                  context,
-                                  details.globalPosition & Size.zero,
+                            onSecondaryTapDown: (details) => showAppContextMenu(
+                              context: context,
+                              theme: widget.theme,
+                              position: details.globalPosition,
+                              menuChildren: [
+                                appMenuItem(
+                                  widget.theme,
+                                  onPressed: () =>
+                                      _removeRecentDatabasePath(basePath),
+                                  child: const Text('Remove from recents'),
                                 ),
-                                items: const [
-                                  PopupMenuItem(
-                                    value: 'remove',
-                                    child: Text('Remove from recents'),
-                                  ),
-                                ],
-                              );
-
-                              if (selected == 'remove') {
-                                await _removeRecentDatabasePath(basePath);
-                              }
-                            },
+                              ],
+                            ),
                             child: DatabaseFileRow(
                               key: ValueKey(basePath),
                               theme: widget.theme,
