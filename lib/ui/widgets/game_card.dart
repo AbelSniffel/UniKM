@@ -18,7 +18,6 @@ import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
-import 'corner_ribbon.dart';
 import 'game_card_badges.dart';
 import 'game_card_interaction.dart';
 import 'game_card_painters.dart';
@@ -27,7 +26,6 @@ import 'game_cover_image.dart';
 import 'game_selection_actions.dart';
 import 'popup_menu_helpers.dart';
 import 'used_overlay.dart';
-import '../../core/utils/format_utils.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget
@@ -57,16 +55,6 @@ class _GameCardState extends ConsumerState<GameCard>
     with TickerProviderStateMixin, GameCardInteractionMixin<GameCard> {
   static const Duration _newBadgeLifetime = Duration(days: 1);
   static const Duration _hoverAnimationDuration = Duration(milliseconds: 180);
-
-  // Corner-ribbon constants.
-  static const double _kRibbonHeight = 22.5;
-  static const double _kDlcRibbonHeight = 25.0;
-  static const double _kSlimDlcRibbonExtent = 46.0;
-  static const double _kRibbonContainerWidth = 130.0;
-  static const double _kRibbonOffset = 9.0;
-  // Large enough to cover the DLC banner on Steam's DLC header artwork.
-  static const double _kGridDlcRibbonHeight = 42.0;
-  static const double _kGridRibbonOffset = 12.0;
 
   // ── Per-card animation state ───────────────────────────────────────────────
   bool _isHovered = false;
@@ -175,7 +163,13 @@ class _GameCardState extends ConsumerState<GameCard>
       );
     }
     if (cardSettings.slimListView) {
-      return _buildSlimListCard(theme, isSelected, options, fetchStatus);
+      return _buildSlimListCard(
+        theme,
+        isSelected,
+        options,
+        fetchStatus,
+        showNewBadge,
+      );
     }
     return _buildListCard(
       theme,
@@ -240,12 +234,7 @@ class _GameCardState extends ConsumerState<GameCard>
             _buildGradientOverlay(theme, isSelected),
             _buildSelectionOverlay(theme, isSelected),
             _buildAnimatedFetchOverlay(theme, fetchStatus),
-            ..._buildCornerRibbons(
-              theme,
-              hasDlc: widget.game.isDlc,
-              showNewBadge: showNewBadge,
-              large: true,
-            ),
+            if (showNewBadge) _buildNewChip(theme),
             Positioned(
               left: 8,
               right: 8,
@@ -338,22 +327,7 @@ class _GameCardState extends ConsumerState<GameCard>
                 ),
               ),
             ),
-          Positioned(
-            left: 0,
-            top: 0,
-            width: kListCardImageWidth,
-            height: kListCardHeight,
-            child: ClipRRect(
-              borderRadius: leftRadius,
-              child: Stack(
-                children: _buildCornerRibbons(
-                  theme,
-                  hasDlc: widget.game.isDlc,
-                  showNewBadge: showNewBadge,
-                ),
-              ),
-            ),
-          ),
+          if (showNewBadge) _buildNewChip(theme),
           _buildSelectionOverlay(
             theme,
             isSelected,
@@ -386,10 +360,10 @@ class _GameCardState extends ConsumerState<GameCard>
     bool isSelected,
     CardViewOptions options,
     GameFetchStatus? fetchStatus,
+    bool showNewBadge,
   ) {
     final showDeadline = options.showDeadline && widget.game.hasDeadline;
     final showUsed = widget.game.isUsed;
-    final showDlc = widget.game.isDlc;
     final showRating = options.showRatingsNow && widget.game.reviewCount > 0;
 
     return _buildAnimatedShell(
@@ -428,36 +402,9 @@ class _GameCardState extends ConsumerState<GameCard>
             ),
           ),
           _buildAnimatedFetchOverlay(theme, fetchStatus, slim: true),
-          if (showDlc)
-            Positioned(
-              left: 0,
-              top: 0,
-              width: _kSlimDlcRibbonExtent,
-              height: kSlimListCardHeight,
-              child: IgnorePointer(
-                child: ClipRect(
-                  child: Stack(
-                    children: [
-                      _buildRibbonBand(
-                        label: 'DLC',
-                        color: theme.accent,
-                        textColor: theme.primaryButtonText,
-                        bandIndex: 0,
-                        compact: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                showDlc ? _kSlimDlcRibbonExtent : 10,
-                6,
-                10,
-                6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 children: [
                   Expanded(
@@ -477,6 +424,8 @@ class _GameCardState extends ConsumerState<GameCard>
                     widget.game,
                     showDeadline: showDeadline,
                     showRating: showRating,
+                    showDlc: widget.game.isDlc,
+                    showNew: showNewBadge,
                     showPlatform: options.showPlatform,
                     fetchStatus: fetchStatus,
                     isSelected: isSelected,
@@ -584,6 +533,7 @@ class _GameCardState extends ConsumerState<GameCard>
     final tagsEnabled = options.showTags && widget.game.tags.isNotEmpty;
     final showSideChips =
         options.showPlatform ||
+        widget.game.isDlc ||
         (options.showRatingsNow && widget.game.reviewCount > 0);
     return Positioned.fill(
       child: Row(
@@ -607,7 +557,8 @@ class _GameCardState extends ConsumerState<GameCard>
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
-                          maxLines: 1,
+                          // Two lines still leave room for the tag row.
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (tagsEnabled) ...[
@@ -808,108 +759,13 @@ class _GameCardState extends ConsumerState<GameCard>
     );
   }
 
-  // ── Corner ribbon ──────────────────────────────────────────────────────────
+  // ── NEW chip ──────────────────────────────────────────────────────────────
 
-  /// The DLC and NEW bands shared by the grid and list layouts. A [large]
-  /// DLC band (grid cards) hides the banner on Steam's DLC artwork.
-  List<Widget> _buildCornerRibbons(
-    AppThemeData theme, {
-    required bool hasDlc,
-    required bool showNewBadge,
-    bool large = false,
-  }) => [
-    if (hasDlc)
-      _buildRibbonBand(
-        label: 'DLC',
-        color: theme.accent,
-        textColor: theme.primaryButtonText,
-        bandIndex: 0,
-        large: large,
-      ),
-    if (showNewBadge)
-      _buildRibbonBand(
-        label: 'NEW',
-        color: theme.secondary,
-        textColor: theme.onSecondaryText,
-        bandIndex: hasDlc ? 1 : 0,
-        addedDate: widget.game.dateAdded,
-        large: large && hasDlc,
-      ),
-  ];
-
-  Positioned _buildRibbonBand({
-    required String label,
-    required Color color,
-    required Color textColor,
-    required int bandIndex,
-    DateTime? addedDate,
-    bool compact = false,
-    bool large = false,
-  }) {
-    final isDlc = label == 'DLC';
-    // With [large], the DLC band is the grid's larger one, and a NEW band
-    // follows it from the same inset.
-    final dlcHeight = large ? _kGridDlcRibbonHeight : _kDlcRibbonHeight;
-    final offset = large ? _kGridRibbonOffset : _kRibbonOffset;
-    final bandHeight = compact ? 20.0 : (isDlc ? dlcHeight : _kRibbonHeight);
-    // NEW follows the larger DLC band when both ribbons are visible.
-    final cx =
-        (compact ? 8.5 : offset) +
-        (bandIndex * dlcHeight + bandHeight / 2) / math.sqrt2;
-
-    final bandWidth = math.max(
-      compact ? 96.0 : _kRibbonContainerWidth * (isDlc ? 1.25 : 1),
-      2 * math.sqrt2 * cx + bandHeight,
-    );
-
-    Widget withTooltip(Widget child) => addedDate == null
-        ? child
-        : Tooltip(
-            message: 'Added ${dayMonthYearFormat.format(addedDate)}',
-            child: child,
-          );
-
-    if (!compact && bandIndex == 0) {
-      return Positioned(
-        left: 0,
-        top: 0,
-        child: withTooltip(
-          CornerRibbon(
-            label: label,
-            color: color,
-            textColor: textColor,
-            bandHeight: bandHeight,
-            bandWidth: bandWidth,
-            offset: offset,
-            fontSize: large && isDlc ? 18 : 12,
-          ),
-        ),
-      );
-    }
-
-    final band = Container(
-      width: bandWidth,
-      height: bandHeight,
-      color: color,
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: compact ? 11 : 13.5,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.6,
-          decoration: TextDecoration.none,
-        ),
-      ),
-    );
-
-    return Positioned(
-      left: cx - bandWidth / 2,
-      top: cx - bandHeight / 2,
-      child: Transform.rotate(angle: -math.pi / 4, child: withTooltip(band)),
-    );
-  }
+  Widget _buildNewChip(AppThemeData theme) => Positioned(
+    left: 5,
+    top: 5,
+    child: GameCardBadges.newChip(theme, widget.game.dateAdded),
+  );
 
   // ── Context menu ───────────────────────────────────────────────────────────
 

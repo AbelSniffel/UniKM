@@ -11,7 +11,6 @@ import '../../core/constants/app_constants.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';
 import 'dialog_helpers.dart';
-import 'corner_ribbon.dart';
 import 'game_cover_image.dart';
 import 'game_card_badges.dart';
 import 'hover_builder.dart';
@@ -261,20 +260,6 @@ class _CoverImageCardState extends State<CoverImageCard> {
           ),
         ),
       ),
-      if (widget.isDlc)
-        Positioned(
-          left: 0,
-          top: 0,
-          child: IgnorePointer(
-            child: CornerRibbon(
-              label: 'DLC',
-              color: theme.accent,
-              textColor: theme.primaryButtonText,
-              bandHeight: 25,
-              bandWidth: 162.5,
-            ),
-          ),
-        ),
       if (widget.hasDeadline)
         Positioned(
           key: const ValueKey('cover-deadline-badge'),
@@ -282,14 +267,23 @@ class _CoverImageCardState extends State<CoverImageCard> {
           bottom: 8,
           child: GameCardBadges.deadlineBadge(theme, widget.deadlineDate),
         ),
-      if (widget.platformSelector != null)
+      if (widget.platformSelector != null || widget.isDlc)
         Positioned(
           right: 5,
           top: 5,
-          child: Material(
-            color: theme.surface.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            child: widget.platformSelector,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [
+              if (widget.platformSelector != null)
+                Material(
+                  color: theme.surface.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
+                  child: widget.platformSelector,
+                ),
+              if (widget.isDlc)
+                IgnorePointer(child: GameCardBadges.dlcChip(theme)),
+            ],
           ),
         ),
     ],

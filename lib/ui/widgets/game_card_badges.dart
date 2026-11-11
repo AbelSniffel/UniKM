@@ -264,6 +264,65 @@ abstract final class GameCardBadges {
     );
   }
 
+  /// Small text chip as tall as the stacked rating chip.
+  static Widget labelChip(
+    AppThemeData theme, {
+    required String label,
+    required Color color,
+    required Color textColor,
+    double height = 26.0,
+    String? tooltip,
+    Key? key,
+  }) {
+    final chip = Container(
+      key: tooltip == null ? key : null,
+      height: height,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.95),
+        borderRadius: chipBorderRadius(theme, 20.0),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+          decoration: TextDecoration.none,
+        ),
+      ),
+    );
+    return tooltip == null
+        ? chip
+        : Tooltip(key: key, message: tooltip, child: chip);
+  }
+
+  static Widget dlcChip(AppThemeData theme, {double height = 26.0}) =>
+      labelChip(
+        theme,
+        key: const ValueKey('dlc-chip'),
+        label: 'DLC',
+        color: theme.accent,
+        textColor: theme.primaryButtonText,
+        height: height,
+      );
+
+  static Widget newChip(
+    AppThemeData theme,
+    DateTime added, {
+    double height = 26.0,
+  }) => labelChip(
+    theme,
+    key: const ValueKey('new-chip'),
+    label: 'NEW',
+    color: theme.secondary,
+    textColor: theme.onSecondaryText,
+    tooltip: 'Added ${dayMonthYearFormat.format(added)}',
+    height: height,
+  );
+
   static Widget titleChip(AppThemeData theme, String title) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
@@ -291,25 +350,36 @@ abstract final class GameCardBadges {
     ),
   }) {
     final bool showRatingChip = showRatings && game.reviewCount > 0;
-    if (!showRatingChip && !showPlatform) return const SizedBox.shrink();
+    if (!showRatingChip && !showPlatform && !game.isDlc) {
+      return const SizedBox.shrink();
+    }
 
-    final Widget content = showPlatform
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              platformBadge(theme, game, kPlatformBadgeHeight),
-              if (showRatingChip)
-                _animatedRatingChip(
-                  theme,
-                  game,
-                  borderRadius: chipBorderRadius(theme, 20.0),
-                  topPadding: 4,
-                ),
-            ],
-          )
-        : _animatedRatingChip(theme, game, minHeight: kBadgeHeight);
-
-    return Padding(padding: padding, child: content);
+    // The DLC chip sits below the rating chip.
+    return Padding(
+      padding: padding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showPlatform) platformBadge(theme, game, kPlatformBadgeHeight),
+          if (showRatingChip)
+            showPlatform
+                ? _animatedRatingChip(
+                    theme,
+                    game,
+                    borderRadius: chipBorderRadius(theme, 20.0),
+                    topPadding: 4,
+                  )
+                : _animatedRatingChip(theme, game, minHeight: kBadgeHeight),
+          if (game.isDlc)
+            Padding(
+              padding: EdgeInsets.only(
+                top: showPlatform || showRatingChip ? 4 : 0,
+              ),
+              child: dlcChip(theme),
+            ),
+        ],
+      ),
+    );
   }
 
   // ── Slim trailing chips ───────────────────────────────────────────────────
@@ -319,13 +389,17 @@ abstract final class GameCardBadges {
     Game game, {
     required bool showDeadline,
     required bool showRating,
+    required bool showDlc,
+    required bool showNew,
     required bool showPlatform,
     required GameFetchStatus? fetchStatus,
     required bool isSelected,
   }) {
     final baseChips = <Widget>[
+      if (showNew) newChip(theme, game.dateAdded, height: kBadgeHeight),
       if (showDeadline)
         deadlineBadge(theme, game.deadlineDate, forceIconOnly: true),
+      if (showDlc) dlcChip(theme, height: kBadgeHeight),
       if (showRating)
         ratingBadge(
           theme,
