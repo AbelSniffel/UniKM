@@ -520,6 +520,13 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
               cachedAt: _fromCache ? widget.cachedAt : null,
             )),
             child: const Text('Save'),
+          )
+        // A failed search, alone in the footer, so it spans its width.
+        else if (!_isSearching)
+          ElevatedButton.icon(
+            onPressed: _searchSteam,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Try Again'),
           ),
       ],
     );
@@ -612,17 +619,23 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
                 'Searching Steam...',
                 style: TextStyle(color: theme.textSecondary),
               ),
+            // Try Again (or Fetch Fresh) is in the footer.
             if (_error case final error?)
               Row(
-                spacing: 4,
+                spacing: 6,
                 children: [
-                  Flexible(
-                    child: Text(error, style: TextStyle(color: theme.error)),
+                  Icon(
+                    _fromCache ? Icons.info_outline : Icons.error_outline,
+                    size: 18,
+                    color: _fromCache ? theme.textSecondary : theme.error,
                   ),
-                  IconButton(
-                    tooltip: 'Try Again',
-                    onPressed: _searchSteam,
-                    icon: const Icon(Icons.refresh),
+                  Flexible(
+                    child: Text(
+                      error,
+                      style: TextStyle(
+                        color: _fromCache ? theme.textSecondary : theme.error,
+                      ),
+                    ),
                   ),
                 ],
               ),

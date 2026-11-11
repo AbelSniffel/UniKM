@@ -558,9 +558,25 @@ class _GameLibraryDragSelectionLayerState
       localOffset.translate(0, _scrollOffset);
 
   @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleKey);
+  }
+
+  @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKey);
     _autoScrollTicker.dispose();
     super.dispose();
+  }
+
+  /// Releasing Shift ends a marquee like releasing the mouse button: the
+  /// selection stays and the overlay goes.
+  bool _handleKey(KeyEvent event) {
+    if (event is KeyUpEvent && _activePointer != null && !_isShiftPressed) {
+      _clearMarqueeTracking();
+    }
+    return false;
   }
 
   void _stopAutoScroll() {

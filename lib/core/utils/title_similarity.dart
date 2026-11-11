@@ -43,6 +43,9 @@ String cleanTitleForSearch(String title) {
   // Remove parenthetical content
   clean = clean.replaceAll(parentheticalPattern, ' ');
 
+  // "Tales & Tactics" and "Tales And Tactics" are the same name.
+  clean = clean.replaceAll('&', ' and ');
+
   // Remove special characters but keep alphanumeric, numbers and spaces
   clean = clean.replaceAll(_specialCharacterPattern, ' ');
   // Collapse multiple spaces

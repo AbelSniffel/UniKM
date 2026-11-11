@@ -383,8 +383,8 @@ class _SettingsPageBody extends ConsumerWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (showSectionPicker) ...[sectionPicker, const SizedBox(width: 8)],
             Expanded(child: search),
-            if (showSectionPicker) ...[const SizedBox(width: 8), sectionPicker],
           ],
         ),
       ),

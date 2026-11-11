@@ -769,44 +769,53 @@ class SteamService {
         .join(' ');
   }
 
+  /// Separators left at the end once an edition suffix is removed, as in
+  /// "Endzone - A World Apart | Complete Edition".
+  static final _trailingSeparatorPattern = RegExp(r'[\s|:\-–—]+$');
+
+  /// Searches to try in order. The full title comes first, so games whose
+  /// real name includes an edition ("… Complete Edition") are found as
+  /// named. Steam's store search finds nothing for some punctuation (" - ",
+  /// "|"), so each form is also tried without it.
   List<String> _generateSearchVariants(String title) {
-    final variants = <String>[];
+    final variants = <String>{};
+    void add(String variant) {
+      final trimmed = variant.trim();
+      if (trimmed.isNotEmpty) variants.add(trimmed);
+    }
+
     final original = title.trim();
-
-    // 1. Original title
-    variants.add(original);
-
-    // 2. Clean special characters
     final cleaned = original
         .replaceAll(_trademarkPattern, '')
         .replaceAll(whitespacePattern, ' ')
         .trim();
-    if (cleaned != original) variants.add(cleaned);
+    String withoutPunctuation(String text) => text
+        .replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ')
+        .replaceAll(whitespacePattern, ' ');
 
-    // 3. Remove edition names
-    final noEdition = cleaned.replaceAll(editionSuffixPattern, '').trim();
-    if (noEdition.isNotEmpty && noEdition != cleaned) variants.add(noEdition);
-
-    // 4. Remove parenthetical content
-    final noParens = cleaned.replaceAll(parentheticalPattern, ' ').trim();
-    if (noParens.isNotEmpty &&
-        noParens != cleaned &&
-        !variants.contains(noParens)) {
-      variants.add(noParens);
+    add(original);
+    add(cleaned);
+    add(withoutPunctuation(cleaned));
+    // Without the edition, and without what separated it from the name.
+    final noEdition = cleaned
+        .replaceAll(editionSuffixPattern, '')
+        .replaceAll(_trailingSeparatorPattern, '');
+    add(noEdition);
+    add(withoutPunctuation(noEdition));
+    // Keys say "Expansion" where Steam often says "DLC"; the add-on's own
+    // name finds it either way.
+    final lowerNoEdition = noEdition.toLowerCase();
+    if (_looksLikeAddonTitle(lowerNoEdition)) {
+      add(withoutPunctuation(lowerNoEdition.replaceAll(_addonWordPattern, ' ')));
     }
-
-    // 5-6. Base title before a colon, then before a dash
-    for (final separator in const [':', ' - ']) {
-      if (!original.contains(separator)) continue;
-      final base = original.split(separator).first.trim();
-      if (base.isNotEmpty &&
-          base.split(' ').length >= 2 &&
-          !variants.contains(base)) {
-        variants.add(base);
-      }
+    add(cleaned.replaceAll(parentheticalPattern, ' '));
+    // The base title before a separator, when it has at least two words.
+    for (final separator in const [' | ', ':', ' - ', ' – ', ' — ']) {
+      if (!noEdition.contains(separator)) continue;
+      final base = noEdition.split(separator).first.trim();
+      if (base.split(' ').length >= 2) add(base);
     }
-
-    return variants;
+    return variants.toList();
   }
 
   Future<List<Map<String, dynamic>>> _searchStoreApi(String term) async {
@@ -868,9 +877,11 @@ class SteamService {
         .trim();
     // An add-on search ("… Expansion") also matches Steam's other wording
     // ("… DLC") before a base game whose name it merely contains.
-    final addonSearch = _looksLikeAddonTitle(searchTitle)
-        ? withoutAddonWords(cleanSearch)
-        : '';
+    final searchIsAddon = _looksLikeAddonTitle(searchTitle);
+    final addonSearch = searchIsAddon ? withoutAddonWords(cleanSearch) : '';
+    // A name containing the search is only accepted as an add-on (a
+    // soundtrack, DLC, pack) when the search names one too.
+    bool eligible(int i) => searchIsAddon || !_looksLikeAddonTitle(lower[i]);
     // Exact, then exact once cleaned, then the same add-on in other words,
     // then either containing the other (original, then cleaned) without
     // being a different sequel.
@@ -882,9 +893,11 @@ class SteamService {
           _looksLikeAddonTitle(lower[i]) &&
           withoutAddonWords(cleaned[i]) == addonSearch,
       (i) =>
+          eligible(i) &&
           overlaps(lower[i], searchTitle) &&
           !_isSequelMismatch(originalTitle, names[i]),
       (i) =>
+          eligible(i) &&
           overlaps(cleaned[i], cleanSearch) &&
           !_isSequelMismatch(originalTitle, names[i]),
     ];
