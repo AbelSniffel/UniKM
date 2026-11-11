@@ -49,6 +49,9 @@ class BiometricUnlock {
   final LocalAuthentication _auth;
   final bool _supported;
 
+  /// Whether this platform can offer biometric unlock at all.
+  bool get supported => _supported;
+
   /// Preferences key listing the paired databases by their storage key.
   static const pairedDatabasesKey = 'biometric_unlock_databases';
 

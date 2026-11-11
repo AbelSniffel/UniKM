@@ -13,6 +13,7 @@ import '../../../app/application/database_session_loader.dart';
 import '../../../core/database/sqlite_file.dart';
 import '../../../core/database/database.dart';
 import '../../../core/services/backup_service.dart';
+import '../../../core/services/biometric_unlock.dart';
 import '../../../core/services/database_switching.dart';
 import '../../../core/services/database_file_info.dart';
 import '../../../core/services/encryption_manager.dart';
@@ -223,26 +224,51 @@ final _activeEncryptionStateProvider = Provider<EncryptionState>((ref) {
             .state;
 });
 
-class _DatabaseEncryptionButton extends ConsumerStatefulWidget {
-  const _DatabaseEncryptionButton({required this.theme});
+/// Whether this phone can pair biometric unlock, and whether the active
+/// database is paired; null while the database is not encrypted.
+final _biometricStateProvider =
+    FutureProvider.autoDispose<({bool available, bool paired})?>((ref) async {
+      if (ref.watch(_activeEncryptionStateProvider) !=
+          EncryptionState.encrypted) {
+        return null;
+      }
+      final path = ref.watch(currentDatabasePathProvider);
+      final unlock = ref.watch(biometricUnlockProvider);
+      final available = await unlock.isAvailable();
+      return (
+        available: available,
+        paired:
+            available &&
+            await unlock.isPaired(DatabaseSessionLoader.basePath(path)),
+      );
+    });
+
+/// Encryption, password and biometric unlock controls for the active
+/// database. Each toggle follows the real state, so a cancelled flow leaves
+/// it unchanged.
+class _EncryptionControls extends ConsumerStatefulWidget {
+  const _EncryptionControls({required this.theme, required this.builder});
   final AppThemeData theme;
 
+  /// Places the header [action] (change password, when encrypted) and the
+  /// toggle [cards].
+  final Widget Function(Widget? action, Widget cards) builder;
+
   @override
-  ConsumerState<_DatabaseEncryptionButton> createState() =>
-      _DatabaseEncryptionButtonState();
+  ConsumerState<_EncryptionControls> createState() =>
+      _EncryptionControlsState();
 }
 
-class _DatabaseEncryptionButtonState
-    extends ConsumerState<_DatabaseEncryptionButton> {
-  bool _opening = false;
-  bool _hovering = false;
+class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
+  bool _busy = false;
 
-  Future<void> _open() async {
-    if (_opening) return;
+  Future<void> _run(
+    Future<void> Function(DatabaseEncryptionController controller) action,
+  ) async {
+    if (_busy) return;
     final container = ProviderScope.containerOf(context, listen: false);
-    final theme = widget.theme;
     final configuredPath = container.read(currentDatabasePathProvider);
-    setState(() => _opening = true);
+    setState(() => _busy = true);
     try {
       final path = DatabaseSessionLoader.basePath(
         configuredPath.isNotEmpty
@@ -251,57 +277,103 @@ class _DatabaseEncryptionButtonState
       );
       if (!mounted) return;
       final manager = container.read(encryptionManagerProvider(path));
-      final controller = DatabaseEncryptionController(container, manager);
-      if (manager.isEncrypted) {
-        final biometric = await controller.biometricPairing();
-        if (!mounted) return;
-        await EncryptionManagementDialog.show(
-          context,
-          theme,
-          onDisable: controller.disable,
-          onChangePassword: controller.changePassword,
-          biometric: biometric,
-        );
-      } else {
-        final password = await EnableEncryptionDialog.show(
-          context,
-          theme,
-          manager,
-        );
-        if (password != null) await controller.enable(password);
-      }
+      await action(DatabaseEncryptionController(container, manager));
     } catch (error) {
       NotificationManager.instance.error('Failed to update encryption: $error');
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) {
+        ref.invalidate(_biometricStateProvider);
+        setState(() => _busy = false);
+      }
     }
   }
 
+  Future<void> _setEncrypted(bool on) => _run((controller) async {
+    if (!on) {
+      await DisableEncryptionDialog.show(
+        context,
+        widget.theme,
+        controller.disable,
+      );
+      return;
+    }
+    final password = await EnableEncryptionDialog.show(
+      context,
+      widget.theme,
+      controller.manager,
+    );
+    if (password != null) await controller.enable(password);
+  });
+
+  Future<void> _setBiometric(bool on) => _run((controller) async {
+    final pairing = await controller.biometricPairing();
+    if (pairing == null || !mounted) return;
+    if (on) {
+      await BiometricPairDialog.show(context, widget.theme, pairing.pair);
+    } else {
+      await pairing.unpair();
+      NotificationManager.instance.success(
+        '${BiometricUnlock.label} unlock turned off for this database',
+      );
+    }
+  });
+
   @override
   Widget build(BuildContext context) {
+    final theme = widget.theme;
     final encrypted =
         ref.watch(_activeEncryptionStateProvider) == EncryptionState.encrypted;
-    final switching = ref.watch(databaseSwitchingProvider);
-    final enabled = !_opening && !switching;
-    final showLocked = encrypted != (_hovering && enabled);
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: IconButton(
-        tooltip: encrypted ? 'Manage Encryption' : 'Enable Encryption',
-        style: widget.theme.compactIconButtonStyle,
-        onPressed: enabled ? _open : null,
-        icon: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: Icon(
-            showLocked ? Icons.lock : Icons.lock_open,
-            key: ValueKey(showLocked),
-            color: showLocked
-                ? widget.theme.accent
-                : widget.theme.textSecondary,
-            size: 26,
+    final enabled = !_busy && !ref.watch(databaseSwitchingProvider);
+    final biometric = ref.watch(_biometricStateProvider).asData?.value;
+    final biometricHint = !ref.watch(biometricUnlockProvider).supported
+        ? 'Available on Android and iOS'
+        : !encrypted
+        ? 'Turn on encryption first'
+        : biometric != null && !biometric.available
+        ? 'Not set up on this device'
+        : null;
+    return widget.builder(
+      encrypted
+          ? IconButton(
+              tooltip: 'Change Password',
+              style: theme.compactIconButtonStyle,
+              color: theme.accent,
+              icon: const Icon(Icons.key, size: 26),
+              onPressed: enabled
+                  ? () => _run(
+                      (controller) => ChangePasswordDialog.show(
+                        context,
+                        widget.theme,
+                        controller.changePassword,
+                      ),
+                    )
+                  : null,
+            )
+          : null,
+      // Each on its own full row, like the Navigation Bar cards: side by
+      // side, the biometric label and hint wrap on narrow windows.
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          SettingsToggleCard(
+            theme: theme,
+            label: DatabaseSection.encryptionSpec.label,
+            icon: DatabaseSection.encryptionSpec.icon,
+            value: encrypted,
+            onChanged: enabled ? _setEncrypted : null,
           ),
-        ),
+          SettingsToggleCard(
+            theme: theme,
+            label: '${BiometricUnlock.label} unlock',
+            icon: DatabaseSection.biometricSpec.icon,
+            description: biometricHint,
+            value: biometric?.paired ?? false,
+            onChanged: enabled && biometric?.available == true
+                ? _setBiometric
+                : null,
+          ),
+        ],
       ),
     );
   }
@@ -322,6 +394,14 @@ class DatabaseSection extends ConsumerStatefulWidget {
 
   static const SettingTextSpec activeDatabaseSpec = SettingTextSpec(
     label: 'Active database file',
+  );
+  static const SettingTextSpec encryptionSpec = SettingTextSpec(
+    label: 'Encryption',
+    icon: Icons.lock_outline,
+  );
+  static const SettingTextSpec biometricSpec = SettingTextSpec(
+    label: 'Fingerprint unlock',
+    icon: Icons.fingerprint,
   );
   static const SettingTextSpec maskKeysSpec = SettingTextSpec(
     label: 'Mask keys',
@@ -351,13 +431,13 @@ class DatabaseSection extends ConsumerStatefulWidget {
   static const SettingsSearchGroup dataManagementSearchGroup =
       SettingsSearchGroup(
         title: 'Data Management',
-        settings: [activeDatabaseSpec],
+        settings: [activeDatabaseSpec, encryptionSpec, biometricSpec],
         extraTexts: [
-          'Encryption',
           'Enable Encryption',
           'Disable Encryption',
           'Change Password',
-          'Fingerprint Unlock',
+          'Face ID',
+          'Touch ID',
           'Biometric',
           'Import DB',
           'Export DB',
@@ -549,52 +629,61 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         // Data Management (Backup/Restore)
         SectionGroupEntry(
           visible: shows(DatabaseSection.dataManagementSearchGroup),
-          builder: (position, isAlternate) => SectionGroupBox(
-            title: DatabaseSection.dataManagementSearchGroup.title,
+          builder: (position, isAlternate) => _EncryptionControls(
             theme: widget.theme,
-            titleIcon: Icons.backup,
-            headerBottomPadding: 0,
-            searchQuery: widget.searchQuery,
-            groupPosition: position,
-            alternateBackground: isAlternate,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: kElementHSpacing,
-              children: [
-                IconButton(
-                  tooltip: 'Backup Manager',
-                  style: widget.theme.compactIconButtonStyle,
-                  color: widget.theme.accent,
-                  icon: const Icon(Icons.backup, size: 26),
-                  onPressed: databaseSwitching
-                      ? null
-                      : () => showBackupDialog(context),
-                ),
-                if (nextBackupTime != null)
-                  _infoButton(
-                    _backupInfoKey,
-                    'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
+            builder: (passwordAction, cards) => SectionGroupBox(
+              title: DatabaseSection.dataManagementSearchGroup.title,
+              theme: widget.theme,
+              titleIcon: Icons.backup,
+              searchQuery: widget.searchQuery,
+              groupPosition: position,
+              alternateBackground: isAlternate,
+              headerCrossAxisAlignment: CrossAxisAlignment.center,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: kElementHSpacing,
+                children: [
+                  ?passwordAction,
+                  IconButton(
+                    tooltip: 'Backup Manager',
+                    style: widget.theme.compactIconButtonStyle,
+                    color: widget.theme.accent,
+                    icon: const Icon(Icons.backup, size: 26),
+                    onPressed: databaseSwitching
+                        ? null
+                        : () => showBackupDialog(context),
                   ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildResponsiveSettingRow(
-                  label: DatabaseSection.activeDatabaseSpec.label,
-                  description: _activeDbPath,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: kElementHSpacing,
-                    children: [
-                      if (_isLoading)
-                        const AppCircularProgressIndicator(size: 20),
-                      _DatabaseEncryptionButton(theme: widget.theme),
-                    ],
+                  if (nextBackupTime != null)
+                    _infoButton(
+                      _backupInfoKey,
+                      'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
+                    ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: kElementVSpacing,
+                children: [
+                  // Tinted like the dialogs' DialogBanner.
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: widget.theme.baseAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(
+                        widget.theme.cornerRadius,
+                      ),
+                    ),
+                    child: _buildResponsiveSettingRow(
+                      label: DatabaseSection.activeDatabaseSpec.label,
+                      description: _activeDbPath,
+                      trailing: _isLoading
+                          ? const AppCircularProgressIndicator(size: 20)
+                          : const SizedBox.shrink(),
+                    ),
                   ),
-                ),
-              ],
+                  cards,
+                ],
+              ),
             ),
           ),
         ),

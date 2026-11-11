@@ -258,20 +258,21 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     'Create password',
     (c) => EnableEncryptionDialog.showForNewDatabase(c, _theme(c)),
   ),
-  for (final tab in [0, 1])
-    DialogGalleryEntry(
-      tab == 0 ? 'disable-encryption' : 'change-password',
-      tab == 0 ? 'Encryption • disable' : 'Encryption • change password',
-      (c) => _widget(
-        c,
-        (_) => EncryptionManagementDialog(
-          theme: _theme(c),
-          initialTab: tab,
-          onDisable: (_) async {},
-          onChangePassword: (_, _) async {},
-        ),
-      ),
-    ),
+  DialogGalleryEntry(
+    'disable-encryption',
+    'Disable encryption',
+    (c) => DisableEncryptionDialog.show(c, _theme(c), (_) async {}),
+  ),
+  DialogGalleryEntry(
+    'change-password',
+    'Change password',
+    (c) => ChangePasswordDialog.show(c, _theme(c), (_, _) async {}),
+  ),
+  DialogGalleryEntry(
+    'biometric-pair',
+    'Fingerprint unlock',
+    (c) => BiometricPairDialog.show(c, _theme(c), (_) async {}),
+  ),
   DialogGalleryEntry('backups', 'Backup manager • backups', showBackupDialog),
   DialogGalleryEntry(
     'restore',

@@ -23,14 +23,20 @@ import 'logging.dart';
 import '../utils/format_utils.dart';
 
 /// Why a backup was taken. The reason is stored in the file name, so it
-/// survives copies; older backups without one read as regular.
+/// survives copies. [regular] is the automatic backup; manual backups made
+/// before the reason was recorded also read as regular.
 enum BackupKind {
   regular(null),
+  manual('manual'),
   preSync('sync'),
   preRestore('restore');
 
   const BackupKind(this.fileToken);
   final String? fileToken;
+
+  /// Automatic backups rotate under the user's limit; the others are listed
+  /// apart from them in the Backup Manager.
+  bool get isAutomatic => this == regular;
 }
 
 typedef _BackupName = ({
@@ -82,7 +88,7 @@ class BackupInfo {
             ? 'Before sync on $date'
             : 'Before sync with $peerName on $date',
       BackupKind.preRestore => 'Before restore on $date',
-      BackupKind.regular => 'Backup from $date',
+      BackupKind.regular || BackupKind.manual => 'Backup from $date',
     };
   }
 }
@@ -114,11 +120,12 @@ class BackupService {
   final Ref ref;
   final int maxBackupCount;
 
-  // Current names read "<database> 2026-10-24 13-10-02[ sync-<peer>][ (2)]".
+  // Current names read
+  // "<database> 2026-10-24 13-10-02[ manual| restore| sync-<peer>][ (2)]".
   // The peer is base64url so any device name fits in a file name.
   static final _namePattern = RegExp(
     r'^(.+) (\d{4})-(\d{2})-(\d{2}) (\d{2})-(\d{2})-(\d{2})'
-    r'(?: (sync|restore)(?:-([A-Za-z0-9_-]+))?)?(?: \((\d+)\))?\.(?:db|enc)$',
+    r'(?: (sync|restore|manual)(?:-([A-Za-z0-9_-]+))?)?(?: \((\d+)\))?\.(?:db|enc)$',
   );
   // Older names: backup_YYYYMMDD_HHMMSS[_micros_id][_<kind>-<json>]_plain.db
   static final _legacyTimestampPattern = RegExp(
@@ -189,11 +196,9 @@ class BackupService {
           parts[4],
           parts[5],
         ),
-        kind: switch (current.group(8)) {
-          'sync' => BackupKind.preSync,
-          'restore' => BackupKind.preRestore,
-          _ => BackupKind.regular,
-        },
+        kind: BackupKind.values.firstWhere(
+          (kind) => kind.fileToken == current.group(8),
+        ),
         databaseName: current.group(1),
         peerName: encodedPeer == null ? null : _decodeBase64Url(encodedPeer),
         duplicate: int.tryParse(current.group(10) ?? '') ?? 1,
@@ -397,17 +402,18 @@ class BackupService {
     return [for (final (backup, _) in backups) backup];
   }
 
-  /// Prune old backups, keeping the newest [maxBackupCount] regular backups
-  /// and, separately, the newest [kMaxSafetyBackupCount] pre-sync and
-  /// pre-restore backups.
+  /// Prune old backups, keeping the newest [maxBackupCount] automatic
+  /// backups and, separately, the newest [kMaxSafetyBackupCount] pre-sync and
+  /// pre-restore backups. Manual backups stay until the user deletes them.
   Future<int> pruneOldBackups() async {
     final backups = await listBackups();
     var deletedCount = 0;
 
-    bool isRegular(BackupInfo b) => b.kind == BackupKind.regular;
+    bool isSafety(BackupInfo b) =>
+        b.kind == BackupKind.preSync || b.kind == BackupKind.preRestore;
     final toDelete = [
-      ...backups.where(isRegular).skip(maxBackupCount),
-      ...backups.where((b) => !isRegular(b)).skip(kMaxSafetyBackupCount),
+      ...backups.where((b) => b.kind.isAutomatic).skip(maxBackupCount),
+      ...backups.where(isSafety).skip(kMaxSafetyBackupCount),
     ];
     for (final backup in toDelete) {
       try {

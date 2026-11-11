@@ -1,10 +1,8 @@
 // Encryption-related dialogs for database security
 
 import 'package:flutter/material.dart';
-import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/services/biometric_unlock.dart';
 import '../../core/services/encryption_manager.dart';
 import '../../core/theme/app_theme.dart';
@@ -171,248 +169,71 @@ class _EnableEncryptionDialogState
   );
 }
 
-/// One window for managing an encrypted database, with tab-specific actions.
-class EncryptionManagementDialog extends StatefulWidget {
-  const EncryptionManagementDialog({
-    super.key,
+/// Shared shell for a password-confirmed change: validates [fields], runs
+/// [action] while blocking dismissal, then reports [successMessage] and
+/// returns true, or shows [errorText] and stays open.
+class _PasswordActionDialog extends StatefulWidget {
+  const _PasswordActionDialog({
     required this.theme,
-    required this.onDisable,
-    required this.onChangePassword,
-    this.initialTab = 0,
-    this.biometric,
+    required this.icon,
+    required this.title,
+    required this.fields,
+    required this.action,
+    required this.successMessage,
+    required this.errorText,
+    required this.confirmIcon,
+    required this.confirmLabel,
+    required this.loadingLabel,
+    this.warning,
   });
 
   final AppThemeData theme;
-  final int initialTab;
-  final Future<void> Function(String password) onDisable;
-  final Future<void> Function(String currentPassword, String newPassword)
-  onChangePassword;
+  final IconData icon;
+  final String title;
+  final List<Widget> Function(VoidCallback submit) fields;
+  final Future<void> Function() action;
+  final String successMessage;
+  final String Function(Object error) errorText;
+  final IconData confirmIcon;
+  final String confirmLabel;
+  final String loadingLabel;
 
-  /// Adds a tab that pairs or unpairs biometric unlock, on phones that
-  /// support it.
-  final BiometricPairing? biometric;
-
-  static Future<bool> show(
-    BuildContext context,
-    AppThemeData theme, {
-    required Future<void> Function(String password) onDisable,
-    required Future<void> Function(String currentPassword, String newPassword)
-    onChangePassword,
-    BiometricPairing? biometric,
-  }) async =>
-      await showAppDialog<bool>(
-        context: context,
-        builder: (_) => EncryptionManagementDialog(
-          theme: theme,
-          onDisable: onDisable,
-          onChangePassword: onChangePassword,
-          biometric: biometric,
-        ),
-      ) ??
-      false;
+  /// Pinned above the buttons, outside the scrolling content.
+  final String? warning;
 
   @override
-  State<EncryptionManagementDialog> createState() =>
-      _EncryptionManagementDialogState();
+  State<_PasswordActionDialog> createState() => _PasswordActionDialogState();
 }
 
-class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
-    with SingleTickerProviderStateMixin {
-  final _disableForm = GlobalKey<FormState>();
-  final _changeForm = GlobalKey<FormState>();
-  final _biometricForm = GlobalKey<FormState>();
-  final _disablePassword = TextEditingController();
-  final _biometricPassword = TextEditingController();
-  final _currentPassword = TextEditingController();
-  final _newPassword = TextEditingController();
-  final _confirmPassword = TextEditingController();
-  late final TabController _tabs;
-  int _selectedTab = 0;
+class _PasswordActionDialogState extends State<_PasswordActionDialog> {
+  final _form = GlobalKey<FormState>();
   bool _busy = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedTab = widget.initialTab;
-    _tabs = TabController(
-      length: widget.biometric == null ? 2 : 3,
-      initialIndex: widget.initialTab,
-      vsync: this,
-      animationDuration: kTabTransition,
-    )..addListener(_onTabChanged);
-  }
-
-  void _onTabChanged() {
-    if (_selectedTab == _tabs.index) return;
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _selectedTab = _tabs.index;
-      _error = null;
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabs.removeListener(_onTabChanged);
-    _tabs.dispose();
-    _disablePassword.dispose();
-    _biometricPassword.dispose();
-    _currentPassword.dispose();
-    _newPassword.dispose();
-    _confirmPassword.dispose();
-    super.dispose();
-  }
-
-  /// Whether the biometric tab turns an existing pairing off.
-  bool get _unpairing => widget.biometric?.paired ?? false;
-
   Future<void> _submit() async {
-    if (_busy) return;
-    final tab = _selectedTab;
-    final form = switch (tab) {
-      0 => _disableForm,
-      1 => _changeForm,
-      _ => _biometricForm,
-    };
-    if (!(tab == 2 && _unpairing) && !form.currentState!.validate()) return;
+    if (_busy || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
       _error = null;
     });
-    final label = BiometricUnlock.label;
     try {
-      await switch (tab) {
-        0 => widget.onDisable(_disablePassword.text),
-        1 => widget.onChangePassword(_currentPassword.text, _newPassword.text),
-        _ when _unpairing => widget.biometric!.unpair(),
-        _ => widget.biometric!.pair(_biometricPassword.text),
-      };
+      await widget.action();
       if (!mounted) return;
-      NotificationManager.instance.success(switch (tab) {
-        0 => 'Database encryption disabled',
-        1 => 'Password changed successfully',
-        _ when _unpairing => '$label unlock turned off for this database',
-        _ => '$label unlock turned on for this database',
-      });
+      NotificationManager.instance.success(widget.successMessage);
       // Re-enable popping after the operation; the busy route blocks dismissals.
       setState(() => _busy = false);
       Navigator.of(context).pop(true);
     } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => _error = switch ((error, tab)) {
-          (InvalidPasswordException(), 1) => 'Current password is incorrect',
-          (InvalidPasswordException(), _) => 'Incorrect password',
-          (_, 0) => 'Failed to disable encryption: $error',
-          (_, 1) => 'Failed to change password: $error',
-          _ => '$label was not confirmed, so nothing changed. Try again.',
-        },
-      );
+      if (mounted) setState(() => _error = widget.errorText(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Widget _disableContent() => Form(
-    key: _disableForm,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Confirm your password to remove encryption.',
-          style: TextStyle(color: widget.theme.textSecondary, fontSize: 13),
-        ),
-        const SizedBox(height: 16),
-        PasswordField(
-          controller: _disablePassword,
-          labelText: 'Enter Password',
-          validator: requiredPassword(),
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _submit(),
-        ),
-      ],
-    ),
-  );
-
-  Widget _biometricContent() {
-    final label = BiometricUnlock.label;
-    final text = Text(
-      _unpairing
-          ? '$label unlock is on for this database on this phone. Turn it off '
-                'to require the password again.'
-          : 'Unlock this database with $label instead of its password. '
-                'Enter the password once, then confirm with $label. Other '
-                'databases are paired separately.',
-      style: TextStyle(color: widget.theme.textSecondary, fontSize: 13),
-    );
-    if (_unpairing) return text;
-    return Form(
-      key: _biometricForm,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 16,
-        children: [
-          text,
-          PasswordField(
-            controller: _biometricPassword,
-            labelText: 'Database Password',
-            validator: requiredPassword(),
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _submit(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _changeContent() => Form(
-    key: _changeForm,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        PasswordField(
-          controller: _currentPassword,
-          labelText: 'Current Password',
-          textInputAction: TextInputAction.next,
-          validator: requiredPassword(message: 'Current password is required'),
-        ),
-        Divider(height: 37, color: widget.theme.border),
-        PasswordField(
-          controller: _newPassword,
-          labelText: 'New Password',
-          textInputAction: TextInputAction.next,
-          validator: (value) {
-            final requiredError = requiredPasswordWithLength(
-              emptyMessage: 'New password is required',
-            )(value);
-            if (requiredError != null) return requiredError;
-            if (value == _currentPassword.text) {
-              return 'New password must be different';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: kDialogSpacing),
-        PasswordField(
-          controller: _confirmPassword,
-          labelText: 'Confirm New Password',
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _submit(),
-          validator: confirmPassword(_newPassword),
-        ),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final tab = _selectedTab;
-    final disabling = tab == 0;
-    final label = BiometricUnlock.label;
     return PopScope(
       canPop: !_busy,
       child: DialogInteractionScope(
@@ -426,48 +247,27 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
           maxHeight: 600,
           showCloseButton: !_busy,
           title: DialogHeader(
-            icon: tab == 2 ? Icons.fingerprint : Icons.lock,
-            title: switch (tab) {
-              0 => 'Disable Encryption',
-              1 => 'Change Database Password',
-              _ => '$label Unlock',
-            },
+            icon: widget.icon,
+            title: widget.title,
             theme: theme,
           ),
           contentChildren: [
-            IgnorePointer(
-              ignoring: _busy,
-              child: AppTabBar(
-                theme: theme,
-                controller: _tabs,
-                tabs: [
-                  const AppTab('Disable'),
-                  const AppTab('Change Password'),
-                  if (widget.biometric != null) AppTab(label),
-                ],
-              ),
-            ),
-            const SizedBox(height: kDialogSpacing),
             ExcludeFocus(
               excluding: _busy,
               child: AbsorbPointer(
                 absorbing: _busy,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: kDialogSpacing,
-                  children: [
-                    AppTabTransition(
-                      index: _selectedTab,
-                      child: switch (tab) {
-                        0 => _disableContent(),
-                        1 => _changeContent(),
-                        _ => _biometricContent(),
-                      },
-                    ),
-                    if (_error != null)
-                      Text(_error!, style: TextStyle(color: theme.secondary)),
-                  ],
+                child: Form(
+                  key: _form,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: kDialogSpacing,
+                    children: [
+                      ...widget.fields(_submit),
+                      if (_error != null)
+                        Text(_error!, style: TextStyle(color: theme.secondary)),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -476,36 +276,17 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: kDialogSpacing,
               children: [
-                if (disabling) ...[
-                  DialogBanner.warning(
-                    theme: theme,
-                    message:
-                        'Your database will be stored in plain text '
-                        'without password protection.',
-                  ),
-                  const SizedBox(height: kDialogSpacing),
-                ],
+                if (widget.warning case final warning?)
+                  DialogBanner.warning(theme: theme, message: warning),
                 DialogActionBar(
                   theme: theme,
                   onCancel: () => Navigator.of(context).pop(false),
                   onConfirm: _submit,
-                  confirmIcon: switch (tab) {
-                    0 => Icons.lock_open,
-                    1 => Icons.key,
-                    _ => Icons.fingerprint,
-                  },
-                  confirmLabel: switch (tab) {
-                    0 => 'Disable',
-                    1 => 'Change Password',
-                    _ when _unpairing => 'Turn Off',
-                    _ => 'Turn On',
-                  },
-                  loadingLabel: switch (tab) {
-                    0 => 'Disabling...',
-                    1 => 'Changing...',
-                    _ => 'Confirming...',
-                  },
+                  confirmIcon: widget.confirmIcon,
+                  confirmLabel: widget.confirmLabel,
+                  loadingLabel: widget.loadingLabel,
                   isLoading: _busy,
                 ),
               ],
@@ -515,4 +296,235 @@ class _EncryptionManagementDialogState extends State<EncryptionManagementDialog>
       ),
     );
   }
+}
+
+/// Text controllers disposed with the dialog.
+mixin _OwnsControllers<T extends StatefulWidget> on State<T> {
+  final controllers = <TextEditingController>[];
+
+  TextEditingController controller() {
+    final controller = TextEditingController();
+    controllers.add(controller);
+    return controller;
+  }
+
+  @override
+  void dispose() {
+    for (final controller in controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+}
+
+TextStyle _hintStyle(AppThemeData theme) =>
+    TextStyle(color: theme.textSecondary, fontSize: 13);
+
+/// Asks for the database password before pairing biometric unlock, which
+/// then shows the system prompt. Returns whether the pairing was saved.
+class BiometricPairDialog extends StatefulWidget {
+  const BiometricPairDialog({
+    super.key,
+    required this.theme,
+    required this.onPair,
+  });
+
+  final AppThemeData theme;
+  final Future<void> Function(String password) onPair;
+
+  static Future<bool> show(
+    BuildContext context,
+    AppThemeData theme,
+    Future<void> Function(String password) onPair,
+  ) async =>
+      await showAppDialog<bool>(
+        context: context,
+        builder: (_) => BiometricPairDialog(theme: theme, onPair: onPair),
+      ) ??
+      false;
+
+  @override
+  State<BiometricPairDialog> createState() => _BiometricPairDialogState();
+}
+
+class _BiometricPairDialogState extends State<BiometricPairDialog>
+    with _OwnsControllers {
+  late final _password = controller();
+
+  @override
+  Widget build(BuildContext context) {
+    final label = BiometricUnlock.label;
+    return _PasswordActionDialog(
+      theme: widget.theme,
+      icon: Icons.fingerprint,
+      title: '$label Unlock',
+      action: () => widget.onPair(_password.text),
+      successMessage: '$label unlock turned on for this database',
+      errorText: (error) => error is InvalidPasswordException
+          ? 'Incorrect password'
+          : '$label was not confirmed, so nothing changed. Try again.',
+      confirmIcon: Icons.fingerprint,
+      confirmLabel: 'Turn On',
+      loadingLabel: 'Confirming...',
+      fields: (submit) => [
+        Text(
+          'Unlock this database with $label instead of its password. Enter '
+          'the password once, then confirm with $label. Other databases are '
+          'paired separately.',
+          style: _hintStyle(widget.theme),
+        ),
+        PasswordField(
+          controller: _password,
+          labelText: 'Database Password',
+          validator: requiredPassword(),
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => submit(),
+        ),
+      ],
+    );
+  }
+}
+
+/// Confirms the password, then removes encryption from the database.
+/// Returns whether encryption was removed.
+class DisableEncryptionDialog extends StatefulWidget {
+  const DisableEncryptionDialog({
+    super.key,
+    required this.theme,
+    required this.onDisable,
+  });
+
+  final AppThemeData theme;
+  final Future<void> Function(String password) onDisable;
+
+  static Future<bool> show(
+    BuildContext context,
+    AppThemeData theme,
+    Future<void> Function(String password) onDisable,
+  ) async =>
+      await showAppDialog<bool>(
+        context: context,
+        builder: (_) =>
+            DisableEncryptionDialog(theme: theme, onDisable: onDisable),
+      ) ??
+      false;
+
+  @override
+  State<DisableEncryptionDialog> createState() =>
+      _DisableEncryptionDialogState();
+}
+
+class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
+    with _OwnsControllers {
+  late final _password = controller();
+
+  @override
+  Widget build(BuildContext context) => _PasswordActionDialog(
+    theme: widget.theme,
+    icon: Icons.lock_open,
+    title: 'Disable Encryption',
+    action: () => widget.onDisable(_password.text),
+    successMessage: 'Database encryption disabled',
+    errorText: (error) => error is InvalidPasswordException
+        ? 'Incorrect password'
+        : 'Failed to disable encryption: $error',
+    confirmIcon: Icons.lock_open,
+    confirmLabel: 'Disable',
+    loadingLabel: 'Disabling...',
+    warning:
+        'Your database will be stored in plain text without password '
+        'protection.',
+    fields: (submit) => [
+      Text(
+        'Confirm your password to remove encryption.',
+        style: _hintStyle(widget.theme),
+      ),
+      PasswordField(
+        controller: _password,
+        labelText: 'Enter Password',
+        validator: requiredPassword(),
+        textInputAction: TextInputAction.done,
+        onFieldSubmitted: (_) => submit(),
+      ),
+    ],
+  );
+}
+
+/// Changes the password of an encrypted database. Returns whether it changed.
+class ChangePasswordDialog extends StatefulWidget {
+  const ChangePasswordDialog({
+    super.key,
+    required this.theme,
+    required this.onChangePassword,
+  });
+
+  final AppThemeData theme;
+  final Future<void> Function(String currentPassword, String newPassword)
+  onChangePassword;
+
+  static Future<bool> show(
+    BuildContext context,
+    AppThemeData theme,
+    Future<void> Function(String currentPassword, String newPassword)
+    onChangePassword,
+  ) async =>
+      await showAppDialog<bool>(
+        context: context,
+        builder: (_) => ChangePasswordDialog(
+          theme: theme,
+          onChangePassword: onChangePassword,
+        ),
+      ) ??
+      false;
+
+  @override
+  State<ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<ChangePasswordDialog>
+    with _OwnsControllers {
+  late final _current = controller();
+  late final _new = controller();
+  late final _confirm = controller();
+
+  @override
+  Widget build(BuildContext context) => _PasswordActionDialog(
+    theme: widget.theme,
+    icon: Icons.key,
+    title: 'Change Database Password',
+    action: () => widget.onChangePassword(_current.text, _new.text),
+    successMessage: 'Password changed successfully',
+    errorText: (error) => error is InvalidPasswordException
+        ? 'Current password is incorrect'
+        : 'Failed to change password: $error',
+    confirmIcon: Icons.key,
+    confirmLabel: 'Change Password',
+    loadingLabel: 'Changing...',
+    fields: (submit) => [
+      PasswordField(
+        controller: _current,
+        labelText: 'Current Password',
+        textInputAction: TextInputAction.next,
+        validator: requiredPassword(message: 'Current password is required'),
+      ),
+      Divider(height: 37 - 2 * kDialogSpacing, color: widget.theme.border),
+      PasswordField(
+        controller: _new,
+        labelText: 'New Password',
+        textInputAction: TextInputAction.next,
+        validator: (value) =>
+            requiredPasswordWithLength(
+              emptyMessage: 'New password is required',
+            )(value) ??
+            (value == _current.text ? 'New password must be different' : null),
+      ),
+      PasswordField(
+        controller: _confirm,
+        labelText: 'Confirm New Password',
+        textInputAction: TextInputAction.done,
+        onFieldSubmitted: (_) => submit(),
+        validator: confirmPassword(_new),
+      ),
+    ],
+  );
 }

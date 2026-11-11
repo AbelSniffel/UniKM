@@ -25,6 +25,7 @@ import '../widgets/notification_system.dart';
 import '../widgets/password_field.dart';
 import 'database_unlock_dialog.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Show the backup management dialog
 Future<void> showBackupDialog(BuildContext context, {int initialTab = 0}) =>
@@ -89,7 +90,8 @@ class _BackupDialog extends ConsumerStatefulWidget {
 class _BackupDialogState extends ConsumerState<_BackupDialog>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final _backupInfoKey = GlobalKey<TooltipState>();
+  final _automaticInfoKey = GlobalKey<TooltipState>();
+  final _otherInfoKey = GlobalKey<TooltipState>();
   bool _isCreatingBackup = false;
   List<BackupInfo> _backups = [];
   bool _isLoading = true;
@@ -138,7 +140,9 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   Future<void> _createBackup() async {
     setState(() => _isCreatingBackup = true);
     try {
-      final result = await ref.read(backupServiceProvider).createBackup();
+      final result = await ref
+          .read(backupServiceProvider)
+          .createBackup(kind: BackupKind.manual);
       if (result.success) {
         NotificationManager.instance.success(
           'Backup created: ${result.backupInfo?.displayName}',
@@ -288,14 +292,68 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     }
   }
 
+  /// A titled group of backup rows, or nothing when [backups] is empty.
+  List<Widget> _backupGroup(
+    AppThemeData theme, {
+    required String title,
+    required String trailing,
+    required String info,
+    required GlobalKey<TooltipState> infoKey,
+    required List<BackupInfo> backups,
+  }) => [
+    if (backups.isNotEmpty) ...[
+      TintedHeading(
+        theme: theme,
+        title: title,
+        trailing: trailing,
+        action: Tooltip(
+          key: infoKey,
+          message: info,
+          child: IconButton(
+            style: theme.compactIconButtonStyle,
+            icon: const Icon(Icons.info_outline, size: 20),
+            color: theme.textSecondary,
+            onPressed: () => infoKey.currentState?.ensureTooltipVisible(),
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      for (final backup in backups)
+        DatabaseFileRow(
+          key: ValueKey(backup.filePath),
+          theme: theme,
+          title: backup.displayName,
+          subtitle: backup.details,
+          isEncrypted: backup.isEncrypted,
+          actions: [
+            IconButton(
+              icon: Icon(Icons.restore, color: theme.accent),
+              tooltip: 'Restore this backup',
+              onPressed: () => _restoreListedBackup(backup),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete, color: theme.secondary),
+              tooltip: 'Delete this backup',
+              onPressed: () => _deleteBackup(backup),
+            ),
+          ],
+        ),
+    ],
+  ];
+
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final backupSettings = ref.watch(backupSettingsProvider);
     final maxBackups = backupSettings.maxCount;
-    final regularCount = _backups
-        .where((b) => b.kind == BackupKind.regular)
-        .length;
+    final automatic = [
+      for (final b in _backups)
+        if (b.kind.isAutomatic) b,
+    ];
+    final other = [
+      for (final b in _backups)
+        if (!b.kind.isAutomatic) b,
+    ];
 
     return ThemedAlertDialog(
       theme: theme,
@@ -312,7 +370,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
             theme: theme,
             controller: _tabController,
             tabs: [
-              AppTab('Backups ($regularCount/$maxBackups)'),
+              AppTab('Backups (${_backups.length})'),
               const AppTab('Restore from File'),
             ],
           ),
@@ -321,88 +379,51 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
             child: AppTabView(
               controller: _tabController,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 8,
-                  children: [
-                    TintedHeading(
-                      theme: theme,
-                      title: 'Backups',
-                      trailing: '$regularCount of $maxBackups',
-                      action: Tooltip(
-                        key: _backupInfoKey,
-                        message:
-                            'Maximum $maxBackups backups are kept. Oldest backups are automatically deleted. '
-                            'Backups made before a sync or restore are kept separately (newest $kMaxSafetyBackupCount).',
-                        child: IconButton(
-                          style: theme.compactIconButtonStyle,
-                          icon: const Icon(Icons.info_outline, size: 20),
-                          color: theme.textSecondary,
-                          onPressed: () => _backupInfoKey.currentState
-                              ?.ensureTooltipVisible(),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _isLoading
-                          ? const Center(child: AppCircularProgressIndicator())
-                          : _backups.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.backup_outlined,
-                                    size: 48,
-                                    color: theme.textSecondary.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No backups yet',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _backups.length,
-                              itemBuilder: (listContext, index) {
-                                final backup = _backups[index];
-                                return DatabaseFileRow(
-                                  key: ValueKey(backup.filePath),
-                                  theme: theme,
-                                  title: backup.displayName,
-                                  subtitle: backup.details,
-                                  isEncrypted: backup.isEncrypted,
-                                  actions: [
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.restore,
-                                        color: theme.accent,
-                                      ),
-                                      tooltip: 'Restore this backup',
-                                      onPressed: () =>
-                                          _restoreListedBackup(backup),
-                                    ),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.delete,
-                                        color: theme.secondary,
-                                      ),
-                                      tooltip: 'Delete this backup',
-                                      onPressed: () => _deleteBackup(backup),
-                                    ),
-                                  ],
-                                );
-                              },
+                _isLoading
+                    ? const Center(child: AppCircularProgressIndicator())
+                    : _backups.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.backup_outlined,
+                              size: 48,
+                              color: theme.textSecondary.withValues(alpha: 0.5),
                             ),
-                    ),
-                  ],
-                ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No backups yet',
+                              style: TextStyle(color: theme.textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView(
+                        children: [
+                          ..._backupGroup(
+                            theme,
+                            title: 'Manual & before sync',
+                            trailing: '${other.length}',
+                            info:
+                                'Manual backups are kept until you delete them. '
+                                'Backups made before a sync or restore keep the newest $kMaxSafetyBackupCount.',
+                            infoKey: _otherInfoKey,
+                            backups: other,
+                          ),
+                          if (other.isNotEmpty && automatic.isNotEmpty)
+                            const SizedBox(height: 8),
+                          ..._backupGroup(
+                            theme,
+                            title: 'Automatic',
+                            trailing: '${automatic.length} of $maxBackups',
+                            info:
+                                'The newest $maxBackups automatic backups are kept. Older ones are deleted automatically.',
+                            infoKey: _automaticInfoKey,
+                            backups: automatic,
+                          ),
+                        ],
+                      ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
