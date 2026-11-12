@@ -139,12 +139,6 @@ final appShellSettingsProvider = _settingsSlice(appShellSettingsFromMap);
 
 final backupSettingsProvider = _settingsSlice(backupSettingsFromMap);
 
-final toggleStyleProvider = _setting<ToggleStyle>(SettingsKeys.toggleStyle);
-
-final settingsCardIndicatorStyleProvider = _setting<SettingsCardIndicatorStyle>(
-  SettingsKeys.settingsCardIndicatorStyle,
-);
-
 final sectionTitleLocationProvider = _setting<SectionTitleLocation>(
   SettingsKeys.sectionTitleLocation,
 );

@@ -11,9 +11,6 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/dev_window.dart';
-import '../../widgets/section_groupbox.dart';
-import '../../widgets/toggle_switch.dart';
-import 'settings_card_style_section.dart';
 import 'settings_common.dart';
 import 'settings_control_cards.dart';
 
@@ -30,24 +27,6 @@ class AdvancedSection extends ConsumerWidget {
   final String searchQuery;
   final bool attachesToAbove;
 
-  static const SettingTextSpec toggleStyleSpec = SettingTextSpec(
-    label: 'Toggle Style',
-    description: 'Choose how toggle switches appear throughout the app',
-    icon: Icons.toggle_on_outlined,
-  );
-  static SettingsSearchGroup get controlStylesSearchGroup =>
-      SettingsSearchGroup(
-        title: 'Control Styles',
-        settings: [toggleStyleSpec],
-        extraTexts: [for (final style in ToggleStyle.values) style.displayName],
-      );
-  static SettingsSearchGroup get cardStylesSearchGroup => SettingsSearchGroup(
-    title: 'Settings Card Style',
-    settings: [SettingsCardStyleSection.indicatorStyleSpec],
-    extraTexts: [
-      for (final style in SettingsCardIndicatorStyle.values) style.displayName,
-    ],
-  );
   static const SettingTextSpec frameRateSpec = SettingTextSpec(
     label: 'Frame Rate',
     icon: Icons.speed,
@@ -65,11 +44,7 @@ class AdvancedSection extends ConsumerWidget {
     extraTexts: ['Display', 'FPS', 'defaults'],
   );
 
-  static List<SettingsSearchGroup> get searchGroups => [
-    controlStylesSearchGroup,
-    cardStylesSearchGroup,
-    systemSearchGroup,
-  ];
+  static List<SettingsSearchGroup> get searchGroups => [systemSearchGroup];
 
   static const _frameRateOptions = <MapEntry<String, String>>[
     MapEntry('auto', 'Auto'),
@@ -89,30 +64,9 @@ class AdvancedSection extends ConsumerWidget {
       ),
     );
 
-    bool show(SettingsSearchGroup group) =>
-        shouldShowSettingsGroup(searchQuery, group);
-
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
-        SectionGroupEntry(
-          visible: show(controlStylesSearchGroup),
-          builder: (position, isAlternate) => _ControlStylesSection(
-            theme: theme,
-            searchQuery: searchQuery,
-            groupPosition: position,
-            isAlternate: isAlternate,
-          ),
-        ),
-        SectionGroupEntry(
-          visible: show(cardStylesSearchGroup),
-          builder: (position, isAlternate) => SettingsCardStyleSection(
-            theme: theme,
-            searchQuery: searchQuery,
-            groupPosition: position,
-            isAlternate: isAlternate,
-          ),
-        ),
         buildSearchableSectionEntry(
           theme: theme,
           group: systemSearchGroup,
@@ -181,63 +135,6 @@ class AdvancedSection extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Toggle style selector
-// ---------------------------------------------------------------------------
-
-/// Settings section that lets the user pick between toggle switch styles.
-class _ControlStylesSection extends ConsumerWidget {
-  const _ControlStylesSection({
-    required this.theme,
-    required this.searchQuery,
-    this.groupPosition = SectionGroupPosition.only,
-    this.isAlternate = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final SectionGroupPosition groupPosition;
-  final bool isAlternate;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentStyle = ref.watch(toggleStyleProvider);
-    return SectionGroupBox(
-      title: AdvancedSection.controlStylesSearchGroup.title,
-      theme: theme,
-      titleIcon: Icons.toggle_on_outlined,
-      searchQuery: searchQuery,
-      groupPosition: groupPosition,
-      alternateBackground: isAlternate,
-      // One card whose buttons are the styles' own switches, the chosen
-      // one switched on.
-      child: SettingsButtonGroupCard<ToggleStyle>(
-        theme: theme,
-        label: AdvancedSection.toggleStyleSpec.label,
-        icon: AdvancedSection.toggleStyleSpec.icon,
-        description: currentStyle.description,
-        value: currentStyle,
-        choices: [
-          for (final style in ToggleStyle.values)
-            SettingsChoice(style, style.displayName),
-        ],
-        onChanged: (style) => ref
-            .read(settingsProvider.notifier)
-            .set(SettingsKeys.toggleStyle, style),
-        buttonBuilder: (choice, selected, choose) => AppToggleSwitch(
-          key: ValueKey(choice.value),
-          value: selected,
-          onChanged: choose == null ? null : (_) => choose(),
-          theme: theme,
-          style: choice.value,
-          // The switch alone, without its On/Off word.
-          label: '',
-        ),
-      ),
     );
   }
 }

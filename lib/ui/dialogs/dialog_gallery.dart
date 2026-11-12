@@ -172,14 +172,6 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final cardStyle = (
-      ref.watch(settingsCardIndicatorStyleProvider),
-      ref.watch(toggleStyleProvider),
-    );
-    final appearanceSettings = <String, dynamic>{
-      SettingsKeys.settingsCardIndicatorStyle: cardStyle.$1,
-      SettingsKeys.toggleStyle: cardStyle.$2,
-    };
     // Rebuilt with each build, so hot reload refreshes inline builders.
     final entries = buildDialogGalleryCatalog();
     _count = entries.length;
@@ -214,10 +206,9 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
               // Its own layer, which panning only moves.
               child: RepaintBoundary(
                 child: _DialogGalleryTile(
-                  key: ValueKey((entry.id, theme, cardStyle)),
+                  key: ValueKey((entry.id, theme)),
                   entry: entry,
                   theme: theme,
-                  appearanceSettings: appearanceSettings,
                 ),
               ),
             ),
@@ -420,20 +411,15 @@ class _DialogGalleryTile extends StatefulWidget {
     super.key,
     required this.entry,
     required this.theme,
-    required this.appearanceSettings,
   });
   final DialogGalleryEntry entry;
   final AppThemeData theme;
-  final Map<String, dynamic> appearanceSettings;
   @override
   State<_DialogGalleryTile> createState() => _DialogGalleryTileState();
 }
 
 class _DialogGalleryTileState extends State<_DialogGalleryTile> {
-  late final _container = createDialogGalleryContainer(
-    widget.theme,
-    appearanceSettings: widget.appearanceSettings,
-  );
+  late final _container = createDialogGalleryContainer(widget.theme);
   final _dismissals = <VoidCallback>[];
   final _contentRevision = ValueNotifier<int>(0);
   WidgetBuilder? _builder;

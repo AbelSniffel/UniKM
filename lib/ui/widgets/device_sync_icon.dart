@@ -5,8 +5,8 @@ import '../../core/theme/app_theme.dart';
 
 /// The Device Sync button's icon, shared by the title bar and the library
 /// header: sync off, no paired device online (a broken link), or the online
-/// device's type, orange when its database differs. The color is null while
-/// sync is off, so the button keeps its idle color.
+/// device's type in the accent, orange when its database differs. The color
+/// is null while sync is off, so the button keeps its idle color.
 ({IconData icon, Color? color}) deviceSyncIcon(
   AppThemeData theme,
   DeviceSyncSnapshot? sync,
@@ -20,7 +20,7 @@ import '../../core/theme/app_theme.dart';
   }
   return (
     icon: deviceIcon,
-    color: sync.dbMismatchPeerIds.isNotEmpty ? Colors.orange : theme.secondary,
+    color: sync.dbMismatchPeerIds.isNotEmpty ? Colors.orange : theme.accent,
   );
 }
 

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'tinted_card.dart';
+import 'tinted_tiles.dart';
 
-/// Shared database and backup row: a [TintedCard] with an encryption icon and
-/// optional actions. Missing files are tinted orange; the [highlighted] row is
-/// tinted more strongly and outlined.
+/// Shared database and backup row: a [TintedOptionTile] with an encryption
+/// icon and optional actions, raised while it takes taps. Missing files are
+/// tinted orange; the [highlighted] row is tinted more strongly and pressed in.
 class DatabaseFileRow extends StatelessWidget {
   const DatabaseFileRow({
     super.key,
@@ -33,7 +34,7 @@ class DatabaseFileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: margin,
-    child: TintedCard(
+    child: TintedOptionTile(
       theme: theme,
       color: available ? theme.accent : Colors.orange,
       icon: !available

@@ -503,32 +503,25 @@ const _confirmations =
 
 /// Standalone containers prevent preview lifecycle code from reaching the app's
 /// database, preferences, network discovery, backup files, or update service.
-ProviderContainer createDialogGalleryContainer(
-  AppThemeData theme, {
-  Map<String, dynamic> appearanceSettings = const {},
-}) => ProviderContainer(
-  overrides: [
-    settingsProvider.overrideWith(() => _GallerySettings(appearanceSettings)),
-    themeProvider.overrideWith(() => _GalleryTheme(theme)),
-    gamesProvider.overrideWith(_GalleryGames.new),
-    tagsProvider.overrideWith(_GalleryTags.new),
-    deviceSyncProvider.overrideWith(_GallerySync.new),
-    deviceSyncServiceProvider.overrideWith(
-      (ref) => _GallerySyncService(ref: ref),
-    ),
-    backupServiceProvider.overrideWith((ref) => _GalleryBackups(ref: ref)),
-    updateProvider.overrideWith(_GalleryUpdates.new),
-  ],
-);
+ProviderContainer createDialogGalleryContainer(AppThemeData theme) =>
+    ProviderContainer(
+      overrides: [
+        settingsProvider.overrideWith(_GallerySettings.new),
+        themeProvider.overrideWith(() => _GalleryTheme(theme)),
+        gamesProvider.overrideWith(_GalleryGames.new),
+        tagsProvider.overrideWith(_GalleryTags.new),
+        deviceSyncProvider.overrideWith(_GallerySync.new),
+        deviceSyncServiceProvider.overrideWith(
+          (ref) => _GallerySyncService(ref: ref),
+        ),
+        backupServiceProvider.overrideWith((ref) => _GalleryBackups(ref: ref)),
+        updateProvider.overrideWith(_GalleryUpdates.new),
+      ],
+    );
 
 class _GallerySettings extends SettingsNotifier {
-  _GallerySettings(this.appearanceSettings);
-
-  final Map<String, dynamic> appearanceSettings;
-
   @override
   Map<String, dynamic> build() => {
-    ...appearanceSettings,
     SettingsKeys.databasePath: galleryDatabaseFiles.keys.first,
     SettingsKeys.recentDatabasePaths: galleryDatabaseFiles.keys.toList(),
     SettingsKeys.skippedVersions: ['v1.3.0', 'v1.2.0'],

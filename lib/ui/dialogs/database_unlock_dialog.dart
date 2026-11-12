@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/database/sqlite_file.dart';
-import '../../core/services/biometric_unlock.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
@@ -56,7 +55,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
   final bool allowChangeDatabase;
 
   /// Reads the password with a biometric check, for a database paired on
-  /// this phone. It is tried once when the dialog opens and from a button.
+  /// this phone. It is tried once when the dialog opens.
   final Future<String?> Function()? onBiometricUnlock;
 
   static Future<String?> show(
@@ -110,7 +109,6 @@ class DatabaseUnlockDialog extends StatefulWidget {
 class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
-  bool _checkingBiometrics = false;
 
   @override
   void initState() {
@@ -122,11 +120,9 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
 
   Future<void> _unlockBiometric() async {
     final unlock = widget.onBiometricUnlock;
-    if (unlock == null || _checkingBiometrics || !mounted) return;
-    setState(() => _checkingBiometrics = true);
+    if (unlock == null || !mounted) return;
     final password = await unlock();
     if (!mounted) return;
-    setState(() => _checkingBiometrics = false);
     // A cancelled check leaves the password field to fall back on.
     if (password != null) Navigator.of(context).pop(password);
   }
@@ -206,15 +202,6 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
             onFieldSubmitted: (_) => _submit(),
             validator: requiredPassword(message: 'Enter your password'),
           ),
-          if (widget.onBiometricUnlock != null) ...[
-            const SizedBox(height: kDialogSpacing),
-            OutlinedButton.icon(
-              key: const ValueKey('database-unlock-biometric'),
-              onPressed: _checkingBiometrics ? null : _unlockBiometric,
-              icon: const Icon(Icons.fingerprint),
-              label: Text('Unlock with ${BiometricUnlock.label}'),
-            ),
-          ],
         ],
       ),
     ),

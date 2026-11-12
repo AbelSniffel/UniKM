@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../providers/app_providers.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/settings/settings_model.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_card_inset.dart';
@@ -12,7 +8,6 @@ import '../../widgets/settings_card_indicator.dart';
 import '../../widgets/settings_card_layout.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/search_highlight.dart';
-import '../../widgets/toggle_switch.dart';
 
 /// Responsive settings cards with shared widths across each row.
 class SettingsControlWrap extends StatelessWidget {
@@ -64,7 +59,9 @@ class SettingsChoice<T> {
   final Widget? icon;
 }
 
-class SettingsToggleCard extends ConsumerWidget {
+/// A toggle setting as a whole-card button, its state shown by a corner dot
+/// that grows when on.
+class SettingsToggleCard extends StatelessWidget {
   const SettingsToggleCard({
     super.key,
     required this.theme,
@@ -73,7 +70,6 @@ class SettingsToggleCard extends ConsumerWidget {
     required this.onChanged,
     this.description,
     this.icon,
-    this.indicatorStyle,
   });
 
   final AppThemeData theme;
@@ -85,13 +81,8 @@ class SettingsToggleCard extends ConsumerWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
-  /// Optional override for live style previews.
-  final SettingsCardIndicatorStyle? indicatorStyle;
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final SettingsCardIndicatorStyle style =
-        indicatorStyle ?? ref.watch(settingsCardIndicatorStyleProvider);
+  Widget build(BuildContext context) {
     return Semantics(
       button: true,
       toggled: value,
@@ -108,25 +99,10 @@ class SettingsToggleCard extends ConsumerWidget {
         description: description,
         icon: icon,
         active: value,
-        toggleIndicator: style,
+        toggle: true,
         enabled: onChanged != null,
         onTap: onChanged == null ? null : () => onChanged!(!value),
-        trailing: style != SettingsCardIndicatorStyle.switchControl
-            ? const SizedBox.shrink()
-            : ExcludeSemantics(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  // Switch animations can repaint without redrawing the card shading.
-                  child: RepaintBoundary(
-                    child: AppToggleSwitch(
-                      value: value,
-                      onChanged: onChanged,
-                      theme: theme,
-                      style: ref.watch(toggleStyleProvider),
-                    ),
-                  ),
-                ),
-              ),
+        trailing: const SizedBox.shrink(),
       ),
     );
   }
@@ -153,7 +129,9 @@ class SettingsActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Expanded(
+    // Flexible in rows sized to their content, so the action takes only the
+    // width it needs and leaves the rest to the label.
+    final text = Flexible(
       child: Text(
         actionLabel,
         overflow: TextOverflow.ellipsis,
@@ -162,6 +140,7 @@ class SettingsActionCard extends StatelessWidget {
     );
     // Both layouts are built here, so a width change only picks one.
     final withIcons = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (actionIcon != null) ...[
           Icon(actionIcon, color: theme.accent, size: 18),
@@ -169,10 +148,11 @@ class SettingsActionCard extends StatelessWidget {
         ],
         text,
         const SizedBox(width: 4),
-        Icon(Icons.arrow_forward_rounded, color: theme.textPrimary, size: 18),
+        // Themed like the action's text.
+        Icon(Icons.arrow_forward_rounded, color: theme.accent, size: 18),
       ],
     );
-    final textOnly = Row(children: [text]);
+    final textOnly = Row(mainAxisSize: MainAxisSize.min, children: [text]);
     return Semantics(
       button: true,
       enabled: onTap != null,
@@ -184,6 +164,8 @@ class SettingsActionCard extends StatelessWidget {
         active: false,
         enabled: onTap != null,
         onTap: onTap,
+        // Raised like an off toggle card while it takes taps.
+        raised: onTap != null,
         trailing: LayoutBuilder(
           builder: (context, constraints) =>
               constraints.maxWidth >= 120 ? withIcons : textOnly,
@@ -308,7 +290,6 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
     required this.onChanged,
     this.description,
     this.icon,
-    this.buttonBuilder,
   });
 
   final AppThemeData theme;
@@ -323,15 +304,6 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
   /// One button each, showing its icon.
   final List<SettingsChoice<T>> choices;
   final ValueChanged<T>? onChanged;
-
-  /// Draws a choice's own control in place of its button, given whether it
-  /// is selected and what picks it (null while the card is disabled).
-  final Widget Function(
-    SettingsChoice<T> choice,
-    bool selected,
-    VoidCallback? choose,
-  )?
-  buttonBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -351,19 +323,12 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
         trailing: FittedBox(
           fit: BoxFit.scaleDown,
           child: RepaintBoundary(
-            // Settings header actions' button group, or the choices' own
-            // controls side by side.
-            child: buttonBuilder == null
-                ? NavButtonGroup(
-                    theme: theme,
-                    isHorizontal: true,
-                    children: buttons,
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 4,
-                    children: buttons,
-                  ),
+            // Settings header actions' button group.
+            child: NavButtonGroup(
+              theme: theme,
+              isHorizontal: true,
+              children: buttons,
+            ),
           ),
         ),
       ),
@@ -386,31 +351,25 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
       label: choice.label,
       excludeSemantics: true,
       onTap: choose,
-      child: buttonBuilder != null
-          ? Tooltip(
-              message: choice.label,
-              child: buttonBuilder!(choice, selected, choose),
-            )
-          // The navigation panel's selectable button, as settings headers
-          // use it.
-          : SizedBox(
-              height: 28,
-              child: AppNavigationButton(
-                theme: theme,
-                isSelected: selected,
-                isEnabled: choose != null,
-                isHorizontal: true,
-                onTap: choose,
-                tooltipMessage: choice.label,
-                iconBuilder: (context, color, size) => IconTheme.merge(
-                  data: IconThemeData(color: color, size: size),
-                  child: choice.icon ?? const SizedBox.shrink(),
-                ),
-                iconSize: 18,
-                padding: const EdgeInsets.all(5),
-                minWidth: 28,
-              ),
-            ),
+      // The navigation panel's selectable button, as settings headers use it.
+      child: SizedBox(
+        height: 28,
+        child: AppNavigationButton(
+          theme: theme,
+          isSelected: selected,
+          isEnabled: choose != null,
+          isHorizontal: true,
+          onTap: choose,
+          tooltipMessage: choice.label,
+          iconBuilder: (context, color, size) => IconTheme.merge(
+            data: IconThemeData(color: color, size: size),
+            child: choice.icon ?? const SizedBox.shrink(),
+          ),
+          iconSize: 18,
+          padding: const EdgeInsets.all(5),
+          minWidth: 28,
+        ),
+      ),
     );
   }
 }
@@ -425,7 +384,8 @@ class _SettingsControlCard extends StatefulWidget {
     required this.trailing,
     this.icon,
     this.onTap,
-    this.toggleIndicator,
+    this.toggle = false,
+    this.raised = false,
     this.fitTrailingBesideLabel = false,
   });
 
@@ -437,9 +397,12 @@ class _SettingsControlCard extends StatefulWidget {
   final Widget trailing;
   final IconData? icon;
 
-  /// A toggle card's indicator; the other cards leave it null and rest flat
-  /// instead of raised while off.
-  final SettingsCardIndicatorStyle? toggleIndicator;
+  /// A toggle card, with the corner dot in place of a trailing control.
+  final bool toggle;
+
+  /// Raises the card like an off toggle card; toggle cards always are, the
+  /// other cards rest flat without it.
+  final bool raised;
 
   /// Without it, the card takes no taps or hover itself and leaves them to
   /// its controls.
@@ -462,9 +425,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final radius = BorderRadius.circular(theme.cornerRadius);
-    final isToggle = widget.toggleIndicator != null;
-    final miniDot =
-        widget.toggleIndicator == SettingsCardIndicatorStyle.miniDot;
+    final isToggle = widget.toggle;
     // Only a card that takes taps lights up; a disabled one takes none.
     final highlighted =
         widget.onTap != null && (_hovered || _pressed || _focused);
@@ -477,6 +438,11 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     final description = widget.description?.trim().isNotEmpty == true
         ? widget.description!
         : null;
+    // The option tiles' icon square, smaller above a description so the
+    // description stays close under the label.
+    final compactIcon = description != null;
+    final iconExtent = compactIcon ? 28.0 : 36.0;
+    final iconGap = compactIcon ? 10.0 : 12.0;
     final descriptionStyle = TextStyle(
       color: theme.textSecondary,
       fontSize: 12,
@@ -490,7 +456,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     // trailing control that fits beside them.
     final besideLabel = widget.fitTrailingBesideLabel
         ? _lineWidth(context, widget.label, labelStyle) +
-              (icon == null ? 0 : 38) +
+              (icon == null ? 0 : iconExtent + iconGap) +
               12
         : null;
     final label = Expanded(
@@ -510,14 +476,14 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     final iconSquare = icon == null
         ? null
         : Container(
-            width: 28,
-            height: 28,
-            margin: const EdgeInsetsDirectional.only(end: 10),
+            width: iconExtent,
+            height: iconExtent,
+            margin: EdgeInsetsDirectional.only(end: iconGap),
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.25),
               borderRadius: radius,
             ),
-            child: Icon(icon, size: 18, color: iconColor),
+            child: Icon(icon, size: compactIcon ? 18 : 20, color: iconColor),
           );
     final background = theme.background.withValues(
       alpha: widget.enabled ? 0.55 : 0.45,
@@ -548,7 +514,10 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         onFocusChange: (value) => setState(() => _focused = value),
         onTap: widget.onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          // The option tiles' padding: text alone starts further in.
+          padding: EdgeInsets.all(
+            _cardPadding,
+          ).copyWith(left: icon == null ? 14 : null),
           child: Opacity(
             opacity: widget.enabled ? 1 : 0.42,
             // The icon and control sit on the label's row, and the
@@ -566,23 +535,30 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
                     final trailingWidth = besideLabel == null
                         ? row * 0.65
                         : (row - besideLabel).clamp(row / 3, row * 0.65);
+                    // A toggle's switch height on every card, so a
+                    // description keeps the same gap below its row.
                     return ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: isToggle && description == null
-                            ? kElementHeight
-                            : 0,
+                      constraints: const BoxConstraints(
+                        minHeight: kElementHeight,
                       ),
                       child: Row(
                         children: [
                           ?iconSquare,
                           label,
-                          const SizedBox(width: 12),
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: trailingWidth,
+                          // The label stops short of the corner dot.
+                          if (isToggle)
+                            const SizedBox(
+                              width: SettingsCardMiniDot.extent - _cardPadding,
+                            )
+                          else ...[
+                            const SizedBox(width: 12),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: trailingWidth,
+                              ),
+                              child: widget.trailing,
                             ),
-                            child: widget.trailing,
-                          ),
+                          ],
                         ],
                       ),
                     );
@@ -599,10 +575,10 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     return RepaintBoundary(
       child: SettingsCardInset(
         active: widget.active && widget.enabled,
-        raisedWhenInactive: isToggle && widget.enabled,
+        raisedWhenInactive: (isToggle || widget.raised) && widget.enabled,
         surfaceColor: theme.background,
         borderRadius: theme.cornerRadius,
-        overlay: miniDot
+        overlay: isToggle
             ? Align(
                 alignment: Alignment.topRight,
                 child: SettingsCardMiniDot(
@@ -619,6 +595,9 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     );
   }
 }
+
+/// The option tiles' padding around a card's content.
+const double _cardPadding = 10;
 
 /// [text]'s width on one line in [style], as a [Text] here would draw it.
 double _lineWidth(BuildContext context, String text, TextStyle style) {

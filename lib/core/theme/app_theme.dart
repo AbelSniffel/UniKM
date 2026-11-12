@@ -26,7 +26,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     required this.baseAccent,
     this.iconData,
     this.cornerRadius = 8.0,
-    this.useThemeToggleRadius = false,
     this.scrollbarRadius = 8.0,
     this.inputPaddingVertical = 10.0,
     this.inputPaddingHorizontal = 12.0,
@@ -40,7 +39,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   final Color baseAccent;
   final IconData? iconData;
   final double cornerRadius;
-  final bool useThemeToggleRadius;
   final double scrollbarRadius;
   final double inputPaddingHorizontal;
   final double inputPaddingVertical;
@@ -56,7 +54,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     baseAccent,
     iconData,
     cornerRadius,
-    useThemeToggleRadius,
     scrollbarRadius,
     inputPaddingHorizontal,
     inputPaddingVertical,
@@ -123,7 +120,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
           ? themeIconFromCodePoint(json['icon_code_point'] as int)
           : null,
       cornerRadius: (json['corner_radius'] as num?)?.toDouble() ?? 8.0,
-      useThemeToggleRadius: (json['use_theme_toggle_radius'] as bool?) ?? false,
       scrollbarRadius: (json['scrollbar_radius'] as num?)?.toDouble() ?? 8.0,
     );
   }
@@ -137,7 +133,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     'base_accent': colorToHex(baseAccent),
     if (iconData != null) 'icon_code_point': iconData!.codePoint,
     'corner_radius': cornerRadius,
-    'use_theme_toggle_radius': useThemeToggleRadius,
     'scrollbar_radius': scrollbarRadius,
   };
 
@@ -152,7 +147,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     IconData? iconData,
     bool clearIcon = false,
     double? cornerRadius,
-    bool? useThemeToggleRadius,
     double? scrollbarRadius,
     double? inputPaddingHorizontal,
     double? inputPaddingVertical,
@@ -165,7 +159,6 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     baseAccent: baseAccent ?? this.baseAccent,
     iconData: clearIcon ? null : (iconData ?? this.iconData),
     cornerRadius: cornerRadius ?? this.cornerRadius,
-    useThemeToggleRadius: useThemeToggleRadius ?? this.useThemeToggleRadius,
     scrollbarRadius: scrollbarRadius ?? this.scrollbarRadius,
     inputPaddingHorizontal:
         inputPaddingHorizontal ?? this.inputPaddingHorizontal,

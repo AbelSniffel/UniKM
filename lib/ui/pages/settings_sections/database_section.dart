@@ -191,11 +191,6 @@ class DatabaseHeaderActions extends ConsumerWidget {
             'New DB',
             switching ? null : () => _createDatabase(context, ref),
           ),
-          (
-            Icons.swap_horiz,
-            'Change DB',
-            switching ? null : () => showChangeDatabaseDialog(context, theme),
-          ),
         ])
           SettingsHeaderAction(
             theme: theme,
@@ -326,7 +321,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
     final enabled = !_busy && !ref.watch(databaseSwitchingProvider);
     final biometric = ref.watch(_biometricStateProvider).asData?.value;
     final biometricHint = !ref.watch(biometricUnlockProvider).supported
-        ? 'Available on Android and iOS'
+        ? 'Available on mobile'
         : !encrypted
         ? 'Turn on encryption first'
         : biometric != null && !biometric.available
@@ -393,7 +388,8 @@ class DatabaseSection extends ConsumerStatefulWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec activeDatabaseSpec = SettingTextSpec(
-    label: 'Active database file',
+    label: 'Current database file',
+    icon: Icons.description_outlined,
   );
   static const SettingTextSpec encryptionSpec = SettingTextSpec(
     label: 'Encryption',
@@ -532,51 +528,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     });
   }
 
-  Widget _buildResponsiveSettingRow({
-    required String label,
-    String? description,
-    required Widget trailing,
-  }) {
-    // Built outside the layout callback, so a width change does not rebuild it.
-    final labelWidget = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      spacing: 2,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: widget.theme.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (description != null)
-          Text(
-            description,
-            style: TextStyle(color: widget.theme.textSecondary, fontSize: 12),
-          ),
-      ],
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) => constraints.maxWidth < 220
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: kElementVSpacing,
-              children: [
-                labelWidget,
-                Align(alignment: Alignment.centerRight, child: trailing),
-              ],
-            )
-          : Row(
-              spacing: kElementHSpacing,
-              children: [
-                Expanded(child: labelWidget),
-                trailing,
-              ],
-            ),
-    );
-  }
-
   /// A header info icon whose tooltip also opens on tap.
   Widget _infoButton(GlobalKey<TooltipState> key, String message) => Tooltip(
     key: key,
@@ -664,22 +615,16 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: kElementVSpacing,
                 children: [
-                  // Tinted like the dialogs' DialogBanner.
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: widget.theme.baseAccent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(
-                        widget.theme.cornerRadius,
-                      ),
-                    ),
-                    child: _buildResponsiveSettingRow(
-                      label: DatabaseSection.activeDatabaseSpec.label,
-                      description: _activeDbPath,
-                      trailing: _isLoading
-                          ? const AppCircularProgressIndicator(size: 20)
-                          : const SizedBox.shrink(),
-                    ),
+                  // The active file's name; a tap opens the Change Database
+                  // dialog, which also shows the full path.
+                  TintedOptionTile(
+                    theme: widget.theme,
+                    icon: DatabaseSection.activeDatabaseSpec.icon,
+                    title: DatabaseSection.activeDatabaseSpec.label,
+                    subtitle: _isLoading ? null : p.basename(_activeDbPath),
+                    onTap: _isLoading || databaseSwitching
+                        ? null
+                        : () => showChangeDatabaseDialog(context, widget.theme),
                   ),
                   cards,
                 ],

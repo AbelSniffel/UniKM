@@ -1,134 +1,37 @@
-/// Theme-colored toggle switches with sliding and dot styles
-/// Matches the original Python toggle switch styles
+/// The app's toggle switch: a dot in a round frame that springs open when on.
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unikm/core/constants/app_constants.dart';
 
-import '../../core/settings/settings_model.dart';
 import 'hover_builder.dart';
 import '../../core/theme/app_theme.dart';
-import '../../providers/app_providers.dart';
 
-double _resolveToggleRadius({
-  required AppThemeData theme,
-  required double extent,
-  required bool useThemeToggleRadius,
-}) {
-  if (!useThemeToggleRadius) return extent / 2;
-  return theme.cornerRadius.clamp(0.0, extent / 2);
-}
-
-/// Custom toggle switch with multiple styles
-class AppToggleSwitch extends ConsumerWidget {
-  static const double _regularSwitchWidth = 50.0;
-  static const double _regularSwitchHeight = kElementHeight;
+/// A dot toggle with an optional state word before it ("On", "Off" or
+/// "Disabled" by default; an empty [label] shows the dot alone).
+class AppToggleSwitch extends StatefulWidget {
   const AppToggleSwitch({
     super.key,
     required this.value,
     required this.onChanged,
     required this.theme,
-    this.style,
     this.label,
   });
 
   final bool value;
   final ValueChanged<bool>? onChanged;
   final AppThemeData theme;
-
-  /// Optional override. When null, uses the global `SettingsKeys.toggleStyle`.
-  final ToggleStyle? style;
   final String? label;
 
   /// Whether the toggle is disabled (onChanged is null)
   bool get isDisabled => onChanged == null;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ToggleStyle effectiveStyle = style ?? ref.watch(toggleStyleProvider);
-
-    final toggle = switch (effectiveStyle) {
-      ToggleStyle.regular => SizedBox(
-        width: _regularSwitchWidth,
-        height: _regularSwitchHeight,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_regularSwitchHeight / 2),
-          child: FittedBox(
-            alignment: Alignment.centerRight,
-            child: Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: theme.accent,
-              inactiveThumbColor: theme.textHint,
-              inactiveTrackColor: theme.surface,
-              trackOutlineColor: WidgetStateProperty.resolveWith<Color?>(
-                (states) => states.contains(WidgetState.selected)
-                    ? Colors.transparent
-                    : theme.border,
-              ),
-              trackOutlineWidth: WidgetStateProperty.all(2),
-            ),
-          ),
-        ),
-      ),
-      ToggleStyle.dot || ToggleStyle.morphDot => _DotToggle(
-        value: value,
-        onChanged: onChanged,
-        theme: theme,
-        useThemeToggleRadius: effectiveStyle == ToggleStyle.morphDot,
-      ),
-    };
-
-    final displayLabel =
-        label ??
-        (isDisabled
-            ? 'Disabled'
-            : value
-            ? 'On'
-            : 'Off');
-    if (displayLabel.isEmpty) return toggle;
-    final labelStyle = TextStyle(
-      fontWeight: FontWeight.w500,
-      color: value && !isDisabled ? theme.accent : theme.textSecondary,
-    );
-    final labelWidget = isDisabled
-        ? Text(displayLabel, style: labelStyle)
-        : MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => onChanged?.call(!value),
-              child: Text(displayLabel, style: labelStyle),
-            ),
-          );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [labelWidget, const SizedBox(width: 6), toggle],
-    );
-  }
+  State<AppToggleSwitch> createState() => _AppToggleSwitchState();
 }
 
-class _DotToggle extends StatefulWidget {
-  const _DotToggle({
-    required this.value,
-    required this.onChanged,
-    required this.theme,
-    required this.useThemeToggleRadius,
-  });
-
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-  final AppThemeData theme;
-  final bool useThemeToggleRadius;
-
-  bool get isDisabled => onChanged == null;
-
-  @override
-  State<_DotToggle> createState() => _DotToggleState();
-}
-
-class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
-  static const double _containerSize = kElementHeight;
+class _AppToggleSwitchState extends State<AppToggleSwitch>
+    with TickerProviderStateMixin {
   static const double _outerSize = 28.0;
 
   static const double _offDotSize = 14.0;
@@ -138,42 +41,29 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
 
   static const Duration _hoverDuration = Duration(milliseconds: 125);
 
-  static const _springCurve = _OnSpringCurve();
-  static const _reverseSpringCurve = _OffSpringCurve();
-
-  late final AnimationController _toggleController;
-  late final Animation<double> _toggleScale;
-  late final AnimationController _hoverController;
-  late final Animation<double> _hoverAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _toggleController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 250),
-      vsync: this,
-      value: widget.value ? 1.0 : 0.0,
-    );
-    _toggleScale = CurvedAnimation(
-      parent: _toggleController,
-      curve: _springCurve,
-      reverseCurve: _reverseSpringCurve,
-    );
-    _hoverController = AnimationController(
-      duration: _hoverDuration,
-      reverseDuration: _hoverDuration,
-      vsync: this,
-    );
-    _hoverAnim = CurvedAnimation(
-      parent: _hoverController,
-      curve: Curves.easeOut,
-      reverseCurve: Curves.easeIn,
-    );
-  }
+  late final AnimationController _toggleController = AnimationController(
+    duration: const Duration(milliseconds: 300),
+    reverseDuration: const Duration(milliseconds: 250),
+    vsync: this,
+    value: widget.value ? 1.0 : 0.0,
+  );
+  late final Animation<double> _toggleScale = CurvedAnimation(
+    parent: _toggleController,
+    curve: const _OnSpringCurve(),
+    reverseCurve: const _OffSpringCurve(),
+  );
+  late final AnimationController _hoverController = AnimationController(
+    duration: _hoverDuration,
+    vsync: this,
+  );
+  late final Animation<double> _hoverAnim = CurvedAnimation(
+    parent: _hoverController,
+    curve: Curves.easeOut,
+    reverseCurve: Curves.easeIn,
+  );
 
   @override
-  void didUpdateWidget(covariant _DotToggle oldWidget) {
+  void didUpdateWidget(covariant AppToggleSwitch oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       widget.value ? _toggleController.forward() : _toggleController.reverse();
@@ -189,53 +79,34 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
 
   void _toggle() => widget.onChanged?.call(!widget.value);
 
-  double _dotRadius({
-    required double toggleLinear,
-    required double toggleSpring,
-    required double hoverProgress,
-  }) {
-    const double offRestRadius = _offDotSize / 2;
-    const double onRestRadius = _onDotSize / 2;
-    const double offHoverDelta = (_offDotHoverSize - _offDotSize) / 2;
-    const double onHoverDelta = (_onDotHoverSize - _onDotSize) / 2;
-
-    final double t = toggleLinear.clamp(0.0, 1.0);
-    final double baseRadius =
-        offRestRadius + (onRestRadius - offRestRadius) * toggleSpring;
-    final double hoverDelta =
-        offHoverDelta + (onHoverDelta - offHoverDelta) * t;
-    return (baseRadius + hoverDelta * hoverProgress).clamp(
-      0.5,
-      double.infinity,
-    );
+  /// Springs from the off size to the on size, and grows a little on hover.
+  double _dotRadius(double toggleLinear, double toggleSpring, double hover) {
+    const offRadius = _offDotSize / 2;
+    const onRadius = _onDotSize / 2;
+    const offHoverDelta = (_offDotHoverSize - _offDotSize) / 2;
+    const onHoverDelta = (_onDotHoverSize - _onDotSize) / 2;
+    final hoverDelta =
+        offHoverDelta + (onHoverDelta - offHoverDelta) * toggleLinear;
+    final radius =
+        offRadius + (onRadius - offRadius) * toggleSpring + hoverDelta * hover;
+    return radius.clamp(0.5, double.infinity);
   }
 
-  Color _dotColor({
-    required Color offColorBase,
-    required double toggleLinear,
-    required double hoverProgress,
-    required double opacity,
-  }) {
-    final double t = toggleLinear.clamp(0.0, 1.0);
-    final double colorProgress = hoverProgress + (1.0 - hoverProgress) * t;
-    const double offRestAlpha = 0.85;
-    final double stateAlpha =
-        1.0 - ((1.0 - offRestAlpha) * (1.0 - t) * (1.0 - hoverProgress));
+  /// The accent while on or hovered, a faded hint colour at rest while off.
+  Color _dotColor(Color offColor, double toggleLinear, double hover) {
+    final progress = hover + (1.0 - hover) * toggleLinear;
+    final alpha = 1.0 - 0.15 * (1.0 - toggleLinear) * (1.0 - hover);
+    final opacity = widget.isDisabled ? 0.4 : 1.0;
     return Color.lerp(
-      offColorBase,
+      offColor,
       widget.theme.accent,
-      colorProgress,
-    )!.withValues(alpha: (opacity * stateAlpha).clamp(0.0, 1.0));
+      progress,
+    )!.withValues(alpha: (opacity * alpha).clamp(0.0, 1.0));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final double opacity = widget.isDisabled ? 0.4 : 1.0;
-    final offColorBase = Color.alphaBlend(
-      widget.theme.textHint,
-      widget.theme.surface,
-    );
-
+  Widget _buildDot() {
+    final theme = widget.theme;
+    final offColor = Color.alphaBlend(theme.textHint, theme.surface);
     return HoverBuilder(
       enabled: !widget.isDisabled,
       cursor: SystemMouseCursors.click,
@@ -244,72 +115,21 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
       builder: (context, _) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _toggle,
-        child: SizedBox(
-          width: _containerSize,
-          height: _containerSize,
+        child: SizedBox.square(
+          dimension: kElementHeight,
           child: AnimatedBuilder(
             animation: Listenable.merge([_toggleController, _hoverController]),
             builder: (context, _) {
-              final double hoverProgress = widget.isDisabled
-                  ? 0.0
-                  : _hoverAnim.value;
-              final double toggleLinear = _toggleController.value;
-              final double toggleSpring = _toggleScale.value;
-              final double dotRadius = _dotRadius(
-                toggleLinear: toggleLinear,
-                toggleSpring: toggleSpring,
-                hoverProgress: hoverProgress,
-              );
-              final Color dotColor = _dotColor(
-                offColorBase: offColorBase,
-                toggleLinear: toggleLinear,
-                hoverProgress: hoverProgress,
-                opacity: opacity,
-              );
-
-              // Centralized constants for easy tuning
-              const double offBorderAlphaDefault = 0.20;
-              const double onBorderAlphaDefault = 0.0;
-              const double borderAlphaMin = 0.05;
-              const double borderAlphaMax = 0.4;
-
-              // The border reaches onBorderAlphaDefault fully at the ON state.
-              final double onProgress = toggleSpring.clamp(0.0, 1.0);
-              final double offBorderAlpha =
-                  (offBorderAlphaDefault - 0.15 * hoverProgress).clamp(
-                    borderAlphaMin,
-                    borderAlphaMax,
-                  );
-              final double borderAlpha =
-                  ((1.0 - onProgress) * offBorderAlpha +
-                          onProgress * onBorderAlphaDefault)
-                      .clamp(borderAlphaMin, borderAlphaMax);
-
-              // Simple background alpha workflow with fixed reference values.
-              const double offBackgroundAlpha = 0.0;
-              const double onBackgroundAlpha = 0.45;
-              const double hoverBackgroundAlpha = 0.25;
-
-              final double backgroundAlphaFinal = widget.value
-                  ? onBackgroundAlpha
-                  : (offBackgroundAlpha + hoverProgress * hoverBackgroundAlpha)
-                        .clamp(0.0, 1.0);
-              final outerRadius = _resolveToggleRadius(
-                theme: widget.theme,
-                extent: _outerSize,
-                useThemeToggleRadius: widget.useThemeToggleRadius,
-              );
-              final dotDiameter = dotRadius * 2;
-              final dotShapeRadius = _resolveToggleRadius(
-                theme: widget.theme,
-                extent: dotDiameter,
-                useThemeToggleRadius: widget.useThemeToggleRadius,
-              );
-
-              final Color backgroundColor = widget.theme.accent.withValues(
-                alpha: backgroundAlphaFinal,
-              );
-
+              final hover = widget.isDisabled ? 0.0 : _hoverAnim.value;
+              final toggleLinear = _toggleController.value.clamp(0.0, 1.0);
+              final toggleSpring = _toggleScale.value;
+              final dotDiameter =
+                  _dotRadius(toggleLinear, toggleSpring, hover) * 2;
+              // The frame's outline fades out as the dot springs on.
+              final onProgress = toggleSpring.clamp(0.0, 1.0);
+              final borderAlpha = ((1.0 - onProgress) * (0.20 - 0.15 * hover))
+                  .clamp(0.05, 0.4);
+              final backgroundAlpha = widget.value ? 0.45 : 0.25 * hover;
               return Stack(
                 alignment: Alignment.center,
                 children: [
@@ -317,33 +137,66 @@ class _DotToggleState extends State<_DotToggle> with TickerProviderStateMixin {
                     width: _outerSize,
                     height: _outerSize,
                     decoration: BoxDecoration(
-                      color: backgroundColor,
-                      borderRadius: BorderRadius.circular(outerRadius),
+                      color: theme.accent.withValues(alpha: backgroundAlpha),
+                      shape: BoxShape.circle,
                       border: Border.all(
-                        color: widget.theme.border.withValues(
-                          alpha: borderAlpha,
-                        ),
+                        color: theme.border.withValues(alpha: borderAlpha),
                         width: 1.5,
                       ),
                     ),
                   ),
-                  if (dotRadius > 0)
-                    SizedBox(
-                      width: dotDiameter,
-                      height: dotDiameter,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: dotColor,
-                          borderRadius: BorderRadius.circular(dotShapeRadius),
-                        ),
+                  SizedBox.square(
+                    dimension: dotDiameter,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _dotColor(offColor, toggleLinear, hover),
+                        shape: BoxShape.circle,
                       ),
                     ),
+                  ),
                 ],
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dot = _buildDot();
+    final disabled = widget.isDisabled;
+    final label =
+        widget.label ??
+        (disabled
+            ? 'Disabled'
+            : widget.value
+            ? 'On'
+            : 'Off');
+    if (label.isEmpty) return dot;
+    final labelStyle = TextStyle(
+      fontWeight: FontWeight.w500,
+      color: widget.value && !disabled
+          ? widget.theme.accent
+          : widget.theme.textSecondary,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (disabled)
+          Text(label, style: labelStyle)
+        else
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: _toggle,
+              child: Text(label, style: labelStyle),
+            ),
+          ),
+        const SizedBox(width: 6),
+        dot,
+      ],
     );
   }
 }

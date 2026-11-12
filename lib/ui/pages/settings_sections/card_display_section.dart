@@ -23,14 +23,6 @@ class CardDisplaySection extends ConsumerWidget {
   final String searchQuery;
   final bool attachesToAbove;
 
-  static const SettingTextSpec showTitleSpec = SettingTextSpec(
-    label: 'Title',
-    icon: Icons.title,
-  );
-  static const SettingTextSpec showTitleOnNoPictureSpec = SettingTextSpec(
-    label: 'Title over covers',
-    icon: Icons.hide_image_outlined,
-  );
   static const SettingTextSpec showPlatformSpec = SettingTextSpec(
     label: 'Platform',
     icon: Icons.storefront_outlined,
@@ -69,7 +61,6 @@ class CardDisplaySection extends ConsumerWidget {
   static const SettingsSearchGroup chipsSearchGroup = SettingsSearchGroup(
     title: 'Card Chips',
     settings: [
-      showTitleSpec,
       showPlatformSpec,
       showTagsSpec,
       showDeadlineSpec,
@@ -82,12 +73,8 @@ class CardDisplaySection extends ConsumerWidget {
   static const SettingsSearchGroup displayRulesSearchGroup =
       SettingsSearchGroup(
         title: 'Hide Chips',
-        settings: [
-          showTagsOnHoverOnlySpec,
-          showPlatformOnHoverOnlySpec,
-          showTitleOnNoPictureSpec,
-        ],
-        extraTexts: ['Display Rules', 'hover', 'picture-less', 'cover image'],
+        settings: [showTagsOnHoverOnlySpec, showPlatformOnHoverOnlySpec],
+        extraTexts: ['Display Rules', 'hover'],
         info: 'Hovering a card shows its hidden chips.',
       );
 
@@ -155,11 +142,6 @@ class CardDisplaySection extends ConsumerWidget {
             theme: theme,
             entries: [
               (
-                spec: showTitleSpec,
-                value: cardSettings.showTitle,
-                onChanged: settingsNotifier.setter(SettingsKeys.showTitleChip),
-              ),
-              (
                 spec: showPlatformSpec,
                 value: cardSettings.showPlatform,
                 onChanged: settingsNotifier.setter(
@@ -206,13 +188,6 @@ class CardDisplaySection extends ConsumerWidget {
                 value: cardSettings.showPlatformOnHoverOnly,
                 onChanged: settingsNotifier.setter(
                   SettingsKeys.showPlatformOnHoverOnly,
-                ),
-              ),
-              (
-                spec: showTitleOnNoPictureSpec,
-                value: cardSettings.showTitleOnNoPicture,
-                onChanged: settingsNotifier.setter(
-                  SettingsKeys.showTitleOnNoPicture,
                 ),
               ),
             ],

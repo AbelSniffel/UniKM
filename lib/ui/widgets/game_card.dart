@@ -132,8 +132,6 @@ class _GameCardState extends ConsumerState<GameCard>
 
     final showNewBadge = _shouldShowNewBadge(hasBeenViewed);
     final CardViewOptions options = (
-      showTitle: cardSettings.showTitle,
-      showTitleOnNoPicture: cardSettings.showTitleOnNoPicture,
       showPlatform:
           cardSettings.showPlatform &&
           (!cardSettings.showPlatformOnHoverOnly || _isHovered),
@@ -190,9 +188,9 @@ class _GameCardState extends ConsumerState<GameCard>
     bool showNewBadge,
   ) {
     final radius = BorderRadius.circular(theme.cornerRadius);
-    final bool titleVisible = options.showTitleOnNoPicture
-        ? (!widget.game.hasCoverImage || _imageLoadFailed)
-        : options.showTitle;
+    // A cover names the game itself, so the title shows only without one,
+    // and always then, so no card is left blank.
+    final bool titleVisible = !widget.game.hasCoverImage || _imageLoadFailed;
 
     // Grid cards show no tags: the cover has no room for them.
     return _buildAnimatedShell(

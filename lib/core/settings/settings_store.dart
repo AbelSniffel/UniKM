@@ -95,8 +95,6 @@ class SettingsStore {
       ...preserved,
       SettingsKeys.syncEnabled: DefaultSettings.syncEnabled,
       SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
-      SettingsKeys.settingsCardIndicatorStyle:
-          DefaultSettings.settingsCardIndicatorStyle,
     }.entries) {
       await save(entry.key, entry.value);
     }

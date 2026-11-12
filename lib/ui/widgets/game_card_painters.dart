@@ -13,8 +13,6 @@ import '../../core/constants/app_constants.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 typedef CardViewOptions = ({
-  bool showTitle,
-  bool showTitleOnNoPicture,
   bool showPlatform,
   bool showTags,
   bool showTagsOnHoverOnly,

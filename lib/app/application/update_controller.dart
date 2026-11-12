@@ -591,11 +591,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Download and install a specific release (update or downgrade).
   Future<void> switchToVersion(GitHubRelease release) async {
-    // If downgrading to 1.1.0 or below, reset the toggle style to regular
+    // 1.1.0 and older cannot draw the dot switch, which earlier builds may
+    // have saved as their toggle style.
     if (compareVersions(release.version, '1.1.0') <= 0) {
-      ref
-          .read(settingsProvider.notifier)
-          .set(SettingsKeys.toggleStyle, ToggleStyle.regular);
+      ref.read(settingsProvider.notifier).set('toggle_style', 'regular');
     }
 
     await _downloadRelease(

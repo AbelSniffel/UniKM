@@ -119,29 +119,6 @@ enum TooltipAnimation {
   final String displayName;
 }
 
-/// Toggle switch styles
-enum ToggleStyle {
-  regular('Regular', 'Sliding switch with an on/off thumb.'),
-  dot('Dot', 'Round dot that grows when enabled.'),
-  morphDot('Morph Dot', 'Dot toggle that follows the theme’s corner radius.');
-
-  const ToggleStyle(this.displayName, this.description);
-
-  final String displayName;
-  final String description;
-}
-
-/// Status controls used only by interaction settings cards.
-enum SettingsCardIndicatorStyle {
-  switchControl('Switch', 'Use the selected app switch inside the card.'),
-  miniDot('Mini Dot', 'A small dot in the card corner that grows when on.');
-
-  const SettingsCardIndicatorStyle(this.displayName, this.description);
-
-  final String displayName;
-  final String description;
-}
-
 /// Section GroupBox title location
 enum SectionTitleLocation {
   left('Left'),
@@ -245,8 +222,6 @@ class SettingsKeys {
   static const String viewedNewGameIds = 'viewed_new_game_ids';
 
   // Game Card Visual
-  static const String showTitleChip = 'show_title_chip';
-  static const String showTitleOnNoPicture = 'show_title_on_no_picture';
   static const String showPlatformChip = 'show_platform_chip';
   static const String showTagsChip = 'show_tags_chip';
   static const String showTagsOnHoverOnly = 'show_tags_on_hover_only';
@@ -255,10 +230,6 @@ class SettingsKeys {
   static const String slimListView = 'slim_list_view';
 
   // Toggle & Section Style
-  static const String toggleStyle = 'toggle_style';
-  static const String settingsCardIndicatorStyle =
-      'settings_card_indicator_style';
-  static const String useThemeToggleRadius = 'use_theme_toggle_radius';
   static const String sectionTitleLocation = 'section_title_location';
 
   // Backup
@@ -371,8 +342,6 @@ class DefaultSettings {
   static const GameSortMode gameSortMode = GameSortMode.deadlineFirst;
 
   // Game Card Visual
-  static const bool showTitleChip = true;
-  static const bool showTitleOnNoPicture = true;
   static const bool showPlatformChip = true;
   static const bool showTagsChip = true;
   static const bool showTagsOnHoverOnly = true;
@@ -382,10 +351,6 @@ class DefaultSettings {
   static const bool showRatings = true;
 
   // Toggle & Section Style
-  static const ToggleStyle toggleStyle = ToggleStyle.morphDot;
-  static const SettingsCardIndicatorStyle settingsCardIndicatorStyle =
-      SettingsCardIndicatorStyle.switchControl;
-  static const bool useThemeToggleRadius = false;
   static const SectionTitleLocation sectionTitleLocation =
       SectionTitleLocation.top;
 
@@ -443,8 +408,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.patternAngle: DefaultSettings.patternAngle,
   SettingsKeys.patternWave: DefaultSettings.patternWave,
   SettingsKeys.viewedNewGameIds: const <String>[],
-  SettingsKeys.showTitleChip: DefaultSettings.showTitleChip,
-  SettingsKeys.showTitleOnNoPicture: DefaultSettings.showTitleOnNoPicture,
   SettingsKeys.showPlatformChip: DefaultSettings.showPlatformChip,
   SettingsKeys.showTagsChip: DefaultSettings.showTagsChip,
   SettingsKeys.showPlatformOnHoverOnly: DefaultSettings.showPlatformOnHoverOnly,
@@ -454,7 +417,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.showPlatformBadges: true,
   SettingsKeys.showTagChips: true,
   SettingsKeys.showRatings: DefaultSettings.showRatings,
-  SettingsKeys.useThemeToggleRadius: DefaultSettings.useThemeToggleRadius,
   SettingsKeys.autoBackupEnabled: DefaultSettings.autoBackupEnabled,
   SettingsKeys.autoBackupIntervalMinutes:
       DefaultSettings.autoBackupIntervalMinutes,
@@ -539,11 +501,6 @@ const enumSettingDefaults = <String, (List<Enum>, Enum)>{
     GameSortMode.values,
     DefaultSettings.gameSortMode,
   ),
-  SettingsKeys.toggleStyle: (ToggleStyle.values, DefaultSettings.toggleStyle),
-  SettingsKeys.settingsCardIndicatorStyle: (
-    SettingsCardIndicatorStyle.values,
-    DefaultSettings.settingsCardIndicatorStyle,
-  ),
   SettingsKeys.sectionTitleLocation: (
     SectionTitleLocation.values,
     DefaultSettings.sectionTitleLocation,
@@ -569,8 +526,6 @@ T readSetting<T>(Map<String, dynamic> settings, String key) =>
 
 /// Typed view of settings used by `GameCard`.
 typedef GameCardSettings = ({
-  bool showTitle,
-  bool showTitleOnNoPicture,
   bool showPlatform,
   bool showTags,
   bool showTagsOnHoverOnly,
@@ -581,11 +536,6 @@ typedef GameCardSettings = ({
 });
 
 GameCardSettings gameCardSettingsFromMap(Map<String, dynamic> settings) => (
-  showTitle: readSetting(settings, SettingsKeys.showTitleChip),
-  showTitleOnNoPicture: readSetting(
-    settings,
-    SettingsKeys.showTitleOnNoPicture,
-  ),
   showPlatform: readSetting(settings, SettingsKeys.showPlatformChip),
   showTags: readSetting(settings, SettingsKeys.showTagsChip),
   showTagsOnHoverOnly: readSetting(settings, SettingsKeys.showTagsOnHoverOnly),

@@ -13,6 +13,16 @@ class SettingsCardMiniDot extends StatelessWidget {
     this.glow = true,
   });
 
+  /// The corner it takes, padding included, which a card's content clears.
+  static const double extent = _gap + _dot + _inset;
+
+  /// From the card's top and right edges.
+  static const double _inset = 10;
+
+  /// Between the dot and the content beside or below it.
+  static const double _gap = 4;
+  static const double _dot = 18;
+
   final AppThemeData theme;
   final bool value;
   final bool enabled;
@@ -27,17 +37,17 @@ class SettingsCardMiniDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final lit = value && enabled;
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(_gap, _inset, _inset, _gap),
       child: SizedBox.square(
-        dimension: 18,
+        dimension: _dot,
         child: Center(
           child: AnimatedContainer(
             duration: MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
                 : const Duration(milliseconds: 140),
             curve: Curves.easeOutCubic,
-            width: lit ? 18 : 16,
-            height: lit ? 18 : 16,
+            width: lit ? _dot : 16,
+            height: lit ? _dot : 16,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               // Transparent while off, so the ring fades in with the dot.
