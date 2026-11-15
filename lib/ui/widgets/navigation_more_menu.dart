@@ -1,7 +1,7 @@
 /// The navigation panel's More menu: the library view and Updates.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/application/update_controller.dart';
@@ -44,23 +44,8 @@ class NavigationMoreMenuButton extends ConsumerStatefulWidget {
 }
 
 class _NavigationMoreMenuButtonState
-    extends ConsumerState<NavigationMoreMenuButton> {
-  final _menu = MenuController();
-  final _focusNode = FocusNode(skipTraversal: true);
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    if (_menu.isOpen) return _menu.close();
-    // Focus lets Escape close the menu again.
-    _focusNode.requestFocus();
-    _menu.open();
-  }
-
+    extends ConsumerState<NavigationMoreMenuButton>
+    with MenuToggle {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
@@ -75,9 +60,8 @@ class _NavigationMoreMenuButtonState
     );
     final placement = navigationMenuPlacement(widget.position);
     return AppMenuAnchor(
-      theme: theme,
-      controller: _menu,
-      childFocusNode: _focusNode,
+      controller: menu,
+      childFocusNode: menuFocusNode,
       alignment: placement.alignment,
       alignmentOffset: placement.offset,
       menuChildren: [
@@ -120,7 +104,7 @@ class _NavigationMoreMenuButtonState
         ),
       ],
       builder: (context, controller, _) => Focus(
-        focusNode: _focusNode,
+        focusNode: menuFocusNode,
         child: Semantics(
           expanded: controller.isOpen,
           child: AppNavigationButton(
@@ -131,7 +115,7 @@ class _NavigationMoreMenuButtonState
             isHorizontal:
                 widget.position == NavBarPosition.top ||
                 widget.position == NavBarPosition.bottom,
-            onTap: _toggleMenu,
+            onTap: toggleMenu,
             iconData: Icons.more_horiz_rounded,
             labelVisible: false,
             hasNotification: updateDot,

@@ -1,7 +1,7 @@
 /// Riverpod providers for UI state (page navigation, view mode, drag selection).
 library;
 
-import 'package:flutter/material.dart' show IconData, Icons;
+import 'package:material_ui/material_ui.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/services/steam_service.dart';
@@ -68,6 +68,20 @@ final dialogGalleryVisibleProvider = sessionValueProvider(false);
 ///
 /// Used to restore the library position when the Home page is rebuilt.
 final gameLibraryScrollOffsetProvider = sessionValueProvider(0.0);
+
+/// Whether the library's filters are open: in the sidebar beside the
+/// library, or on very narrow layouts in the panel below the toolbar. Both
+/// follow this one state, so changing layout keeps them open or closed.
+///
+/// Null until the library first shows, then set by its layout: open as a
+/// sidebar, closed below the toolbar, where it would cover the library. Read
+/// it through [homeFiltersOpen].
+final homeFiltersOpenProvider = sessionValueProvider<bool?>(null);
+
+/// Whether the library's filters are open, given whether the layout is very
+/// narrow until [homeFiltersOpenProvider] is set.
+bool homeFiltersOpen(bool? open, {required bool veryNarrow}) =>
+    open ?? !veryNarrow;
 
 final settingsPageSelectedSectionProvider = sessionValueProvider('all');
 

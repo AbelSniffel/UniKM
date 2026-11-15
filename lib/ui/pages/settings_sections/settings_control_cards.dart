@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
@@ -94,7 +94,6 @@ class SettingsToggleCard extends StatelessWidget {
           ? 'On'
           : 'Off',
       child: _SettingsControlCard(
-        theme: theme,
         label: label,
         description: description,
         icon: icon,
@@ -158,7 +157,6 @@ class SettingsActionCard extends StatelessWidget {
       enabled: onTap != null,
       label: '$label, $actionLabel',
       child: _SettingsControlCard(
-        theme: theme,
         label: label,
         description: description,
         active: false,
@@ -243,7 +241,6 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
       ),
     );
     return AppMenuAnchor(
-      theme: theme,
       controller: _menu,
       // The menu matches the card's width.
       width: _menuWidth,
@@ -263,7 +260,6 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
         label: widget.label,
         value: selectedLabel,
         child: _SettingsControlCard(
-          theme: theme,
           label: widget.label,
           description: widget.description,
           icon: widget.icon,
@@ -312,7 +308,6 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
       container: true,
       enabled: onChanged != null,
       child: _SettingsControlCard(
-        theme: theme,
         label: label,
         description: description,
         icon: icon,
@@ -324,11 +319,7 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
           fit: BoxFit.scaleDown,
           child: RepaintBoundary(
             // Settings header actions' button group.
-            child: NavButtonGroup(
-              theme: theme,
-              isHorizontal: true,
-              children: buttons,
-            ),
+            child: NavButtonGroup(isHorizontal: true, children: buttons),
           ),
         ),
       ),
@@ -376,7 +367,6 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
 
 class _SettingsControlCard extends StatefulWidget {
   const _SettingsControlCard({
-    required this.theme,
     required this.label,
     required this.description,
     required this.active,
@@ -389,7 +379,6 @@ class _SettingsControlCard extends StatefulWidget {
     this.fitTrailingBesideLabel = false,
   });
 
-  final AppThemeData theme;
   final String label;
   final String? description;
   final bool active;
@@ -423,7 +412,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final radius = BorderRadius.circular(theme.cornerRadius);
     final isToggle = widget.toggle;
     // Only a card that takes taps lights up; a disabled one takes none.
@@ -582,7 +571,6 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
             ? Align(
                 alignment: Alignment.topRight,
                 child: SettingsCardMiniDot(
-                  theme: theme,
                   value: widget.active,
                   enabled: widget.enabled,
                 ),

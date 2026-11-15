@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -10,6 +10,7 @@ import '../../core/services/biometric_unlock.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/services/deadline_notification_service.dart';
 import '../../core/services/encrypted_db_session.dart';
+import '../../core/services/database_lock.dart';
 import '../../core/services/database_switching.dart';
 import '../../core/services/display_refresh_rate.dart';
 import '../../core/services/encryption_manager.dart';
@@ -196,6 +197,9 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           ? configuredPath
           : await AppDatabase.getDatabasePath();
 
+      // Before any password prompt: another window may own this file.
+      await DatabaseLock.acquire(baseDbPath);
+
       final encryptionManager = EncryptionManager(baseDbPath);
 
       if (encryptionManager.isEncrypted) {
@@ -342,14 +346,21 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
   Future<void> _switchDatabase(DatabaseSwitchRequest request) async {
     if (_booting) return;
 
+    final selectedPath = request is OpenDatabaseRequest
+        ? request.path
+        : (request as CreateDatabaseRequest).path;
+    final baseDbPath = DatabaseSessionLoader.basePath(selectedPath);
+    // Checked before closing, so a file open elsewhere leaves this one open.
+    try {
+      await DatabaseLock.acquire(baseDbPath);
+    } on DatabaseInUseException catch (e) {
+      NotificationManager.instance.error(e.toString());
+      return;
+    }
+
     _setBooting(true);
 
     try {
-      final selectedPath = request is OpenDatabaseRequest
-          ? request.path
-          : (request as CreateDatabaseRequest).path;
-
-      final baseDbPath = DatabaseSessionLoader.basePath(selectedPath);
       final encryptionManager = EncryptionManager(baseDbPath);
 
       // Close current database (and persist if encrypted) before switching.
@@ -463,7 +474,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
       // Keep the current search query visible/active across database file
       // switches while still clearing non-search filters.
-      final preservedSearchQuery = ref.read(gamesProvider).searchQuery;
+      final preservedSearchQuery = ref.read(gamesProvider).filter.searchQuery;
       ref.read(gamesProvider.notifier).clearAllFilters();
       if (preservedSearchQuery.isNotEmpty) {
         ref.read(gamesProvider.notifier).setSearchQuery(preservedSearchQuery);
@@ -497,16 +508,19 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       theme: materialTheme,
       themeAnimationDuration: Duration.zero,
       scrollBehavior: const AppScrollBehavior(),
-      builder: (context, child) => AppPrivacyGuard(
-        lockAfter: _booting || _encryptedSession == null || autoLockMinutes <= 0
-            ? null
-            : Duration(minutes: autoLockMinutes),
-        onLock: _lock,
-        hideInRecents: hideInRecents,
-        // Every text field, dialogs' included.
-        child: Actions(
-          actions: {EditableTextTapOutsideIntent: DeferredTapOutsideAction()},
-          child: NotificationHost(theme: theme, child: child!),
+      builder: (context, child) => _ReduceMotionAsDisabledAnimations(
+        child: AppPrivacyGuard(
+          lockAfter:
+              _booting || _encryptedSession == null || autoLockMinutes <= 0
+              ? null
+              : Duration(minutes: autoLockMinutes),
+          onLock: _lock,
+          hideInRecents: hideInRecents,
+          // Every text field, dialogs' included.
+          child: Actions(
+            actions: {EditableTextTapOutsideIntent: DeferredTapOutsideAction()},
+            child: NotificationHost(theme: theme, child: child!),
+          ),
         ),
       ),
       home: Builder(
@@ -577,6 +591,25 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           return const UniKMApp();
         },
       ),
+    );
+  }
+}
+
+/// iOS reports Reduce Motion apart from disabled animations. The app's
+/// animations check [MediaQuery.disableAnimationsOf], so both count there.
+class _ReduceMotionAsDisabledAnimations extends StatelessWidget {
+  const _ReduceMotionAsDisabledAnimations({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(
+        disableAnimations: media.disableAnimations || media.reduceMotion,
+      ),
+      child: child,
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -9,9 +9,7 @@ import 'app_search_field.dart';
 /// A tag name field and Add button that create custom tags one after
 /// another, keeping the field focused for the next name.
 class AddTagField extends ConsumerStatefulWidget {
-  const AddTagField({super.key, required this.theme});
-
-  final AppThemeData theme;
+  const AddTagField({super.key});
 
   @override
   ConsumerState<AddTagField> createState() => _AddTagFieldState();
@@ -42,6 +40,7 @@ class _AddTagFieldState extends ConsumerState<AddTagField> {
       _saving = true;
       _error = null;
     });
+    final color = colorToHex(context.appTheme.secondary);
     try {
       final db = ref.read(requireDatabaseProvider);
       final existing = await db.getTagByName(name);
@@ -53,7 +52,7 @@ class _AddTagFieldState extends ConsumerState<AddTagField> {
         }
         return;
       }
-      await db.getOrCreateTag(name, color: colorToHex(widget.theme.secondary));
+      await db.getOrCreateTag(name, color: color);
       await ref.read(tagsProvider.notifier).refresh();
       await persistEncryptedDbIfNeeded(ref, database: db);
       // Keep a next name typed while this tag was saving.
@@ -75,7 +74,7 @@ class _AddTagFieldState extends ConsumerState<AddTagField> {
         children: [
           Expanded(
             child: AppSearchField(
-              theme: widget.theme,
+              theme: context.appTheme,
               controller: _controller,
               focusNode: _focusNode,
               hintText: 'Enter tag name...',
@@ -93,7 +92,7 @@ class _AddTagFieldState extends ConsumerState<AddTagField> {
         ],
       ),
       if (_error != null)
-        Text(_error!, style: TextStyle(color: widget.theme.error)),
+        Text(_error!, style: TextStyle(color: context.appTheme.error)),
     ],
   );
 }

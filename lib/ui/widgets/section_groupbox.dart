@@ -2,7 +2,7 @@
 /// Matches the original Python SectionGroupBox with left/top title positions
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/settings/settings_model.dart';
@@ -114,7 +114,7 @@ class SectionGroupBox extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
 
-  /// The raised surface under the [gradient], see-through while the pattern
+  /// The raised surface under the [fill], see-through while the pattern
   /// shows on pages ([tinted]). [alternate] takes the darker surface.
   static Color background(
     AppThemeData theme, {
@@ -126,9 +126,22 @@ class SectionGroupBox extends ConsumerWidget {
               : theme.surface)
           .withValues(alpha: tinted ? patternAlpha : 1);
 
-  /// The raised surface's shading over [color].
-  static Gradient gradient(Color color, {double highlight = 0.085}) =>
-      SurfaceDepth.gradient(color, highlight: highlight);
+  /// The raised surface's flat fill: [color] with a hint of the [theme]'s
+  /// accent, keeping its opacity. Dark surfaces take the whole hint; it
+  /// eases off as they lighten, so near-white surfaces stay untinted.
+  static Color fill(AppThemeData theme, Color color) {
+    final lightness = HSLColor.fromColor(color.withValues(alpha: 1)).lightness;
+    final hint =
+        1 -
+        Curves.easeInOut.transform(
+          ((lightness - 0.35) / (0.85 - 0.35)).clamp(0.0, 1.0),
+        );
+    return Color.lerp(
+      color,
+      theme.accent.withValues(alpha: color.a),
+      0.06 * hint,
+    )!;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -257,15 +270,11 @@ class SectionGroupBox extends ConsumerWidget {
 
     // Paint the background on Material so child controls' ink stays visible.
     final hasCorners = showTop || showBottom;
-    // While see-through, only the gradient paints, so the fill is not doubled.
     final surface = Material(
-      color: tinted ? Colors.transparent : bgColor,
+      color: fill(theme, bgColor),
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
-      child: Ink(
-        decoration: BoxDecoration(gradient: gradient(bgColor)),
-        child: content,
-      ),
+      child: content,
     );
     // Keep controls mounted when search filtering changes connected corners.
     final bgLayer = ClipRRect(

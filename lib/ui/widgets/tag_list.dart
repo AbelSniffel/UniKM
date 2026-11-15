@@ -2,10 +2,11 @@
 ///
 /// Tags keep Wrap spacing; scrollable lists mount only nearby rows.
 ///
-/// Performance during resize: the scrollable path detects horizontal width
-/// changes via [LayoutBuilder] and hides the Wrap one frame after the change
-/// (skipping per-pixel re-layout passes). Once the width has been stable for
-/// ~150 ms the Wrap is shown again with a single whole-list fade-in, driven by
+/// Performance during resize: the scrollable path detects changes to the room
+/// it is given, its width or its height limit, via [LayoutBuilder] and hides
+/// the Wrap one frame after the change (skipping per-pixel re-layout passes).
+/// Once the room has been stable for ~150 ms the Wrap is shown again with a
+/// single whole-list fade-in, driven by
 /// one [AnimationController] that lives on [_TagListState], rather than
 /// starting a separate resize fade for every tag.
 ///
@@ -18,8 +19,7 @@ import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:material_ui/material_ui.dart';
 import 'package:unikm/core/constants/app_constants.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -79,13 +79,17 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   // Resize-aware state (scrollable path only)
   // ---------------------------------------------------------------------------
   Timer? _resizeDebounce;
-  double? _stableWidth;
+  // The width and height limit the rows were last shown at.
+  Size? _stableRoom;
   bool _tagsVisible = true;
   bool _hidePending = false;
   // Full content height, computed from cached row metrics.
   // Used to preserve the container size while tags are hidden so the
   // layout doesn't collapse or show excess empty space.
   double? _lastKnownHeight;
+  // Whether the list last took all the height it was given, as one filling a
+  // sidebar does, so the placeholder fills a resized room as well.
+  bool _filledRoom = false;
   final _buttons = <int, AppTagButton>{};
   final _textSizes = <String, Size>{};
   // Text style, scaler, direction, locale and status-hidden flag that
@@ -140,10 +144,10 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   }
 
   /// Shows tags again after a resize has settled, triggering the fade-in.
-  void _showTags(double newWidth) {
+  void _showTags(Size room) {
     if (!mounted) return;
     setState(() {
-      _stableWidth = newWidth;
+      _stableRoom = room;
       _tagsVisible = true;
     });
     _fadeController.forward(from: 0.0);
@@ -183,12 +187,15 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
             return SingleChildScrollView(child: _buildWrap(tags));
           }
           final width = constraints.maxWidth;
+          // A list that fills the height, as in a sidebar, also refreshes
+          // when the window's height changes.
+          final room = Size(width, constraints.maxHeight);
 
-          if (_stableWidth == null) {
-            // First build — record stable width, no animation needed.
-            _stableWidth = width;
-          } else if (width != _stableWidth) {
-            // Width changed → hide chips next frame to skip Wrap re-layout.
+          if (_stableRoom == null) {
+            // First build — record the stable room, no animation needed.
+            _stableRoom = room;
+          } else if (room != _stableRoom) {
+            // Room changed → hide chips next frame to skip re-layout.
             if (_tagsVisible && !_hidePending) {
               _hidePending = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -198,19 +205,19 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
                 }
               });
             }
-            // Restart debounce: show chips once width has settled.
+            // Restart debounce: show chips once the room has settled.
             _resizeDebounce?.cancel();
             _resizeDebounce = Timer(
               const Duration(milliseconds: 150),
-              () => _showTags(width),
+              () => _showTags(room),
             );
           }
 
-          final preservedHeight = _lastKnownHeight ?? 80.0;
-
           if (!_tagsVisible) {
             return SizedBox(
-              height: preservedHeight,
+              height: _filledRoom && constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : _lastKnownHeight ?? 80.0,
               child: Center(child: AppCircularProgressIndicator(size: 24)),
             );
           }
@@ -240,6 +247,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
           // The placeholder shown while resizing keeps the height on screen,
           // not the whole list's, so a capped list does not jump open.
           _lastKnownHeight = height;
+          _filledRoom = height >= constraints.maxHeight;
           return FadeTransition(
             opacity: _fadeAnimation,
             child: SizedBox(

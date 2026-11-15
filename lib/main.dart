@@ -1,9 +1,10 @@
 /// UniKM Flutter - Game Key Manager
 library;
 
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,10 +36,12 @@ void main() async {
 
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
-  await prefs.remove(SettingsKeys.notificationsEnabled);
+  if (prefs.containsKey(SettingsKeys.notificationsEnabled)) {
+    await prefs.remove(SettingsKeys.notificationsEnabled);
+  }
 
-  // Initialize OS-level notification plugin.
-  await DeadlineNotificationService.instance.initialize();
+  // Start the OS notification plugin without holding back the first frame.
+  unawaited(DeadlineNotificationService.instance.initialize());
 
   runApp(
     ProviderScope(

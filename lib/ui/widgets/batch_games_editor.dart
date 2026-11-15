@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import 'app_scrollbar.dart';
 import '../../core/utils/batch_parser.dart';
@@ -343,42 +344,53 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
             ],
           );
         },
-        child: DefaultSelectionStyle.merge(
-          selectionColor: Colors.transparent,
-          child: TextField(
-            key: const ValueKey('batch-games-input'),
-            controller: widget.controller,
-            focusNode: _focus,
-            minLines: 8,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            cursorHeight: MediaQuery.textScalerOf(context).scale(14) * 1.25,
-            style: style,
-            strutStyle: const StrutStyle(
-              fontSize: 14,
-              height: 2.7,
-              forceStrutHeight: true,
-            ),
-            selectionHeightStyle: ui.BoxHeightStyle.strut,
-            selectionWidthStyle: ui.BoxWidthStyle.tight,
-            decoration: InputDecoration(
-              constraints: const BoxConstraints(),
-              contentPadding: EdgeInsets.fromLTRB(
-                textInset,
-                6,
-                _pillHorizontalPadding + 4,
-                6,
+        // An empty box slides its hint aside for the active row's chevron and
+        // back; typed text moves at once.
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: textInset),
+          duration:
+              widget.controller.text.isEmpty &&
+                  !MediaQuery.disableAnimationsOf(context)
+              ? kMediumAnimation
+              : Duration.zero,
+          curve: Curves.easeInOutCubic,
+          builder: (context, inset, _) => DefaultSelectionStyle.merge(
+            selectionColor: Colors.transparent,
+            child: TextField(
+              key: const ValueKey('batch-games-input'),
+              controller: widget.controller,
+              focusNode: _focus,
+              minLines: 8,
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              cursorHeight: MediaQuery.textScalerOf(context).scale(14) * 1.25,
+              style: style,
+              strutStyle: const StrutStyle(
+                fontSize: 14,
+                height: 2.7,
+                forceStrutHeight: true,
               ),
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              hintText:
-                  'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
-              hintStyle: TextStyle(color: widget.theme.textHint, height: 2.7),
+              selectionHeightStyle: ui.BoxHeightStyle.strut,
+              selectionWidthStyle: ui.BoxWidthStyle.tight,
+              decoration: InputDecoration(
+                constraints: const BoxConstraints(),
+                contentPadding: EdgeInsets.fromLTRB(
+                  inset,
+                  6,
+                  _pillHorizontalPadding + 4,
+                  6,
+                ),
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                hintText:
+                    'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
+                hintStyle: TextStyle(color: widget.theme.textHint, height: 2.7),
+              ),
+              onChanged: widget.onChanged,
             ),
-            onChanged: widget.onChanged,
           ),
         ),
       ),

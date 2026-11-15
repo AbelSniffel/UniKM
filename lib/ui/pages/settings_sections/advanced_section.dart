@@ -1,7 +1,7 @@
 /// Advanced settings section
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -72,6 +72,8 @@ class AdvancedSection extends ConsumerWidget {
           group: systemSearchGroup,
           titleIcon: Icons.settings,
           searchQuery: searchQuery,
+          // The section's own title names it.
+          showTitle: false,
           childBuilder: () => Column(
             children: [
               SettingsChoiceCard<String>(

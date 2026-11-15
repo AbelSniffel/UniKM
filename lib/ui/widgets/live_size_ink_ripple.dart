@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Expanding ink whose radius follows a button that resizes during the gesture.
 class LiveSizeInkRipple extends InteractiveInkFeature {

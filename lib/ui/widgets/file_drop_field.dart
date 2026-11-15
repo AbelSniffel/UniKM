@@ -1,5 +1,5 @@
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';

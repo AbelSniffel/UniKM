@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/services/legacy_db_converter.dart';
@@ -19,12 +19,10 @@ Future<void> showLegacyConversionDialog(
   await showAppDialog<void>(
     context: context,
     builder: (ctx) => ThemedAlertDialog(
-      theme: theme,
       maxWidth: 560,
       title: DialogHeader(
         icon: Icons.upgrade,
         title: 'Legacy Database Converted',
-        theme: theme,
       ),
       contentSpacing: 16,
       contentChildren: [
@@ -33,7 +31,6 @@ Future<void> showLegacyConversionDialog(
           style: TextStyle(color: theme.textSecondary),
         ),
         TintedCard(
-          theme: theme,
           icon: Icons.description_outlined,
           title: p.basename(dbPath),
           subtitle: 'Source file, left unchanged',
@@ -44,7 +41,6 @@ Future<void> showLegacyConversionDialog(
             spacing: 8,
             children: [
               TintedHeading(
-                theme: theme,
                 title: 'Changes Applied',
                 trailing: '${actions.length}',
               ),

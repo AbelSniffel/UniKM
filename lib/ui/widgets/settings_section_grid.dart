@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'multi_child_render_box.dart';
+import 'tab_height_transition.dart';
 
 /// Edit this value (1 or greater) to cap columns in All and search views.
 const int kSettingsSectionMaxColumns = 4;
@@ -49,7 +50,8 @@ class SettingsSectionGrid extends MultiChildRenderObjectWidget {
       );
 }
 
-class _RenderSettingsSectionGrid extends MultiChildRenderBox {
+class _RenderSettingsSectionGrid extends MultiChildRenderBox
+    with PendingHeightPlacement {
   _RenderSettingsSectionGrid(this._columns, this._spacing, this._textDirection);
 
   int _columns;
@@ -84,18 +86,22 @@ class _RenderSettingsSectionGrid extends MultiChildRenderBox {
       (width - _spacing * (columns - 1)) / columns,
     );
     final heights = List<double>.filled(columns, 0);
+    // Column heights once running tab transitions end, which choose columns,
+    // so sections do not hop between columns while a box animates.
+    final settled = List<double>.filled(columns, 0);
     var child = firstChild;
     while (child != null) {
       // Place the next section in the shortest column, preferring reading order
       // when columns have equal heights.
       var column = 0;
       for (var i = 1; i < columns; i++) {
-        if (heights[i] < heights[column]) column = i;
+        if (settled[i] < settled[column]) column = i;
       }
       child.layout(
         BoxConstraints.tightFor(width: columnWidth),
         parentUsesSize: true,
       );
+      settled[column] += child.size.height + pendingHeightOf(child) + _spacing;
       final data = childData(child);
       final visualColumn = _textDirection == TextDirection.ltr
           ? column

@@ -7,7 +7,7 @@
 /// - Simple confirmation dialog
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -132,7 +132,7 @@ class DialogInteractionScope extends StatelessWidget {
 ///
 /// ```dart
 /// AlertDialog(
-///   title: DialogHeader(icon: Icons.lock, title: 'Enable Encryption', theme: theme),
+///   title: DialogHeader(icon: Icons.lock, title: 'Enable Encryption'),
 /// )
 /// ```
 class DialogHeader extends StatelessWidget {
@@ -140,7 +140,6 @@ class DialogHeader extends StatelessWidget {
     super.key,
     this.icon,
     required this.title,
-    required this.theme,
     this.iconColor,
     this.iconSize,
     this.titleColor,
@@ -150,15 +149,14 @@ class DialogHeader extends StatelessWidget {
   /// Optional leading icon. When null no icon or spacing is rendered.
   final IconData? icon;
   final String title;
-  final AppThemeData theme;
 
-  /// Defaults to [theme.accent].
+  /// Defaults to the theme's accent.
   final Color? iconColor;
 
   /// Defaults to 28 when [showCloseButton] is true, else platform default.
   final double? iconSize;
 
-  /// Defaults to [theme.textPrimary].
+  /// Defaults to the theme's primary text colour.
   final Color? titleColor;
 
   /// If true, adds a themed close `IconButton` at the trailing edge.
@@ -166,6 +164,7 @@ class DialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final effectiveSize = iconSize ?? (showCloseButton ? 28.0 : null);
     return Row(
       children: [
@@ -200,35 +199,33 @@ class DialogHeader extends StatelessWidget {
 
 /// Shared warning banner for destructive actions and security notices.
 class DialogBanner extends StatelessWidget {
-  const DialogBanner.warning({
-    super.key,
-    required this.message,
-    required this.theme,
-  });
+  const DialogBanner.warning({super.key, required this.message});
 
   final String message;
-  final AppThemeData theme;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: theme.baseAccent.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
-    ),
-    child: Row(
-      children: [
-        Icon(Icons.warning_amber, color: theme.baseAccent),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(color: theme.textSecondary, fontSize: 11),
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: theme.baseAccent.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber, color: theme.baseAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: theme.textSecondary, fontSize: 11),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +238,6 @@ class DialogBanner extends StatelessWidget {
 ///
 /// ```dart
 /// DialogActionBar(
-///   theme: theme,
 ///   onConfirm: _submit,
 ///   confirmIcon: Icons.lock,
 ///   confirmLabel: 'Enable Encryption',
@@ -251,7 +247,6 @@ class DialogBanner extends StatelessWidget {
 class DialogActionBar extends StatelessWidget {
   const DialogActionBar({
     super.key,
-    required this.theme,
     required this.onConfirm,
     this.onCancel,
     this.showCancel = false,
@@ -264,8 +259,6 @@ class DialogActionBar extends StatelessWidget {
     this.destructive = false,
     this.spinnerSize = 16,
   });
-
-  final AppThemeData theme;
 
   /// Called when Cancel is pressed. If null, pops the current route.
   final VoidCallback? onCancel;
@@ -296,6 +289,7 @@ class DialogActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final effectiveShowCancel = showCancel || onCancel != null;
     final cancelButton = OutlinedButton(
       onPressed: isLoading ? null : (onCancel ?? () => Navigator.pop(context)),
@@ -626,18 +620,15 @@ Future<bool> showConfirmDialog({
       onPrimaryAction: () => Navigator.pop(ctx, true),
       onDismiss: () => Navigator.pop(ctx, false),
       child: ThemedAlertDialog(
-        theme: theme,
         maxWidth: kCompactDialogWidth,
         title: DialogHeader(
           icon: titleIcon,
           iconColor: destructive && titleIcon != null ? theme.error : null,
           title: title,
-          theme: theme,
         ),
         content: Text(message, style: TextStyle(color: theme.textSecondary)),
         actions: [
           DialogActionBar(
-            theme: theme,
             onConfirm: () => Navigator.pop(ctx, true),
             showCancel: showCancel,
             onCancel: showCancel ? () => Navigator.pop(ctx, false) : null,

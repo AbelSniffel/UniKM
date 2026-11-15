@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/device_sync_models.dart';
 import '../../providers/app_providers.dart';
@@ -59,12 +59,7 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
       onPrimaryAction: _accepted ? null : _accept,
       onDismiss: _accepted ? null : _decline,
       child: ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.handshake,
-          title: 'Pair Request',
-          theme: theme,
-        ),
+        title: DialogHeader(icon: Icons.handshake, title: 'Pair Request'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,7 +69,7 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
               style: TextStyle(color: theme.textSecondary),
             ),
             const SizedBox(height: 12),
-            PairCodeDisplay(code: widget.request.code, theme: theme),
+            PairCodeDisplay(code: widget.request.code),
             const SizedBox(height: 8),
             Text(
               _accepted

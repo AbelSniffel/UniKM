@@ -10,7 +10,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -90,6 +90,11 @@ class _GameCardState extends ConsumerState<GameCard>
     _selectionController = AnimationController(
       duration: kMediumAnimation,
       vsync: this,
+      // A card that scrolls into view already selected shows it at once,
+      // rather than playing the animation on every one that enters.
+      value: ref.read(gamesProvider).selectedGameIds.contains(widget.game.id)
+          ? 1
+          : 0,
     );
     _selectionAnim = CurvedAnimation(
       parent: _selectionController,
@@ -317,11 +322,10 @@ class _GameCardState extends ConsumerState<GameCard>
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: listRadius,
-                child: LayoutBuilder(
-                  builder: (context, constraints) => UsedOverlay(
-                    theme: theme,
-                    patternSize: constraints.biggest,
-                  ),
+                // The pattern only depends on the card's height.
+                child: UsedOverlay(
+                  theme: theme,
+                  patternSize: const Size.fromHeight(kListCardHeight),
                 ),
               ),
             ),
@@ -375,12 +379,10 @@ class _GameCardState extends ConsumerState<GameCard>
         children: [
           if (showUsed)
             Positioned.fill(
-              child: LayoutBuilder(
-                builder: (context, constraints) => UsedOverlay(
-                  theme: theme,
-                  patternSize: Size(constraints.maxWidth, kSlimListCardHeight),
-                  tileToCanvas: true,
-                ),
+              child: UsedOverlay(
+                theme: theme,
+                patternSize: const Size.fromHeight(kSlimListCardHeight),
+                tileToCanvas: true,
               ),
             ),
           Positioned.fill(
@@ -446,26 +448,26 @@ class _GameCardState extends ConsumerState<GameCard>
     required BoxDecoration Function(double t) decorationBuilder,
     required Widget child,
   }) => _buildInteractive(
-    RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _hoverAnim,
-        builder: (context, staticChild) {
-          final t = _hoverAnim.value;
-          // No filterQuality: that scales an offscreen image of the card
-          // whose bounds snap to whole pixels, so the card shook while
-          // zooming. A plain transform scales it at sub-pixel precision.
-          return Transform.scale(
-            scale: 1.0 + t * scaleFactor,
-            child: DecoratedBox(
-              decoration: decorationBuilder(t),
-              child: staticChild,
-            ),
-          );
-        },
-        // The content keeps its own layer, so zooming only moves it.
-        child: RepaintBoundary(
-          child: SizedBox(width: width, height: height, child: child),
-        ),
+    // The list's own repaint boundary around each card keeps the zoom from
+    // repainting its neighbours.
+    AnimatedBuilder(
+      animation: _hoverAnim,
+      builder: (context, staticChild) {
+        final t = _hoverAnim.value;
+        // No filterQuality: that scales an offscreen image of the card
+        // whose bounds snap to whole pixels, so the card shook while
+        // zooming. A plain transform scales it at sub-pixel precision.
+        return Transform.scale(
+          scale: 1.0 + t * scaleFactor,
+          child: DecoratedBox(
+            decoration: decorationBuilder(t),
+            child: staticChild,
+          ),
+        );
+      },
+      // The content keeps its own layer, so zooming only moves it.
+      child: RepaintBoundary(
+        child: SizedBox(width: width, height: height, child: child),
       ),
     ),
   );
@@ -591,30 +593,19 @@ class _GameCardState extends ConsumerState<GameCard>
 
   // ── Overlay builders ───────────────────────────────────────────────────────
 
-  Widget _buildGradientOverlay(AppThemeData theme, bool isSelected) {
-    final glow = CustomPaint(
-      painter: CardGlowPainter(
-        accentColor: theme.accent,
-        primaryColor: theme.secondary,
-        selected: isSelected,
-        cornerRadius: theme.cornerRadius,
-      ),
-      child: const SizedBox.expand(),
-    );
-    if (isSelected) return glow;
-
-    return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _hoverAnim,
-        builder: (context, child) {
-          final t = _hoverAnim.value;
-          if (t <= 0.0) return const SizedBox.shrink();
-          return Opacity(opacity: t, child: child);
-        },
-        child: glow,
-      ),
-    );
-  }
+  Widget _buildGradientOverlay(AppThemeData theme, bool isSelected) =>
+      IgnorePointer(
+        child: CustomPaint(
+          painter: CardGlowPainter(
+            accentColor: theme.accent,
+            primaryColor: theme.secondary,
+            cornerRadius: theme.cornerRadius,
+            hover: isSelected ? null : _hoverAnim,
+            devicePixelRatio: MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      );
 
   /// Centres [child] over the cover image of list cards ([imageWidth] set),
   /// or over the whole card.

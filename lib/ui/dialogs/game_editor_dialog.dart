@@ -4,7 +4,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show setEquals;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/settings/settings_model.dart';
@@ -89,7 +89,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   // Steam-specific state
   late String _steamAppId;
   bool _isFetching = false;
-  DateTime? _steamCacheAt;
+  // Read from disk after the editor opens; only its stat listens, so the
+  // answer does not rebuild the whole editor.
+  final _steamCacheAt = ValueNotifier<DateTime?>(null);
   DateTime? _lastUpdatedAt;
 
   // Local fetched review preview values (null == not available)
@@ -166,6 +168,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   @override
   void dispose() {
     _fields.dispose();
+    _steamCacheAt.dispose();
     super.dispose();
   }
 
@@ -181,7 +184,16 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     _lastUpdatedAt = game.updatedAt;
   }
 
-  void _markChanged() => setState(() => _hasChanges = true);
+  /// Whether closing asked first, as last built.
+  bool _builtDirty = false;
+
+  /// A typed edit rebuilds the editor only when that changes what it shows:
+  /// Save turning on, or whether closing must ask first. The fields, and
+  /// what is drawn from them, follow their controllers themselves.
+  void _markChanged() {
+    if (_hasChanges && _isDirty == _builtDirty) return;
+    setState(() => _hasChanges = true);
+  }
 
   VoidCallback? get _saveAction => _hasChanges && !_isSaving ? _save : null;
 
@@ -335,7 +347,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     final cached = preview != null
         ? preview.steamCachedAt
         : await getCachedAtForTitle(_fields.title.text.trim());
-    if (mounted) setState(() => _steamCacheAt = cached);
+    if (mounted) _steamCacheAt.value = cached;
   }
 
   /// Whether the edits differ from the saved game. Edits undone by hand,
@@ -417,8 +429,9 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
             DefaultSettings.showGameDetailsSkmId,
       ),
     );
+    _builtDirty = _isDirty;
     return PopScope<bool>(
-      canPop: !_isDirty,
+      canPop: !_builtDirty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _onPopBlocked();
       },
@@ -477,11 +490,14 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         fallback: 'Unchanged',
       ),
       if (_isSteam)
-        GameStat.date(
-          theme: theme,
-          label: 'Cached',
-          date: _steamCacheAt,
-          fallback: 'Not cached',
+        ValueListenableBuilder(
+          valueListenable: _steamCacheAt,
+          builder: (context, cachedAt, _) => GameStat.date(
+            theme: theme,
+            label: 'Cached',
+            date: cachedAt,
+            fallback: 'Not cached',
+          ),
         ),
       if (showSkmId)
         GameStat(theme: theme, label: 'SKM-ID', value: '${game.id}'),
@@ -575,7 +591,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         onSelected: _changePlatform,
       ),
       options: GameOptionsRow(
-        theme: theme,
         isDlc: _isDlc,
         onDlcChanged: (value) => _edit(() => _isDlc = value),
         deadline: DeadlineChip(
@@ -678,13 +693,8 @@ Future<String?> showUnsavedGameChangesDialog(
 ) => showAppDialog<String>(
   context: context,
   builder: (ctx) => ThemedAlertDialog(
-    theme: theme,
     maxWidth: kCompactDialogWidth,
-    title: DialogHeader(
-      icon: Icons.edit_note,
-      title: 'Unsaved Changes',
-      theme: theme,
-    ),
+    title: DialogHeader(icon: Icons.edit_note, title: 'Unsaved Changes'),
     content: Text(
       'Save changes to "$gameTitle"?',
       style: TextStyle(color: theme.textSecondary),

@@ -1,14 +1,12 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 
 import '../../core/theme/app_theme.dart';
 
 class AppFpsCounter extends StatefulWidget {
-  const AppFpsCounter({super.key, required this.theme});
-
-  final AppThemeData theme;
+  const AppFpsCounter({super.key});
 
   @override
   State<AppFpsCounter> createState() => _AppFpsCounterState();
@@ -51,12 +49,15 @@ class _AppFpsCounterState extends State<AppFpsCounter>
   }
 
   @override
-  Widget build(BuildContext context) => Text(
-    '${_fps > 0 ? _fps : '--'} FPS',
-    style: TextStyle(
-      color: widget.theme.textSecondary,
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Text(
+      '${_fps > 0 ? _fps : '--'} FPS',
+      style: TextStyle(
+        color: theme.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
 }

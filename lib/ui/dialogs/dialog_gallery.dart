@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -224,7 +224,7 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              PageBarSurface(theme: theme, child: _header(theme)),
+              PageBarSurface(child: _header(theme)),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -251,7 +251,6 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
                 ),
               ),
               PageBarSurface(
-                theme: theme,
                 isFooter: true,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -382,10 +381,7 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
                           ),
                         ),
                       ),
-                      NavigationThemeMenuButton(
-                        theme: theme,
-                        position: NavBarPosition.top,
-                      ),
+                      NavigationThemeMenuButton(position: NavBarPosition.top),
                       IconButton(
                         tooltip: 'Close gallery',
                         onPressed: () => ref

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -199,7 +199,6 @@ class _PopoverPosition extends SingleChildLayoutDelegate {
 class SliderPopoverButton extends StatelessWidget {
   const SliderPopoverButton({
     super.key,
-    required this.theme,
     required this.title,
     required this.value,
     required this.icon,
@@ -207,8 +206,6 @@ class SliderPopoverButton extends StatelessWidget {
     this.action,
     this.onOpenChanged,
   });
-
-  final AppThemeData theme;
 
   /// Heads the popover and is the button's tooltip.
   final String title;
@@ -225,63 +222,66 @@ class SliderPopoverButton extends StatelessWidget {
   final ValueChanged<bool>? onOpenChanged;
 
   @override
-  Widget build(BuildContext context) => AnimatedPopover(
-    theme: theme,
-    onOpenChanged: onOpenChanged,
-    child: SizedBox(
-      width: 300,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 36,
-              // The value sits right after the title, reading as one label.
-              child: Row(
-                spacing: 8,
-                children: [
-                  Expanded(
-                    child: Row(
-                      spacing: 6,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return AnimatedPopover(
+      theme: theme,
+      onOpenChanged: onOpenChanged,
+      child: SizedBox(
+        width: 300,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 36,
+                // The value sits right after the title, reading as one label.
+                child: Row(
+                  spacing: 8,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        spacing: 6,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              title,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            value,
                             style: TextStyle(
-                              color: theme.textPrimary,
+                              color: theme.accent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ),
-                        Text(
-                          value,
-                          style: TextStyle(
-                            color: theme.accent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  ?action,
-                ],
+                    ?action,
+                  ],
+                ),
               ),
-            ),
-            // Without side padding, so the track lines up with the title row.
-            SliderTheme(
-              data: SliderTheme.of(
-                context,
-              ).copyWith(padding: const EdgeInsets.symmetric(vertical: 8)),
-              child: slider,
-            ),
-          ],
+              // Without side padding, so the track lines up with the title row.
+              SliderTheme(
+                data: SliderTheme.of(
+                  context,
+                ).copyWith(padding: const EdgeInsets.symmetric(vertical: 8)),
+                child: slider,
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-    builder: (context, toggle) =>
-        IconButton(tooltip: title, onPressed: toggle, icon: icon),
-  );
+      builder: (context, toggle) =>
+          IconButton(tooltip: title, onPressed: toggle, icon: icon),
+    );
+  }
 }

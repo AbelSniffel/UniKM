@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -20,6 +20,7 @@ class PreviewCardWrap extends StatelessWidget {
     required this.children,
     this.spacing = 8,
     this.runSpacing = 8,
+    this.fillWhenAlone = false,
   }) : assert(spacing >= 0),
        assert(runSpacing >= 0);
 
@@ -27,19 +28,25 @@ class PreviewCardWrap extends StatelessWidget {
   final double spacing;
   final double runSpacing;
 
+  /// A lone card takes the whole row, rather than the capped width it would
+  /// share with others, so a collection of one leaves no empty space.
+  final bool fillWhenAlone;
+
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        final width = availableWidth.isFinite
-            ? settingsCardWidth(
+        final width = !availableWidth.isFinite
+            ? kInteractionCardMaxWidth
+            : fillWhenAlone && children.length == 1
+            ? availableWidth
+            : settingsCardWidth(
                 availableWidth: availableWidth,
                 cardCount: children.length,
                 spacing: spacing,
-              )
-            : kInteractionCardMaxWidth;
+              );
         final cards = [
           for (final child in children)
             SizedBox(
@@ -298,7 +305,6 @@ class _PreviewCardState extends State<PreviewCard> {
                             scale: 0.4 + 0.6 * t,
                             child: SettingsCardMiniDot(
                               key: const ValueKey('preview-selection-check'),
-                              theme: theme,
                               value: true,
                               enabled: true,
                               outlineColor: theme.surface,

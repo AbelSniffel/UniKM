@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -65,7 +65,7 @@ class AppTitleBar extends ConsumerWidget {
                   ),
 
                   // Menu button with Import/Export options
-                  _MenuButton(theme: theme),
+                  _MenuButton(),
                   _SyncButton(theme: theme),
 
                   const Spacer(),
@@ -78,19 +78,16 @@ class AppTitleBar extends ConsumerWidget {
           // double taps so they are responsive immediately.
           _TitleBarActionButton(
             icon: Icons.remove,
-            theme: theme,
             width: 46,
             onPressed: windowManager.minimize,
           ),
           _TitleBarActionButton(
             icon: Icons.crop_square,
-            theme: theme,
             width: 46,
             onPressed: _toggleMaximized,
           ),
           _TitleBarActionButton(
             icon: Icons.close,
-            theme: theme,
             width: 46,
             hoverColor: theme.secondary,
             onPressed: windowManager.close,
@@ -103,9 +100,7 @@ class AppTitleBar extends ConsumerWidget {
 
 /// Menu button with Import/Export options
 class _MenuButton extends StatefulWidget {
-  const _MenuButton({required this.theme});
-
-  final AppThemeData theme;
+  const _MenuButton();
 
   @override
   State<_MenuButton> createState() => _MenuButtonState();
@@ -114,9 +109,8 @@ class _MenuButton extends StatefulWidget {
 class _MenuButtonState extends State<_MenuButton> {
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     return AppMenuAnchor(
-      theme: theme,
       menuChildren: [
         for (final (icon, label, open) in <(IconData, String, VoidCallback)>[
           (
@@ -143,7 +137,6 @@ class _MenuButtonState extends State<_MenuButton> {
           ),
       ],
       builder: (context, controller, _) => _TitleBarActionButton(
-        theme: theme,
         icon: Icons.menu,
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
@@ -167,7 +160,6 @@ class _SyncButton extends ConsumerWidget {
     return Tooltip(
       message: 'Device Sync',
       child: _TitleBarActionButton(
-        theme: theme,
         icon: icon,
         color: color?.withValues(alpha: 0.9),
         hoverIconColor: color,
@@ -181,7 +173,6 @@ class _SyncButton extends ConsumerWidget {
 /// window buttons.
 class _TitleBarActionButton extends StatefulWidget {
   const _TitleBarActionButton({
-    required this.theme,
     required this.icon,
     required this.onPressed,
     this.width = 36,
@@ -190,7 +181,6 @@ class _TitleBarActionButton extends StatefulWidget {
     this.hoverIconColor,
   });
 
-  final AppThemeData theme;
   final IconData icon;
   final VoidCallback onPressed;
   final double width;
@@ -210,7 +200,8 @@ class _TitleBarActionButtonState extends State<_TitleBarActionButton> {
 
   @override
   Widget build(BuildContext context) {
-    final hover = widget.hoverColor ?? widget.theme.accent;
+    final theme = context.appTheme;
+    final hover = widget.hoverColor ?? theme.accent;
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -236,7 +227,7 @@ class _TitleBarActionButtonState extends State<_TitleBarActionButton> {
             size: 16,
             color: _isHovered
                 ? widget.hoverIconColor ?? hover
-                : widget.color ?? widget.theme.textSecondary,
+                : widget.color ?? theme.textSecondary,
           ),
         ),
       ),

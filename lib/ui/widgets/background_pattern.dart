@@ -5,7 +5,7 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,6 +62,7 @@ class PanelPatternSurface extends ConsumerWidget {
     final showOnPage = ref.watch(pagePatternProvider);
     return _PanelPatternSurface(
       color: page ? theme.background : theme.navBackground,
+      pixelRatio: MediaQuery.devicePixelRatioOf(context),
       pattern: BackgroundPatternPainter(
         theme: theme,
         style: ref.watch(backgroundPatternProvider),
@@ -82,15 +83,17 @@ class _PanelPatternSurface extends SingleChildRenderObjectWidget {
   const _PanelPatternSurface({
     required this.color,
     required this.pattern,
+    required this.pixelRatio,
     super.child,
   });
 
   final Color color;
   final BackgroundPatternPainter pattern;
+  final double pixelRatio;
 
   @override
   _RenderPanelPatternSurface createRenderObject(BuildContext context) =>
-      _RenderPanelPatternSurface(color, pattern);
+      _RenderPanelPatternSurface(color, pattern, pixelRatio);
 
   @override
   void updateRenderObject(
@@ -98,14 +101,17 @@ class _PanelPatternSurface extends SingleChildRenderObjectWidget {
     _RenderPanelPatternSurface renderObject,
   ) => renderObject
     ..color = color
-    ..pattern = pattern;
+    ..pattern = pattern
+    ..pixelRatio = pixelRatio;
 }
 
 /// Records the pattern around the surface once, in window coordinates, and
 /// lets the compositor pin it to the window: moving the surface never
 /// repaints it, and hover repaints inside the panel reuse the recording.
+/// The recording draws [_PatternTiles], so a surface that grows, as in a
+/// window resize, only draws the tiles it newly reaches.
 class _RenderPanelPatternSurface extends RenderProxyBox {
-  _RenderPanelPatternSurface(this._color, this._pattern);
+  _RenderPanelPatternSurface(this._color, this._pattern, this._pixelRatio);
 
   /// Extra pattern recorded around the surface, so small moves reuse it.
   static const double _margin = 64;
@@ -118,6 +124,7 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
   final _clip = LayerHandle<ClipRectLayer>();
   final _follower = LayerHandle<FollowerLayer>();
   ui.Picture? _recording;
+  List<Record> _tiles = const [];
   Rect? _recordedArea;
   Size? _recordedWindow;
 
@@ -128,6 +135,8 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
   set color(Color value) {
     if (value == _color) return;
     _color = value;
+    // The tiles hold the color under the pattern.
+    _clearRecording();
     markNeedsPaint();
   }
 
@@ -138,6 +147,14 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
     _pattern = value;
     _clearRecording();
     if (wasVisible != value.isVisible) markNeedsCompositingBitsUpdate();
+    markNeedsPaint();
+  }
+
+  double _pixelRatio;
+  set pixelRatio(double value) {
+    if (value == _pixelRatio) return;
+    _pixelRatio = value;
+    _clearRecording();
     markNeedsPaint();
   }
 
@@ -166,6 +183,8 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
   }
 
   void _clearRecording() {
+    _PatternTiles.release(_tiles);
+    _tiles = const [];
     _recording?.dispose();
     _recording = null;
     _recordedArea = null;
@@ -224,11 +243,20 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
     if (_pattern.isVisible) {
       final area = _area;
       if (!_covers(area)) {
-        _clearRecording();
         final recorded = area.inflate(_margin);
         final recorder = ui.PictureRecorder();
-        _pattern.paintArea(Canvas(recorder), _windowSize, recorded);
+        // Hold the new tiles before letting go of the old, to keep shared ones.
+        final tiles = _PatternTiles.paint(
+          Canvas(recorder),
+          _pattern,
+          _color,
+          _windowSize,
+          recorded,
+          _pixelRatio,
+        );
+        _clearRecording();
         _recording = recorder.endRecording();
+        _tiles = tiles;
         _recordedArea = recorded;
         _recordedWindow = _windowSize;
       }
@@ -251,6 +279,104 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
       _follower.layer = null;
     }
     super.paint(context, offset);
+  }
+}
+
+/// Squares of a panel's color and pattern, drawn once into images that every
+/// surface showing them shares. A square is a whole number of physical
+/// pixels, placed on physical pixels, and holds the color under the pattern,
+/// so the pattern blends with the panel as it would drawn straight onto it.
+abstract final class _PatternTiles {
+  /// A tile's side, in physical pixels.
+  static const _side = 512;
+
+  /// Tiles no surface holds that are kept for the next one to ask.
+  static const _spare = 48;
+
+  static final _images = <Record, ui.Image>{};
+  static final _holders = <Record, int>{};
+
+  /// Unheld tiles, the longest unheld first.
+  static final _unheld = <Record>{};
+  static final _paint = Paint()..filterQuality = FilterQuality.none;
+
+  /// Draws [color] and [pattern] over [area] of a [window]-sized pattern
+  /// and returns the tiles it holds, for [release].
+  static List<Record> paint(
+    Canvas canvas,
+    BackgroundPatternPainter pattern,
+    Color color,
+    Size window,
+    Rect area,
+    double pixelRatio,
+  ) {
+    final held = <Record>[];
+    final extent = _side / pixelRatio;
+    final anchored = pattern._anchored(window);
+    canvas
+      ..save()
+      ..scale(1 / pixelRatio);
+    for (var y = (area.top / extent).floor(); y * extent < area.bottom; y++) {
+      for (var x = (area.left / extent).floor(); x * extent < area.right; x++) {
+        final tile = Rect.fromLTWH(x * extent, y * extent, extent, extent);
+        // Only tiles reaching something placed in the window follow its size.
+        final key = (
+          pattern._key,
+          color,
+          pixelRatio,
+          x,
+          y,
+          anchored.any(tile.overlaps) ? window : pattern._scope(window, tile),
+        );
+        _holders[key] = (_holders[key] ?? 0) + 1;
+        _unheld.remove(key);
+        held.add(key);
+        canvas.drawImage(
+          _images[key] ??= _draw(pattern, color, window, tile, pixelRatio),
+          tile.topLeft * pixelRatio,
+          _paint,
+        );
+      }
+    }
+    canvas.restore();
+    return held;
+  }
+
+  static ui.Image _draw(
+    BackgroundPatternPainter pattern,
+    Color color,
+    Size window,
+    Rect tile,
+    double pixelRatio,
+  ) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)
+      ..drawColor(color, BlendMode.src)
+      ..scale(pixelRatio)
+      ..translate(-tile.left, -tile.top);
+    pattern.paintArea(canvas, window, tile);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(_side, _side);
+    picture.dispose();
+    return image;
+  }
+
+  /// Lets go of [tiles]; those no surface holds any more wait as spares.
+  static void release(List<Record> tiles) {
+    for (final key in tiles) {
+      final holders = _holders[key]! - 1;
+      if (holders > 0) {
+        _holders[key] = holders;
+      } else {
+        _holders.remove(key);
+        _unheld.add(key);
+      }
+    }
+    while (_unheld.length > _spare) {
+      final oldest = _unheld.first;
+      _unheld.remove(oldest);
+      _images.remove(oldest)!.dispose();
+    }
   }
 }
 
@@ -312,6 +438,55 @@ class BackgroundPatternPainter extends CustomPainter {
       case NavPanelOverlayStyle.christmas:
         _paintChristmas(canvas, Offset.zero & size, area);
         _paintLights(canvas, Offset.zero & size, area);
+    }
+  }
+
+  /// What [tile] depends on in the window, away from [_anchored]: Christmas
+  /// has stars down to half its height and snow down to three quarters.
+  Object _scope(Size window, Rect tile) =>
+      style == NavPanelOverlayStyle.christmas
+      ? (tile.top < window.height * 0.5, tile.top < window.height * 0.75)
+      : 0;
+
+  /// Where the pattern is placed in the [window] rather than fixed to its
+  /// origin, with room for glows and for the scattered shapes kept clear.
+  List<Rect> _anchored(Size window) {
+    final shortest = window.shortestSide;
+    switch (style) {
+      case NavPanelOverlayStyle.halloween:
+        // The webs, the scratch, and the bats left out around them.
+        final reach = math.min(280.0, shortest * 0.6);
+        final claw = math.min(220.0, shortest * 0.42);
+        return [
+          Rect.fromCircle(center: Offset(window.width, 0), radius: reach + 76),
+          Rect.fromCircle(center: Offset.zero, radius: reach * 0.6 + 76),
+          Rect.fromCircle(
+            center: window.center(Offset.zero),
+            radius: claw + 96,
+          ),
+        ];
+      case NavPanelOverlayStyle.christmas:
+        // The trees with their topper's glow, the lights' last bulbs, and
+        // the lines the stars and the snow stop at.
+        final size = math.min(window.height * 0.55, 420.0) / 1.95;
+        return [
+          Rect.fromLTRB(
+            window.width / 2 - size * 1.75 - 8,
+            window.height - size * 2.3 - 20,
+            window.width / 2 + size * 1.75 + 8,
+            window.height,
+          ),
+          Rect.fromLTRB(window.width - 48, 0, window.width, 40),
+          for (final share in const [0.5, 0.75])
+            Rect.fromLTRB(
+              double.negativeInfinity,
+              window.height * share - 24,
+              double.infinity,
+              window.height * share + 24,
+            ),
+        ];
+      default:
+        return const [];
     }
   }
 
@@ -878,15 +1053,20 @@ class BackgroundPatternPainter extends CustomPainter {
     }
   }
 
+  /// Everything the drawing depends on.
+  Record get _key => (
+    preview,
+    strength,
+    angle,
+    wave,
+    theme.accent,
+    theme.secondary,
+    // Halloween's silk and glow and Christmas's wire follow it.
+    theme.isDark,
+    style,
+  );
+
   @override
   bool shouldRepaint(covariant BackgroundPatternPainter oldDelegate) =>
-      oldDelegate.preview != preview ||
-      oldDelegate.strength != strength ||
-      oldDelegate.angle != angle ||
-      oldDelegate.wave != wave ||
-      oldDelegate.theme.accent != theme.accent ||
-      oldDelegate.theme.secondary != theme.secondary ||
-      // Halloween's silk and glow and Christmas's wire follow it.
-      oldDelegate.theme.isDark != theme.isDark ||
-      oldDelegate.style != style;
+      oldDelegate._key != _key;
 }

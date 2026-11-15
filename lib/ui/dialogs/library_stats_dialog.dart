@@ -1,7 +1,7 @@
 /// Totals for the whole library: keys, types, deadlines and platforms.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -43,13 +43,8 @@ class LibraryStatsDialog extends ConsumerWidget {
     final accent = HSLColor.fromColor(theme.accent);
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 480,
-      title: DialogHeader(
-        icon: Icons.bar_chart,
-        title: 'Library Stats',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.bar_chart, title: 'Library Stats'),
       contentSpacing: 20,
       contentChildren: [
         Row(
@@ -60,10 +55,10 @@ class LibraryStatsDialog extends ConsumerWidget {
               ('Unused', unused.length),
               ('Due in 7 days', dueThisWeek),
             ])
-              Expanded(child: _StatTile(theme, label, value)),
+              Expanded(child: _StatTile(label, value)),
           ],
         ),
-        _StatBar(theme, 'Keys', [
+        _StatBar('Keys', [
           (label: 'Unused', count: unused.length, color: theme.accent),
           (
             label: 'Used',
@@ -71,11 +66,11 @@ class LibraryStatsDialog extends ConsumerWidget {
             color: theme.textSecondary.withValues(alpha: 0.45),
           ),
         ]),
-        _StatBar(theme, 'Type', [
+        _StatBar('Type', [
           (label: 'Games', count: count((g) => !g.isDlc), color: theme.accent),
           (label: 'DLC', count: count((g) => g.isDlc), color: theme.secondary),
         ]),
-        _StatBar(theme, 'Unused Key Deadlines', [
+        _StatBar('Unused Key Deadlines', [
           (label: 'Expired', count: due((d) => d < 0), color: theme.secondary),
           (
             label: 'Within 7 days',
@@ -98,7 +93,7 @@ class LibraryStatsDialog extends ConsumerWidget {
             color: theme.textSecondary.withValues(alpha: 0.3),
           ),
         ]),
-        _StatBar(theme, 'Platforms', [
+        _StatBar('Platforms', [
           for (final (i, MapEntry(:key, :value)) in byPlatform.indexed)
             (
               label: key,
@@ -113,48 +108,49 @@ class LibraryStatsDialog extends ConsumerWidget {
 
 /// A large number over its caption.
 class _StatTile extends StatelessWidget {
-  const _StatTile(this.theme, this.label, this.value);
+  const _StatTile(this.label, this.value);
 
-  final AppThemeData theme;
   final String label;
   final int value;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-    decoration: BoxDecoration(
-      color: theme.accent.withValues(alpha: 0.20),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
-    ),
-    // Narrow screens and large text shrink the tile's content to fit.
-    child: FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Column(
-        spacing: 2,
-        children: [
-          Text(
-            '$value',
-            style: TextStyle(
-              color: theme.accent,
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(color: theme.textSecondary, fontSize: 12),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.20),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
       ),
-    ),
-  );
+      // Narrow screens and large text shrink the tile's content to fit.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          spacing: 2,
+          children: [
+            Text(
+              '$value',
+              style: TextStyle(
+                color: theme.accent,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(color: theme.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// A titled [SegmentedBar] over a legend with every count.
 class _StatBar extends StatelessWidget {
-  const _StatBar(this.theme, this.title, this.segments);
+  const _StatBar(this.title, this.segments);
 
-  final AppThemeData theme;
   final String title;
   final List<BarSegment> segments;
 
@@ -164,18 +160,16 @@ class _StatBar extends StatelessWidget {
     spacing: 8,
     children: [
       TintedHeading(
-        theme: theme,
         title: title,
         trailing: '${segments.fold(0, (sum, s) => sum + s.count)}',
       ),
-      SegmentedBar(theme: theme, segments: segments),
+      SegmentedBar(segments: segments),
       Wrap(
         spacing: 6,
         runSpacing: 6,
         children: [
           for (final segment in segments)
             TintedChip(
-              theme: theme,
               color: segment.color,
               label: segment.label,
               value: '${segment.count}',

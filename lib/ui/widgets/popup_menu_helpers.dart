@@ -2,7 +2,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -51,7 +51,6 @@ Size anchoredMenuSize(MediaQueryData media, Size max) => Size(
 class AppMenuAnchor extends StatelessWidget {
   const AppMenuAnchor({
     super.key,
-    required this.theme,
     required this.menuChildren,
     required this.builder,
     this.controller,
@@ -64,7 +63,6 @@ class AppMenuAnchor extends StatelessWidget {
     this.maxHeight,
   });
 
-  final AppThemeData theme;
   final List<Widget> menuChildren;
   final MenuAnchorChildBuilder builder;
   final MenuController? controller;
@@ -80,6 +78,7 @@ class AppMenuAnchor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final maxSize = anchoredMenuSize(
       MediaQuery.of(context),
       Size(width ?? double.infinity, maxHeight ?? double.infinity),
@@ -106,6 +105,25 @@ class AppMenuAnchor extends StatelessWidget {
       menuChildren: menuChildren,
       builder: builder,
     );
+  }
+}
+
+/// A menu button's controller and focus node, and the toggle that opens it.
+mixin MenuToggle<T extends StatefulWidget> on State<T> {
+  final menu = MenuController();
+  final menuFocusNode = FocusNode(skipTraversal: true);
+
+  @override
+  void dispose() {
+    menuFocusNode.dispose();
+    super.dispose();
+  }
+
+  void toggleMenu() {
+    if (menu.isOpen) return menu.close();
+    // Focus lets Escape close the menu again.
+    menuFocusNode.requestFocus();
+    menu.open();
   }
 }
 
@@ -183,7 +201,6 @@ void showAppContextMenu({
       left: anchor.dx,
       top: anchor.dy,
       child: AppMenuAnchor(
-        theme: theme,
         controller: controller,
         childFocusNode: focusNode,
         alignmentOffset: Offset.zero,
@@ -211,13 +228,11 @@ void showAppContextMenu({
 class AnchoredPanelMenu extends StatefulWidget {
   const AnchoredPanelMenu({
     super.key,
-    required this.theme,
     required this.maxSize,
     required this.panel,
     required this.button,
   });
 
-  final AppThemeData theme;
   final Size maxSize;
   final Widget Function(Size size, ScrollController scrollController) panel;
   final Widget Function(FocusNode focusNode, VoidCallback toggle) button;
@@ -239,6 +254,7 @@ class _AnchoredPanelMenuState extends State<AnchoredPanelMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final size = anchoredMenuSize(MediaQuery.of(context), widget.maxSize);
     return MenuAnchor(
       animated: !MediaQuery.disableAnimationsOf(context),
@@ -250,7 +266,7 @@ class _AnchoredPanelMenuState extends State<AnchoredPanelMenu> {
         Directionality.of(context) == TextDirection.ltr ? -size.width : 0,
         8,
       ),
-      style: appMenuStyle(widget.theme),
+      style: appMenuStyle(theme),
       menuChildren: [widget.panel(size, _scrollController)],
       builder: (context, controller, _) => widget.button(
         _buttonFocus,

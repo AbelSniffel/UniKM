@@ -5,7 +5,7 @@
 /// - MouseRegion with onEnter/onExit setState calls
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A builder widget that provides hover state management.
 ///

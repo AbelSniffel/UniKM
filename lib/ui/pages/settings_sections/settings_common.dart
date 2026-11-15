@@ -1,7 +1,7 @@
 /// Common setting row widgets used across settings sections
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/search_highlight.dart';
@@ -66,6 +66,7 @@ SectionGroupEntry buildSearchableSectionEntry({
   IconData? titleIcon,
   bool Function()? extraMatch,
   bool attachesToAbove = false,
+  bool showTitle = true,
 }) {
   bool matches() =>
       shouldShowSettingsGroup(searchQuery, group) ||
@@ -77,6 +78,7 @@ SectionGroupEntry buildSearchableSectionEntry({
         ? const SizedBox.shrink()
         : SectionGroupBox(
             title: group.title,
+            showTitle: showTitle,
             theme: theme,
             titleIcon: titleIcon,
             searchQuery: searchQuery,
@@ -93,7 +95,7 @@ SectionGroupEntry buildSearchableSectionEntry({
             alternateBackground: isAlternate,
             trailing: group.info == null
                 ? null
-                : SettingsInfoButton(theme: theme, message: group.info!),
+                : SettingsInfoButton(message: group.info!),
             child: childBuilder(),
           ),
   );
@@ -101,13 +103,8 @@ SectionGroupEntry buildSearchableSectionEntry({
 
 /// An info icon whose tooltip also opens on tap, for a group's title bar.
 class SettingsInfoButton extends StatefulWidget {
-  const SettingsInfoButton({
-    super.key,
-    required this.theme,
-    required this.message,
-  });
+  const SettingsInfoButton({super.key, required this.message});
 
-  final AppThemeData theme;
   final String message;
 
   @override
@@ -119,7 +116,7 @@ class _SettingsInfoButtonState extends State<SettingsInfoButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     // Tinted when the settings search matches the info.
     final query = SettingsSearchScope.queryOf(context);
     final matched =
@@ -219,30 +216,31 @@ class SettingsSectionGroups extends StatelessWidget {
 class ThemedTextField extends StatelessWidget {
   const ThemedTextField({
     super.key,
-    required this.theme,
     this.controller,
     this.hintText,
     this.obscureText = false,
     this.onChanged,
   });
 
-  final AppThemeData theme;
   final TextEditingController? controller;
   final String? hintText;
   final bool obscureText;
   final ValueChanged<String>? onChanged;
 
   @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    obscureText: obscureText,
-    style: TextStyle(color: theme.textPrimary),
-    decoration: InputDecoration(
-      hintText: hintText,
-      hintStyle: TextStyle(color: theme.textHint),
-    ),
-    onChanged: onChanged,
-  );
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      style: TextStyle(color: theme.textPrimary),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: theme.textHint),
+      ),
+      onChanged: onChanged,
+    );
+  }
 }
 
 /// Search descriptor for a settings group.
@@ -274,14 +272,8 @@ bool matchesSettingsSearchGroup(String query, SettingsSearchGroup group) =>
 
 /// Setting row that takes a canonical [SettingTextSpec].
 class SpecSettingRow extends StatelessWidget {
-  const SpecSettingRow({
-    super.key,
-    required this.theme,
-    required this.spec,
-    required this.child,
-  });
+  const SpecSettingRow({super.key, required this.spec, required this.child});
 
-  final AppThemeData theme;
   final SettingTextSpec spec;
   final Widget child;
 
@@ -292,38 +284,41 @@ class SpecSettingRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    child: Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2,
-            children: [
-              Text.rich(
-                searchHighlightSpan(
-                  spec.label,
-                  _matchedQuery(context),
-                  TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text.rich(
+                  searchHighlightSpan(
+                    spec.label,
+                    _matchedQuery(context),
+                    TextStyle(
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    searchMarkStyle(theme.accent),
                   ),
-                  searchMarkStyle(theme.accent),
                 ),
-              ),
-              if (spec.description case final description?)
-                Text(
-                  description,
-                  style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                ),
-            ],
+                if (spec.description case final description?)
+                  Text(
+                    description,
+                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
+                  ),
+              ],
+            ),
           ),
-        ),
-        child,
-      ],
-    ),
-  );
+          child,
+        ],
+      ),
+    );
+  }
 }
 
 typedef SpecToggleSettingEntry = ({

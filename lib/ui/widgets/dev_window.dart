@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -73,14 +73,16 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     const message = 'Fetching Steam data';
     final progressLabel = '${step + 1}/$count';
     if (!_hasActiveFetchPreview) {
-      _fetchPreviewHandle = NotificationManager.instance.beginTask(
-        message,
+      _fetchPreviewHandle = NotificationManager.instance.showHandle(
+        message: message,
         type: NotificationType.steam,
         title: title,
         progress: progress,
         progressLabel: progressLabel,
         actionLabel: 'Cancel',
         onAction: _clearFetchPreview,
+        persistent: true,
+        dedupe: false,
       );
     } else {
       _fetchPreviewHandle!.update(
@@ -500,7 +502,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               ),
             ),
             // Always measured while Dev Tools is open.
-            AppFpsCounter(theme: theme),
+            AppFpsCounter(),
             IconButton(
               tooltip: 'Close Dev Tools',
               onPressed: widget.onClose,

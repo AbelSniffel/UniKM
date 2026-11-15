@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -90,7 +90,6 @@ class ThemeIconMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = selectedIconCodePoint != null;
     return AnchoredPanelMenu(
-      theme: theme,
       maxSize: const Size(280, 320),
       panel: _picker,
       button: (focusNode, toggle) => IconButton(

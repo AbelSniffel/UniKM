@@ -1,7 +1,7 @@
 /// Tags management settings section.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -255,7 +255,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
             theme: theme,
             groupPosition: position,
             alternateBackground: isAlternate,
-            child: AddTagField(theme: theme),
+            child: AddTagField(),
           ),
         ),
         tagGroup(

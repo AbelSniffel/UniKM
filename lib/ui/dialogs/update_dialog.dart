@@ -5,8 +5,7 @@ library;
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -88,13 +87,8 @@ class UpdateDialog extends ConsumerWidget {
           );
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 560,
-      title: DialogHeader(
-        icon: Icons.system_update_alt,
-        title: 'Updates',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.system_update_alt, title: 'Updates'),
       titleActions: [
         // A check would replace the release being downloaded or installed.
         if (!state.isDownloading && state.downloadedFilePath == null)
@@ -132,12 +126,11 @@ class UpdateDialog extends ConsumerWidget {
       contentChildren: [
         // Sets the notes apart from the title bar, as far as below it.
         _ReleaseNotes(
-          theme: theme,
           releases: state.allReleases,
           updateRelease: state.hasUpdate ? state.release : null,
         ),
         // Next to the buttons that act on it.
-        _StatusCard(theme: theme, state: state),
+        _StatusCard(state: state),
       ],
       // The next step for the update, like any dialog's buttons.
       actions: switch (state.stage) {
@@ -181,13 +174,13 @@ class UpdateDialog extends ConsumerWidget {
 /// What the update is doing, tinted by its outcome: an icon, the versions
 /// involved, the download size and, while downloading, its progress.
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.theme, required this.state});
+  const _StatusCard({required this.state});
 
-  final AppThemeData theme;
   final UpdateState state;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final stage = state.stage;
     final failed = stage == UpdatePreviewState.error;
     final downloading = stage == UpdatePreviewState.downloading;
@@ -237,7 +230,6 @@ class _StatusCard extends StatelessWidget {
 
     return TintedCard(
       key: const ValueKey('update-status-card'),
-      theme: theme,
       size: TintedCardSize.large,
       liveRegion: true,
       color: color,
@@ -269,7 +261,6 @@ class _StatusCard extends StatelessWidget {
       children: [
         if (downloading)
           SegmentedBar(
-            theme: theme,
             formatCount: formatFileSize,
             // One fill growing over its track, like a progress bar.
             gap: 0,
@@ -308,13 +299,8 @@ class SkippedVersionsDialog extends ConsumerWidget {
     final notifier = ref.read(updateProvider.notifier);
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: kCompactDialogWidth,
-      title: DialogHeader(
-        icon: Icons.block,
-        title: 'Skipped Versions',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.block, title: 'Skipped Versions'),
       content: SizedBox(
         width: 380,
         child: skipped.isEmpty
@@ -366,13 +352,8 @@ class SkippedVersionsDialog extends ConsumerWidget {
 /// One release's notes at a time, picked from every known release, with
 /// the installer for each.
 class _ReleaseNotes extends ConsumerStatefulWidget {
-  const _ReleaseNotes({
-    required this.theme,
-    required this.releases,
-    this.updateRelease,
-  });
+  const _ReleaseNotes({required this.releases, this.updateRelease});
 
-  final AppThemeData theme;
   final List<GitHubRelease> releases;
   final GitHubRelease? updateRelease;
 
@@ -416,7 +397,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final notifier = ref.read(updateProvider.notifier);
     final releases = _releases
       ..sort((a, b) => notifier.compareVersions(b.version, a.version));
@@ -511,7 +492,6 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
         // Each release opens at the top of its own notes.
         _NotesPanel(
           key: ValueKey(release.tagName),
-          theme: theme,
           body: release.body,
           header: [
             Text(
@@ -562,14 +542,8 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
 /// frame, so the scrollbar soon knows their full height instead of
 /// estimating it from the blocks seen so far.
 class _NotesPanel extends StatefulWidget {
-  const _NotesPanel({
-    super.key,
-    required this.theme,
-    required this.header,
-    required this.body,
-  });
+  const _NotesPanel({super.key, required this.header, required this.body});
 
-  final AppThemeData theme;
   final List<Widget> header;
   final String body;
 
@@ -615,7 +589,7 @@ class _NotesPanelState extends State<_NotesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     TextStyle text(double size, {bool bold = false, Color? color}) => TextStyle(
       color: color ?? theme.textPrimary,
       fontSize: size,

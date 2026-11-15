@@ -4,7 +4,7 @@
 /// and game.dart into a single source of truth.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Parse a hex color string (e.g. '#FF5733' or 'FF5733') into a [Color].
 /// Returns [fallback] if parsing fails.

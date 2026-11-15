@@ -24,11 +24,13 @@ class SyncProgressNotifications {
     }
     final handle = _handles[id];
     if (handle == null) {
-      _handles[id] = NotificationManager.instance.beginTask(
-        event.message,
+      _handles[id] = NotificationManager.instance.showHandle(
+        message: event.message,
         type: NotificationType.download,
         title: event.title,
         progress: event.progress,
+        persistent: true,
+        dedupe: false,
         dismissible: false,
       );
     } else {

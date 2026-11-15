@@ -3,7 +3,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/device_sync_models.dart';
@@ -37,12 +37,11 @@ Future<bool?> showChooseSyncDirectionDialog({
 }) => showAppDialog<bool>(
   context: context,
   builder: (ctx) => ThemedAlertDialog(
-    theme: theme,
     maxWidth: kCompactDialogWidth,
-    title: DialogHeader(icon: Icons.sync, title: 'Sync Library', theme: theme),
+    title: DialogHeader(icon: Icons.sync, title: 'Sync Library'),
     contentSpacing: 8,
     contentChildren: [
-      TintedHeading(theme: theme, title: 'Sync with $peerName'),
+      TintedHeading(title: 'Sync with $peerName'),
       Consumer(
         builder: (context, ref, _) {
           final lastSync = ref.watch(syncPeerLastSyncProvider(peerId));
@@ -54,7 +53,6 @@ Future<bool?> showChooseSyncDirectionDialog({
       ),
       if (hasMismatch)
         DialogBanner.warning(
-          theme: theme,
           message:
               'Different database files. Receiving will switch this device to $peerName\'s database filename before merging changes.',
         ),
@@ -98,7 +96,6 @@ Future<bool> showOutgoingPairCodeDialog({
     context: context,
     barrierDismissible: false,
     builder: (_) => _OutgoingPairDialog(
-      theme: theme,
       peerName: peerName,
       code: code,
       confirmed: confirmed,
@@ -111,7 +108,6 @@ Future<bool> showOutgoingPairCodeDialog({
 
 class _OutgoingPairDialog extends StatefulWidget {
   const _OutgoingPairDialog({
-    required this.theme,
     required this.peerName,
     required this.code,
     required this.confirmed,
@@ -119,7 +115,6 @@ class _OutgoingPairDialog extends StatefulWidget {
     required this.pairingResult,
   });
 
-  final AppThemeData theme;
   final String peerName;
   final String code;
   final Completer<bool> confirmed;
@@ -161,18 +156,13 @@ class _OutgoingPairDialogState extends State<_OutgoingPairDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final waiting = widget.confirmed.isCompleted;
     return DialogInteractionScope(
       onPrimaryAction: waiting ? null : _confirm,
       onDismiss: _cancel,
       child: ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.verified_user,
-          title: 'Pairing Code',
-          theme: theme,
-        ),
+        title: DialogHeader(icon: Icons.verified_user, title: 'Pairing Code'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,7 +173,7 @@ class _OutgoingPairDialogState extends State<_OutgoingPairDialog> {
               style: TextStyle(color: theme.textSecondary),
             ),
             const SizedBox(height: 12),
-            PairCodeDisplay(code: widget.code, theme: theme),
+            PairCodeDisplay(code: widget.code),
             const SizedBox(height: 8),
             Text(
               waiting
@@ -285,9 +275,8 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
     }
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 680,
-      title: DialogHeader(icon: Icons.lan, title: 'Device Sync', theme: theme),
+      title: DialogHeader(icon: Icons.lan, title: 'Device Sync'),
       titleActions: [
         Tooltip(
           message: 'Enable Local Device Sync',
@@ -312,7 +301,7 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
           height: 160,
           child: Center(child: AppCircularProgressIndicator(size: 24)),
         ),
-        error: (error, _) => _ErrorView(error: error.toString(), theme: theme),
+        error: (error, _) => _ErrorView(error: error.toString()),
         data: (sync) => _SyncContent(sync: sync, theme: theme),
       ),
       actions: [
@@ -542,7 +531,6 @@ class _SyncContent extends ConsumerWidget {
                     final visual = _deviceVisual(row);
                     return _DeviceTile(
                       key: ValueKey(row.id),
-                      theme: theme,
                       icon: _deviceTypeIcon(row),
                       color: visual.color,
                       name: row.name,
@@ -582,7 +570,7 @@ class _SyncContent extends ConsumerWidget {
     DeviceSyncNotifier notifier,
   ) {
     if (row.discovered?.isSyncCompatible == false) {
-      return _IncompatibleSyncInfoButton(theme: theme);
+      return _IncompatibleSyncInfoButton();
     }
     if (row.pendingRequest != null) {
       // Pending requests are handled via the global Pair Request prompt
@@ -722,7 +710,6 @@ class _SyncContent extends ConsumerWidget {
 class _DeviceTile extends StatelessWidget {
   const _DeviceTile({
     super.key,
-    required this.theme,
     required this.icon,
     required this.color,
     required this.name,
@@ -732,7 +719,6 @@ class _DeviceTile extends StatelessWidget {
     required this.actions,
   });
 
-  final AppThemeData theme;
   final IconData icon;
   final Color color;
   final String name;
@@ -744,39 +730,41 @@ class _DeviceTile extends StatelessWidget {
   final Widget actions;
 
   @override
-  Widget build(BuildContext context) => TintedCard(
-    theme: theme,
-    color: color,
-    leading: Consumer(
-      builder: (context, ref, _) {
-        final pairedId = this.pairedId;
-        return Tooltip(
-          message: pairedId == null
-              ? ''
-              : 'Last sync: ${ref.watch(syncPeerLastSyncProvider(pairedId)).when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
-          child: TintedCard.tile(
-            theme: theme,
-            color: color,
-            child: Icon(icon, color: color, size: 20),
-          ),
-        );
-      },
-    ),
-    title: name,
-    details: Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(text: '$address  ·  '),
-          TextSpan(
-            text: status,
-            style: TextStyle(color: color, fontWeight: FontWeight.w600),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return TintedCard(
+      color: color,
+      leading: Consumer(
+        builder: (context, ref, _) {
+          final pairedId = this.pairedId;
+          return Tooltip(
+            message: pairedId == null
+                ? ''
+                : 'Last sync: ${ref.watch(syncPeerLastSyncProvider(pairedId)).when(data: _formatLastSync, loading: () => 'Checking…', error: (_, _) => 'Unavailable')}',
+            child: TintedCard.tile(
+              theme: theme,
+              color: color,
+              child: Icon(icon, color: color, size: 20),
+            ),
+          );
+        },
       ),
-      style: TintedCard.detailStyle(theme),
-    ),
-    trailing: actions,
-  );
+      title: name,
+      details: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '$address  ·  '),
+            TextSpan(
+              text: status,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        style: TintedCard.detailStyle(theme),
+      ),
+      trailing: actions,
+    );
+  }
 }
 
 class _UnifiedDeviceRow {
@@ -800,29 +788,28 @@ class _UnifiedDeviceRow {
 }
 
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error, required this.theme});
+  const _ErrorView({required this.error});
 
   final String error;
-  final AppThemeData theme;
-
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 120,
-    child: Center(
-      child: Text(
-        error,
-        style: TextStyle(color: theme.error),
-        textAlign: TextAlign.center,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return SizedBox(
+      height: 120,
+      child: Center(
+        child: Text(
+          error,
+          style: TextStyle(color: theme.error),
+          textAlign: TextAlign.center,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // Match the click-to-show info buttons used on the settings page.
 class _IncompatibleSyncInfoButton extends StatefulWidget {
-  const _IncompatibleSyncInfoButton({required this.theme});
-
-  final AppThemeData theme;
+  const _IncompatibleSyncInfoButton();
 
   @override
   State<_IncompatibleSyncInfoButton> createState() =>
@@ -834,16 +821,19 @@ class _IncompatibleSyncInfoButtonState
   final _tooltipKey = GlobalKey<TooltipState>();
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    key: _tooltipKey,
-    message:
-        'This device is running an incompatible sync version. '
-        'Update UniKM on both devices to use pairing and device sync.',
-    child: IconButton(
-      style: widget.theme.compactIconButtonStyle,
-      icon: const Icon(Icons.info_outline, size: 26),
-      color: widget.theme.accent,
-      onPressed: () => _tooltipKey.currentState?.ensureTooltipVisible(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Tooltip(
+      key: _tooltipKey,
+      message:
+          'This device is running an incompatible sync version. '
+          'Update UniKM on both devices to use pairing and device sync.',
+      child: IconButton(
+        style: theme.compactIconButtonStyle,
+        icon: const Icon(Icons.info_outline, size: 26),
+        color: theme.accent,
+        onPressed: () => _tooltipKey.currentState?.ensureTooltipVisible(),
+      ),
+    );
+  }
 }

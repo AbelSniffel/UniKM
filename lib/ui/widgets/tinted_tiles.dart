@@ -2,7 +2,7 @@
 /// copy options, the game editor and the rest).
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'settings_card_inset.dart';
@@ -13,46 +13,47 @@ import 'tinted_card.dart';
 class TintedHeading extends StatelessWidget {
   const TintedHeading({
     super.key,
-    required this.theme,
     required this.title,
     this.trailing,
     this.action,
   });
 
-  final AppThemeData theme;
   final String title;
   final String? trailing;
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Row(
-      spacing: 8,
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        // A long note wraps within most of the row rather than pushing the
-        // title out.
-        if (trailing != null)
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        spacing: 8,
+        children: [
+          Expanded(
             child: Text(
-              trailing!,
-              textAlign: TextAlign.end,
-              style: TextStyle(color: theme.textSecondary),
+              title,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ?action,
-      ],
-    ),
-  );
+          // A long note wraps within most of the row rather than pushing the
+          // title out.
+          if (trailing != null)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+              child: Text(
+                trailing!,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: theme.textSecondary),
+              ),
+            ),
+          ?action,
+        ],
+      ),
+    );
+  }
 }
 
 /// A tinted tile with an optional icon in its own square, a title, an
@@ -142,7 +143,6 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
                   t,
         );
         final tile = TintedCard(
-          theme: theme,
           color: color,
           icon: widget.icon,
           title: widget.title,

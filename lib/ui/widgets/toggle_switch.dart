@@ -1,7 +1,7 @@
 /// The app's toggle switch: a dot in a round frame that springs open when on.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:unikm/core/constants/app_constants.dart';
 
 import 'hover_builder.dart';

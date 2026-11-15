@@ -3,7 +3,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
@@ -182,7 +182,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               Text(UpdatesSection.repositorySpec.label, style: labelStyle),
               const SizedBox(height: kElementVSpacing),
               ThemedTextField(
-                theme: widget.theme,
                 controller: _repoController,
                 hintText: UpdatesSection.repositorySpec.description,
                 onChanged: settingsNotifier.setter(SettingsKeys.updateRepo),
@@ -211,7 +210,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               ),
               const SizedBox(height: kElementVSpacing),
               ThemedTextField(
-                theme: widget.theme,
                 controller: _tokenController,
                 obscureText: true,
                 hintText: UpdatesSection.githubTokenSpec.description,

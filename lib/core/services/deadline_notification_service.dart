@@ -50,7 +50,9 @@ class DeadlineNotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  bool _initialized = false;
+  /// The plugin's start-up, begun by [initialize]. Null in tests, which never
+  /// start it, so nothing reaches the OS there.
+  Future<void>? _ready;
 
   /// Games that have already received an OS notification today.
   final Set<int> _notifiedGameIds = {};
@@ -62,10 +64,18 @@ class DeadlineNotificationService {
   // Initialization
   // ---------------------------------------------------------------------------
 
-  /// Initialise the local notifications plugin.
-  Future<void> initialize() async {
-    if (_initialized) return;
+  /// Initialise the local notifications plugin. Start-up does not wait for
+  /// this (it can sit behind the OS permission prompt); senders do.
+  Future<void> initialize() => _ready ??= _initialize();
 
+  Future<bool> _isReady() async {
+    final ready = _ready;
+    if (ready == null) return false;
+    await ready;
+    return true;
+  }
+
+  Future<void> _initialize() async {
     try {
       // Windows uses native WinRT toasts via PowerShell — no plugin init needed.
       if (!Platform.isWindows) {
@@ -96,9 +106,8 @@ class DeadlineNotificationService {
               ?.requestPermissions(alert: true);
         }
       }
-      _initialized = true;
     } catch (_) {
-      _initialized = true;
+      // Sends fail quietly on their own.
     }
   }
 
@@ -269,7 +278,7 @@ class DeadlineNotificationService {
     required int total,
     required String? currentTitle,
   }) async {
-    if (!_initialized) return;
+    if (!await _isReady()) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
       if (await windowManager.isFocused()) return;
@@ -312,7 +321,7 @@ class DeadlineNotificationService {
 
   /// Dismiss the fetch-progress OS notification (mobile only).
   Future<void> clearFetchProgressNotification() async {
-    if (!_initialized) return;
+    if (!await _isReady()) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
       await _plugin.cancel(id: _osIdFetchProgress);
@@ -329,7 +338,7 @@ class DeadlineNotificationService {
     required String body,
     bool bypassFocusCheck = false,
   }) async {
-    if (!_initialized) return;
+    if (!await _isReady()) return;
 
     // Skip OS notifications while the app window is focused — in-app toasts
     // are already visible to the user and provide the same information.

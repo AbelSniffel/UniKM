@@ -301,11 +301,7 @@ class DefaultSettings {
   DefaultSettings._();
 
   // Updates
-  static const bool autoUpdateCheck = true;
-  static const String updateRepo = 'AbelSniffel/UniKM';
-  static const bool includePreReleases = false;
   static const int autoCheckIntervalMinutes = kDefaultAutoUpdateIntervalMinutes;
-  static const String githubApiToken = '';
 
   // Theme & UI
   static const String activeTheme = 'Dark';
@@ -316,9 +312,6 @@ class DefaultSettings {
   static const NavExpansionMode navExpansionMode = NavExpansionMode.automatic;
   static const NavPanelOverlayStyle navPanelOverlayStyle =
       NavPanelOverlayStyle.none;
-  static const double patternStrength = 1;
-  static const bool seasonalPattern = true;
-  static const bool showSeasonalPatterns = false;
   // Degrees clockwise: the Lines' slant from vertical.
   static const int patternAngle = 30;
   // How the Lines style sways: 0 straight, 0.5 smooth waves, 1 zigzag.
@@ -333,94 +326,58 @@ class DefaultSettings {
   static const GradientAnimationSpeed gradientAnimationSpeed =
       GradientAnimationSpeed.standard;
   static const TooltipAnimation tooltipAnimation = TooltipAnimation.slide;
-  static const int tooltipShowDelay = 600;
-  // Swap primary & accent used by gradient bars (off by default)
-  static const bool swapGradientColors = false;
 
   // Game List
   static const GameListViewMode gameListViewMode = GameListViewMode.list;
   static const GameSortMode gameSortMode = GameSortMode.deadlineFirst;
 
-  // Game Card Visual
-  static const bool showPlatformChip = true;
-  static const bool showTagsChip = true;
-  static const bool showTagsOnHoverOnly = true;
-  static const bool showPlatformOnHoverOnly = false;
-  static const bool showDeadlineChip = true;
-  static bool get slimListView => Platform.isAndroid || Platform.isIOS;
-  static const bool showRatings = true;
-
   // Toggle & Section Style
   static const SectionTitleLocation sectionTitleLocation =
       SectionTitleLocation.top;
-
-  // Backup
-  static const bool autoBackupEnabled = true;
-  static const int autoBackupIntervalMinutes = 5;
-  static const int backupMaxCount = 10;
 
   // Device Sync
   static const bool syncEnabled = false;
   static const bool syncAutoOnStartup = false;
   static const String syncDeviceId = '';
   static const String syncTrustedPeersJson = '[]';
-  static const String syncRevokedPeersJson = '[]';
-  static const String syncLastTrustedPeerId = '';
   static const String syncLastSyncAtIso = '';
-  static const String syncDbRevisionId = '';
-  static const int syncDbTimestampMillis = 0;
-  static const String syncStaticPrivateKey = '';
-  static const String syncStaticPublicKey = '';
 
   // Debug
-  static const bool developerMode = false;
   static const bool showStatusBar = false;
   static const bool showGameDetailsSkmId = false;
-  static const bool showSyncDeviceId = false;
-  static const bool showSyncStatus = false;
-
-  // Display
-  static const String frameRatePreference = 'auto';
-
-  // Maintenance
-  static const bool legacyDefaultTagsCleanupDone = false;
-
-  // Window
-  static const double windowWidth = 1300;
-  static const double windowHeight = 800;
 }
 
 /// Each ordinary preference's stored type and fallback, kept together.
 /// Fresh empty lists preserve independent defaults for each load.
 Map<String, Object> get settingDefaults => {
-  SettingsKeys.autoUpdateCheck: DefaultSettings.autoUpdateCheck,
-  SettingsKeys.updateRepo: DefaultSettings.updateRepo,
-  SettingsKeys.includePreReleases: DefaultSettings.includePreReleases,
+  SettingsKeys.autoUpdateCheck: true,
+  SettingsKeys.updateRepo: 'AbelSniffel/UniKM',
+  SettingsKeys.includePreReleases: false,
   SettingsKeys.skippedVersions: <String>[],
-  SettingsKeys.githubApiToken: DefaultSettings.githubApiToken,
+  SettingsKeys.githubApiToken: '',
   SettingsKeys.activeTheme: DefaultSettings.activeTheme,
   SettingsKeys.customThemes: <String>[],
-  SettingsKeys.tooltipShowDelay: DefaultSettings.tooltipShowDelay,
-  SettingsKeys.swapGradientColors: DefaultSettings.swapGradientColors,
-  SettingsKeys.patternStrength: DefaultSettings.patternStrength,
-  SettingsKeys.seasonalPattern: DefaultSettings.seasonalPattern,
-  SettingsKeys.showSeasonalPatterns: DefaultSettings.showSeasonalPatterns,
+  SettingsKeys.tooltipShowDelay: 600,
+  // Swap primary & accent used by gradient bars (off by default)
+  SettingsKeys.swapGradientColors: false,
+  SettingsKeys.patternStrength: 1.0,
+  SettingsKeys.seasonalPattern: true,
+  SettingsKeys.showSeasonalPatterns: false,
   SettingsKeys.patternAngle: DefaultSettings.patternAngle,
   SettingsKeys.patternWave: DefaultSettings.patternWave,
   SettingsKeys.viewedNewGameIds: const <String>[],
-  SettingsKeys.showPlatformChip: DefaultSettings.showPlatformChip,
-  SettingsKeys.showTagsChip: DefaultSettings.showTagsChip,
-  SettingsKeys.showPlatformOnHoverOnly: DefaultSettings.showPlatformOnHoverOnly,
-  SettingsKeys.showTagsOnHoverOnly: DefaultSettings.showTagsOnHoverOnly,
-  SettingsKeys.showDeadlineChip: DefaultSettings.showDeadlineChip,
-  SettingsKeys.slimListView: DefaultSettings.slimListView,
+  SettingsKeys.showPlatformChip: true,
+  SettingsKeys.showTagsChip: true,
+  SettingsKeys.showPlatformOnHoverOnly: false,
+  SettingsKeys.showTagsOnHoverOnly: true,
+  SettingsKeys.showDeadlineChip: true,
+  SettingsKeys.slimListView: Platform.isAndroid || Platform.isIOS,
   SettingsKeys.showPlatformBadges: true,
   SettingsKeys.showTagChips: true,
-  SettingsKeys.showRatings: DefaultSettings.showRatings,
-  SettingsKeys.autoBackupEnabled: DefaultSettings.autoBackupEnabled,
-  SettingsKeys.autoBackupIntervalMinutes:
-      DefaultSettings.autoBackupIntervalMinutes,
-  SettingsKeys.backupMaxCount: DefaultSettings.backupMaxCount,
+  SettingsKeys.showRatings: true,
+  SettingsKeys.autoBackupEnabled: true,
+  SettingsKeys.autoBackupIntervalMinutes: 5,
+  SettingsKeys.backupMaxCount: 10,
   SettingsKeys.databasePath: '',
   SettingsKeys.isEncrypted: false,
   SettingsKeys.recentDatabasePaths: const <String>[],
@@ -428,13 +385,13 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
   SettingsKeys.syncDeviceId: DefaultSettings.syncDeviceId,
   SettingsKeys.syncTrustedPeersJson: DefaultSettings.syncTrustedPeersJson,
-  SettingsKeys.syncRevokedPeersJson: DefaultSettings.syncRevokedPeersJson,
-  SettingsKeys.syncLastTrustedPeerId: DefaultSettings.syncLastTrustedPeerId,
+  SettingsKeys.syncRevokedPeersJson: '[]',
+  SettingsKeys.syncLastTrustedPeerId: '',
   SettingsKeys.syncLastSyncAtIso: DefaultSettings.syncLastSyncAtIso,
-  SettingsKeys.syncDbRevisionId: DefaultSettings.syncDbRevisionId,
-  SettingsKeys.syncDbTimestampMillis: DefaultSettings.syncDbTimestampMillis,
-  SettingsKeys.syncStaticPrivateKey: DefaultSettings.syncStaticPrivateKey,
-  SettingsKeys.syncStaticPublicKey: DefaultSettings.syncStaticPublicKey,
+  SettingsKeys.syncDbRevisionId: '',
+  SettingsKeys.syncDbTimestampMillis: 0,
+  SettingsKeys.syncStaticPrivateKey: '',
+  SettingsKeys.syncStaticPublicKey: '',
   SettingsKeys.deadlineReminders: true,
   SettingsKeys.updateNotifications: true,
   SettingsKeys.encryptionEnabled: false,
@@ -442,17 +399,16 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.autoHideKeys: true,
   SettingsKeys.autoLockMinutes: 0,
   SettingsKeys.hideInRecents: false,
-  SettingsKeys.developerMode: DefaultSettings.developerMode,
+  SettingsKeys.developerMode: false,
   SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
   SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
-  SettingsKeys.showSyncDeviceId: DefaultSettings.showSyncDeviceId,
-  SettingsKeys.showSyncStatus: DefaultSettings.showSyncStatus,
-  SettingsKeys.frameRatePreference: DefaultSettings.frameRatePreference,
-  SettingsKeys.windowWidth: DefaultSettings.windowWidth,
-  SettingsKeys.windowHeight: DefaultSettings.windowHeight,
+  SettingsKeys.showSyncDeviceId: false,
+  SettingsKeys.showSyncStatus: false,
+  SettingsKeys.frameRatePreference: 'auto',
+  SettingsKeys.windowWidth: 1300.0,
+  SettingsKeys.windowHeight: 800.0,
   SettingsKeys.windowMaximized: false,
-  SettingsKeys.legacyDefaultTagsCleanupDone:
-      DefaultSettings.legacyDefaultTagsCleanupDone,
+  SettingsKeys.legacyDefaultTagsCleanupDone: false,
 };
 
 /// Enum preferences, stored by name: their values and fallback.

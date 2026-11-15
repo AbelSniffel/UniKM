@@ -5,7 +5,8 @@ import '../../../core/theme/theme_icons.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -222,11 +223,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         }
       },
       child: ThemedAlertDialog(
-        theme: previewTheme,
         title: DialogHeader(
           icon: _isEditing ? Icons.palette_outlined : Icons.add_circle_outline,
           title: _isEditing ? 'Theme Editor' : 'Create Theme',
-          theme: previewTheme,
         ),
         content: SizedBox(
           width: 480,
@@ -271,17 +270,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                   _buildColorCirclesRow(previewTheme),
                   trailing: 'Tap to edit · Drag to swap',
                 ),
-                // Shared color editor for the active slot
-                _section(
-                  previewTheme,
-                  '${_slotLabel(_activeSlot)} Color',
-                  _panel(previewTheme, _buildActiveColorEditor(previewTheme)),
-                ),
-                _section(
-                  previewTheme,
-                  'Style',
-                  _panel(previewTheme, _buildCornerRadiusSlider(previewTheme)),
-                ),
+                // The selected tile's color, picked in place
+                _buildActiveColorEditor(previewTheme),
+                _buildCornerRadiusRow(previewTheme),
               ],
             ),
           ),
@@ -315,7 +306,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     spacing: 8,
     children: [
-      TintedHeading(theme: theme, title: title, trailing: trailing),
+      TintedHeading(title: title, trailing: trailing),
       child,
     ],
   );
@@ -350,7 +341,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
       IconData? badge,
       Duration duration = kFastAnimation,
     }) => _ColorSwatch(
-      theme: theme,
       color: parseHexColor(hex),
       label: _slotLabel(slot),
       hex: hex,
@@ -527,30 +517,28 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // Active color editor (shared picker)
   // ---------------------------------------------------------------------------
 
-  /// A softly tinted, outlined panel grouping a section's controls.
-  static Widget _panel(AppThemeData theme, Widget child) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: theme.textPrimary.withValues(alpha: 0.035),
-      borderRadius: BorderRadius.circular(
-        theme.cornerRadius + _ColorSwatch.inset,
-      ),
-      border: Border.all(color: theme.divider),
-    ),
-    child: child,
-  );
-
+  /// The selected tile's color: its hue on a strip, saturation and
+  /// brightness picked on an area below, then its hex code.
   Widget _buildActiveColorEditor(AppThemeData theme) {
     final activeColor = _hsvToColor();
-    Color hsv(double h, double s, double v) =>
-        HSVColor.fromAHSV(1, h, s, v).toColor();
-
     return Column(
-      spacing: 4,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
       children: [
+        _buildHueSlider(theme),
+        _SaturationValueArea(
+          hue: _hue,
+          saturation: _saturation,
+          value: _value,
+          radius: theme.cornerRadius + _ColorSwatch.inset,
+          onChanged: (saturation, value) => _applyHsvChange(() {
+            _saturation = saturation;
+            _value = value;
+          }),
+        ),
         // Hex input, led by a dot of the color, and randomize button
         Row(
-          spacing: 8,
+          spacing: 6,
           children: [
             Expanded(
               child: TextField(
@@ -608,81 +596,36 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        _buildGradientSlider(
-          theme: theme,
-          label: 'Hue',
-          value: _hue,
-          max: 360,
-          displayText: '${_hue.round()}\u00b0',
-          thumbColor: hsv(_hue, 1, 1),
-          colors: [for (var h = 0; h <= 360; h += 60) hsv(h.toDouble(), 1, 1)],
-          onChanged: (v) => _applyHsvChange(() => _hue = v),
-        ),
-        _buildGradientSlider(
-          theme: theme,
-          label: 'Saturation',
-          ensureHandleContrast: true,
-          value: _saturation,
-          displayText: '${(_saturation * 100).round()}%',
-          thumbColor: activeColor,
-          colors: [hsv(_hue, 0, _value), hsv(_hue, 1, _value)],
-          onChanged: (v) => _applyHsvChange(() => _saturation = v),
-        ),
-        _buildGradientSlider(
-          theme: theme,
-          label: 'Brightness',
-          ensureHandleContrast: true,
-          value: _value,
-          displayText: '${(_value * 100).round()}%',
-          thumbColor: activeColor,
-          colors: [Colors.black, hsv(_hue, _saturation, 1)],
-          onChanged: (v) => _applyHsvChange(() => _value = v),
-        ),
       ],
     );
   }
 
-  Widget _buildGradientSlider({
-    required AppThemeData theme,
-    required String label,
-    required double value,
-    double max = 1,
-    required String displayText,
-    required Color thumbColor,
-    required List<Color> colors,
-    required ValueChanged<double> onChanged,
-    bool ensureHandleContrast = false,
-  }) => _labeledRow(
-    theme,
-    label,
-    value: displayText,
-    SliderTheme(
+  /// A rainbow strip whose handle takes the hue at full strength.
+  Widget _buildHueSlider(AppThemeData theme) {
+    Color hue(double h) => HSVColor.fromAHSV(1, h, 1, 1).toColor();
+    final label = '${_hue.round()}°';
+    return SliderTheme(
       data: _sliderTheme(theme).copyWith(
+        // Spans the color area's width, its handle reaching the edges.
+        padding: const EdgeInsets.symmetric(vertical: 8),
         showValueIndicator: ShowValueIndicator.onDrag,
         trackShape: AppSliderTrackShape(
           cornerRadius: theme.cornerRadius,
-          colors: colors,
+          colors: [for (var h = 0; h <= 360; h += 60) hue(h.toDouble())],
         ),
-        thumbShape: AppSliderThumbShape(
-          cornerRadius: theme.cornerRadius,
-          outlineColor: ensureHandleContrast
-              ? contrastColor(theme.surface).withValues(alpha: 0.5)
-              : null,
-        ),
-        thumbColor: thumbColor,
-        overlayColor: ensureHandleContrast
-            ? contrastColor(theme.surface).withValues(alpha: 0.18)
-            : thumbColor.withValues(alpha: 0.14),
+        thumbShape: AppSliderThumbShape(cornerRadius: theme.cornerRadius),
+        thumbColor: hue(_hue),
+        overlayColor: hue(_hue).withValues(alpha: 0.14),
       ),
       child: Slider(
-        value: value,
-        max: max,
-        label: displayText,
-        onChanged: onChanged,
+        value: _hue,
+        max: 360,
+        label: label,
+        semanticFormatterCallback: (_) => 'Hue $label',
+        onChanged: (v) => _applyHsvChange(() => _hue = v),
       ),
-    ),
-  );
+    );
+  }
 
   static SliderThemeData _sliderTheme(AppThemeData theme) =>
       buildAppSliderTheme(
@@ -692,74 +635,56 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         cornerRadius: theme.cornerRadius,
       );
 
-  /// A label, its control and an optional [value] pill, aligned across the
-  /// editor's panels.
-  Widget _labeledRow(
-    AppThemeData theme,
-    String label,
-    Widget control, {
-    String? value,
-  }) => Row(
-    spacing: 8,
-    children: [
-      SizedBox(
-        width: 76,
-        child: Text(
-          label,
+  // ---------------------------------------------------------------------------
+  // Style
+  // ---------------------------------------------------------------------------
+
+  /// Roundness on one row, ending in its value.
+  Widget _buildCornerRadiusRow(AppThemeData theme) {
+    final radius = _cornerRadius.roundToDouble();
+    final text = radius.toStringAsFixed(0);
+    return Row(
+      spacing: 0,
+      children: [
+        Text(
+          'Roundness',
           style: TextStyle(
-            color: theme.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+            color: theme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
-      ),
-      Expanded(child: control),
-      if (value != null)
-        Container(
-          width: 46,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
-            color: theme.textPrimary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
+        Expanded(
+          child: SliderTheme(
+            data: _sliderTheme(theme),
+            child: Slider(
+              value: radius,
+              min: _minCornerRadius,
+              max: _maxCornerRadius,
+              divisions: (_maxCornerRadius - _minCornerRadius).round(),
+              label: text,
+              onChanged: (value) {
+                setState(() => _cornerRadius = value);
+                _throttledPreview();
+              },
+            ),
           ),
+        ),
+        // Wide enough for two digits, so the slider never shifts.
+        SizedBox(
+          width: 24,
           child: Text(
-            value,
-            textAlign: TextAlign.center,
+            text,
+            textAlign: TextAlign.end,
             style: TextStyle(
               color: theme.textPrimary,
-              fontSize: 11,
+              fontSize: 16,
               fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ),
-    ],
-  );
-
-  // ---------------------------------------------------------------------------
-  // Style
-  // ---------------------------------------------------------------------------
-
-  Widget _buildCornerRadiusSlider(AppThemeData theme) {
-    final roundedRadius = _cornerRadius.roundToDouble();
-    return _labeledRow(
-      theme,
-      'Roundness',
-      value: roundedRadius.toStringAsFixed(0),
-      SliderTheme(
-        data: _sliderTheme(theme),
-        child: Slider(
-          value: roundedRadius,
-          min: _minCornerRadius,
-          max: _maxCornerRadius,
-          divisions: (_maxCornerRadius - _minCornerRadius).round(),
-          label: roundedRadius.toStringAsFixed(0),
-          onChanged: (value) {
-            setState(() => _cornerRadius = value);
-            _throttledPreview();
-          },
-        ),
-      ),
+      ],
     );
   }
 
@@ -810,13 +735,156 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 }
 
 // ---------------------------------------------------------------------------
+// Saturation and brightness area
+// ---------------------------------------------------------------------------
+
+/// Picks saturation (across) and brightness (up) for one [hue]. It claims a
+/// pointer as it lands, so a touch drag picks instead of scrolling the dialog.
+class _SaturationValueArea extends StatelessWidget {
+  const _SaturationValueArea({
+    required this.hue,
+    required this.saturation,
+    required this.value,
+    required this.radius,
+    required this.onChanged,
+  });
+
+  static const double height = 132;
+
+  /// Keeps the handle inside the area at its edges.
+  static const double thumbRadius = 9;
+
+  final double hue;
+  final double saturation;
+  final double value;
+  final double radius;
+  final void Function(double saturation, double value) onChanged;
+
+  void _pick(Offset position, double width) {
+    double along(double offset, double extent) =>
+        ((offset - thumbRadius) / (extent - 2 * thumbRadius)).clamp(0.0, 1.0);
+    onChanged(along(position.dx, width), 1 - along(position.dy, height));
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Saturation and brightness',
+    value:
+        '${(saturation * 100).round()}% saturation, '
+        '${(value * 100).round()}% brightness',
+    child: MouseRegion(
+      cursor: SystemMouseCursors.precise,
+      child: LayoutBuilder(
+        builder: (context, constraints) => RawGestureDetector(
+          gestures: {
+            EagerGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                  EagerGestureRecognizer.new,
+                  (_) {},
+                ),
+          },
+          child: Listener(
+            onPointerDown: (e) => _pick(e.localPosition, constraints.maxWidth),
+            onPointerMove: (e) => _pick(e.localPosition, constraints.maxWidth),
+            child: CustomPaint(
+              size: Size(constraints.maxWidth, height),
+              painter: _SaturationValuePainter(
+                hue: hue,
+                saturation: saturation,
+                value: value,
+                radius: radius,
+                border: context.appTheme.border,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SaturationValuePainter extends CustomPainter {
+  const _SaturationValuePainter({
+    required this.hue,
+    required this.saturation,
+    required this.value,
+    required this.radius,
+    required this.border,
+  });
+
+  final double hue;
+  final double saturation;
+  final double value;
+  final double radius;
+  final Color border;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final shape = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+    // Both gradients are flattened before the rounded clip edges them, so
+    // the hue under the black never shows through the corners' soft edge.
+    canvas
+      ..save()
+      ..clipRRect(shape)
+      ..saveLayer(rect, Paint())
+      ..drawRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [Colors.white, HSVColor.fromAHSV(1, hue, 1, 1).toColor()],
+          ).createShader(rect),
+      )
+      ..drawRect(
+        rect,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x00000000), Colors.black],
+          ).createShader(rect),
+      )
+      ..restore()
+      ..restore()
+      ..drawRRect(
+        shape,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = border,
+      );
+    // A white ring edged in black reads on any color under it.
+    const r = _SaturationValueArea.thumbRadius;
+    final center = Offset(
+      r + saturation * (size.width - 2 * r),
+      r + (1 - value) * (size.height - 2 * r),
+    );
+    canvas
+      ..drawCircle(center, r + 1, Paint()..color = const Color(0x66000000))
+      ..drawCircle(center, r, Paint()..color = Colors.white)
+      ..drawCircle(
+        center,
+        r - 2.5,
+        Paint()
+          ..color = HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
+      );
+  }
+
+  @override
+  bool shouldRepaint(_SaturationValuePainter old) =>
+      old.hue != hue ||
+      old.saturation != saturation ||
+      old.value != value ||
+      old.radius != radius ||
+      old.border != border;
+}
+
+// ---------------------------------------------------------------------------
 // Color swatch
 // ---------------------------------------------------------------------------
 
 /// A color slot's swatch with its name and hex code; also the drag feedback.
 class _ColorSwatch extends StatelessWidget {
   const _ColorSwatch({
-    required this.theme,
     required this.color,
     required this.label,
     required this.hex,
@@ -831,7 +899,6 @@ class _ColorSwatch extends StatelessWidget {
   static const double inset = 5;
   static const double tileHeight = 94;
 
-  final AppThemeData theme;
   final Color color;
   final String label;
   final String hex;
@@ -845,6 +912,7 @@ class _ColorSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final onColor = contrastColor(color);
 
     return AnimatedContainer(

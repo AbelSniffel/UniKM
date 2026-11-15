@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -10,19 +10,18 @@ import '../../core/theme/app_theme.dart';
 class ThemePickerActions extends StatelessWidget {
   const ThemePickerActions({
     super.key,
-    required this.theme,
     required this.onCreate,
     this.onEdit,
     this.onDelete,
   });
 
-  final AppThemeData theme;
   final VoidCallback onCreate;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final height = math.max(
       36.0,
       MediaQuery.textScalerOf(context).scale(13) * 1.5 + 16,

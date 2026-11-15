@@ -2,8 +2,10 @@
 library;
 
 import 'dart:async';
+
+import 'package:clock/clock.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -65,16 +67,11 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
       onDismiss: () => Navigator.pop(ctx),
       child: StatefulBuilder(
         builder: (context, setState) => ThemedAlertDialog(
-          theme: theme,
           maxWidth: 520,
-          title: DialogHeader(
-            icon: Icons.note_add,
-            title: 'Create Database',
-            theme: theme,
-          ),
+          title: DialogHeader(icon: Icons.note_add, title: 'Create Database'),
           contentSpacing: 8,
           contentChildren: [
-            TintedHeading(theme: theme, title: 'Database Type'),
+            TintedHeading(title: 'Database Type'),
             for (final (type, icon, title, subtitle) in [
               (
                 'unencrypted',
@@ -242,8 +239,7 @@ final _biometricStateProvider =
 /// database. Each toggle follows the real state, so a cancelled flow leaves
 /// it unchanged.
 class _EncryptionControls extends ConsumerStatefulWidget {
-  const _EncryptionControls({required this.theme, required this.builder});
-  final AppThemeData theme;
+  const _EncryptionControls({required this.builder});
 
   /// Places the header [action] (change password, when encrypted) and the
   /// toggle [cards].
@@ -287,14 +283,14 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
     if (!on) {
       await DisableEncryptionDialog.show(
         context,
-        widget.theme,
+        context.appTheme,
         controller.disable,
       );
       return;
     }
     final password = await EnableEncryptionDialog.show(
       context,
-      widget.theme,
+      context.appTheme,
       controller.manager,
     );
     if (password != null) await controller.enable(password);
@@ -304,7 +300,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
     final pairing = await controller.biometricPairing();
     if (pairing == null || !mounted) return;
     if (on) {
-      await BiometricPairDialog.show(context, widget.theme, pairing.pair);
+      await BiometricPairDialog.show(context, pairing.pair);
     } else {
       await pairing.unpair();
       NotificationManager.instance.success(
@@ -315,7 +311,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final encrypted =
         ref.watch(_activeEncryptionStateProvider) == EncryptionState.encrypted;
     final enabled = !_busy && !ref.watch(databaseSwitchingProvider);
@@ -338,7 +334,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
                   ? () => _run(
                       (controller) => ChangePasswordDialog.show(
                         context,
-                        widget.theme,
+                        context.appTheme,
                         controller.changePassword,
                       ),
                     )
@@ -415,6 +411,14 @@ class DatabaseSection extends ConsumerStatefulWidget {
     label: 'Hide in recents',
     icon: Icons.privacy_tip_outlined,
   );
+  static const SettingTextSpec backupManagerSpec = SettingTextSpec(
+    label: 'Backup Manager',
+    icon: Icons.backup_outlined,
+  );
+  static const SettingTextSpec deviceSyncSpec = SettingTextSpec(
+    label: 'Device Sync',
+    icon: Icons.devices_outlined,
+  );
   static const SettingTextSpec enableLocalDeviceSyncSpec = SettingTextSpec(
     label: 'Local sync',
     icon: Icons.lan_outlined,
@@ -427,7 +431,12 @@ class DatabaseSection extends ConsumerStatefulWidget {
   static const SettingsSearchGroup dataManagementSearchGroup =
       SettingsSearchGroup(
         title: 'Data Management',
-        settings: [activeDatabaseSpec, encryptionSpec, biometricSpec],
+        settings: [
+          activeDatabaseSpec,
+          backupManagerSpec,
+          encryptionSpec,
+          biometricSpec,
+        ],
         extraTexts: [
           'Enable Encryption',
           'Disable Encryption',
@@ -440,7 +449,7 @@ class DatabaseSection extends ConsumerStatefulWidget {
           'Change DB',
           'New DB',
           'Next Auto Backup',
-          'Backup Manager',
+          'Auto backup is off',
           'Open Backup Manager',
           'Create Backup',
         ],
@@ -472,9 +481,12 @@ class DatabaseSection extends ConsumerStatefulWidget {
   static const SettingsSearchGroup databaseSyncSearchGroup =
       SettingsSearchGroup(
         title: 'Database Sync',
-        settings: [enableLocalDeviceSyncSpec, autoSyncOnStartupSpec],
-        extraTexts: ['Device Sync', 'Enable Local Device Sync', 'LAN'],
-        // info: 'Sync with trusted devices on your network.',
+        settings: [
+          deviceSyncSpec,
+          enableLocalDeviceSyncSpec,
+          autoSyncOnStartupSpec,
+        ],
+        extraTexts: ['Enable Local Device Sync', 'LAN', 'Paired devices'],
       );
 
   @override
@@ -484,7 +496,6 @@ class DatabaseSection extends ConsumerStatefulWidget {
 class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
   bool _isLoading = true;
   String _activeDbPath = '';
-  final _backupInfoKey = GlobalKey<TooltipState>();
   ProviderSubscription<String>? _dbPathSub;
 
   @override
@@ -528,20 +539,8 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
     });
   }
 
-  /// A header info icon whose tooltip also opens on tap.
-  Widget _infoButton(GlobalKey<TooltipState> key, String message) => Tooltip(
-    key: key,
-    message: message,
-    child: IconButton(
-      style: widget.theme.compactIconButtonStyle,
-      icon: const Icon(Icons.info_outline, size: 26),
-      color: widget.theme.accent,
-      onPressed: () => key.currentState?.ensureTooltipVisible(),
-    ),
-  );
-
-  String _formatNextBackupTime(DateTime nextTime) {
-    final diff = nextTime.difference(DateTime.now());
+  static String _formatNextBackupTime(DateTime nextTime) {
+    final diff = nextTime.difference(clock.now());
     final minutes = diff.inMinutes;
     if (diff.isNegative) return 'Running now...';
     if (minutes < 1) return 'In less than a minute';
@@ -581,7 +580,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         SectionGroupEntry(
           visible: shows(DatabaseSection.dataManagementSearchGroup),
           builder: (position, isAlternate) => _EncryptionControls(
-            theme: widget.theme,
             builder: (passwordAction, cards) => SectionGroupBox(
               title: DatabaseSection.dataManagementSearchGroup.title,
               theme: widget.theme,
@@ -590,27 +588,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
               groupPosition: position,
               alternateBackground: isAlternate,
               headerCrossAxisAlignment: CrossAxisAlignment.center,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: kElementHSpacing,
-                children: [
-                  ?passwordAction,
-                  IconButton(
-                    tooltip: 'Backup Manager',
-                    style: widget.theme.compactIconButtonStyle,
-                    color: widget.theme.accent,
-                    icon: const Icon(Icons.backup, size: 26),
-                    onPressed: databaseSwitching
-                        ? null
-                        : () => showBackupDialog(context),
-                  ),
-                  if (nextBackupTime != null)
-                    _infoButton(
-                      _backupInfoKey,
-                      'Next auto backup: ${_formatNextBackupTime(nextBackupTime)}',
-                    ),
-                ],
-              ),
+              trailing: passwordAction,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: kElementVSpacing,
@@ -626,6 +604,23 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                         ? null
                         : () => showChangeDatabaseDialog(context, widget.theme),
                   ),
+                  // The countdown to the next auto backup stays current.
+                  _EveryMinute(
+                    enabled: nextBackupTime != null,
+                    builder: (context) => TintedOptionTile(
+                      theme: widget.theme,
+                      icon: DatabaseSection.backupManagerSpec.icon,
+                      title: DatabaseSection.backupManagerSpec.label,
+                      subtitle: switch (nextBackupTime) {
+                        final next? =>
+                          'Next auto backup: ${_formatNextBackupTime(next)}',
+                        null => 'Auto backup is off',
+                      },
+                      onTap: databaseSwitching
+                          ? null
+                          : () => showBackupDialog(context),
+                    ),
+                  ),
                   cards,
                 ],
               ),
@@ -640,37 +635,42 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             theme: widget.theme,
             titleIcon: Icons.sync,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: kElementHSpacing,
-              children: [
-                IconButton(
-                  tooltip: 'Device Sync',
-                  style: widget.theme.compactIconButtonStyle,
-                  icon: const Icon(Icons.sync, size: 26),
-                  color: widget.theme.accent,
-                  onPressed: () => showDeviceSyncDialog(context),
-                ),
-                if (DatabaseSection.databaseSyncSearchGroup.info
-                    case final info?)
-                  SettingsInfoButton(theme: widget.theme, message: info),
-              ],
-            ),
             searchQuery: widget.searchQuery,
             groupPosition: position,
             alternateBackground: isAlternate,
-            child: buildSpecToggleSettingList(
-              theme: widget.theme,
-              entries: [
-                (
-                  spec: DatabaseSection.enableLocalDeviceSyncSpec,
-                  value: syncEnabled,
-                  onChanged: syncNotifier.setEnabled,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: kElementVSpacing,
+              children: [
+                TintedOptionTile(
+                  theme: widget.theme,
+                  icon: DatabaseSection.deviceSyncSpec.icon,
+                  title: DatabaseSection.deviceSyncSpec.label,
+                  subtitle:
+                      switch (syncAsync.asData?.value.trustedPeers.length) {
+                        null => null,
+                        0 => 'No paired devices',
+                        1 => '1 paired device',
+                        final count => '$count paired devices',
+                      },
+                  onTap: () => showDeviceSyncDialog(context),
                 ),
-                (
-                  spec: DatabaseSection.autoSyncOnStartupSpec,
-                  value: syncAutoOnStartup,
-                  onChanged: syncEnabled ? syncNotifier.setAutoOnStartup : null,
+                buildSpecToggleSettingList(
+                  theme: widget.theme,
+                  entries: [
+                    (
+                      spec: DatabaseSection.enableLocalDeviceSyncSpec,
+                      value: syncEnabled,
+                      onChanged: syncNotifier.setEnabled,
+                    ),
+                    (
+                      spec: DatabaseSection.autoSyncOnStartupSpec,
+                      value: syncAutoOnStartup,
+                      onChanged: syncEnabled
+                          ? syncNotifier.setAutoOnStartup
+                          : null,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -685,10 +685,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             titleIcon: Icons.security,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
             trailing: switch (DatabaseSection.keyVisibilitySearchGroup.info) {
-              final info? => SettingsInfoButton(
-                theme: widget.theme,
-                message: info,
-              ),
+              final info? => SettingsInfoButton(message: info),
               null => null,
             },
             searchQuery: widget.searchQuery,
@@ -745,9 +742,8 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
 }
 
 class _ChangeDatabaseDialog extends ConsumerStatefulWidget {
-  const _ChangeDatabaseDialog({required this.theme, required this.container});
+  const _ChangeDatabaseDialog({required this.container});
 
-  final AppThemeData theme;
   final ProviderContainer container;
 
   @override
@@ -931,6 +927,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     String basePath(String path) => p.normalize(
       path.endsWith('.enc') ? path.substring(0, path.length - 4) : path,
     );
@@ -949,8 +946,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
           };
     return LayoutBuilder(
       builder: (context, constraints) => ThemedAlertDialog(
-        theme: widget.theme,
-        backgroundColor: widget.theme.background,
+        backgroundColor: theme.background,
         maxWidth: 520,
         maxHeight: 600,
         fullscreen: constraints.maxHeight < 480,
@@ -963,17 +959,13 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                 ),
               ]
             : null,
-        title: DialogHeader(
-          icon: Icons.swap_horiz,
-          title: 'Change Database',
-          theme: widget.theme,
-        ),
+        title: DialogHeader(icon: Icons.swap_horiz, title: 'Change Database'),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FileDropField(
               key: const ValueKey('change-database-drop'),
-              theme: widget.theme,
+              theme: theme,
               description: 'Supports .db, .enc and extensionless SQLite files',
               enabled: !_isLoading && !_choosingFile,
               onBrowse: _openDatabase,
@@ -989,13 +981,13 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
               invalidDropMessage: 'Drop one .db or .enc database file.',
             ),
             const SizedBox(height: 16),
-            TintedHeading(theme: widget.theme, title: 'Current'),
+            TintedHeading(title: 'Current'),
             const SizedBox(height: 8),
             if (_isLoading)
               const Center(child: AppCircularProgressIndicator(size: 20))
             else
               DatabaseFileRow(
-                theme: widget.theme,
+                theme: theme,
                 title: p.basename(_activeFilePath),
                 subtitle: _activeFilePath,
                 isEncrypted:
@@ -1014,17 +1006,13 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                 ],
               ),
             const SizedBox(height: 16),
-            TintedHeading(
-              theme: widget.theme,
-              title: 'Recent',
-              trailing: '${recents.length}',
-            ),
+            TintedHeading(title: 'Recent', trailing: '${recents.length}'),
             const SizedBox(height: 8),
             Expanded(
               child: recents.isEmpty
                   ? Text(
                       'No other recent databases.',
-                      style: TextStyle(color: widget.theme.textSecondary),
+                      style: TextStyle(color: theme.textSecondary),
                     )
                   : AppScrollbar(
                       controller: _scrollController,
@@ -1042,11 +1030,11 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                             behavior: HitTestBehavior.opaque,
                             onSecondaryTapDown: (details) => showAppContextMenu(
                               context: context,
-                              theme: widget.theme,
+                              theme: theme,
                               position: details.globalPosition,
                               menuChildren: [
                                 appMenuItem(
-                                  widget.theme,
+                                  theme,
                                   onPressed: () =>
                                       _removeRecentDatabasePath(basePath),
                                   child: const Text('Remove from recents'),
@@ -1055,7 +1043,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                             ),
                             child: DatabaseFileRow(
                               key: ValueKey(basePath),
-                              theme: widget.theme,
+                              theme: theme,
                               title: p.basename(resolvedPath),
                               subtitle: sizeBytes == null
                                   ? resolvedPath
@@ -1072,7 +1060,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                                 IconButton(
                                   icon: Icon(
                                     Icons.delete,
-                                    color: widget.theme.secondary,
+                                    color: theme.secondary,
                                   ),
                                   tooltip: 'Remove from recents',
                                   onPressed: () =>
@@ -1117,6 +1105,49 @@ Future<void> showChangeDatabaseDialog(
   final container = ProviderScope.containerOf(context, listen: false);
   return showAppDialog<void>(
     context: context,
-    builder: (ctx) => _ChangeDatabaseDialog(theme: theme, container: container),
+    builder: (ctx) => _ChangeDatabaseDialog(container: container),
   );
+}
+
+/// Rebuilds once a minute while [enabled], so a countdown stays current.
+class _EveryMinute extends StatefulWidget {
+  const _EveryMinute({required this.enabled, required this.builder});
+
+  final bool enabled;
+  final WidgetBuilder builder;
+
+  @override
+  State<_EveryMinute> createState() => _EveryMinuteState();
+}
+
+class _EveryMinuteState extends State<_EveryMinute> {
+  Timer? _timer;
+
+  void _sync() {
+    _timer?.cancel();
+    _timer = widget.enabled
+        ? Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}))
+        : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_EveryMinute oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled != widget.enabled) _sync();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
 }

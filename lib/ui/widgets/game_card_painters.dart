@@ -4,7 +4,7 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 
@@ -31,18 +31,29 @@ typedef FetchStatusVisual = ({Color color, Widget icon, String tooltip});
 /// A horizontal [LinearGradient] (accent → primary) fills the card, then an
 /// alpha mask shaped like a frame — fully opaque at the card edges, punched
 /// out in the centre by a blurred inner [RRect] — is applied via [BlendMode.dstIn].
+///
+/// That takes two offscreen layers and a blur, the same again on every frame
+/// for every glowing card. It is drawn once into an image, shared by every
+/// card of the same size, and each paint only draws that image.
 class CardGlowPainter extends CustomPainter {
   const CardGlowPainter({
     required this.accentColor,
     required this.primaryColor,
-    required this.selected,
     required this.cornerRadius,
-  });
+    this.hover,
+    this.devicePixelRatio = 1.0,
+  }) : super(repaint: hover);
 
   final Color accentColor;
   final Color primaryColor;
-  final bool selected;
   final double cornerRadius;
+
+  /// How far the hover glow has faded in. A selected card has none: its glow
+  /// shows in full.
+  final Animation<double>? hover;
+
+  /// The pixel density the glow's image is drawn at.
+  final double devicePixelRatio;
 
   static const double _hoverAlpha = 0.85;
   static const double _selectedAlpha = 0.95;
@@ -50,7 +61,21 @@ class CardGlowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double alpha = selected ? _selectedAlpha : _hoverAlpha;
+    final alpha = hover == null ? _selectedAlpha : _hoverAlpha * hover!.value;
+    if (alpha <= 0 || size.isEmpty) return;
+    final image = _CardGlowImages.of(this, size);
+    canvas.drawImageRect(
+      image,
+      Offset.zero & Size(image.width.toDouble(), image.height.toDouble()),
+      Offset.zero & size,
+      Paint()
+        ..color = Color.fromRGBO(255, 255, 255, alpha)
+        ..filterQuality = FilterQuality.low,
+    );
+  }
+
+  /// Draws the glow itself, at full strength.
+  void _paintGlow(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final double glowDepth =
         math.min(size.width, size.height) * _glowDepthFraction;
@@ -58,11 +83,6 @@ class CardGlowPainter extends CustomPainter {
     final double innerRadius = (cornerRadius - glowDepth * 0.4).clamp(
       0.0,
       cornerRadius,
-    );
-
-    canvas.saveLayer(
-      rect,
-      Paint()..color = Color.fromARGB((alpha * 255).round(), 255, 255, 255),
     );
 
     canvas.drawRect(
@@ -88,8 +108,6 @@ class CardGlowPainter extends CustomPainter {
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma)
         ..color = const Color(0xFFFFFFFF),
     );
-
-    canvas.restore();
     canvas.restore();
   }
 
@@ -97,8 +115,39 @@ class CardGlowPainter extends CustomPainter {
   bool shouldRepaint(covariant CardGlowPainter old) =>
       old.accentColor != accentColor ||
       old.primaryColor != primaryColor ||
-      old.selected != selected ||
-      old.cornerRadius != cornerRadius;
+      old.cornerRadius != cornerRadius ||
+      old.hover != hover ||
+      old.devicePixelRatio != devicePixelRatio;
+}
+
+/// The glow images drawn so far, the latest few.
+abstract final class _CardGlowImages {
+  static final _images = <(Color, Color, double, Size, double), ui.Image>{};
+
+  static ui.Image of(CardGlowPainter painter, Size size) {
+    final ratio = painter.devicePixelRatio;
+    final key = (
+      painter.accentColor,
+      painter.primaryColor,
+      painter.cornerRadius,
+      size,
+      ratio,
+    );
+    final cached = _images[key];
+    if (cached != null) return cached;
+    if (_images.length >= 6) _images.remove(_images.keys.first)?.dispose();
+    final width = (size.width * ratio).ceil();
+    final height = (size.height * ratio).ceil();
+    final recorder = ui.PictureRecorder();
+    painter._paintGlow(
+      Canvas(recorder)..scale(width / size.width, height / size.height),
+      size,
+    );
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(width, height);
+    picture.dispose();
+    return _images[key] = image;
+  }
 }
 
 /// Paints a diagonal tiled "USED" watermark text pattern.

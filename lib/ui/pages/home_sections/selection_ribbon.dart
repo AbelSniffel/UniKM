@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -175,7 +175,7 @@ class SelectionRibbon extends ConsumerWidget {
                 ? Duration.zero
                 : kFastAnimation,
             curve: Curves.easeOutCubic,
-            child: _SelectedGamesStrip(theme: theme),
+            child: _SelectedGamesStrip(),
             builder: (context, height, strip) => ClipRect(
               child: Align(
                 alignment: Alignment.bottomCenter,
@@ -202,9 +202,7 @@ class SelectionRibbon extends ConsumerWidget {
 
 /// Every selected game as a [TintedChip] in one horizontally scrolling row.
 class _SelectedGamesStrip extends ConsumerStatefulWidget {
-  const _SelectedGamesStrip({required this.theme});
-
-  final AppThemeData theme;
+  const _SelectedGamesStrip();
 
   @override
   ConsumerState<_SelectedGamesStrip> createState() =>
@@ -236,7 +234,7 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final games = ref.watch(selectedGamesProvider);
     final notifier = ref.read(gamesProvider.notifier);
     final height = (MediaQuery.textScalerOf(context).scale(12) * 1.5 + 22)
@@ -277,7 +275,6 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
                     message: 'Deselect',
                     child: TintedChip(
                       key: ValueKey('selection-chip-${game.id}'),
-                      theme: theme,
                       color: theme.accent,
                       label: game.title,
                       maxLines: 1,
@@ -358,7 +355,6 @@ class _RibbonBar extends StatelessWidget {
 
   /// The overflow actions, opening upward from the bar.
   Widget _moreMenu(List<_RibbonAction> overflow) => AppMenuAnchor(
-    theme: theme,
     alignment: Alignment.topLeft,
     alignmentOffset: const Offset(0, -4),
     menuChildren: [
@@ -447,7 +443,6 @@ class _RibbonBar extends StatelessWidget {
 
   Widget _group(String id, List<Widget> children) => NavButtonGroup(
     key: ValueKey('selection-group-$id'),
-    theme: theme,
     isHorizontal: true,
     color: id == _RibbonActionGroup.destructive.name ? theme.secondary : null,
     children: children,

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/application/update_controller.dart';
@@ -141,10 +141,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     'Cover image path',
     (c) => _widget(
       c,
-      (_) => CoverPathDialog(
-        theme: _theme(c),
-        initialPath: '/preview/UniKM/images/portal-2.png',
-      ),
+      (_) => CoverPathDialog(initialPath: '/preview/UniKM/images/portal-2.png'),
     ),
   ),
   DialogGalleryEntry(
@@ -271,7 +268,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
   DialogGalleryEntry(
     'biometric-pair',
     'Fingerprint unlock',
-    (c) => BiometricPairDialog.show(c, _theme(c), (_) async {}),
+    (c) => BiometricPairDialog.show(c, (_) async {}),
   ),
   DialogGalleryEntry('backups', 'Backup manager • backups', showBackupDialog),
   DialogGalleryEntry(

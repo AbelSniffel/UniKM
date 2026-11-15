@@ -6,7 +6,7 @@
 /// - backup_dialogs.dart (optional future usage)
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A [TextFormField] with an obscure-text visibility toggle suffix icon.
 ///

@@ -2,7 +2,7 @@
 /// Matches the original Python HomePage with grid/list views
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/shortcuts/app_shortcuts.dart';
@@ -11,6 +11,7 @@ import '../dialogs/delete_games_dialog.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/notification_system.dart';
 import 'home_sections/game_library_view.dart';
+import 'home_sections/home_filters_panel.dart';
 import 'home_sections/home_header.dart';
 
 export '../dialogs/delete_games_dialog.dart' show showDeleteGamesDialog;
@@ -49,7 +50,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    _syncSearchController(ref.read(gamesProvider).searchQuery);
+    _syncSearchController(ref.read(gamesProvider).filter.searchQuery);
     _scrollController = LibraryScrollController(
       initialScrollOffset: ref.read(gameLibraryScrollOffsetProvider),
     )..addListener(_saveScrollOffset);
@@ -76,7 +77,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<String>(
-      gamesProvider.select((s) => s.searchQuery),
+      gamesProvider.select((s) => s.filter.searchQuery),
       (_, next) => _syncSearchController(next),
     );
 
@@ -108,15 +109,19 @@ class _HomePageState extends ConsumerState<HomePage> {
               isVeryNarrowLayout: widget.isVeryNarrowLayout,
             ),
 
-            // Game grid/list (internal state handling)
+            // Game grid/list (internal state handling), with the filter
+            // sidebar beside it unless the layout is very narrow.
             Expanded(
-              child: GameLibraryView(
-                scrollController: _scrollController,
-                animateEntries: true,
-                gameListFocusNode: _gameListFocusNode,
-                onSelectAll: _handleSelectAll,
-                onDeleteSelection: () => _handleDeleteSelection(context),
-                onCopySelection: () => _handleCopySelection(context),
+              child: HomeFilterSidebarLayout(
+                showSidebar: !widget.isVeryNarrowLayout,
+                child: GameLibraryView(
+                  scrollController: _scrollController,
+                  animateEntries: true,
+                  gameListFocusNode: _gameListFocusNode,
+                  onSelectAll: _handleSelectAll,
+                  onDeleteSelection: () => _handleDeleteSelection(context),
+                  onCopySelection: () => _handleCopySelection(context),
+                ),
               ),
             ),
           ],

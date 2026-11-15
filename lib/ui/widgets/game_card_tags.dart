@@ -2,7 +2,7 @@
 library;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/color_utils.dart';
@@ -38,6 +38,10 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
   String _label = '';
   String _count = '';
 
+  /// The row built last, kept while its layout, style and colour are.
+  Widget? _builtRow;
+  Object? _rowKey;
+
   @override
   void initState() {
     super.initState();
@@ -58,7 +62,7 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
 
   void _updateTags() {
     _names = widget.game.tags.map((tag) => tag.name).toList(growable: false);
-    _layoutKey = null;
+    _layoutKey = _rowKey = null;
   }
 
   void _fit(
@@ -142,7 +146,10 @@ class _GameCardTagsRowState extends State<GameCardTagsRow> {
       Directionality.of(context),
       Localizations.maybeLocaleOf(context),
     );
-    return Align(
+    final rowKey = (_layoutKey, style, color, widget.theme);
+    if (rowKey == _rowKey) return _builtRow!;
+    _rowKey = rowKey;
+    return _builtRow = Align(
       alignment: AlignmentDirectional.centerStart,
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -4,7 +4,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -18,13 +18,11 @@ typedef BarSegment = ({String label, int count, Color color});
 class SegmentedBar extends StatelessWidget {
   const SegmentedBar({
     super.key,
-    required this.theme,
     required this.segments,
     this.formatCount = _plain,
     this.gap = 2,
   });
 
-  final AppThemeData theme;
   final List<BarSegment> segments;
 
   /// Writes a count in the bubbles, such as a file size.
@@ -50,6 +48,7 @@ class SegmentedBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final total = segments.fold(0, (sum, s) => sum + s.count);
     final shown = segments.where((s) => s.count > 0).toList();
     String share(int count) {
@@ -109,7 +108,6 @@ class SegmentedBar extends StatelessWidget {
 class TintedChip extends StatelessWidget {
   const TintedChip({
     super.key,
-    required this.theme,
     required this.color,
     required this.label,
     this.value,
@@ -118,7 +116,6 @@ class TintedChip extends StatelessWidget {
     this.onTap,
   });
 
-  final AppThemeData theme;
   final Color color;
   final String label;
   final String? value;
@@ -132,6 +129,7 @@ class TintedChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final radius = theme.cornerRadius;
     final chip = Opacity(
       opacity: faded ? 0.5 : 1,

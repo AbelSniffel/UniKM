@@ -1,7 +1,7 @@
 /// Navigation panel widget with configurable position and appearance
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -227,7 +227,6 @@ class NavigationPanel extends ConsumerWidget {
     required bool isCollapsed,
     required NavExpansionMode expansionMode,
   }) => NavButtonGroup(
-    theme: theme,
     isHorizontal: isHorizontal,
     children: [
       for (final index in indices)
@@ -253,7 +252,6 @@ class NavigationPanel extends ConsumerWidget {
     item: items[index],
     isSelected: index == selectedIndex,
     onTap: () => onItemSelected(index),
-    theme: theme,
     appearance: appearance,
     isHorizontal: isHorizontal,
     isCollapsed:
@@ -354,10 +352,7 @@ class _ThemeSelector extends ConsumerWidget {
               child: SizedBox(
                 width: isVert ? double.infinity : 40,
                 height: 40,
-                child: NavigationThemeMenuButton(
-                  theme: theme,
-                  position: position,
-                ),
+                child: NavigationThemeMenuButton(position: position),
               ),
             ),
           ),
@@ -373,7 +368,6 @@ class _NavButton extends StatelessWidget {
     required this.item,
     required this.isSelected,
     required this.onTap,
-    required this.theme,
     required this.appearance,
     required this.isHorizontal,
     required this.isCollapsed,
@@ -383,7 +377,6 @@ class _NavButton extends StatelessWidget {
   final NavItem item;
   final bool isSelected;
   final VoidCallback onTap;
-  final AppThemeData theme;
   final NavBarAppearance appearance;
   final bool isHorizontal;
   final bool isCollapsed;
@@ -391,6 +384,7 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final textOnly = appearance == NavBarAppearance.textOnly;
     final showText = !isCollapsed && appearance != NavBarAppearance.iconOnly;
     final displayIcon = item.selectedIcon ?? item.icon;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Shared by update status cards and their Dev Tools previews.
 abstract final class UpdateStatusIcons {

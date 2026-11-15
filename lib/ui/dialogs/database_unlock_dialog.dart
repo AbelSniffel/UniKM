@@ -2,7 +2,7 @@
 library;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/database/sqlite_file.dart';
 import '../../core/theme/app_theme.dart';
@@ -162,13 +162,8 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
 
   @override
   Widget build(BuildContext context) => ThemedAlertDialog(
-    theme: widget.theme,
     maxWidth: kCompactDialogWidth,
-    title: DialogHeader(
-      icon: Icons.lock,
-      title: widget.title,
-      theme: widget.theme,
-    ),
+    title: DialogHeader(icon: Icons.lock, title: widget.title),
     titleActions:
         widget.allowChangeDatabase &&
             widget.currentDatabasePath != null &&
@@ -207,7 +202,6 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
     ),
     actions: [
       DialogActionBar(
-        theme: widget.theme,
         onCancel: () => Navigator.of(context).pop(),
         onConfirm: _submit,
         confirmIcon: Icons.lock_open,

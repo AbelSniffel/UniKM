@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -13,14 +13,13 @@ import '../../core/theme/app_theme.dart';
 /// Numbers are arranged as two groups of three separated by a dash, each
 /// digit sitting above a themed underline.
 class PairCodeDisplay extends StatelessWidget {
-  const PairCodeDisplay({super.key, required this.code, required this.theme});
+  const PairCodeDisplay({super.key, required this.code});
 
   /// The 6-digit code string to display. May be shorter during animation.
   final String code;
-  final AppThemeData theme;
-
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final padded = code.padRight(6);
     return Container(
       width: double.infinity,
@@ -33,7 +32,6 @@ class PairCodeDisplay extends StatelessWidget {
       child: Center(
         child: _PairCodeRow(
           chars: List.generate(6, (i) => padded[i] == ' ' ? null : padded[i]),
-          theme: theme,
         ),
       ),
     );
@@ -46,16 +44,14 @@ class PairCodeDisplay extends StatelessWidget {
 
 /// A row of six code cells split into two groups by an em-dash separator.
 class _PairCodeRow extends StatelessWidget {
-  const _PairCodeRow({required this.chars, required this.theme});
+  const _PairCodeRow({required this.chars});
 
   /// Exactly 6 entries; null means the slot is empty.
   final List<String?> chars;
 
-  final AppThemeData theme;
-
   @override
   Widget build(BuildContext context) {
-    Widget cell(int i) => _PairCodeCell(char: chars[i], theme: theme);
+    Widget cell(int i) => _PairCodeCell(char: chars[i]);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -84,51 +80,52 @@ class _PairCodeRow extends StatelessWidget {
 /// One digit cell: digit text above an underline bar.
 /// No background — only the underline carries the theme colour.
 class _PairCodeCell extends StatelessWidget {
-  const _PairCodeCell({required this.char, required this.theme});
+  const _PairCodeCell({required this.char});
 
   final String? char;
-  final AppThemeData theme;
-
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 32,
-    height: 48,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        // Digit with fade+scale transition when value changes.
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 120),
-          transitionBuilder: (child, anim) => FadeTransition(
-            opacity: anim,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
-              child: child,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return SizedBox(
+      width: 32,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Digit with fade+scale transition when value changes.
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 120),
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
+                child: child,
+              ),
+            ),
+            child: Text(
+              char ?? '',
+              key: ValueKey(char),
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          child: Text(
-            char ?? '',
-            key: ValueKey(char),
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
+          Positioned(
+            left: 2,
+            right: 2,
+            bottom: 4,
+            child: Container(
+              height: 2,
+              decoration: BoxDecoration(
+                color: theme.border,
+                borderRadius: BorderRadius.circular(1),
+              ),
             ),
           ),
-        ),
-        Positioned(
-          left: 2,
-          right: 2,
-          bottom: 4,
-          child: Container(
-            height: 2,
-            decoration: BoxDecoration(
-              color: theme.border,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

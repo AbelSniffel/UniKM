@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/constants/app_constants.dart';
@@ -64,8 +64,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
     setState(() => _editing = true);
     final path = await showAppDialog<String>(
       context: context,
-      builder: (_) =>
-          CoverPathDialog(theme: widget.theme, initialPath: controller.text),
+      builder: (_) => CoverPathDialog(initialPath: controller.text),
     );
     if (!mounted) return;
     setState(() => _editing = false);
@@ -349,12 +348,7 @@ Future<bool> _isCoverImageFile(String path) async {
 }
 
 class CoverPathDialog extends StatefulWidget {
-  const CoverPathDialog({
-    super.key,
-    required this.theme,
-    required this.initialPath,
-  });
-  final AppThemeData theme;
+  const CoverPathDialog({super.key, required this.initialPath});
   final String initialPath;
 
   @override
@@ -429,62 +423,63 @@ class _CoverPathDialogState extends State<CoverPathDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => DialogInteractionScope(
-    onPrimaryAction: _picking ? null : _apply,
-    onDismiss: () => Navigator.pop(context),
-    child: WindowDropTarget(
-      enable: PlatformFileActions.supportsDragAndDrop && !_picking,
-      onDragDone: _acceptDrop,
-      child: ThemedAlertDialog(
-        theme: widget.theme,
-        maxWidth: 480,
-        title: DialogHeader(
-          title: 'Cover Image Path',
-          icon: Icons.image_outlined,
-          theme: widget.theme,
-        ),
-        content: TextField(
-          controller: _controller,
-          autofocus: true,
-          enabled: !_picking,
-          style: TextStyle(color: widget.theme.textPrimary),
-          decoration: InputDecoration(
-            labelText: 'File path or image URL',
-            hintText: 'https://… or /path/to/cover.png',
-            errorText: _error,
-            suffixIcon: IconButton(
-              tooltip: 'Choose JPG or PNG file',
-              onPressed: _picking ? null : _browse,
-              icon: const Icon(Icons.folder_open),
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return DialogInteractionScope(
+      onPrimaryAction: _picking ? null : _apply,
+      onDismiss: () => Navigator.pop(context),
+      child: WindowDropTarget(
+        enable: PlatformFileActions.supportsDragAndDrop && !_picking,
+        onDragDone: _acceptDrop,
+        child: ThemedAlertDialog(
+          maxWidth: 480,
+          title: DialogHeader(
+            title: 'Cover Image Path',
+            icon: Icons.image_outlined,
+          ),
+          content: TextField(
+            controller: _controller,
+            autofocus: true,
+            enabled: !_picking,
+            style: TextStyle(color: theme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'File path or image URL',
+              hintText: 'https://… or /path/to/cover.png',
+              errorText: _error,
+              suffixIcon: IconButton(
+                tooltip: 'Choose JPG or PNG file',
+                onPressed: _picking ? null : _browse,
+                icon: const Icon(Icons.folder_open),
+              ),
             ),
+            onSubmitted: (_) => _apply(),
           ),
-          onSubmitted: (_) => _apply(),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _picking
+                        ? null
+                        : () {
+                            _controller.clear();
+                            _apply();
+                          },
+                    child: const Text('Remove Image'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _picking ? null : _apply,
+                    child: const Text('Apply'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _picking
-                      ? null
-                      : () {
-                          _controller.clear();
-                          _apply();
-                        },
-                  child: const Text('Remove Image'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _picking ? null : _apply,
-                  child: const Text('Apply'),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  }
 }

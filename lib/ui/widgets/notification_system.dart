@@ -7,7 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:uuid/uuid.dart';
 
@@ -88,14 +88,10 @@ class AppNotification {
     String? title,
     double? progress,
     String? progressLabel,
-    VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onAction,
     NotificationActionStyle? actionStyle,
-    String? secondaryActionLabel,
-    VoidCallback? onSecondaryAction,
     bool clearProgress = false,
-    bool clearOnTap = false,
     bool clearAction = false,
     bool clearSecondaryAction = false,
     bool? isDismissing,
@@ -109,19 +105,15 @@ class AppNotification {
     title: title ?? this.title,
     progress: clearProgress ? null : (progress ?? this.progress),
     progressLabel: clearProgress ? null : (progressLabel ?? this.progressLabel),
-    onTap: clearOnTap ? null : (onTap ?? this.onTap),
+    onTap: onTap,
     actionLabel: clearAction ? null : (actionLabel ?? this.actionLabel),
     onAction: clearAction ? null : (onAction ?? this.onAction),
     actionStyle: clearAction
         ? NotificationActionStyle.text
         : (actionStyle ?? this.actionStyle),
     actionIcon: clearAction ? null : actionIcon,
-    secondaryActionLabel: clearSecondaryAction
-        ? null
-        : (secondaryActionLabel ?? this.secondaryActionLabel),
-    onSecondaryAction: clearSecondaryAction
-        ? null
-        : (onSecondaryAction ?? this.onSecondaryAction),
+    secondaryActionLabel: clearSecondaryAction ? null : secondaryActionLabel,
+    onSecondaryAction: clearSecondaryAction ? null : onSecondaryAction,
     isDismissing: isDismissing ?? this.isDismissing,
     dismissible: dismissible ?? this.dismissible,
     autoDismiss: clearAutoDismiss ? null : (autoDismiss ?? this.autoDismiss),
@@ -144,8 +136,6 @@ class NotificationHandle {
     String? actionLabel,
     VoidCallback? onAction,
     NotificationActionStyle? actionStyle,
-    String? secondaryActionLabel,
-    VoidCallback? onSecondaryAction,
     bool clearProgress = false,
     bool clearAction = false,
     bool clearSecondaryAction = false,
@@ -162,8 +152,6 @@ class NotificationHandle {
       actionLabel: actionLabel,
       onAction: onAction,
       actionStyle: actionStyle,
-      secondaryActionLabel: secondaryActionLabel,
-      onSecondaryAction: onSecondaryAction,
       clearProgress: clearProgress,
       clearAction: clearAction,
       clearSecondaryAction: clearSecondaryAction,
@@ -301,29 +289,6 @@ class NotificationManager {
 
     return NotificationHandle(this, notification.id);
   }
-
-  /// Start a sticky "task" notification that stays until completed.
-  NotificationHandle beginTask(
-    String message, {
-    NotificationType type = NotificationType.info,
-    String? title,
-    double? progress,
-    String? progressLabel,
-    String? actionLabel,
-    VoidCallback? onAction,
-    bool dismissible = true,
-  }) => showHandle(
-    message: message,
-    type: type,
-    title: title,
-    progress: progress,
-    progressLabel: progressLabel,
-    actionLabel: actionLabel,
-    onAction: onAction,
-    persistent: true,
-    dedupe: false,
-    dismissible: dismissible,
-  );
 
   /// Applies [change] to a shown notification. A new [autoDismissAfter]
   /// restarts its countdown once it no longer shows progress.
@@ -807,7 +772,6 @@ class _NotificationToastState extends State<NotificationToast>
         minWidth: maxWidth >= 280 ? 280 : 0,
       ),
       child: TintedCard(
-        theme: theme,
         size: TintedCardSize.large,
         liveRegion: true,
         color: color,
@@ -900,9 +864,7 @@ class _NotificationToastState extends State<NotificationToast>
         Row(
           spacing: kElementHSpacing,
           children: [
-            Expanded(
-              child: AppLinearProgressBar(theme: widget.theme, value: progress),
-            ),
+            Expanded(child: AppLinearProgressBar(value: progress)),
             ...textActions,
             ?button,
           ],

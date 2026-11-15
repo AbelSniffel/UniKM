@@ -4,7 +4,7 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/steam/application/apply_steam_metadata.dart';
@@ -202,8 +202,10 @@ Future<void> performSteamBatchLookup(
   batchNotifier.startBatch([for (final g in steamTargets) g.id]);
 
   late NotificationHandle handle;
-  handle = NotificationManager.instance.beginTask(
-    'Fetching Steam data',
+  handle = NotificationManager.instance.showHandle(
+    message: 'Fetching Steam data',
+    persistent: true,
+    dedupe: false,
     type: NotificationType.steam,
     title: 'Starting...',
     progress: 0,
@@ -473,13 +475,12 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       color: theme.border,
     );
     return ThemedAlertDialog(
-      theme: theme,
       showCloseButton: false,
       // The banner reaches the edges; the buttons keep the dialog's padding.
       bleedContent: true,
       // The banner's art runs on behind the buttons, so the dialog has no
       // edge where its content ends.
-      backdrop: GameBannerBackdrop(theme: theme, coverController: _backdrop),
+      backdrop: GameBannerBackdrop(coverController: _backdrop),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -538,7 +539,6 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     final count = widget.gameCount;
     return LayoutBuilder(
       builder: (context, constraints) => GameBannerHero(
-        theme: theme,
         // Cached data is named as such until Fetch Fresh replaces it.
         heading: _fromCache ? 'Steam Cache' : 'Steam Lookup',
         actions: [
@@ -572,7 +572,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           child: AspectRatio(
             aspectRatio: 460 / 215,
             child: result != null
-                ? _LoadingCover(theme: theme, cover: _coverFor(result))
+                ? _LoadingCover(cover: _coverFor(result))
                 : ColoredBox(
                     color: theme.cardCoverPlaceholder,
                     child: Center(
@@ -606,7 +606,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
               ),
             ),
             if (result?.isDlc ?? false)
-              TintedChip(theme: theme, color: theme.secondary, label: 'DLC'),
+              TintedChip(color: theme.secondary, label: 'DLC'),
             if (_isBatch)
               Text(
                 _fromCache
@@ -738,9 +738,7 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 /// A cover with a spinner on its placeholder while [cover] downloads and
 /// while the image it names decodes.
 class _LoadingCover extends StatefulWidget {
-  const _LoadingCover({required this.theme, required this.cover});
-
-  final AppThemeData theme;
+  const _LoadingCover({required this.cover});
 
   /// The cover's path once downloaded, or null for none.
   final Future<String?> cover;
@@ -776,12 +774,12 @@ class _LoadingCoverState extends State<_LoadingCover>
       return Stack(
         fit: StackFit.expand,
         children: [
-          ColoredBox(color: widget.theme.cardCoverPlaceholder),
+          ColoredBox(color: context.appTheme.cardCoverPlaceholder),
           if (downloaded)
             CoverLoadScope(
               listener: this,
               child: GameCoverImage(
-                theme: widget.theme,
+                theme: context.appTheme,
                 coverImage: snapshot.data,
               ),
             ),

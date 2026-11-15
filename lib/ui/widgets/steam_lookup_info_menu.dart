@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/services/steam_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -148,7 +148,6 @@ class SteamLookupInfoMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnchoredPanelMenu(
-    theme: theme,
     maxSize: const Size(320, 420),
     panel: _details,
     button: (focusNode, toggle) => IconButton(

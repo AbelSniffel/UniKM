@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'preview_card.dart';
@@ -9,7 +9,6 @@ class ThemePreviewCard extends StatelessWidget {
   const ThemePreviewCard({
     super.key,
     required this.data,
-    required this.theme,
     required this.selected,
     required this.onTap,
     this.onDoubleTap,
@@ -18,7 +17,6 @@ class ThemePreviewCard extends StatelessWidget {
   });
 
   final AppThemeData data;
-  final AppThemeData theme;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback? onDoubleTap;
@@ -28,7 +26,7 @@ class ThemePreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PreviewCard(
     name: data.name,
-    theme: theme,
+    theme: context.appTheme,
     isSelected: selected,
     height: height,
     tapKey: tapKey,

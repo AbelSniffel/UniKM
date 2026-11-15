@@ -6,7 +6,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../core/constants/app_constants.dart';
@@ -233,32 +233,30 @@ abstract final class GameCardBadges {
       );
     }
 
+    // Its parents give it loose widths, so it wraps its row by itself.
     return Tooltip(
       message: tooltipMessage,
-      child: IntrinsicWidth(
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          constraints: const BoxConstraints(minHeight: kBadgeHeight),
-          decoration: BoxDecoration(
-            color: badgeColor,
-            borderRadius: chipBorderRadius(theme, kBadgeHeight),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon,
-              const SizedBox(width: 6),
-              Text(
-                text,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        constraints: const BoxConstraints(minHeight: kBadgeHeight),
+        decoration: BoxDecoration(
+          color: badgeColor,
+          borderRadius: chipBorderRadius(theme, kBadgeHeight),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            icon,
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -363,13 +361,13 @@ abstract final class GameCardBadges {
           if (showPlatform) platformBadge(theme, game, kPlatformBadgeHeight),
           if (showRatingChip)
             showPlatform
-                ? _animatedRatingChip(
+                ? _ratingChip(
                     theme,
                     game,
                     borderRadius: chipBorderRadius(theme, 20.0),
                     topPadding: 4,
                   )
-                : _animatedRatingChip(theme, game, minHeight: kBadgeHeight),
+                : _ratingChip(theme, game, minHeight: kBadgeHeight),
           if (game.isDlc)
             Padding(
               padding: EdgeInsets.only(
@@ -493,7 +491,7 @@ abstract final class GameCardBadges {
     return Icons.thumb_down_rounded;
   }
 
-  static Widget _animatedRatingChip(
+  static Widget _ratingChip(
     AppThemeData theme,
     Game game, {
     BorderRadius? borderRadius,
@@ -514,12 +512,6 @@ abstract final class GameCardBadges {
         child: rating,
       );
     }
-
-    return VisibilityReveal(
-      isVisible: true,
-      axisAlignment: -1.0,
-      alignment: Alignment.topCenter,
-      child: rating,
-    );
+    return rating;
   }
 }

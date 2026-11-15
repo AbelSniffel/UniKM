@@ -2,7 +2,7 @@
 /// Matches the original Python SettingsPage with 5+ sections
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../widgets/nav_button_group.dart';
@@ -296,7 +296,6 @@ class _SettingsSectionRail extends ConsumerWidget {
             padding: const EdgeInsets.all(_settingsRailOuterPadding),
             children: [
               NavButtonGroup(
-                theme: theme,
                 isHorizontal: false,
                 children: [
                   for (final (id, label, icon) in _settingsRailSections)
@@ -361,7 +360,6 @@ class _SettingsPageBody extends ConsumerWidget {
     );
     final sectionPicker = IconMenuButton<String>(
       key: const ValueKey<String>('settings-section-picker'),
-      theme: theme,
       value: selectedSection,
       tooltip: 'Section: $sectionLabel',
       onSelected: onSectionSelected,

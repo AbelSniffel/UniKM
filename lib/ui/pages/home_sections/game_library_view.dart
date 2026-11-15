@@ -5,8 +5,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,6 +95,11 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
   var _revealCoordinator = GameCardRevealCoordinator();
   Object? _database;
   (GameListViewMode, bool)? _layout;
+
+  /// Where each game is in the list, so a card a filter moves keeps its
+  /// element and state.
+  List<int>? _indexedIds;
+  Map<int, int> _indexOf = const {};
   static const double _gridCacheExtent = kGridCardHeight + kGridCardSpacing;
 
   @override
@@ -145,13 +149,13 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
       final hasActiveFilters = ref.watch(
         gamesProvider.select(
           (s) =>
-              s.searchQuery.isNotEmpty ||
-              s.tagFilters.isNotEmpty ||
-              s.showDeadlineOnly ||
-              s.showDlcOnly ||
-              s.showUsedOnly ||
-              s.showNoPicturesOnly ||
-              s.showNoTagsOnly,
+              s.filter.searchQuery.isNotEmpty ||
+              s.filter.tagFilters.isNotEmpty ||
+              s.filter.showDeadlineOnly ||
+              s.filter.showDlcOnly ||
+              s.filter.showUsedOnly ||
+              s.filter.showNoPicturesOnly ||
+              s.filter.showNoTagsOnly,
         ),
       );
 
@@ -312,6 +316,10 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
     bool slimList,
   ) {
     final scrollController = widget.scrollController;
+    if (!identical(gameIds, _indexedIds)) {
+      _indexedIds = gameIds;
+      _indexOf = {for (final (i, id) in gameIds.indexed) id: i};
+    }
     final coverWidth = viewMode == GameListViewMode.grid
         ? double.infinity
         : slimList
@@ -324,7 +332,6 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
     // The shell owns the selection ribbon, so selection changes do not
     // rebuild the grid/list.
     final library = _GameLibraryDragSelectionLayer(
-      theme: theme,
       gameIds: gameIds,
       viewMode: viewMode,
       scrollController: scrollController,
@@ -343,6 +350,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
                 mainAxisSpacing: kGridCardSpacing,
               ),
               itemCount: gameIds.length,
+              findChildIndexCallback: _findIndex,
               itemBuilder: (context, index) =>
                   _revealCard(gameIds[index], viewMode, coverWidth),
             )
@@ -354,6 +362,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
               padding: const EdgeInsets.all(12),
               addAutomaticKeepAlives: false,
               itemCount: gameIds.length,
+              findChildIndexCallback: _findIndex,
               itemBuilder: (context, index) {
                 final revealed = _revealCard(
                   gameIds[index],
@@ -363,6 +372,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
                 return slimList
                     ? revealed
                     : Padding(
+                        key: ValueKey(gameIds[index]),
                         padding: EdgeInsets.only(bottom: listSpacing),
                         child: revealed,
                       );
@@ -377,8 +387,10 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
         : library;
   }
 
-  /// The card for [gameId], revealed by an entry animation when enabled;
-  /// [coverWidth] is how much of its left side its cover covers.
+  int? _findIndex(Key key) => key is ValueKey<int> ? _indexOf[key.value] : null;
+
+  /// The card for [gameId], keyed by it, revealed by an entry animation when
+  /// enabled; [coverWidth] is how much of its left side its cover covers.
   Widget _revealCard(int gameId, GameListViewMode viewMode, double coverWidth) {
     final card = _LibraryGameCard(
       key: ValueKey(gameId),
@@ -388,7 +400,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
     );
     return widget.animateEntries
         ? AnimatedGameCard(
-            key: ValueKey('anim_$gameId'),
+            key: ValueKey(gameId),
             gameId: gameId,
             coordinator: _revealCoordinator,
             coverWidth: coverWidth,
@@ -412,7 +424,8 @@ class _LibraryGameCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final game = ref.watch(gameByIdProvider(gameId));
+    // Not gameByIdProvider: no provider element per card scrolled in.
+    final game = ref.watch(gamesByIdProvider.select((games) => games[gameId]));
     if (game == null) return const SizedBox.shrink();
     return GameCard(
       key: ValueKey(gameId),
@@ -425,7 +438,6 @@ class _LibraryGameCard extends ConsumerWidget {
 
 class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
   const _GameLibraryDragSelectionLayer({
-    required this.theme,
     required this.gameIds,
     required this.viewMode,
     required this.scrollController,
@@ -433,7 +445,6 @@ class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
     required this.child,
   });
 
-  final AppThemeData theme;
   final List<int> gameIds;
   final GameListViewMode viewMode;
   final ScrollController scrollController;
@@ -869,7 +880,6 @@ class _GameLibraryDragSelectionLayerState
               child: app_selection_overlay.SelectionOverlay(
                 startPosition: marqueeStartLocal,
                 currentPosition: _marqueeCurrentLocal!,
-                theme: widget.theme,
                 selectedCount: _marqueeSelectedIds.length,
               ),
             ),

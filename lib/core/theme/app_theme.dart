@@ -5,7 +5,7 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' show Size, lerpDouble;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../constants/app_constants.dart';
@@ -670,6 +670,12 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
       });
 }
 
+/// The app theme in effect at this point of the tree.
+extension AppThemeContext on BuildContext {
+  AppThemeData get appTheme =>
+      Theme.of(this).extension<AppThemeData>() ?? kDarkTheme;
+}
+
 /// An outline drawn as an underline that wraps up the corners by
 /// [wrapExtent], with a glow rising from it.
 class BottomGlowInputBorder extends OutlineInputBorder {
@@ -1259,27 +1265,25 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
 /// A progress bar as tall as a slider track: an accent fill over a faint
 /// accent track, like the update dialog's download bar.
 class AppLinearProgressBar extends StatelessWidget {
-  const AppLinearProgressBar({
-    super.key,
-    required this.theme,
-    required this.value,
-  });
+  const AppLinearProgressBar({super.key, required this.value});
 
-  final AppThemeData theme;
   final double? value;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(
-      math.min(theme.cornerRadius, kSliderTrackHeight / 2),
-    ),
-    child: LinearProgressIndicator(
-      value: value,
-      minHeight: kSliderTrackHeight,
-      backgroundColor: theme.accent.withValues(alpha: 0.25),
-      valueColor: AlwaysStoppedAnimation(theme.accent),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(
+        math.min(theme.cornerRadius, kSliderTrackHeight / 2),
+      ),
+      child: LinearProgressIndicator(
+        value: value,
+        minHeight: kSliderTrackHeight,
+        backgroundColor: theme.accent.withValues(alpha: 0.25),
+        valueColor: AlwaysStoppedAnimation(theme.accent),
+      ),
+    );
+  }
 }
 
 // =============================================================================

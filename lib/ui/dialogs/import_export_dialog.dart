@@ -13,7 +13,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -251,20 +251,15 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     final showsAdditionalInfo = _exportFormat != 'db' && _exportFormat != 'enc';
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 550,
-      title: DialogHeader(
-        icon: Icons.upload,
-        title: 'Export Database',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.upload, title: 'Export Database'),
       contentSpacing: 16,
       contentChildren: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 8,
           children: [
-            TintedHeading(theme: theme, title: 'Format'),
+            TintedHeading(title: 'Format'),
             ..._optionTiles(
               theme,
               [
@@ -282,7 +277,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 8,
             children: [
-              TintedHeading(theme: theme, title: 'Include'),
+              TintedHeading(title: 'Include'),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -366,13 +361,15 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       (n) => n.id == _importTask?.id && !n.isDismissing,
     );
     if (!visible) {
-      _importTask = manager.beginTask(
-        _importMessage,
+      _importTask = manager.showHandle(
+        message: _importMessage,
         progress: _importProgress,
         actionLabel: _importCommitted || _cancelRequested
             ? null
             : 'Cancel import',
         onAction: _importCommitted || _cancelRequested ? null : _requestCancel,
+        persistent: true,
+        dedupe: false,
       );
     } else {
       _importTask!.update(
@@ -988,13 +985,8 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
     final theme = ref.watch(themeProvider);
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 550,
-      title: DialogHeader(
-        icon: Icons.download,
-        title: 'Import Database',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.download, title: 'Import Database'),
       contentSpacing: 16,
       contentChildren: [
         Column(
@@ -1002,7 +994,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           spacing: 8,
           children: [
             TintedHeading(
-              theme: theme,
               title: 'Source File',
               trailing: _selectedFile != null && _previewCount > 0
                   ? '$_previewCount games found in file'
@@ -1028,7 +1019,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 8,
           children: [
-            TintedHeading(theme: theme, title: 'Import Mode'),
+            TintedHeading(title: 'Import Mode'),
             ..._optionTiles(
               theme,
               _importModeOptions,
@@ -1046,7 +1037,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
         ),
         if (_importMode == 'replace')
           DialogBanner.warning(
-            theme: theme,
             message: 'Replace mode will delete all existing data!',
           ),
       ],
@@ -1057,7 +1047,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             child: const Text('Cancel import'),
           ),
         DialogActionBar(
-          theme: theme,
           onConfirm: _import,
           confirmIcon: Icons.download,
           confirmLabel: 'Import',

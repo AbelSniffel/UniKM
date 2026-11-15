@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'app_action_button.dart';
@@ -7,7 +7,6 @@ import 'app_action_button.dart';
 class GameOptionsRow extends StatelessWidget {
   const GameOptionsRow({
     super.key,
-    required this.theme,
     required this.isDlc,
     required this.onDlcChanged,
     required this.isUsed,
@@ -15,7 +14,6 @@ class GameOptionsRow extends StatelessWidget {
     required this.deadline,
   });
 
-  final AppThemeData theme;
   final bool isDlc;
   final ValueChanged<bool> onDlcChanged;
   final bool isUsed;
@@ -23,24 +21,27 @@ class GameOptionsRow extends StatelessWidget {
   final Widget deadline;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      AppActionButton(
-        theme: theme,
-        label: 'DLC',
-        selected: isDlc,
-        onTap: () => onDlcChanged(!isDlc),
-      ),
-      AppActionButton(
-        theme: theme,
-        label: 'Used',
-        selected: isUsed,
-        onTap: () => onUsedChanged(!isUsed),
-      ),
-      deadline,
-    ],
-  );
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        AppActionButton(
+          theme: theme,
+          label: 'DLC',
+          selected: isDlc,
+          onTap: () => onDlcChanged(!isDlc),
+        ),
+        AppActionButton(
+          theme: theme,
+          label: 'Used',
+          selected: isUsed,
+          onTap: () => onUsedChanged(!isUsed),
+        ),
+        deadline,
+      ],
+    );
+  }
 }

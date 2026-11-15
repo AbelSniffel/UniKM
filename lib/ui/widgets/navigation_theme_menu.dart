@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -19,13 +19,8 @@ import 'theme_picker_actions.dart';
 
 /// A small, keyboard-accessible theme picker anchored to the navigation bar.
 class NavigationThemeMenuButton extends ConsumerStatefulWidget {
-  const NavigationThemeMenuButton({
-    super.key,
-    required this.theme,
-    required this.position,
-  });
+  const NavigationThemeMenuButton({super.key, required this.position});
 
-  final AppThemeData theme;
   final NavBarPosition position;
 
   @override
@@ -66,7 +61,7 @@ class _NavigationThemeMenuButtonState
   @override
   Widget build(BuildContext context) {
     final current = ref.watch(themeProvider);
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final placement = navigationMenuPlacement(widget.position);
     return MenuAnchor(
       controller: _controller,
@@ -338,7 +333,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                                                 height: null,
                                                 data: data,
                                                 selected: data.id == current.id,
-                                                theme: theme,
                                                 onTap: () =>
                                                     widget.onSelected(data),
                                                 onDoubleTap: builtIn
@@ -358,7 +352,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                   ),
                   const SizedBox(height: 8),
                   ThemePickerActions(
-                    theme: theme,
                     onCreate: widget.onCreate,
                     // Edit and Delete act on the active custom theme, on the
                     // Custom tab only.

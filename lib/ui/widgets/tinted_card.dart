@@ -3,7 +3,7 @@
 /// same colour. Its tints are set here, for every card at once.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -23,7 +23,6 @@ enum TintedCardSize { compact, large }
 class TintedCard extends StatelessWidget {
   const TintedCard({
     super.key,
-    required this.theme,
     required this.title,
     this.titleColor,
     this.icon,
@@ -61,7 +60,6 @@ class TintedCard extends StatelessWidget {
   /// The icon square's tint, over the card's.
   static const double tileAlpha = 0.25;
 
-  final AppThemeData theme;
   final String title;
 
   /// Overrides the title's colour, such as a chosen choice tile's tint.
@@ -133,6 +131,7 @@ class TintedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final color = this.color ?? theme.accent;
     final large = size == TintedCardSize.large;
     final tint =

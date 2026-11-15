@@ -2,6 +2,53 @@ import '../../../models/game.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../shared/time/calendar_date.dart';
 
+/// What the library is narrowed to; the default shows every game.
+class LibraryFilter {
+  const LibraryFilter({
+    this.searchQuery = '',
+    this.platformFilter,
+    this.tagFilters = const [],
+    this.showDeadlineOnly = false,
+    this.showDlcOnly = false,
+    this.showUsedOnly = false,
+    this.showNoPicturesOnly = false,
+    this.showNoTagsOnly = false,
+  });
+
+  static const _unset = Object();
+
+  final String searchQuery;
+  final String? platformFilter;
+  final List<int> tagFilters;
+  final bool showDeadlineOnly;
+  final bool showDlcOnly;
+  final bool showUsedOnly;
+  final bool showNoPicturesOnly;
+  final bool showNoTagsOnly;
+
+  LibraryFilter copyWith({
+    String? searchQuery,
+    Object? platformFilter = _unset,
+    List<int>? tagFilters,
+    bool? showDeadlineOnly,
+    bool? showDlcOnly,
+    bool? showUsedOnly,
+    bool? showNoPicturesOnly,
+    bool? showNoTagsOnly,
+  }) => LibraryFilter(
+    searchQuery: searchQuery ?? this.searchQuery,
+    platformFilter: platformFilter == _unset
+        ? this.platformFilter
+        : platformFilter as String?,
+    tagFilters: tagFilters ?? this.tagFilters,
+    showDeadlineOnly: showDeadlineOnly ?? this.showDeadlineOnly,
+    showDlcOnly: showDlcOnly ?? this.showDlcOnly,
+    showUsedOnly: showUsedOnly ?? this.showUsedOnly,
+    showNoPicturesOnly: showNoPicturesOnly ?? this.showNoPicturesOnly,
+    showNoTagsOnly: showNoTagsOnly ?? this.showNoTagsOnly,
+  );
+}
+
 /// Searchable values are normalized once per library snapshot. Ordering is
 /// cached across filter edits and invalidated by sort mode or calendar day.
 class LibraryQueryIndex {
@@ -76,18 +123,13 @@ class LibraryQueryIndex {
   GameSortMode? _mode;
   DateTime? _day;
 
-  List<Game> select({
-    required String searchQuery,
-    required String? platformFilter,
-    required List<int> tagFilters,
-    required bool showDeadlineOnly,
-    required bool showDlcOnly,
-    required bool showUsedOnly,
-    required bool showNoPicturesOnly,
-    required bool showNoTagsOnly,
+  List<Game> select(
+    LibraryFilter filter, {
     required GameSortMode sortMode,
     DateTime? now,
   }) {
+    final platform = filter.platformFilter;
+    final tagFilters = filter.tagFilters;
     final instant = now ?? DateTime.now();
     final day = calendarDay(instant);
     if (_ordered == null || _mode != sortMode || _day != day) {
@@ -95,15 +137,15 @@ class LibraryQueryIndex {
       _mode = sortMode;
       _day = day;
     }
-    final query = searchQuery.trim().toLowerCase();
+    final query = filter.searchQuery.trim().toLowerCase();
     if (query.isEmpty &&
-        (platformFilter == null || platformFilter.isEmpty) &&
+        (platform == null || platform.isEmpty) &&
         tagFilters.isEmpty &&
-        !showDeadlineOnly &&
-        !showDlcOnly &&
-        !showUsedOnly &&
-        !showNoPicturesOnly &&
-        !showNoTagsOnly) {
+        !filter.showDeadlineOnly &&
+        !filter.showDlcOnly &&
+        !filter.showUsedOnly &&
+        !filter.showNoPicturesOnly &&
+        !filter.showNoTagsOnly) {
       return _ordered!;
     }
     return List.unmodifiable(
@@ -113,20 +155,20 @@ class LibraryQueryIndex {
             !_keys[game.id]!.contains(query)) {
           return false;
         }
-        if (platformFilter != null &&
-            platformFilter.isNotEmpty &&
-            game.platform != platformFilter) {
+        if (platform != null &&
+            platform.isNotEmpty &&
+            game.platform != platform) {
           return false;
         }
         if (tagFilters.isNotEmpty) {
           final tags = _tags[game.id];
           if (tags == null || !tagFilters.every(tags.contains)) return false;
         }
-        return (!showDeadlineOnly || game.hasDeadline) &&
-            (!showDlcOnly || game.isDlc) &&
-            (!showUsedOnly || game.isUsed) &&
-            (!showNoPicturesOnly || !game.hasCoverImage) &&
-            (!showNoTagsOnly || game.tags.isEmpty);
+        return (!filter.showDeadlineOnly || game.hasDeadline) &&
+            (!filter.showDlcOnly || game.isDlc) &&
+            (!filter.showUsedOnly || game.isUsed) &&
+            (!filter.showNoPicturesOnly || !game.hasCoverImage) &&
+            (!filter.showNoTagsOnly || game.tags.isEmpty);
       }),
     );
   }

@@ -1,7 +1,7 @@
 /// Notifications settings section
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
@@ -35,7 +35,6 @@ class NotificationsSection extends ConsumerWidget {
     title: 'Notify Me About',
     settings: [deadlineRemindersSpec, updateNotificationsSpec],
     extraTexts: ['Notification Types', 'reminders', 'expire'],
-    info: 'Keys about to expire and new app versions.',
   );
 
   @override
@@ -50,6 +49,8 @@ class NotificationsSection extends ConsumerWidget {
           group: typesSearchGroup,
           titleIcon: Icons.notifications_active,
           searchQuery: searchQuery,
+          // The section's own title names it.
+          showTitle: false,
           childBuilder: () => buildSpecToggleSettingList(
             theme: theme,
             entries: [

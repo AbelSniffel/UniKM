@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -30,11 +30,13 @@ class GroupBoxFamilyTitle extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(8),
     decoration: BoxDecoration(
-      gradient: SurfaceDepth.gradient(
+      color: SurfaceDepth.top(
         Color.alphaBlend(theme.accent.withValues(alpha: 0.25), theme.surface),
         highlight: 0.05,
       ),
-      border: Border(bottom: BorderSide(color: theme.border.withValues(alpha: 0.05))),
+      border: Border(
+        bottom: BorderSide(color: theme.border.withValues(alpha: 0.05)),
+      ),
     ),
     child: _buildTitle(),
   );

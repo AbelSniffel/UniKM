@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -29,8 +29,7 @@ class SettingsSectionFamily extends ConsumerWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: color,
-        gradient: SectionGroupBox.gradient(color, highlight: 0.05),
+        color: SectionGroupBox.fill(theme, color),
         borderRadius: radius,
         boxShadow: [if (!tinted) SurfaceDepth.shadow(isDark: theme.isDark)],
       ),

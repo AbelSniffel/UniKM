@@ -1,6 +1,6 @@
 // Encryption-related dialogs for database security
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/biometric_unlock.dart';
@@ -103,11 +103,9 @@ class _EnableEncryptionDialogState
     onPrimaryAction: _confirm,
     onDismiss: () => Navigator.of(context).pop(),
     child: ThemedAlertDialog(
-      theme: widget.theme,
       title: DialogHeader(
         icon: Icons.lock,
         title: widget.title,
-        theme: widget.theme,
         iconColor: widget.theme.baseAccent,
       ),
       titleActions: [
@@ -148,7 +146,6 @@ class _EnableEncryptionDialogState
               ),
               const SizedBox(height: kDialogSpacing),
               DialogBanner.warning(
-                theme: widget.theme,
                 message:
                     'WARNING: If you forget your password, your data cannot be recovered!',
               ),
@@ -158,7 +155,6 @@ class _EnableEncryptionDialogState
       ),
       actions: [
         DialogActionBar(
-          theme: widget.theme,
           onCancel: () => Navigator.of(context).pop(),
           onConfirm: _confirm,
           confirmIcon: Icons.lock,
@@ -174,7 +170,6 @@ class _EnableEncryptionDialogState
 /// returns true, or shows [errorText] and stays open.
 class _PasswordActionDialog extends StatefulWidget {
   const _PasswordActionDialog({
-    required this.theme,
     required this.icon,
     required this.title,
     required this.fields,
@@ -187,7 +182,6 @@ class _PasswordActionDialog extends StatefulWidget {
     this.warning,
   });
 
-  final AppThemeData theme;
   final IconData icon;
   final String title;
   final List<Widget> Function(VoidCallback submit) fields;
@@ -233,7 +227,7 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     return PopScope(
       canPop: !_busy,
       child: DialogInteractionScope(
@@ -242,15 +236,10 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
         onPrimaryAction: _submit,
         onDismiss: () => Navigator.of(context).pop(false),
         child: ThemedAlertDialog(
-          theme: theme,
           maxWidth: 520,
           maxHeight: 600,
           showCloseButton: !_busy,
-          title: DialogHeader(
-            icon: widget.icon,
-            title: widget.title,
-            theme: theme,
-          ),
+          title: DialogHeader(icon: widget.icon, title: widget.title),
           contentChildren: [
             ExcludeFocus(
               excluding: _busy,
@@ -279,9 +268,8 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
               spacing: kDialogSpacing,
               children: [
                 if (widget.warning case final warning?)
-                  DialogBanner.warning(theme: theme, message: warning),
+                  DialogBanner.warning(message: warning),
                 DialogActionBar(
-                  theme: theme,
                   onCancel: () => Navigator.of(context).pop(false),
                   onConfirm: _submit,
                   confirmIcon: widget.confirmIcon,
@@ -323,23 +311,17 @@ TextStyle _hintStyle(AppThemeData theme) =>
 /// Asks for the database password before pairing biometric unlock, which
 /// then shows the system prompt. Returns whether the pairing was saved.
 class BiometricPairDialog extends StatefulWidget {
-  const BiometricPairDialog({
-    super.key,
-    required this.theme,
-    required this.onPair,
-  });
+  const BiometricPairDialog({super.key, required this.onPair});
 
-  final AppThemeData theme;
   final Future<void> Function(String password) onPair;
 
   static Future<bool> show(
     BuildContext context,
-    AppThemeData theme,
     Future<void> Function(String password) onPair,
   ) async =>
       await showAppDialog<bool>(
         context: context,
-        builder: (_) => BiometricPairDialog(theme: theme, onPair: onPair),
+        builder: (_) => BiometricPairDialog(onPair: onPair),
       ) ??
       false;
 
@@ -355,7 +337,6 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
   Widget build(BuildContext context) {
     final label = BiometricUnlock.label;
     return _PasswordActionDialog(
-      theme: widget.theme,
       icon: Icons.fingerprint,
       title: '$label Unlock',
       action: () => widget.onPair(_password.text),
@@ -371,7 +352,7 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
           'Unlock this database with $label instead of its password. Enter '
           'the password once, then confirm with $label. Other databases are '
           'paired separately.',
-          style: _hintStyle(widget.theme),
+          style: _hintStyle(context.appTheme),
         ),
         PasswordField(
           controller: _password,
@@ -420,7 +401,6 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
 
   @override
   Widget build(BuildContext context) => _PasswordActionDialog(
-    theme: widget.theme,
     icon: Icons.lock_open,
     title: 'Disable Encryption',
     action: () => widget.onDisable(_password.text),
@@ -489,7 +469,6 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog>
 
   @override
   Widget build(BuildContext context) => _PasswordActionDialog(
-    theme: widget.theme,
     icon: Icons.key,
     title: 'Change Database Password',
     action: () => widget.onChangePassword(_current.text, _new.text),

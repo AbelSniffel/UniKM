@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../providers/ui_state_providers.dart' show kAutoDetectPlatformValue;
@@ -35,7 +35,6 @@ class PlatformMenuButton extends StatelessWidget {
         ? detectedPlatform
         : GamePlatform.fromDisplayName(value);
     return IconMenuButton<String>(
-      theme: theme,
       value: value,
       tooltip: tooltip,
       onSelected: onSelected,
@@ -65,7 +64,6 @@ class PlatformMenuButton extends StatelessWidget {
 class IconMenuButton<T> extends StatefulWidget {
   const IconMenuButton({
     super.key,
-    required this.theme,
     required this.value,
     required this.tooltip,
     required this.onSelected,
@@ -75,7 +73,6 @@ class IconMenuButton<T> extends StatefulWidget {
     this.tabStyle = false,
   });
 
-  final AppThemeData theme;
   final T value;
   final String tooltip;
   final ValueChanged<T>? onSelected;
@@ -96,32 +93,16 @@ class IconMenuButton<T> extends StatefulWidget {
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
 }
 
-class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
-  final _menu = MenuController();
-  final _focusNode = FocusNode(skipTraversal: true);
+class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
   var _hovered = false;
 
   @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    if (_menu.isOpen) return _menu.close();
-    // Focus lets Escape close the menu again.
-    _focusNode.requestFocus();
-    _menu.open();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final enabled = widget.onSelected != null;
     return AppMenuAnchor(
-      theme: theme,
-      controller: _menu,
-      childFocusNode: _focusNode,
+      controller: menu,
+      childFocusNode: menuFocusNode,
       width: 230,
       maxHeight: kDropdownMenuMaxHeight,
       menuChildren: [
@@ -147,7 +128,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
               ActivateIntent(),
         },
         child: Focus(
-          focusNode: _focusNode,
+          focusNode: menuFocusNode,
           child: Semantics(
             expanded: controller.isOpen,
             child: widget.expanded
@@ -215,10 +196,9 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
             boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
           ),
           child: AppTabSurface(
-            theme: theme,
             selected: controller.isOpen,
             borderRadius: radius,
-            onTap: enabled ? _toggleMenu : null,
+            onTap: enabled ? toggleMenu : null,
             onHover: (hovered) => setState(() => _hovered = hovered),
             padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
             builder: (context, color) => Row(
@@ -254,7 +234,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> {
       isSelected: controller.isOpen,
       isEnabled: enabled,
       isHorizontal: true,
-      onTap: _toggleMenu,
+      onTap: toggleMenu,
       tooltipMessage: widget.tooltip,
       selectedBackgroundColor: theme.accent.withValues(alpha: 0.30),
       // The chevron's glyph has its own side margin, so the icon side gets

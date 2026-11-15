@@ -1,7 +1,7 @@
 /// Navigation panel layout and gradient bar animation settings.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -66,7 +66,6 @@ class NavigationSection extends ConsumerWidget {
       'Position',
       'Button',
     ],
-    info: 'Where the bar sits and where its page buttons go.',
   );
 
   static SettingsSearchGroup get gradientSearchGroup => SettingsSearchGroup(
@@ -121,6 +120,8 @@ class NavigationSection extends ConsumerWidget {
           group: navigationSearchGroup,
           titleIcon: Icons.view_sidebar,
           searchQuery: searchQuery,
+          // The section's own title names it.
+          showTitle: false,
           // Each on its own full row: side by side, their buttons crowd
           // the names on narrow windows.
           childBuilder: () => Column(
@@ -260,7 +261,6 @@ class _GradientAnimationSection extends ConsumerWidget {
             ),
           ),
           SliderPopoverButton(
-            theme: theme,
             title: 'Animation speed',
             value:
                 '${speed.multiplier.toStringAsFixed(speed.multiplier % 1 == 0 ? 0 : 1)}×',

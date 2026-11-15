@@ -5,12 +5,11 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import '../../widgets/animated_popover.dart';
 import '../../widgets/app_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:unikm/core/constants/app_constants.dart';
 
 import '../../../core/services/platform_file_actions.dart';
 import '../../../core/settings/settings_model.dart';
@@ -25,6 +24,7 @@ import '../../widgets/section_groupbox.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../widgets/theme_preview_card.dart';
 import '../../widgets/theme_picker_actions.dart';
+import '../../widgets/tab_height_transition.dart';
 import '../../widgets/app_tab_bar.dart';
 import 'settings_common.dart';
 import 'settings_control_cards.dart';
@@ -172,7 +172,7 @@ class AppearanceSection extends ConsumerWidget {
               // Only the panel animates its height, so the actions below
               // move with the groupbox instead of jumping to their place.
               _animatedPanelHeight(
-                context,
+                visibleTab,
                 AppTabTransition(
                   index: visibleTab,
                   child: visibleThemes.isEmpty
@@ -187,14 +187,12 @@ class AppearanceSection extends ConsumerWidget {
                           ),
                         )
                       : PreviewCardWrap(
-                          spacing: kElementHSpacing,
-                          runSpacing: 10,
+                          fillWhenAlone: true,
                           children: [
                             for (final themeData in visibleThemes)
                               ThemePreviewCard(
                                 key: ValueKey(themeData.id),
                                 data: themeData,
-                                theme: theme,
                                 selected: current.id == themeData.id,
                                 onDoubleTap: builtInIds.contains(themeData.id)
                                     ? null
@@ -213,7 +211,6 @@ class AppearanceSection extends ConsumerWidget {
               ),
               const SizedBox(height: 10),
               ThemePickerActions(
-                theme: theme,
                 onCreate: () => _openThemeEditor(context, ref),
                 onEdit: canManageCurrent
                     ? () => _openThemeEditor(context, ref, existing: current)
@@ -233,7 +230,6 @@ class AppearanceSection extends ConsumerWidget {
         SectionGroupEntry(
           visible: showPatternSection,
           builder: (position, isAlternate) => _BackgroundPatternSection(
-            theme: theme,
             searchQuery: searchQuery,
             groupPosition: position,
             isAlternate: isAlternate,
@@ -244,16 +240,13 @@ class AppearanceSection extends ConsumerWidget {
   }
 }
 
-Widget _animatedPanelHeight(BuildContext context, Widget panel) =>
-    MediaQuery.disableAnimationsOf(context)
-    ? panel
-    : AnimatedSize(
-        key: const ValueKey('appearance-theme-size'),
-        duration: kTabTransition,
-        curve: kTabTransitionCurve,
-        alignment: Alignment.topLeft,
-        child: panel,
-      );
+// Only a Default/Custom switch animates the height; a resizing window
+// reflows the cards at once, as the other card panels do.
+Widget _animatedPanelHeight(int tab, Widget panel) => TabHeightTransition(
+  key: const ValueKey('appearance-theme-size'),
+  tab: tab,
+  child: panel,
+);
 
 void _openThemeEditor(
   BuildContext context,
@@ -379,13 +372,11 @@ class ThemeHeaderActions extends ConsumerWidget {
 
 class _BackgroundPatternSection extends ConsumerStatefulWidget {
   const _BackgroundPatternSection({
-    required this.theme,
     required this.searchQuery,
     this.groupPosition = SectionGroupPosition.only,
     this.isAlternate = false,
   });
 
-  final AppThemeData theme;
   final String searchQuery;
   final SectionGroupPosition groupPosition;
   final bool isAlternate;
@@ -410,7 +401,7 @@ class _BackgroundPatternSectionState
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final currentTheme = ref.watch(themeProvider);
     final pattern = ref.watch(backgroundPatternProvider);
     final saved = ref.watch(savedBackgroundPatternProvider);
@@ -437,7 +428,6 @@ class _BackgroundPatternSectionState
         mainAxisSize: MainAxisSize.min,
         children: [
           SliderPopoverButton(
-            theme: theme,
             title: AppearanceSection.patternStrengthSpec.label,
             value: percent,
             icon: CustomPaint(
@@ -458,7 +448,6 @@ class _BackgroundPatternSectionState
             ),
           ),
           SliderPopoverButton(
-            theme: theme,
             title: AppearanceSection.patternAngleSpec.label,
             value: '$angle°',
             // Points across the stripes.
@@ -495,7 +484,6 @@ class _BackgroundPatternSectionState
             ),
           ),
           SliderPopoverButton(
-            theme: theme,
             title: AppearanceSection.lineShapeSpec.label,
             value: shape,
             icon: Icon(

@@ -1,9 +1,10 @@
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -30,7 +31,7 @@ class CoverLoadScope extends InheritedWidget {
       listener != oldWidget.listener;
 }
 
-class GameCoverImage extends StatelessWidget {
+class GameCoverImage extends StatefulWidget {
   const GameCoverImage({
     super.key,
     required this.theme,
@@ -44,7 +45,44 @@ class GameCoverImage extends StatelessWidget {
   /// Called once if the image fails to load (URL 404, missing file, etc.).
   final VoidCallback? onError;
 
+  @override
+  State<GameCoverImage> createState() => _GameCoverImageState();
+}
+
+class _GameCoverImageState extends State<GameCoverImage> {
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
+
+  /// The image built last and what it depends on: a resize that keeps the
+  /// decode size returns the same widget, so its subtree is not rebuilt.
+  Widget? _image;
+  Object? _imageKey;
+
+  /// The decode width in use. While the size changes, as when the window
+  /// resizes, it is held, so covers do not decode again at every step, and
+  /// the new one is taken once the size settles. Never more than one step
+  /// too small.
+  int? _cacheWidth;
+  Timer? _settle;
+
+  AppThemeData get theme => widget.theme;
+
+  int _heldCacheWidth(int needed) {
+    _settle?.cancel();
+    final held = _cacheWidth;
+    if (held == null || needed == held || needed > held + 128) {
+      return _cacheWidth = needed;
+    }
+    _settle = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() => _cacheWidth = null);
+    });
+    return held;
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -55,13 +93,25 @@ class GameCoverImage extends StatelessWidget {
       // Reuse decodes across small window size changes. Keep the previous
       // frame visible while a larger decode is loading.
       final pixels = width * MediaQuery.devicePixelRatioOf(context);
-      final cacheWidth = ((pixels / 128).ceil() * 128).clamp(128, 2048);
-      return _buildImage(cacheWidth);
+      final cacheWidth = _heldCacheWidth(
+        ((pixels / 128).ceil() * 128).clamp(128, 2048),
+      );
+      final key = (
+        cacheWidth,
+        widget.coverImage,
+        widget.theme,
+        widget.onError == null,
+      );
+      if (key != _imageKey) {
+        _imageKey = key;
+        _image = _buildImage(cacheWidth);
+      }
+      return _image!;
     },
   );
 
   Widget _buildImage(int cacheWidth) {
-    final raw = coverImage?.trim() ?? '';
+    final raw = widget.coverImage?.trim() ?? '';
     if (raw.isEmpty) return _buildPlaceholder();
 
     if (raw.startsWith('http')) {
@@ -116,7 +166,7 @@ class GameCoverImage extends StatelessWidget {
       );
 
   Widget _imageError() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => onError?.call());
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onError?.call());
     return _buildPlaceholder();
   }
 

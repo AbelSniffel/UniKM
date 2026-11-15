@@ -1,14 +1,13 @@
 /// Dialog showing all available copy/redeem actions for selected games
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/game_clipboard.dart';
 import '../../models/game.dart';
-import '../../providers/app_providers.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/game_selection_actions.dart';
 import '../widgets/tinted_tiles.dart';
@@ -26,7 +25,6 @@ class CopyActionsDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
     final redeemable = targets
         .where((g) => redeemPageUrl(g.platform, g.gameKey) != null)
         .length;
@@ -34,16 +32,11 @@ class CopyActionsDialog extends ConsumerWidget {
     final container = ProviderScope.containerOf(context, listen: false);
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 440,
-      title: DialogHeader(
-        icon: Icons.copy,
-        title: 'Copy Options',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.copy, title: 'Copy Options'),
       contentSpacing: 16,
       contentChildren: [
-        _ActionGroup(theme, 'Keys', targets.length, [
+        _ActionGroup('Keys', targets.length, [
           (
             Icons.key,
             'Key Only',
@@ -64,7 +57,7 @@ class CopyActionsDialog extends ConsumerWidget {
           ),
         ]),
         if (redeemable > 0)
-          _ActionGroup(theme, 'Redeem Links', redeemable, [
+          _ActionGroup('Redeem Links', redeemable, [
             (
               Icons.open_in_new,
               'Open Redeem Page',
@@ -99,9 +92,8 @@ typedef _CopyAction = (
 
 /// A titled list of tinted action tiles, with how many keys they cover.
 class _ActionGroup extends StatelessWidget {
-  const _ActionGroup(this.theme, this.title, this.count, this.actions);
+  const _ActionGroup(this.title, this.count, this.actions);
 
-  final AppThemeData theme;
   final String title;
   final int count;
   final List<_CopyAction> actions;
@@ -112,14 +104,13 @@ class _ActionGroup extends StatelessWidget {
     spacing: 8,
     children: [
       TintedHeading(
-        theme: theme,
         title: title,
         trailing: count == 1 ? '1 key' : '$count keys',
       ),
       for (final (icon, label, format, run) in actions)
         // Closes the dialog, then runs the action.
         TintedOptionTile(
-          theme: theme,
+          theme: context.appTheme,
           icon: icon,
           title: label,
           subtitle: format,

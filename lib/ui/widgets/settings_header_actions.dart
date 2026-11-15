@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'nav_button_group.dart';
@@ -23,7 +23,6 @@ class SettingsHeaderActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => NavButtonGroup(
-    theme: theme,
     isHorizontal: true,
     expanded: expanded,
     children: children,

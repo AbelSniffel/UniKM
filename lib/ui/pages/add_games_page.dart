@@ -2,7 +2,7 @@
 /// Matches the original Python AddGamesPage
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -42,14 +42,12 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
 ) => showAppDialog<DuplicateAction>(
   context: context,
   builder: (ctx) => ThemedAlertDialog(
-    theme: theme,
     maxWidth: kCompactDialogWidth,
     title: DialogHeader(
       icon: Icons.warning_amber_rounded,
       iconColor: theme.error,
       iconSize: 28,
       title: 'Duplicate Keys Found',
-      theme: theme,
     ),
     contentSpacing: 16,
     contentChildren: [
@@ -58,7 +56,6 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
         spacing: 8,
         children: [
           TintedHeading(
-            theme: theme,
             title: duplicates.length == 1 ? 'Existing Key' : 'Existing Keys',
             trailing: '${duplicates.length}',
           ),
@@ -75,7 +72,6 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
               itemBuilder: (_, index) {
                 final MapEntry(key: key, value: game) = duplicates[index];
                 return TintedCard(
-                  theme: theme,
                   color: theme.accent,
                   icon: Icons.key,
                   title: game.title,
@@ -165,10 +161,7 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
         Expanded(
           child: AppTabView(
             controller: _tabController,
-            children: [
-              _SingleEntryTab(theme: theme),
-              _BatchAddTab(theme: theme),
-            ],
+            children: [_SingleEntryTab(), _BatchAddTab()],
           ),
         ),
       ],
@@ -189,9 +182,7 @@ bool _syncBlocksAdding(WidgetRef ref) {
 }
 
 class _SingleEntryTab extends ConsumerStatefulWidget {
-  const _SingleEntryTab({required this.theme});
-
-  final AppThemeData theme;
+  const _SingleEntryTab();
 
   @override
   ConsumerState<_SingleEntryTab> createState() => _SingleEntryTabState();
@@ -314,7 +305,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
       ref.read(allGamesProvider),
     );
     if (existingGame != null) {
-      final action = await showDuplicateKeyDialog(context, widget.theme, [
+      final action = await showDuplicateKeyDialog(context, context.appTheme, [
         MapEntry(existingGame.gameKey, existingGame),
       ]);
       if (action != DuplicateAction.addAnyway) return;
@@ -460,7 +451,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final steam = _isSteamPlatform;
     final preview = _steamPreview;
     final developer = preview?.developer;
@@ -530,7 +521,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   onSelected: (value) => _update(() => _platform = value),
                 ),
                 options: GameOptionsRow(
-                  theme: theme,
                   isDlc: _isDlc,
                   onDlcChanged: (value) => _update(() => _isDlc = value),
                   deadline: DeadlineChip(
@@ -587,7 +577,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
         ),
         _ActionRibbon(
           key: const ValueKey('single-entry-footer'),
-          theme: theme,
           child: Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -612,9 +601,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
 
 /// Batch add tab
 class _BatchAddTab extends ConsumerStatefulWidget {
-  const _BatchAddTab({required this.theme});
-
-  final AppThemeData theme;
+  const _BatchAddTab();
 
   @override
   ConsumerState<_BatchAddTab> createState() => _BatchAddTabState();
@@ -770,7 +757,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
     if (duplicates.isNotEmpty) {
       action = await showDuplicateKeyDialog(
         context,
-        widget.theme,
+        context.appTheme,
         duplicates.entries.toList(),
       );
       if (action == null) return; // User cancelled
@@ -863,7 +850,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final loaded = _steamResults.values.where((result) => result != null);
     return Column(
       children: [
@@ -873,7 +860,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
             // Under the same banner as Single Game: a heading, the options
             // as a strip of pills, then the paste box.
             child: GameBanner(
-              theme: theme,
               cornerRadius: theme.cornerRadius,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 10, 20),
@@ -883,7 +869,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                     // The heading and its buttons, then the description
                     // across the full width.
                     BannerHeadingRow(
-                      theme: theme,
                       heading: 'Paste Games',
                       actions: [
                         if (_parsedGames.isNotEmpty && _hasSteamGames)
@@ -964,7 +949,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         // Pinned Import buttons at bottom
         _ActionRibbon(
           key: const ValueKey('batch-footer'),
-          theme: theme,
           child: Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -997,30 +981,32 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
 /// navigation panel's color and pattern, a little stronger than the page's,
 /// with a top border and a soft shadow.
 class _ActionRibbon extends StatelessWidget {
-  const _ActionRibbon({super.key, required this.theme, required this.child});
+  const _ActionRibbon({super.key, required this.child});
 
-  final AppThemeData theme;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      border: Border(top: BorderSide(color: theme.border)),
-      boxShadow: [
-        BoxShadow(
-          color: theme.border.withValues(alpha: 0.06),
-          blurRadius: 8,
-          offset: const Offset(0, -4),
-        ),
-      ],
-    ),
-    child: PanelPatternSurface(
-      strength: PanelPatternSurface.sidePanelStrength,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-        child: child,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: theme.border)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.border.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
-    ),
-  );
+      child: PanelPatternSurface(
+        strength: PanelPatternSurface.sidePanelStrength,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: child,
+        ),
+      ),
+    );
+  }
 }

@@ -2,7 +2,7 @@
 /// This extends the database model with business logic
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:collection/collection.dart';
 
 import '../core/constants/platform_patterns.dart';

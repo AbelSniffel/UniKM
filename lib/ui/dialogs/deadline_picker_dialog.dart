@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
@@ -44,7 +44,6 @@ Future<DateTime?> showDeadlinePickerDialog({
     context: context,
     useRootNavigator: useRootNavigator,
     builder: (dialogContext) => _DeadlinePickerDialog(
-      theme: theme,
       initialDate: selectedDate,
       firstDate: earliestDate,
       lastDate: latestDate,
@@ -62,14 +61,12 @@ DateTime _clampDate(DateTime value, DateTime firstDate, DateTime lastDate) =>
 
 class _DeadlinePickerDialog extends StatefulWidget {
   const _DeadlinePickerDialog({
-    required this.theme,
     required this.initialDate,
     required this.firstDate,
     required this.lastDate,
     required this.currentDate,
   });
 
-  final AppThemeData theme;
   final DateTime initialDate;
   final DateTime firstDate;
   final DateTime lastDate;
@@ -213,7 +210,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final textScale =
         MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 3).scale(14) /
         14;
@@ -262,17 +259,11 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
     );
 
     return ThemedAlertDialog(
-      theme: theme,
       maxWidth: 460,
-      title: DialogHeader(
-        icon: Icons.schedule,
-        title: 'Select Deadline',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.schedule, title: 'Select Deadline'),
       contentSpacing: 16,
       contentChildren: [
         _SelectedDateCard(
-          theme: theme,
           date: _selectedDate,
           daysLeft: calendarDaysUntil(_selectedDate, _currentDateOnly),
         ),
@@ -332,18 +323,14 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 /// The chosen date, tinted by how soon it is due like the game card badges,
 /// with the days left as large as the stats tiles' numbers.
 class _SelectedDateCard extends StatelessWidget {
-  const _SelectedDateCard({
-    required this.theme,
-    required this.date,
-    required this.daysLeft,
-  });
+  const _SelectedDateCard({required this.date, required this.daysLeft});
 
-  final AppThemeData theme;
   final DateTime date;
   final int daysLeft;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final color = switch (daysLeft) {
       < 0 => theme.secondary,
       <= 7 => theme.deadlineSoon,
@@ -355,7 +342,6 @@ class _SelectedDateCard extends StatelessWidget {
       liveRegion: true,
       child: TintedCard(
         key: const ValueKey('deadline-selected-date'),
-        theme: theme,
         size: TintedCardSize.large,
         color: color,
         icon: Icons.event,

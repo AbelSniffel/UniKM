@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -62,7 +62,6 @@ class AppTabBar extends StatelessWidget {
                   excludeSemantics: true,
                   onTap: () => _select(context, index),
                   child: AppTabSurface(
-                    theme: theme,
                     selected: index == selected,
                     borderRadius: _radiusFor(index, radius, context),
                     onTap: () => _select(context, index),
@@ -146,7 +145,6 @@ class AppTabBar extends StatelessWidget {
 class AppTabSurface extends StatelessWidget {
   const AppTabSurface({
     super.key,
-    required this.theme,
     required this.selected,
     required this.borderRadius,
     required this.onTap,
@@ -155,7 +153,6 @@ class AppTabSurface extends StatelessWidget {
     this.onHover,
   });
 
-  final AppThemeData theme;
   final bool selected;
   final BorderRadius borderRadius;
   final VoidCallback? onTap;
@@ -164,43 +161,46 @@ class AppTabSurface extends StatelessWidget {
   final Widget Function(BuildContext context, Color color) builder;
 
   @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: selected ? 1 : 0, end: selected ? 1 : 0),
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : kTabTransition,
-    curve: kTabTransitionCurve,
-    builder: (context, amount, _) {
-      final background = Color.lerp(
-        theme.tabUnselected,
-        theme.tabSelected,
-        amount,
-      )!;
-      final color = onTap == null
-          ? theme.primaryButtonDisabledText
-          : Color.lerp(theme.textSecondary, theme.primaryButtonText, amount)!;
-      return Material(
-        color: background,
-        animationDuration: Duration.zero,
-        borderRadius: borderRadius,
-        clipBehavior: Clip.antiAlias,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: SurfaceDepth.gradient(background),
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: selected ? 1 : 0, end: selected ? 1 : 0),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : kTabTransition,
+      curve: kTabTransitionCurve,
+      builder: (context, amount, _) {
+        final background = Color.lerp(
+          theme.tabUnselected,
+          theme.tabSelected,
+          amount,
+        )!;
+        final color = onTap == null
+            ? theme.primaryButtonDisabledText
+            : Color.lerp(theme.textSecondary, theme.primaryButtonText, amount)!;
+        return Material(
+          color: background,
+          animationDuration: Duration.zero,
+          borderRadius: borderRadius,
+          clipBehavior: Clip.antiAlias,
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: SurfaceDepth.gradient(background),
+            ),
+            child: InkWell(
+              borderRadius: borderRadius,
+              hoverColor: theme.navItemHover,
+              splashColor: theme.navItemHover,
+              highlightColor: theme.tabSelected,
+              onTap: onTap,
+              onHover: onHover,
+              child: Padding(padding: padding, child: builder(context, color)),
+            ),
           ),
-          child: InkWell(
-            borderRadius: borderRadius,
-            hoverColor: theme.navItemHover,
-            splashColor: theme.navItemHover,
-            highlightColor: theme.tabSelected,
-            onTap: onTap,
-            onHover: onHover,
-            child: Padding(padding: padding, child: builder(context, color)),
-          ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }
 
 /// Slides index-driven tab content like [TabBarView]: the previous tab slides

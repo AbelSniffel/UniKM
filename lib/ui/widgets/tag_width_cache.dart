@@ -4,7 +4,7 @@
 /// promotion and LRU eviction are O(1) without any extra data structure.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class TagWidthCache {
   static const _maxCacheSize = 500;

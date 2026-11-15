@@ -16,6 +16,8 @@ import '../features/library/data/library_repository.dart';
 import 'database_providers.dart';
 import 'settings_providers.dart';
 
+export '../features/library/application/library_query.dart' show LibraryFilter;
+
 // =============================================================================
 // GAMES STATE
 // =============================================================================
@@ -38,20 +40,11 @@ Future<void> _bumpSyncDbRevision(Ref ref, AppDatabase db) async {
 
 /// State for the games list with filtering and sorting
 class GamesState {
-  static const _unset = Object();
-
   const GamesState({
     this.games = const [],
     this.isLoading = false,
     this.error,
-    this.searchQuery = '',
-    this.platformFilter,
-    this.tagFilters = const [],
-    this.showDeadlineOnly = false,
-    this.showDlcOnly = false,
-    this.showUsedOnly = false,
-    this.showNoPicturesOnly = false,
-    this.showNoTagsOnly = false,
+    this.filter = const LibraryFilter(),
     this.sortMode = GameSortMode.deadlineFirst,
     this.selectedGameIds = const {},
     this.filteredGames = const [],
@@ -61,14 +54,7 @@ class GamesState {
   final List<Game> games;
   final bool isLoading;
   final String? error;
-  final String searchQuery;
-  final String? platformFilter;
-  final List<int> tagFilters;
-  final bool showDeadlineOnly;
-  final bool showDlcOnly;
-  final bool showUsedOnly;
-  final bool showNoPicturesOnly;
-  final bool showNoTagsOnly;
+  final LibraryFilter filter;
   final GameSortMode sortMode;
   final Set<int> selectedGameIds;
   final List<Game> filteredGames;
@@ -78,77 +64,28 @@ class GamesState {
     List<Game>? games,
     bool? isLoading,
     String? error,
-    String? searchQuery,
-    Object? platformFilter = _unset,
-    List<int>? tagFilters,
-    bool? showDeadlineOnly,
-    bool? showDlcOnly,
-    bool? showUsedOnly,
-    bool? showNoPicturesOnly,
-    bool? showNoTagsOnly,
+    LibraryFilter? filter,
     GameSortMode? sortMode,
     Set<int>? selectedGameIds,
   }) {
     final nextGames = games ?? this.games;
-    final nextSearchQuery = searchQuery ?? this.searchQuery;
-    final nextPlatformFilter = platformFilter == _unset
-        ? this.platformFilter
-        : platformFilter as String?;
-    final nextTagFilters = tagFilters ?? this.tagFilters;
-    final nextShowDeadlineOnly = showDeadlineOnly ?? this.showDeadlineOnly;
-    final nextShowDlcOnly = showDlcOnly ?? this.showDlcOnly;
-    final nextShowUsedOnly = showUsedOnly ?? this.showUsedOnly;
-    final nextShowNoPicturesOnly =
-        showNoPicturesOnly ?? this.showNoPicturesOnly;
-    final nextShowNoTagsOnly = showNoTagsOnly ?? this.showNoTagsOnly;
+    final nextFilter = filter ?? this.filter;
     final nextSortMode = sortMode ?? this.sortMode;
-
-    // Check if re-filtering is needed.
-    // If only selectedGameIds or isLoading/error changed, we can reuse result.
-    final needsRefilter =
-        games != null ||
-        searchQuery != null ||
-        platformFilter != _unset ||
-        tagFilters != null ||
-        showDeadlineOnly != null ||
-        showDlcOnly != null ||
-        showUsedOnly != null ||
-        showNoPicturesOnly != null ||
-        showNoTagsOnly != null ||
-        sortMode != null;
-
     final nextIndex = games != null || queryIndex == null
         ? LibraryQueryIndex(nextGames, previous: queryIndex)
         : queryIndex!;
-    final nextFilteredGames = needsRefilter
-        ? nextIndex.select(
-            searchQuery: nextSearchQuery,
-            platformFilter: nextPlatformFilter,
-            tagFilters: nextTagFilters,
-            showDeadlineOnly: nextShowDeadlineOnly,
-            showDlcOnly: nextShowDlcOnly,
-            showUsedOnly: nextShowUsedOnly,
-            showNoPicturesOnly: nextShowNoPicturesOnly,
-            showNoTagsOnly: nextShowNoTagsOnly,
-            sortMode: nextSortMode,
-          )
-        : filteredGames;
-
+    // A change of selection, loading or error reuses the filtered result.
+    final needsRefilter = games != null || filter != null || sortMode != null;
     return GamesState(
       games: nextGames,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      searchQuery: nextSearchQuery,
-      platformFilter: nextPlatformFilter,
-      tagFilters: nextTagFilters,
-      showDeadlineOnly: nextShowDeadlineOnly,
-      showDlcOnly: nextShowDlcOnly,
-      showUsedOnly: nextShowUsedOnly,
-      showNoPicturesOnly: nextShowNoPicturesOnly,
-      showNoTagsOnly: nextShowNoTagsOnly,
+      filter: nextFilter,
       sortMode: nextSortMode,
       selectedGameIds: selectedGameIds ?? this.selectedGameIds,
-      filteredGames: nextFilteredGames,
+      filteredGames: needsRefilter
+          ? nextIndex.select(nextFilter, sortMode: nextSortMode)
+          : filteredGames,
       queryIndex: nextIndex,
     );
   }
@@ -564,9 +501,12 @@ class GamesNotifier extends Notifier<GamesState> {
   // FILTERING
   // ===========================================================================
 
+  void _setFilter(LibraryFilter filter) =>
+      state = state.copyWith(filter: filter);
+
   void setSearchQuery(String query) {
     _searchDebounce?.cancel();
-    state = state.copyWith(searchQuery: query);
+    _setFilter(state.filter.copyWith(searchQuery: query));
   }
 
   void setSearchQueryDebounced(String query) {
@@ -582,45 +522,39 @@ class GamesNotifier extends Notifier<GamesState> {
 
   // Empty strings become null so the filter is never stored as '' and
   // "All Platforms" reliably clears the filter.
-  void setPlatformFilter(String? platform) => state = state.copyWith(
-    platformFilter: platform?.isEmpty == true ? null : platform,
+  void setPlatformFilter(String? platform) => _setFilter(
+    state.filter.copyWith(
+      platformFilter: platform?.isEmpty == true ? null : platform,
+    ),
   );
 
   void setTagFilters(List<int> tagIds) =>
-      state = state.copyWith(tagFilters: tagIds);
+      _setFilter(state.filter.copyWith(tagFilters: tagIds));
 
   void toggleTagFilter(int tagId) {
-    final current = List<int>.from(state.tagFilters);
+    final current = List<int>.from(state.filter.tagFilters);
     if (!current.remove(tagId)) current.add(tagId);
-    state = state.copyWith(tagFilters: current);
+    setTagFilters(current);
   }
 
   void setShowDeadlineOnly(bool value) =>
-      state = state.copyWith(showDeadlineOnly: value);
+      _setFilter(state.filter.copyWith(showDeadlineOnly: value));
 
-  void setShowDlcOnly(bool value) => state = state.copyWith(showDlcOnly: value);
+  void setShowDlcOnly(bool value) =>
+      _setFilter(state.filter.copyWith(showDlcOnly: value));
 
   void setShowUsedOnly(bool value) =>
-      state = state.copyWith(showUsedOnly: value);
+      _setFilter(state.filter.copyWith(showUsedOnly: value));
 
   void setShowNoPicturesOnly(bool value) =>
-      state = state.copyWith(showNoPicturesOnly: value);
+      _setFilter(state.filter.copyWith(showNoPicturesOnly: value));
 
   void setShowNoTagsOnly(bool value) =>
-      state = state.copyWith(showNoTagsOnly: value);
+      _setFilter(state.filter.copyWith(showNoTagsOnly: value));
 
   void clearAllFilters() {
     _searchDebounce?.cancel();
-    state = state.copyWith(
-      searchQuery: '',
-      platformFilter: null,
-      tagFilters: [],
-      showDeadlineOnly: false,
-      showDlcOnly: false,
-      showUsedOnly: false,
-      showNoPicturesOnly: false,
-      showNoTagsOnly: false,
-    );
+    _setFilter(const LibraryFilter());
   }
 
   // ===========================================================================
@@ -691,30 +625,9 @@ final gamesProvider = NotifierProvider<GamesNotifier, GamesState>(
   GamesNotifier.new,
 );
 
-typedef ActiveFiltersState = ({
-  String searchQuery,
-  List<int> tagFilters,
-  bool showDeadlineOnly,
-  bool showDlcOnly,
-  bool showUsedOnly,
-  bool showNoPicturesOnly,
-  bool showNoTagsOnly,
-});
-
-final activeFiltersProvider = Provider<ActiveFiltersState>(
-  (ref) => ref.watch(
-    gamesProvider.select(
-      (s) => (
-        searchQuery: s.searchQuery,
-        tagFilters: s.tagFilters,
-        showDeadlineOnly: s.showDeadlineOnly,
-        showDlcOnly: s.showDlcOnly,
-        showUsedOnly: s.showUsedOnly,
-        showNoPicturesOnly: s.showNoPicturesOnly,
-        showNoTagsOnly: s.showNoTagsOnly,
-      ),
-    ),
-  ),
+/// The library's filter; a new instance on every filter change.
+final activeFiltersProvider = Provider<LibraryFilter>(
+  (ref) => ref.watch(gamesProvider.select((s) => s.filter)),
 );
 
 /// Selected games in selection order. Filters never hide a selected game, so

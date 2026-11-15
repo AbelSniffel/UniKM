@@ -4,7 +4,7 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
@@ -106,7 +106,6 @@ class GameEditorLayout extends StatelessWidget {
         color: theme.border,
       );
       return GameBanner(
-        theme: theme,
         coverController: coverController,
         cornerRadius: cornerRadius,
         child: Column(
@@ -132,7 +131,6 @@ class GameEditorLayout extends StatelessWidget {
   );
 
   Widget _buildHero(BuildContext context, bool wide) => GameBannerHero(
-    theme: theme,
     heading: heading,
     actions: actions,
     wide: wide,
@@ -303,7 +301,6 @@ class GameEditorLayout extends StatelessWidget {
 class GameBannerHero extends StatelessWidget {
   const GameBannerHero({
     super.key,
-    required this.theme,
     this.heading,
     required this.actions,
     required this.cover,
@@ -312,8 +309,6 @@ class GameBannerHero extends StatelessWidget {
     required this.coverWidth,
     this.spacing = 20,
   });
-
-  final AppThemeData theme;
 
   /// The dialog's name, at the left of [actions].
   final String? heading;
@@ -328,11 +323,8 @@ class GameBannerHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actionRow = BannerHeadingRow(
-      theme: theme,
-      heading: heading,
-      actions: actions,
-    );
+    final theme = context.appTheme;
+    final actionRow = BannerHeadingRow(heading: heading, actions: actions);
     final coverBox = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(theme.cornerRadius),
@@ -380,13 +372,11 @@ class GameBannerHero extends StatelessWidget {
 class GameBanner extends StatelessWidget {
   const GameBanner({
     super.key,
-    required this.theme,
     required this.child,
     this.coverController,
     this.cornerRadius = 0,
   });
 
-  final AppThemeData theme;
   final Widget child;
   final TextEditingController? coverController;
 
@@ -404,10 +394,7 @@ class GameBanner extends StatelessWidget {
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(cornerRadius),
           ),
-          child: GameBannerBackdrop(
-            theme: theme,
-            coverController: coverController,
-          ),
+          child: GameBannerBackdrop(coverController: coverController),
         ),
       ),
       child,
@@ -419,13 +406,7 @@ class GameBanner extends StatelessWidget {
 /// (so an empty cover still has some colour), fading out over its [height]
 /// so it has no edge of its own.
 class GameBannerBackdrop extends StatelessWidget {
-  const GameBannerBackdrop({
-    super.key,
-    required this.theme,
-    this.coverController,
-  });
-
-  final AppThemeData theme;
+  const GameBannerBackdrop({super.key, this.coverController});
 
   /// The cover whose art is blurred in; without one only the tint shows.
   final TextEditingController? coverController;
@@ -435,99 +416,98 @@ class GameBannerBackdrop extends StatelessWidget {
   static const height = 480.0;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: height,
-    // The enlarged, blurred art would spill past the fade otherwise.
-    child: ClipRect(
-      child: RepaintBoundary(
-        child: ShaderMask(
-          blendMode: BlendMode.dstIn,
-          // Full strength behind the header, then an eased fade to nothing.
-          shaderCallback: (bounds) => LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              for (final alpha in [1.0, 1.0, 0.75, 0.4, 0.15, 0.0])
-                Colors.white.withValues(alpha: alpha),
-            ],
-            stops: [
-              for (final y in [0, 80, 180, 280, 380, 480]) y / height,
-            ],
-          ).createShader(bounds),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (coverController case final cover?)
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: cover,
-                  builder: (context, value, _) => value.text.trim().isEmpty
-                      ? const SizedBox.shrink()
-                      : ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                          child: Transform.scale(
-                            scale: 1.4,
-                            child: GameCoverImage(
-                              theme: theme,
-                              coverImage: value.text.trim(),
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return SizedBox(
+      height: height,
+      // The enlarged, blurred art would spill past the fade otherwise.
+      child: ClipRect(
+        child: RepaintBoundary(
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            // Full strength behind the header, then an eased fade to nothing.
+            shaderCallback: (bounds) => LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                for (final alpha in [1.0, 1.0, 0.75, 0.4, 0.15, 0.0])
+                  Colors.white.withValues(alpha: alpha),
+              ],
+              stops: [
+                for (final y in [0, 80, 180, 280, 380, 480]) y / height,
+              ],
+            ).createShader(bounds),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (coverController case final cover?)
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: cover,
+                    builder: (context, value, _) => value.text.trim().isEmpty
+                        ? const SizedBox.shrink()
+                        : ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                              sigmaX: 40,
+                              sigmaY: 40,
+                            ),
+                            child: Transform.scale(
+                              scale: 1.4,
+                              child: GameCoverImage(
+                                theme: theme,
+                                coverImage: value.text.trim(),
+                              ),
                             ),
                           ),
-                        ),
-                ),
-              // Dims the art so text stays readable over it.
-              ColoredBox(color: theme.background.withValues(alpha: 0.55)),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.accent.withValues(alpha: 0.28),
-                      theme.accent.withValues(alpha: 0.0),
-                    ],
+                  ),
+                // Dims the art so text stays readable over it.
+                ColoredBox(color: theme.background.withValues(alpha: 0.55)),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.accent.withValues(alpha: 0.28),
+                        theme.accent.withValues(alpha: 0.0),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A banner's heading in the accent color, with its buttons at the end. Kept
 /// at a button's height when empty, so the content below stays put.
 class BannerHeadingRow extends StatelessWidget {
-  const BannerHeadingRow({
-    super.key,
-    required this.theme,
-    required this.actions,
-    this.heading,
-  });
+  const BannerHeadingRow({super.key, required this.actions, this.heading});
 
-  final AppThemeData theme;
   final String? heading;
   final List<Widget> actions;
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minHeight: 40),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      spacing: 8,
-      children: [
-        if (heading case final heading?)
-          Expanded(
-            child: DialogHeader(
-              title: heading,
-              theme: theme,
-              titleColor: theme.accent,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 40),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        spacing: 8,
+        children: [
+          if (heading case final heading?)
+            Expanded(
+              child: DialogHeader(title: heading, titleColor: theme.accent),
             ),
-          ),
-        ...actions,
-      ],
-    ),
-  );
+          ...actions,
+        ],
+      ),
+    );
+  }
 }
 
 /// The game key's field, its placeholder "Key", or with [playfulHints] a

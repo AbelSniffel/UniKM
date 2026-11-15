@@ -2,7 +2,7 @@
 /// Matches the original Python SelectionOverlay
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -12,17 +12,16 @@ class SelectionOverlay extends StatelessWidget {
     super.key,
     required this.startPosition,
     required this.currentPosition,
-    required this.theme,
     required this.selectedCount,
   });
 
   final Offset startPosition;
   final Offset currentPosition;
-  final AppThemeData theme;
   final int selectedCount;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final rect = Rect.fromPoints(startPosition, currentPosition);
     final attachRight = currentPosition.dx >= startPosition.dx;
     final attachBottom = currentPosition.dy >= startPosition.dy;

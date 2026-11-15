@@ -4,7 +4,7 @@ library;
 import '../widgets/file_drop_field.dart';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import '../widgets/app_tab_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -303,7 +303,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   }) => [
     if (backups.isNotEmpty) ...[
       TintedHeading(
-        theme: theme,
         title: title,
         trailing: trailing,
         action: Tooltip(
@@ -356,13 +355,8 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     ];
 
     return ThemedAlertDialog(
-      theme: theme,
       maxHeight: 700,
-      title: DialogHeader(
-        icon: Icons.backup,
-        title: 'Backup Manager',
-        theme: theme,
-      ),
+      title: DialogHeader(icon: Icons.backup, title: 'Backup Manager'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -432,7 +426,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            TintedHeading(theme: theme, title: 'Backup File'),
+                            TintedHeading(title: 'Backup File'),
                             const SizedBox(height: 8),
                             FileDropField(
                               theme: theme,
@@ -472,7 +466,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                     ),
                     const SizedBox(height: kElementVSpacing),
                     DialogBanner.warning(
-                      theme: theme,
                       message:
                           'Restoring a backup will replace your current database. This action cannot be undone.',
                     ),
@@ -503,7 +496,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
             ]
           : [
               DialogActionBar(
-                theme: theme,
                 onConfirm: _restoreFromSelectedFile,
                 confirmIcon: Icons.restore,
                 confirmLabel: 'Restore Backup',
@@ -546,15 +538,10 @@ Future<bool> showRestoreConfirmDialog(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => ThemedAlertDialog(
-        theme: theme,
-        title: DialogHeader(
-          icon: Icons.restore,
-          title: 'Restore Backup',
-          theme: theme,
-        ),
+        title: DialogHeader(icon: Icons.restore, title: 'Restore Backup'),
         maxHeight: 450,
         contentChildren: [
-          TintedHeading(theme: theme, title: 'Backup to Restore'),
+          TintedHeading(title: 'Backup to Restore'),
           const SizedBox(height: 8),
           DatabaseFileRow(
             theme: theme,
@@ -573,7 +560,6 @@ Future<bool> showRestoreConfirmDialog(
           ),
           const SizedBox(height: kDialogSpacing),
           DialogBanner.warning(
-            theme: theme,
             message: 'This will replace your current database with the backup.',
           ),
         ],

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -6,7 +6,6 @@ import '../../core/theme/app_theme.dart';
 class SettingsCardMiniDot extends StatelessWidget {
   const SettingsCardMiniDot({
     super.key,
-    required this.theme,
     required this.value,
     required this.enabled,
     this.outlineColor,
@@ -23,7 +22,6 @@ class SettingsCardMiniDot extends StatelessWidget {
   static const double _gap = 4;
   static const double _dot = 18;
 
-  final AppThemeData theme;
   final bool value;
   final bool enabled;
 
@@ -35,6 +33,7 @@ class SettingsCardMiniDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final lit = value && enabled;
     return Padding(
       padding: const EdgeInsets.fromLTRB(_gap, _inset, _inset, _gap),
