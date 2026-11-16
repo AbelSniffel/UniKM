@@ -18,6 +18,7 @@ import '../widgets/database_file_row.dart';
 import '../widgets/tinted_tiles.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../providers/app_providers.dart';
+import '../pages/settings_sections/settings_common.dart';
 import '../pages/settings_sections/settings_control_cards.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/dialog_helpers.dart';
@@ -90,8 +91,6 @@ class _BackupDialog extends ConsumerStatefulWidget {
 class _BackupDialogState extends ConsumerState<_BackupDialog>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final _automaticInfoKey = GlobalKey<TooltipState>();
-  final _otherInfoKey = GlobalKey<TooltipState>();
   bool _isCreatingBackup = false;
   List<BackupInfo> _backups = [];
   bool _isLoading = true;
@@ -298,23 +297,13 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
     required String title,
     required String trailing,
     required String info,
-    required GlobalKey<TooltipState> infoKey,
     required List<BackupInfo> backups,
   }) => [
     if (backups.isNotEmpty) ...[
       TintedHeading(
         title: title,
         trailing: trailing,
-        action: Tooltip(
-          key: infoKey,
-          message: info,
-          child: IconButton(
-            style: theme.compactIconButtonStyle,
-            icon: const Icon(Icons.info_outline, size: 20),
-            color: theme.textSecondary,
-            onPressed: () => infoKey.currentState?.ensureTooltipVisible(),
-          ),
-        ),
+        action: SettingsInfoButton(message: info),
       ),
       const SizedBox(height: 8),
       for (final backup in backups)
@@ -402,7 +391,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                             info:
                                 'Manual backups are kept until you delete them. '
                                 'Backups made before a sync or restore keep the newest $kMaxSafetyBackupCount.',
-                            infoKey: _otherInfoKey,
                             backups: other,
                           ),
                           if (other.isNotEmpty && automatic.isNotEmpty)
@@ -413,7 +401,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                             trailing: '${automatic.length} of $maxBackups',
                             info:
                                 'The newest $maxBackups automatic backups are kept. Older ones are deleted automatically.',
-                            infoKey: _automaticInfoKey,
                             backups: automatic,
                           ),
                         ],

@@ -384,7 +384,7 @@ class DatabaseSection extends ConsumerStatefulWidget {
   final bool attachesToAbove;
 
   static const SettingTextSpec activeDatabaseSpec = SettingTextSpec(
-    label: 'Current database file',
+    label: 'Change Database',
     icon: Icons.description_outlined,
   );
   static const SettingTextSpec encryptionSpec = SettingTextSpec(
@@ -449,7 +449,10 @@ class DatabaseSection extends ConsumerStatefulWidget {
           'Change DB',
           'New DB',
           'Next Auto Backup',
+          'Next backup',
           'Auto backup is off',
+          'Current database file',
+          'Database in use',
           'Open Backup Manager',
           'Create Backup',
         ],
@@ -542,12 +545,14 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
   static String _formatNextBackupTime(DateTime nextTime) {
     final diff = nextTime.difference(clock.now());
     final minutes = diff.inMinutes;
-    if (diff.isNegative) return 'Running now...';
-    if (minutes < 1) return 'In less than a minute';
-    if (minutes == 1) return 'In 1 minute';
-    if (minutes < 60) return 'In $minutes minutes';
+    if (diff.isNegative) return 'Next backup is running now';
+    if (minutes < 1) return 'Next backup in less than a minute';
+    if (minutes == 1) return 'Next backup in 1 minute';
+    if (minutes < 60) return 'Next backup in $minutes minutes';
     final hours = '${diff.inHours} hour${diff.inHours > 1 ? 's' : ''}';
-    return minutes % 60 == 0 ? 'In $hours' : 'In $hours ${minutes % 60} min';
+    return minutes % 60 == 0
+        ? 'Next backup in $hours'
+        : 'Next backup in $hours ${minutes % 60} min';
   }
 
   @override
@@ -599,7 +604,9 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                     theme: widget.theme,
                     icon: DatabaseSection.activeDatabaseSpec.icon,
                     title: DatabaseSection.activeDatabaseSpec.label,
-                    subtitle: _isLoading ? null : p.basename(_activeDbPath),
+                    subtitle: _isLoading
+                        ? null
+                        : 'Current: ${p.basename(_activeDbPath)}',
                     onTap: _isLoading || databaseSwitching
                         ? null
                         : () => showChangeDatabaseDialog(context, widget.theme),
@@ -612,8 +619,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                       icon: DatabaseSection.backupManagerSpec.icon,
                       title: DatabaseSection.backupManagerSpec.label,
                       subtitle: switch (nextBackupTime) {
-                        final next? =>
-                          'Next auto backup: ${_formatNextBackupTime(next)}',
+                        final next? => _formatNextBackupTime(next),
                         null => 'Auto backup is off',
                       },
                       onTap: databaseSwitching

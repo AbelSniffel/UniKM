@@ -459,8 +459,7 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
               child: SettingsChoiceCard<String>(
                 key: const ValueKey('changelog-version-selector'),
                 theme: theme,
-                label: 'Version',
-                icon: Icons.history,
+                label: 'Selected Version',
                 menuMaxHeight: kDropdownMenuMaxHeight * 2,
                 value: release.tagName,
                 choices: [
@@ -639,6 +638,9 @@ class _NotesPanelState extends State<_NotesPanel> {
                   h1: text(16, bold: true),
                   h2: text(14, bold: true),
                   h3: text(13, bold: true),
+                  h4: text(14, bold: true, color: theme.accent),
+                  h5: text(13, bold: true, color: theme.accent),
+                  h6: text(13, bold: true, color: theme.accent),
                   code: text(
                     12,
                     color: theme.accent,
