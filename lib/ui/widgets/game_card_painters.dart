@@ -1,30 +1,10 @@
-/// Custom painters and layout data classes for GameCard.
+/// The library cards' glow and USED watermark, drawn once into images.
 library;
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
-
-import '../../core/constants/app_constants.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Data-only helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-typedef CardViewOptions = ({
-  bool showPlatform,
-  bool showTags,
-  bool showTagsOnHoverOnly,
-  bool showDeadline,
-  bool showRatingsNow,
-});
-
-typedef FetchStatusVisual = ({Color color, Widget icon, String tooltip});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Painters
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Paints an inward frame glow around a game card.
 ///
@@ -314,98 +294,4 @@ abstract final class _UsedPatternImages {
     picture.dispose();
     return _images[key] = image;
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _VisibilityReveal
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Explicit visibility animation that only runs when [isVisible] changes.
-///
-/// Unlike AnimatedSize, this does not start a new layout animation when the
-/// child changes size because of a parent resize, which keeps large card lists
-/// much cheaper during nav panel collapse/expand and window resizing.
-class VisibilityReveal extends StatefulWidget {
-  const VisibilityReveal({
-    super.key,
-    required this.isVisible,
-    required this.axisAlignment,
-    required this.alignment,
-    required this.child,
-  });
-
-  final bool isVisible;
-  final double axisAlignment;
-  final Alignment alignment;
-  final Widget child;
-
-  @override
-  State<VisibilityReveal> createState() => _VisibilityRevealState();
-}
-
-class _VisibilityRevealState extends State<VisibilityReveal>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _curve;
-  late final Animation<double> _opacity;
-
-  /// The widget currently being rendered inside the transitions.
-  late Widget _displayChild;
-
-  @override
-  void initState() {
-    super.initState();
-    _displayChild = widget.child;
-    _controller = AnimationController(
-      vsync: this,
-      duration: kVeryFastAnimation,
-      reverseDuration: kFastAnimation,
-      value: widget.isVisible ? 1.0 : 0.0,
-    );
-    _curve = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOutCirc,
-      reverseCurve: Curves.easeInOutCirc,
-    );
-    _opacity = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeOutCubic,
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant VisibilityReveal oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isVisible) {
-      _displayChild = widget.child;
-      if (oldWidget.isVisible != widget.isVisible) _controller.forward();
-    } else if (oldWidget.isVisible != widget.isVisible) {
-      _controller.reverse().whenCompleteOrCancel(() {
-        if (mounted) setState(() => _displayChild = widget.child);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ClipRect(
-    child: SizeTransition(
-      sizeFactor: _curve,
-      alignment: Alignment(0, widget.axisAlignment),
-      child: Align(
-        alignment: widget.alignment,
-        heightFactor: 1.0,
-        child: IgnorePointer(
-          ignoring: !widget.isVisible,
-          child: FadeTransition(opacity: _opacity, child: _displayChild),
-        ),
-      ),
-    ),
-  );
 }

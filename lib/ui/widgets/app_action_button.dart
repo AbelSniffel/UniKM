@@ -326,7 +326,7 @@ class AppButtonSelectionIndicator extends StatelessWidget {
           curve: Curves.easeInOutCubic,
           builder: (context, progress, child) => RepaintBoundary(
             child: CustomPaint(
-              painter: _ToggleIndicatorPainter(
+              painter: ToggleIndicatorPainter(
                 progress: progress.dx,
                 deleteProgress: progress.dy,
                 color: Color.lerp(
@@ -343,8 +343,8 @@ class AppButtonSelectionIndicator extends StatelessWidget {
   );
 }
 
-class _ToggleIndicatorPainter extends CustomPainter {
-  const _ToggleIndicatorPainter({
+class ToggleIndicatorPainter extends CustomPainter {
+  const ToggleIndicatorPainter({
     required this.color,
     required this.progress,
     required this.deleteProgress,
@@ -401,7 +401,7 @@ class _ToggleIndicatorPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ToggleIndicatorPainter oldDelegate) =>
+  bool shouldRepaint(ToggleIndicatorPainter oldDelegate) =>
       oldDelegate.color != color ||
       oldDelegate.progress != progress ||
       oldDelegate.deleteProgress != deleteProgress;

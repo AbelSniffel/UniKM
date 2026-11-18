@@ -16,14 +16,14 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../../widgets/game_cover_image.dart';
+import '../../widgets/game_tile.dart';
+import '../../widgets/game_tile_render.dart';
 
 /// Tracks revealed entries for one library session without keeping cards alive.
 class GameCardRevealCoordinator {
@@ -34,7 +34,7 @@ class GameCardRevealCoordinator {
   final bool scrollReveals;
   bool _scrolledOn = false;
   final _revealedIds = <int>{};
-  final _cards = <_AnimatedGameCardState>{};
+  final _cards = <GameCardReveal>{};
   final _unmountedIds = <int>{};
   bool _viewportCheckScheduled = false;
   Duration? _batchFrame;
@@ -138,17 +138,17 @@ class GameCardRevealCoordinator {
 
   /// A card dropped by scrolling reveals again when it is built anew; one
   /// rebuilt in the same frame, as when filters move it, stays revealed.
-  void _detach(_AnimatedGameCardState card) {
+  void _detach(GameCardReveal card) {
     _cards.remove(card);
     if (_cards.isEmpty) _skipTimer?.cancel();
     if (_unmountedIds.isEmpty) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
-        final mounted = {for (final card in _cards) card.widget.gameId};
+        final mounted = {for (final card in _cards) card._revealId};
         _revealedIds.removeAll(_unmountedIds.difference(mounted));
         _unmountedIds.clear();
       });
     }
-    _unmountedIds.add(card.widget.gameId);
+    _unmountedIds.add(card._revealId);
   }
 
   /// Starts [gameId]'s reveal, returning how long it waits first. Cards at
@@ -176,68 +176,45 @@ class GameCardRevealCoordinator {
   }
 }
 
-class AnimatedGameCard extends StatefulWidget {
-  const AnimatedGameCard({
-    super.key,
-    required this.gameId,
-    required this.coordinator,
-    required this.child,
-    this.coverWidth = double.infinity,
-  });
-
-  final int gameId;
-  final GameCardRevealCoordinator coordinator;
-  final Widget child;
-
-  /// How much of the card's left side its cover covers: all of it by
-  /// default, none for a row without a cover.
-  final double coverWidth;
-
-  /// How far the card of [element], an [AnimatedGameCard]'s, has revealed,
-  /// from 0 (at its starting size, cover hidden) to 1.
-  @visibleForTesting
-  static double debugRevealOf(Element element) {
-    final state = (element as StatefulElement).state as _AnimatedGameCardState;
-    return state._plain ? 1 : state._animation.value;
-  }
-
-  /// Whether the card of [element] was last drawn from still images of itself
-  /// rather than as the live card.
-  @visibleForTesting
-  static bool debugDrawsStills(Element element) {
-    final state = (element as StatefulElement).state as _AnimatedGameCardState;
-    return !state._plain && state._popIn.drawsStills;
-  }
-
-  @override
-  State<AnimatedGameCard> createState() => _AnimatedGameCardState();
-}
-
-class _AnimatedGameCardState extends State<AnimatedGameCard>
-    with SingleTickerProviderStateMixin
+/// A library card's reveal: when it starts, what it waits for, and how far
+/// it has run, for the card to draw from [revealAnimation].
+mixin GameCardReveal on State<GameTile>, TickerProvider
     implements CoverLoadListener {
-  late final _controller = AnimationController(
-    duration: const Duration(milliseconds: 200),
-    value: widget.coordinator.startsShown(widget.gameId) ? 1 : 0,
-    vsync: this,
-  );
-  late final _animation = CurvedAnimation(
-    parent: _controller,
+  /// The card's render object, which draws the reveal and tells when it is
+  /// painted in view.
+  RenderGameTile? get tile => switch (context.findRenderObject()) {
+    final RenderGameTile tile => tile,
+    _ => null,
+  };
+
+  /// Whether the card was last drawn from still images of itself.
+  bool get drawsStills => tile?.drawsStills ?? false;
+
+  bool _controllerMade = false;
+  late final revealController = () {
+    _controllerMade = true;
+    return AnimationController(
+      duration: const Duration(milliseconds: 200),
+      value: _coordinator!.startsShown(_revealId) ? 1 : 0,
+      vsync: this,
+    );
+  }();
+  late final revealAnimation = CurvedAnimation(
+    parent: revealController,
     curve: Curves.easeOutCubic,
   );
-  late final _scale = _animation.drive(Tween(begin: _startScale, end: 1.0));
 
-  late final _popIn = _PopIn(_animation);
-  static final _noSnapshot = SnapshotController();
+  int get _revealId => widget.gameId;
+  GameCardRevealCoordinator? get _coordinator => widget.coordinator;
 
   /// A pointer over or pressing the card: it must react at once, so the card
   /// is drawn live from then on.
-  bool _pointerOver = false;
+  bool pointerOver = false;
   bool _started = false;
 
-  /// A card built after a layout-only reveal ended: just its child, with
-  /// nothing to reveal or check.
-  late bool _plain;
+  /// A card that does not reveal, or one built after a layout-only reveal
+  /// ended: just itself, with nothing to reveal or check.
+  late bool revealPlain;
 
   /// In view, waiting for or running its reveal.
   bool _visible = false;
@@ -245,45 +222,51 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   Timer? _coverTimer;
   final _loadingCovers = <Object>{};
 
-  static const double _startScale = 0.9;
-
   /// A slow or unreachable cover never keeps its card hidden for long.
   static const Duration _maxCoverWait = Duration(seconds: 2);
 
   /// Hidden and waiting to come into view.
-  bool get _armed => !_visible && !_started && _controller.value == 0;
+  bool get _armed => !_visible && !_started && revealController.value == 0;
 
   @override
   void initState() {
     super.initState();
-    _plain = !widget.coordinator._reveals;
-    if (!_plain) widget.coordinator._cards.add(this);
+    final coordinator = _coordinator;
+    revealPlain = coordinator == null || !coordinator._reveals;
+    if (!revealPlain) coordinator!._cards.add(this);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_plain && MediaQuery.disableAnimationsOf(context)) _showImmediately();
+    if (!revealPlain && MediaQuery.disableAnimationsOf(context)) {
+      _showImmediately();
+    }
   }
 
   @override
-  void didUpdateWidget(AnimatedGameCard oldWidget) {
+  void didUpdateWidget(GameTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.gameId == widget.gameId &&
-        oldWidget.coordinator == widget.coordinator) {
-      return;
-    }
-    oldWidget.coordinator._cards.remove(this);
+    final old = oldWidget.coordinator;
+    final coordinator = _coordinator;
+    if (oldWidget.gameId == _revealId && old == coordinator) return;
+    old?._cards.remove(this);
     // A new coordinator, as a layout switch brings, reveals the card anew.
-    if (_plain) _plain = !widget.coordinator._reveals;
-    if (_plain) return;
-    widget.coordinator._cards.add(this);
-    _reset(widget.coordinator.startsShown(widget.gameId) ? 1 : 0);
+    if (revealPlain) {
+      revealPlain = coordinator == null || !coordinator._reveals;
+    } else if (coordinator == null) {
+      _startTimer?.cancel();
+      _coverTimer?.cancel();
+      revealPlain = true;
+    }
+    if (revealPlain) return;
+    coordinator!._cards.add(this);
+    _reset(coordinator.startsShown(_revealId) ? 1 : 0);
     if (MediaQuery.disableAnimationsOf(context)) {
       _showImmediately();
     } else {
       // A kept card may reuse its last paint: find it in view instead.
-      widget.coordinator._scheduleViewportCheck();
+      coordinator._scheduleViewportCheck();
     }
   }
 
@@ -291,24 +274,24 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     _startTimer?.cancel();
     _coverTimer?.cancel();
     _started = _visible = false;
-    _popIn
-      ..live = _pointerOver
-      ..clear();
-    _controller.value = value;
-    final box = context.findRenderObject();
-    if (box is _RenderRevealOnPaint) box.rearm();
+    // Armed again: no stills, and drawn live only while a pointer is on it.
+    tile
+      ?..revealLive = pointerOver
+      ..clearStills();
+    revealController.value = value;
+    tile?.rearm();
   }
 
   /// Hides a shown card that is fully outside the viewport, and reveals a
   /// hidden one that is back in it.
   void _syncWithViewport() {
     if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
-    final box = context.findRenderObject();
-    if (box is! _RenderRevealOnPaint) return;
+    final box = tile;
+    if (box == null) return;
     if (box.inViewport) {
-      _onVisible();
+      revealVisible();
     } else if (!_armed) {
-      widget.coordinator._revealedIds.remove(widget.gameId);
+      _coordinator!._revealedIds.remove(_revealId);
       _reset(0);
     }
   }
@@ -316,7 +299,9 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   /// Shows a card that is waiting for or running its reveal at once, or any
   /// card not yet shown with [all].
   void _finishReveal({bool all = false}) {
-    if (mounted && !_controller.isCompleted && (all || _started || _visible)) {
+    if (mounted &&
+        !revealController.isCompleted &&
+        (all || _started || _visible)) {
       _showImmediately();
     }
   }
@@ -325,8 +310,8 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     _startTimer?.cancel();
     _coverTimer?.cancel();
     _started = true;
-    widget.coordinator.markRevealed(widget.gameId);
-    _controller.value = 1;
+    _coordinator?.markRevealed(_revealId);
+    revealController.value = 1;
   }
 
   @override
@@ -346,10 +331,11 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
     SchedulerBinding.instance.ensureVisualUpdate();
   }
 
-  void _onVisible() {
-    if (!mounted || !_armed) return;
+  /// The card was painted in view: it reveals, once its cover is ready.
+  void revealVisible() {
+    if (!mounted || revealPlain || !_armed) return;
     _visible = true;
-    if (widget.coordinator._skipsReveals) {
+    if (_coordinator!._skipsReveals) {
       _showImmediately();
     } else if (_loadingCovers.isEmpty) {
       _startReveal();
@@ -359,204 +345,43 @@ class _AnimatedGameCardState extends State<AnimatedGameCard>
   }
 
   void _startReveal() {
-    if (!mounted || _started || _controller.isCompleted) return;
+    if (!mounted || revealPlain || _started || revealController.isCompleted) {
+      return;
+    }
     _started = true;
     _coverTimer?.cancel();
-    final box = context.findRenderObject() as _RenderRevealOnPaint?;
-    final delay = widget.coordinator.reveal(
-      widget.gameId,
-      row: box?.viewportTop,
-    );
+    final delay = _coordinator!.reveal(_revealId, row: tile?.viewportTop);
     if (delay == Duration.zero) {
-      _controller.forward();
+      revealController.forward();
     } else {
       _startTimer = Timer(delay, () {
-        if (mounted) _controller.forward();
+        if (mounted) revealController.forward();
       });
     }
   }
 
   @override
   void dispose() {
-    if (!_plain) {
-      widget.coordinator._detach(this);
-      _startTimer?.cancel();
-      _coverTimer?.cancel();
-      _popIn.dispose();
-      _animation.dispose();
-      _controller.dispose();
+    if (!revealPlain) _coordinator?._detach(this);
+    _startTimer?.cancel();
+    _coverTimer?.cancel();
+    if (_controllerMade) {
+      revealAnimation.dispose();
+      revealController.dispose();
     }
     super.dispose();
   }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_plain) return widget.child;
-    _popIn
-      ..coverWidth = widget.coverWidth
-      ..pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    return _RevealOnPaint(
-      key: ValueKey((widget.coordinator, widget.gameId)),
-      onPaint: _onVisible,
-      // Grows from the card's centre, like an app opening, from the loading
-      // card it already is, its cover fading in.
-      child: ScaleTransition(
-        scale: _scale,
-        child: MouseRegion(
-          opaque: false,
-          onEnter: (_) {
-            _pointerOver = true;
-            _popIn.live = true;
-          },
-          onExit: (_) => _pointerOver = false,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: (_) => _popIn.live = true,
-            child: SnapshotWidget(
-              controller: _noSnapshot,
-              painter: _popIn,
-              child: CoverLoadScope(listener: this, child: widget.child),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-/// Draws a card from still images of it until it has fully revealed: the card
-/// as it waits, with its cover still loading, and the card with its cover in,
-/// fading in over the first as the reveal runs. Each is taken once, at the
-/// device's pixel ratio, so growing costs image draws, where the live card,
-/// scaled, would redraw all its text and overlays at every scale. Revealed, or
-/// touched by a pointer, the card paints as itself.
-class _PopIn extends SnapshotPainter {
-  _PopIn(this.reveal) {
-    reveal.addListener(notifyListeners);
-  }
-
-  final Animation<double> reveal;
-
-  /// How much of the card's left side its cover covers. The two images differ
-  /// only there, so only there the second is drawn: a translucent background
-  /// elsewhere would show through twice.
-  double coverWidth = double.infinity;
-  double pixelRatio = 1;
-
-  /// Whether the last paint drew the still images.
-  bool drawsStills = false;
-  bool _live = false;
-  ui.Image? _waiting, _covered;
-  final _paint = Paint()..filterQuality = FilterQuality.low;
-
-  set live(bool value) {
-    if (value == _live) return;
-    _live = value;
-    notifyListeners();
-  }
-
-  void clear() {
-    _waiting?.dispose();
-    _covered?.dispose();
-    _waiting = _covered = null;
-  }
-
-  @override
-  void dispose() {
-    reveal.removeListener(notifyListeners);
-    clear();
-    super.dispose();
-  }
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset offset,
-    Size size,
-    PaintingContextCallback painter,
-  ) {
-    final progress = reveal.value;
-    drawsStills = progress < 1 && !_live;
-    if (!drawsStills) {
-      clear();
-      return painter(context, offset);
-    }
-    // The child painted into a layer of its own, as a SnapshotWidget does.
-    ui.Image capture() {
-      final layer = OffsetLayer();
-      final imageContext = PaintingContext(layer, Offset.zero & size);
-      painter(imageContext, Offset.zero);
-      // ignore: invalid_use_of_protected_member
-      imageContext.stopRecordingIfNeeded();
-      final image = layer.toImageSync(
-        Offset.zero & size,
-        pixelRatio: pixelRatio,
-      );
-      layer.dispose();
-      return image;
-    }
-
-    _waiting ??= capture();
-    final cover = Size(math.min(coverWidth, size.width), size.height);
-    if (progress > 0 && !cover.isEmpty) _covered ??= capture();
-    context.canvas.drawImageRect(
-      _waiting!,
-      Offset.zero & (size * pixelRatio),
-      offset & size,
-      _paint..color = const Color(0xFF000000),
-    );
-    if (_covered != null) {
-      context.canvas.drawImageRect(
-        _covered!,
-        Offset.zero & (cover * pixelRatio),
-        offset & cover,
-        _paint..color = Color.fromRGBO(0, 0, 0, progress),
-      );
-    }
-  }
-
-  @override
-  void paintSnapshot(
-    PaintingContext context,
-    Offset offset,
-    Size size,
-    ui.Image image,
-    Size sourceSize,
-    double pixelRatio,
-  ) {}
-
-  @override
-  bool shouldRepaint(SnapshotPainter oldPainter) => false;
-}
-
-/// Slivers paint only entries intersecting their viewport. Listening to their
-/// first paint avoids starting animations for the offscreen scroll cache, and
-/// needs no visibility polling or per-card scroll listeners. A re-armed card
-/// shrinks back and hides its cover, which repaints it on its return.
-class _RevealOnPaint extends SingleChildRenderObjectWidget {
-  const _RevealOnPaint({
-    super.key,
-    required this.onPaint,
-    required super.child,
-  });
-
-  final VoidCallback onPaint;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderRevealOnPaint(onPaint);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderRevealOnPaint renderObject,
-  ) => renderObject.onPaint = onPaint;
-}
-
-class _RenderRevealOnPaint extends RenderProxyBox {
-  _RenderRevealOnPaint(this.onPaint);
-
-  VoidCallback onPaint;
+/// A card's render object that tells when the card is painted in view.
+/// Slivers paint only entries intersecting their viewport: listening to the
+/// first paint there avoids starting animations for the offscreen scroll
+/// cache, and needs no visibility polling or per-card scroll listeners. A
+/// re-armed card shrinks back and hides its cover, which repaints it on its
+/// return.
+mixin RevealViewportBox on RenderBox {
+  /// Called after the frame in which the card was first painted in view.
+  VoidCallback? onRevealPaint;
   bool _scheduled = false;
 
   void rearm() => _scheduled = false;
@@ -582,13 +407,13 @@ class _RenderRevealOnPaint extends RenderProxyBox {
         _boundsIn(viewport).overlaps(viewport.paintBounds);
   }
 
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    super.paint(context, offset);
-    if (_scheduled || !inViewport) return;
+  /// Tells [onRevealPaint] after this frame if this is the card's first
+  /// paint in view; called after painting.
+  void revealPainted() {
+    if (onRevealPaint == null || _scheduled || !inViewport) return;
     _scheduled = true;
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (attached) onPaint();
+      if (attached) onRevealPaint?.call();
     });
   }
 }

@@ -47,11 +47,30 @@ class GameCoverImage extends StatefulWidget {
 
   @override
   State<GameCoverImage> createState() => _GameCoverImageState();
+
+  static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
+
+  /// The decode width for a cover [width] logical pixels wide: device pixels
+  /// rounded up to steps of 128, so small size changes reuse a decode.
+  static int decodeWidth(double width, double pixelRatio) =>
+      ((width * pixelRatio / 128).ceil() * 128).clamp(128, 2048);
+
+  /// The provider of the local cover at [raw], an asset or a file, decoded
+  /// [cacheWidth] pixels wide.
+  static ImageProvider localProvider(String raw, int cacheWidth) {
+    if (raw.startsWith('assets/')) {
+      return ResizeImage.resizeIfNeeded(cacheWidth, null, AssetImage(raw));
+    }
+    final uri = Uri.tryParse(raw);
+    final file =
+        uri != null && uri.hasScheme && !_windowsPathPattern.hasMatch(raw)
+        ? File.fromUri(uri)
+        : File(raw);
+    return ResizeImage.resizeIfNeeded(cacheWidth, null, FileImage(file));
+  }
 }
 
 class _GameCoverImageState extends State<GameCoverImage> {
-  static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
-
   /// The image built last and what it depends on: a resize that keeps the
   /// decode size returns the same widget, so its subtree is not rebuilt.
   Widget? _image;
@@ -92,9 +111,11 @@ class _GameCoverImageState extends State<GameCoverImage> {
           : 640.0;
       // Reuse decodes across small window size changes. Keep the previous
       // frame visible while a larger decode is loading.
-      final pixels = width * MediaQuery.devicePixelRatioOf(context);
       final cacheWidth = _heldCacheWidth(
-        ((pixels / 128).ceil() * 128).clamp(128, 2048),
+        GameCoverImage.decodeWidth(
+          width,
+          MediaQuery.devicePixelRatioOf(context),
+        ),
       );
       final key = (
         cacheWidth,
@@ -131,39 +152,28 @@ class _GameCoverImageState extends State<GameCoverImage> {
       );
     }
 
-    if (raw.startsWith('assets/')) {
-      return _localImage(AssetImage(raw), raw, cacheWidth);
-    }
-
-    final uri = Uri.tryParse(raw);
-    final file =
-        uri != null && uri.hasScheme && !_windowsPathPattern.hasMatch(raw)
-        ? File.fromUri(uri)
-        : File(raw);
-
-    return _localImage(FileImage(file), raw, cacheWidth);
+    return _localImage(GameCoverImage.localProvider(raw, cacheWidth), raw);
   }
 
-  Widget _localImage(ImageProvider provider, String raw, int cacheWidth) =>
-      Image(
-        image: ResizeImage.resizeIfNeeded(cacheWidth, null, provider),
-        key: ValueKey(raw),
-        gaplessPlayback: true,
-        fit: BoxFit.cover,
-        // The loading tone shows under the picture until its first frame; a
-        // picture kept while a larger one loads stays on top of it.
-        frameBuilder: (context, child, frame, _) => _CoverLoadReport(
-          loading: frame == null,
-          child: frame == null
-              ? Stack(
-                  fit: StackFit.passthrough,
-                  alignment: Alignment.center,
-                  children: [_buildPlaceholder(), child],
-                )
-              : child,
-        ),
-        errorBuilder: (context, error, stackTrace) => _imageError(),
-      );
+  Widget _localImage(ImageProvider provider, String raw) => Image(
+    image: provider,
+    key: ValueKey(raw),
+    gaplessPlayback: true,
+    fit: BoxFit.cover,
+    // The loading tone shows under the picture until its first frame; a
+    // picture kept while a larger one loads stays on top of it.
+    frameBuilder: (context, child, frame, _) => _CoverLoadReport(
+      loading: frame == null,
+      child: frame == null
+          ? Stack(
+              fit: StackFit.passthrough,
+              alignment: Alignment.center,
+              children: [_buildPlaceholder(), child],
+            )
+          : child,
+    ),
+    errorBuilder: (context, error, stackTrace) => _imageError(),
+  );
 
   Widget _imageError() {
     WidgetsBinding.instance.addPostFrameCallback((_) => widget.onError?.call());

@@ -167,15 +167,15 @@ class ButtonDepthLayer extends StatelessWidget {
     builder: (_, depth, child) => CustomPaint(
       painter: depth == 0
           ? null
-          : _ButtonDepthPainter(depth, outlined, shape, textDirection),
+          : ButtonDepthPainter(depth, outlined, shape, textDirection),
       child: child,
     ),
   );
 }
 
 /// Inexpensive translucent lighting painted inside the live button outline.
-class _ButtonDepthPainter extends CustomPainter {
-  const _ButtonDepthPainter(
+class ButtonDepthPainter extends CustomPainter {
+  const ButtonDepthPainter(
     this.depth,
     this.outlined,
     this.shape,
@@ -215,7 +215,7 @@ class _ButtonDepthPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ButtonDepthPainter oldDelegate) =>
+  bool shouldRepaint(ButtonDepthPainter oldDelegate) =>
       oldDelegate.depth != depth ||
       oldDelegate.outlined != outlined ||
       oldDelegate.shape != shape ||

@@ -1,24 +1,24 @@
-/// Pointer and selection interaction mixin for GameCard.
+/// Pointer and selection interaction mixin for the library cards ([GameTile]).
 ///
-/// Owns all pointer-tracking fields and event handlers so they can be removed
-/// from [_GameCardState].  Uses an abstract [cardGame] getter so this file
-/// does not import game_card.dart, avoiding a circular dependency.
+/// Owns all pointer-tracking fields, event handlers and the context menu.
+/// Uses an abstract [cardGame] getter, the card's game.
 library;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../models/game.dart';
 import '../../providers/app_providers.dart';
 import 'game_selection_actions.dart';
+import 'popup_menu_helpers.dart';
 
 /// Mixin that adds pointer-tracking and selection-orchestration logic to any
 /// [ConsumerState].  The host state must implement [cardGame].
 mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
     on ConsumerState<T> {
-  /// The [Game] this card represents.  Implemented by [_GameCardState] as
-  /// `widget.game`.
+  /// The [Game] this card represents.
   Game get cardGame;
   bool get dragSelectionHandledByParent => false;
   static const double _dragStartSlop = 6.0;
@@ -185,6 +185,116 @@ mixin GameCardInteractionMixin<T extends ConsumerStatefulWidget>
   void handlePointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePrimaryPointer) return;
     _resetPrimaryPointerTracking();
+  }
+
+  // ── Context menu ──────────────────────────────────────────────────────────
+
+  /// The games a menu choice acts on: the selection, if it holds this card.
+  List<Game> _targetGames() =>
+      ref.read(gamesProvider).selectedGameIds.contains(cardGame.id)
+      ? ref.read(selectedGamesProvider)
+      : [cardGame];
+
+  void showContextMenu(Offset position) {
+    final selectedIds = ref.read(
+      gamesProvider.select((s) => s.selectedGameIds),
+    );
+    if (!selectedIds.contains(cardGame.id)) {
+      ref.read(gamesProvider.notifier).clearSelection();
+      ref.read(gamesProvider.notifier).selectGame(cardGame.id);
+      ref.read(lastSelectedGameIdProvider.notifier).set(cardGame.id);
+    }
+
+    final theme = ref.read(themeProvider);
+    final game = cardGame;
+    final targetGames = _targetGames();
+    final count = targetGames.length;
+    final suffix = count > 1 ? ' ($count)' : '';
+    final isFetching = ref.read(batchFetchProvider).isActive;
+    final hasSteamTargets = targetGames.any((g) => g.platform == 'Steam');
+
+    // Items with a [lockedLabel] are disabled while a Steam fetch runs.
+    Widget item(
+      IconData icon,
+      String label,
+      VoidCallback onPressed, {
+      Color? iconColor,
+      Color? color,
+      String? lockedLabel,
+    }) {
+      final enabled = lockedLabel == null || !isFetching;
+      return appMenuItem(
+        theme,
+        leading: Icon(
+          enabled ? icon : Icons.lock_rounded,
+          size: 18,
+          color: enabled ? iconColor : theme.textHint,
+        ),
+        color: enabled ? color : null,
+        // The menu runs its choice a frame after closing.
+        onPressed: enabled
+            ? () {
+                if (context.mounted) onPressed();
+              }
+            : null,
+        child: Text(enabled ? '$label$suffix' : '$lockedLabel (Locked)$suffix'),
+      );
+    }
+
+    showAppContextMenu(
+      context: context,
+      theme: theme,
+      position: position,
+      menuChildren: [
+        item(
+          Icons.copy_all,
+          'Copy',
+          () => GameSelectionActions.showCopyDialog(context, ref, targetGames),
+        ),
+        appMenuDivider(theme),
+        item(
+          Icons.edit_outlined,
+          'Game Editor',
+          handleDoubleTap,
+          lockedLabel: 'Game Editor',
+        ),
+        if (hasSteamTargets) ...[
+          item(
+            Icons.open_in_new,
+            'Open Steam Page',
+            () => GameSelectionActions.openSteamPages(ref, targetGames),
+          ),
+          item(
+            Icons.cloud_download,
+            'Fetch Steam Data',
+            () =>
+                GameSelectionActions.fetchSteamData(context, ref, targetGames),
+            iconColor: theme.accent,
+            lockedLabel: 'Fetch Steam Data',
+          ),
+        ],
+        appMenuDivider(theme),
+        item(
+          game.isUsed ? Icons.radio_button_unchecked : Icons.check_circle,
+          game.isUsed ? 'Mark as Unused' : 'Mark as Used',
+          () => GameSelectionActions.toggleUsed(ref, targetGames, !game.isUsed),
+          lockedLabel: 'Mark as Used/Unused',
+        ),
+        appMenuDivider(theme),
+        item(
+          Icons.delete_outline,
+          'Delete',
+          () => GameSelectionActions.deleteGames(
+            context,
+            ref,
+            theme,
+            targetGames,
+          ),
+          color: theme.error,
+          lockedLabel: 'Delete',
+        ),
+      ],
+    );
   }
 
   // ── Internal ──────────────────────────────────────────────────────────────

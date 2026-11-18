@@ -480,7 +480,7 @@ T readSetting<T>(Map<String, dynamic> settings, String key) =>
 // provider notifies only when one of its own fields changes. List fields
 // compare by identity; saving a list with equal contents keeps its instance.
 
-/// Typed view of settings used by `GameCard`.
+/// Typed view of settings used by `GameTile`.
 typedef GameCardSettings = ({
   bool showPlatform,
   bool showTags,

@@ -1,6 +1,6 @@
 /// Shared clipboard operations for game data
 ///
-/// Consolidates duplicate copy methods from game_card.dart and home_page.dart.
+/// Consolidates duplicate copy methods from the game cards and home_page.dart.
 library;
 
 import '../../core/constants/app_constants.dart';

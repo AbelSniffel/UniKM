@@ -1,4 +1,4 @@
-/// Shared game-card action handlers used by both [GameCard] and [SelectionRibbon].
+/// Shared game-card action handlers used by both [GameTile] and [SelectionRibbon].
 ///
 /// All methods accept an explicit [targets] list so each call site can determine
 /// its own scope (single card vs. all selected games) independently.

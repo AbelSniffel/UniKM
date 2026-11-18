@@ -44,6 +44,30 @@ class SettingsCardInset extends StatelessWidget {
   /// their layer made scrolling the settings page stutter on phones.
   final bool cacheRaster;
 
+  /// The lighting at [depth] (1 recessed, -1 raised, 0 none), drawn from a
+  /// shared image once settled when [devicePixelRatio] is given (see
+  /// [cacheRaster]); animating depths paint directly.
+  static CustomPainter? painterFor({
+    required double depth,
+    required double radius,
+    required Color surfaceColor,
+    double depthStrength = defaultDepthStrength,
+    double? devicePixelRatio,
+  }) => depth == 0 || depthStrength <= 0
+      ? null
+      : devicePixelRatio != null && depth.abs() == 1
+      ? _CachedInsetPainter(
+          radius: radius,
+          depth: depth * depthStrength,
+          surfaceColor: surfaceColor,
+          devicePixelRatio: devicePixelRatio,
+        )
+      : _SettingsCardInsetPainter(
+          radius: radius,
+          depth: depth * depthStrength,
+          surfaceColor: surfaceColor,
+        );
+
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(
@@ -59,21 +83,15 @@ class SettingsCardInset extends StatelessWidget {
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, depth, child) {
-      // Only the settled lighting is cached; animating depths paint directly.
-      final painter = depth == 0 || depthStrength <= 0
-          ? null
-          : cacheRaster && depth.abs() == 1
-          ? _CachedInsetPainter(
-              radius: borderRadius,
-              depth: depth * depthStrength,
-              surfaceColor: surfaceColor,
-              devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-            )
-          : _SettingsCardInsetPainter(
-              radius: borderRadius,
-              depth: depth * depthStrength,
-              surfaceColor: surfaceColor,
-            );
+      final painter = painterFor(
+        depth: depth,
+        depthStrength: depthStrength,
+        radius: borderRadius,
+        surfaceColor: surfaceColor,
+        devicePixelRatio: cacheRaster
+            ? MediaQuery.devicePixelRatioOf(context)
+            : null,
+      );
       if (overlay == null) {
         return CustomPaint(foregroundPainter: painter, child: child);
       }

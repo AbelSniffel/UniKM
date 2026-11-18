@@ -121,7 +121,7 @@ final frameRatePreferenceProvider = _setting<String>(
   SettingsKeys.frameRatePreference,
 );
 
-/// Typed settings slice used by `GameCard`.
+/// Typed settings slice used by `GameTile`.
 ///
 /// Uses `select` + value equality to prevent rebuilding every card when
 /// unrelated settings change.
