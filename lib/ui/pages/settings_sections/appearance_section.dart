@@ -21,6 +21,7 @@ import '../../widgets/background_pattern.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
+import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../widgets/theme_preview_card.dart';
 import '../../widgets/theme_picker_actions.dart';
@@ -358,8 +359,8 @@ class ThemeHeaderActions extends ConsumerWidget {
             : () => _exportTheme(context, ref, theme),
       ),
     ];
-    return SettingsHeaderActions(
-      theme: theme,
+    return NavButtonGroup(
+      isHorizontal: true,
       expanded: expanded,
       children: buttons,
     );

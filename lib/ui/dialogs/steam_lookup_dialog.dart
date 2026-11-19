@@ -377,6 +377,12 @@ class SteamLookupDialog extends ConsumerStatefulWidget {
 }
 
 class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
+  /// Width from which the cover sits beside the name.
+  static const _wideHeroWidth = 480.0;
+
+  /// A Steam header's shape.
+  static const _coverAspect = 460 / 215;
+
   late SteamSearchResult? _result = widget.result;
   late bool _fromCache = widget.fromCache;
   // A batch never searches: it only chooses between cache and fresh data.
@@ -480,7 +486,16 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
       bleedContent: true,
       // The banner's art runs on behind the buttons, so the dialog has no
       // edge where its content ends.
-      backdrop: GameBannerBackdrop(coverController: _backdrop),
+      backdrop: LayoutBuilder(
+        builder: (context, constraints) => GameBannerBackdrop(
+          coverController: _backdrop,
+          solidHeight: GameBannerBackdrop.solidHeightFor(
+            wide: constraints.maxWidth >= _wideHeroWidth,
+            width: constraints.maxWidth,
+            coverAspect: _coverAspect,
+          ),
+        ),
+      ),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -564,17 +579,22 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
             icon: const Icon(Icons.close),
           ),
         ],
-        wide: constraints.maxWidth >= 480,
+        wide: constraints.maxWidth >= _wideHeroWidth,
         coverWidth: math.min(260, constraints.maxWidth * 0.45),
         cover: ClipRRect(
           borderRadius: BorderRadius.circular(theme.cornerRadius),
-          // A Steam header's shape.
           child: AspectRatio(
-            aspectRatio: 460 / 215,
+            aspectRatio: _coverAspect,
             child: result != null
                 ? _LoadingCover(cover: _coverFor(result))
-                : ColoredBox(
-                    color: theme.cardCoverPlaceholder,
+                : DecoratedBox(
+                    // An empty field's fill and outline, so the banner
+                    // shows through.
+                    decoration: BoxDecoration(
+                      color: theme.inputBackground,
+                      border: Border.all(color: theme.border),
+                      borderRadius: BorderRadius.circular(theme.cornerRadius),
+                    ),
                     child: Center(
                       child: _isSearching
                           ? const AppCircularProgressIndicator(size: 24)
@@ -774,7 +794,7 @@ class _LoadingCoverState extends State<_LoadingCover>
       return Stack(
         fit: StackFit.expand,
         children: [
-          ColoredBox(color: context.appTheme.cardCoverPlaceholder),
+          if (!downloaded) ColoredBox(color: context.appTheme.inputBackground),
           if (downloaded)
             CoverLoadScope(
               listener: this,

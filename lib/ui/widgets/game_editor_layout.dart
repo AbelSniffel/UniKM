@@ -108,6 +108,11 @@ class GameEditorLayout extends StatelessWidget {
       return GameBanner(
         coverController: coverController,
         cornerRadius: cornerRadius,
+        solidHeight: GameBannerBackdrop.solidHeightFor(
+          wide: wide,
+          width: constraints.maxWidth,
+          coverAspect: 2,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -296,8 +301,8 @@ class GameEditorLayout extends StatelessWidget {
 }
 
 /// The top of a banner: [heading] and [actions] in a row of their own,
-/// [info] under them, and [cover] with a drop shadow. Wide, the cover rises
-/// beside them to the banner's top; narrow, it sits between them.
+/// [info] under them, and [cover]. Wide, the cover rises beside them to the
+/// banner's top; narrow, it sits between them.
 class GameBannerHero extends StatelessWidget {
   const GameBannerHero({
     super.key,
@@ -323,21 +328,7 @@ class GameBannerHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.appTheme;
     final actionRow = BannerHeadingRow(heading: heading, actions: actions);
-    final coverBox = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: cover,
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 10, 0),
       child: wide
@@ -345,7 +336,7 @@ class GameBannerHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: spacing,
               children: [
-                SizedBox(width: coverWidth, child: coverBox),
+                SizedBox(width: coverWidth, child: cover),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -359,7 +350,7 @@ class GameBannerHero extends StatelessWidget {
               children: [
                 actionRow,
                 const SizedBox(height: 4),
-                coverBox,
+                cover,
                 const SizedBox(height: 12),
                 info,
               ],
@@ -375,10 +366,14 @@ class GameBanner extends StatelessWidget {
     required this.child,
     this.coverController,
     this.cornerRadius = 0,
+    this.solidHeight = GameBannerBackdrop.headerHeight,
   });
 
   final Widget child;
   final TextEditingController? coverController;
+
+  /// How far down the backdrop stays at full strength.
+  final double solidHeight;
 
   /// Rounds the backdrop's top corners to the container's.
   final double cornerRadius;
@@ -394,7 +389,10 @@ class GameBanner extends StatelessWidget {
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(cornerRadius),
           ),
-          child: GameBannerBackdrop(coverController: coverController),
+          child: GameBannerBackdrop(
+            coverController: coverController,
+            solidHeight: solidHeight,
+          ),
         ),
       ),
       child,
@@ -403,21 +401,48 @@ class GameBanner extends StatelessWidget {
 }
 
 /// A banner's backdrop: the cover's art blurred and tinted with the accent
-/// (so an empty cover still has some colour), fading out over its [height]
-/// so it has no edge of its own.
+/// (so an empty cover still has some colour), at full strength down to
+/// [solidHeight], then fading out over [fadeLength] so it has no edge of its
+/// own.
 class GameBannerBackdrop extends StatelessWidget {
-  const GameBannerBackdrop({super.key, this.coverController});
+  const GameBannerBackdrop({
+    super.key,
+    this.coverController,
+    this.solidHeight = headerHeight,
+  });
 
   /// The cover whose art is blurred in; without one only the tint shows.
   final TextEditingController? coverController;
 
-  /// How far the backdrop reaches down before it has faded out; past it
-  /// nothing shows, so nothing is blurred or painted there.
-  static const height = 480.0;
+  /// How far down the backdrop stays at full strength.
+  final double solidHeight;
+
+  /// Full strength behind a banner's heading row.
+  static const headerHeight = 80.0;
+
+  /// How far the backdrop fades out below [solidHeight]; past it nothing
+  /// shows, so nothing is blurred or painted there.
+  static const fadeLength = 400.0;
+
+  /// The full-strength height for a [GameBannerHero] [width] wide whose
+  /// cover is [coverAspect] wide for its height. Wide, the cover sits beside
+  /// the details and only the heading needs it; narrow, the cover spans the
+  /// banner and would hide that part, so it reaches down to the cover's foot
+  /// and the art shows round the details under it.
+  static double solidHeightFor({
+    required bool wide,
+    required double width,
+    required double coverAspect,
+  }) => wide
+      ? headerHeight
+      // The hero's padding (12 and 10 at the sides, 10 on top), heading row
+      // (40) and the 4 under it.
+      : 54 + (width - 22) / coverAspect;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
+    final height = solidHeight + fadeLength;
     return SizedBox(
       height: height,
       // The enlarged, blurred art would spill past the fade otherwise.
@@ -425,7 +450,8 @@ class GameBannerBackdrop extends StatelessWidget {
         child: RepaintBoundary(
           child: ShaderMask(
             blendMode: BlendMode.dstIn,
-            // Full strength behind the header, then an eased fade to nothing.
+            // Full strength down to [solidHeight], then an eased fade to
+            // nothing.
             shaderCallback: (bounds) => LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -434,7 +460,9 @@ class GameBannerBackdrop extends StatelessWidget {
                   Colors.white.withValues(alpha: alpha),
               ],
               stops: [
-                for (final y in [0, 80, 180, 280, 380, 480]) y / height,
+                0,
+                for (final y in [0, 100, 200, 300, 400])
+                  (solidHeight + y) / height,
               ],
             ).createShader(bounds),
             child: Stack(

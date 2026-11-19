@@ -346,7 +346,7 @@ class _RibbonBar extends StatelessWidget {
     label:
         '$selectedCount games selected${isMultiSelectEnabled ? ', multi-select enabled' : ''}',
     excludeSemantics: true,
-    child: Container(
+    child: Padding(
       key: const ValueKey('selection-count'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Text(text, maxLines: 1, softWrap: false, style: style),

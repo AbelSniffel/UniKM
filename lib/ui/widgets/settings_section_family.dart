@@ -25,11 +25,10 @@ class SettingsSectionFamily extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final radius = BorderRadius.circular(theme.cornerRadius);
     final tinted = ref.watch(pagePatternProvider);
-    final color = SectionGroupBox.background(theme, tinted: tinted);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: SectionGroupBox.fill(theme, color),
+        color: SectionGroupBox.background(theme, tinted: tinted),
         borderRadius: radius,
         boxShadow: [if (!tinted) SurfaceDepth.shadow(isDark: theme.isDark)],
       ),

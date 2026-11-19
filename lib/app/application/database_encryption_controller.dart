@@ -59,6 +59,8 @@ class DatabaseEncryptionController {
     String currentPassword,
     String newPassword,
   ) async {
+    // Nothing to re-encrypt; only the current password needs checking.
+    if (newPassword == currentPassword) return _checkPassword(currentPassword);
     await _transition(
       verifyPassword: currentPassword,
       reopenPassword: newPassword,
@@ -89,12 +91,19 @@ class DatabaseEncryptionController {
   /// Pairs this database after checking [password], which the phone then
   /// stores behind a biometric check.
   Future<void> _pairBiometric(String password) async {
+    await _checkPassword(password);
+    await _biometric.pair(manager.dbPath, password);
+  }
+
+  /// Throws [InvalidPasswordException] unless [password] opens this
+  /// database. While it is open, that is the password its session opened
+  /// with, so nothing is decrypted.
+  Future<void> _checkPassword(String password) async {
     final session = container.read(encryptedDbSessionProvider);
     final valid = session != null && session.baseDbPath == manager.dbPath
         ? session.password == password
         : await manager.verifyPassword(password);
     if (!valid) throw InvalidPasswordException();
-    await _biometric.pair(manager.dbPath, password);
   }
 
   Future<void> _transition({
@@ -116,13 +125,14 @@ class DatabaseEncryptionController {
     if (callback == null) throw StateError('Database switching is unavailable');
     final database = container.read(databaseProvider);
     final session = container.read(encryptedDbSessionProvider);
+    // An incorrect password is rejected before the app shows it is switching
+    // databases or anything is closed.
+    if (verifyPassword != null) await _checkPassword(verifyPassword);
     final wasEncrypted = manager.isEncrypted;
     var closed = false;
     var changed = false;
     container.read(databaseSwitchingProvider.notifier).set(true);
     try {
-      // Reject incorrect passwords before closing the user's working database.
-      if (verifyPassword != null) await manager.decrypt(verifyPassword);
       if (!identical(container.read(databaseProvider), database) ||
           !identical(container.read(encryptedDbSessionProvider), session)) {
         throw StateError(
@@ -142,7 +152,11 @@ class DatabaseEncryptionController {
       await operation();
       changed = true;
       await callback(
-        OpenDatabaseRequest(manager.dbPath, password: reopenPassword),
+        OpenDatabaseRequest(
+          manager.dbPath,
+          password: reopenPassword,
+          announce: false,
+        ),
       );
       await container
           .read(settingsProvider.notifier)
@@ -159,6 +173,7 @@ class DatabaseEncryptionController {
                 : wasEncrypted
                 ? verifyPassword
                 : null,
+            announce: false,
           ),
         );
       }

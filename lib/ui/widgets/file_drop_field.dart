@@ -86,11 +86,12 @@ class _FileDropFieldState extends State<FileDropField> {
             child: Ink(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _dragging
-                    ? theme.accent.withValues(alpha: 0.1)
-                    : _hovering
-                    ? theme.accent.withValues(alpha: 0.05)
-                    : theme.inputBackground,
+                color: Color.alphaBlend(
+                  theme.accent.withValues(
+                    alpha: _dragging ? 0.1 : (_hovering ? 0.05 : 0),
+                  ),
+                  theme.inputBackground,
+                ),
                 borderRadius: radius,
                 border: Border.all(
                   color: _dragging

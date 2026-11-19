@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -32,7 +34,6 @@ class DeadlineChip extends StatelessWidget {
   /// staying compact.
   final bool expand;
 
-
   Future<void> _chooseDate(BuildContext context) async {
     final selected = await showDeadlinePickerDialog(
       context: context,
@@ -47,16 +48,12 @@ class DeadlineChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = date == null ? 'Select date' : dayMonthYearFormat.format(date!);
-    final insetColor = Color.alphaBlend(
-      theme.accent.withValues(alpha: 0.10),
-      theme.inputBackground,
-    );
+    final label = date == null
+        ? 'Select date'
+        : dayMonthYearFormat.format(date!);
+    final insetColor = theme.accent.withValues(alpha: 0.10);
     // Match the inset curve to the outer radius and its 4 px inset.
-    final insetCornerMultiplier = theme.cornerRadius == 0
-        ? 0.0
-        : ((theme.cornerRadius - 4) / theme.cornerRadius).clamp(0.0, 1.0);
-    final insetRadius = theme.cornerRadius * insetCornerMultiplier;
+    final insetRadius = math.max(0.0, theme.cornerRadius - 4);
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: expand ? double.infinity : 260),
       child: Semantics(

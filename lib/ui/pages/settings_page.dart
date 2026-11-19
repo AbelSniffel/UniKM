@@ -36,7 +36,6 @@ class _SettingsSectionDefinition {
     required this.searchGroups,
     required this.builder,
     this.extraMatch,
-    this.platformSearchGroups,
   });
 
   final String id;
@@ -44,16 +43,12 @@ class _SettingsSectionDefinition {
   final String headerTitle;
   final IconData icon;
   final List<SettingsSearchGroup> searchGroups;
-  final List<SettingsSearchGroup> Function(TargetPlatform)?
-  platformSearchGroups;
   final _SettingsSectionBuilder builder;
   final _SectionExtraMatch? extraMatch;
 
-  bool shouldShow(WidgetRef ref, TargetPlatform platform, String query) =>
+  bool shouldShow(WidgetRef ref, String query) =>
       query.isEmpty ||
-      (platformSearchGroups?.call(platform) ?? searchGroups).any(
-        (group) => matchesSettingsSearchGroup(query, group),
-      ) ||
+      searchGroups.any((group) => matchesSettingsSearchGroup(query, group)) ||
       (extraMatch?.call(ref, (text) => settingsSearchMatches(query, text)) ??
           false);
 }
@@ -83,8 +78,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
     railLabel: 'Game Card',
     headerTitle: 'Game Card Visual',
     icon: Icons.style,
-    searchGroups: const [],
-    platformSearchGroups: CardDisplaySection.searchGroupsFor,
+    searchGroups: CardDisplaySection.searchGroups,
     builder: CardDisplaySection.new,
   ),
   _SettingsSectionDefinition(
@@ -390,9 +384,7 @@ class _SettingsPageBody extends ConsumerWidget {
 
     // Filter whole sections before arranging their connected groupboxes.
     final visibleSections = sections
-        .where(
-          (s) => s.shouldShow(ref, Theme.of(context).platform, searchQuery),
-        )
+        .where((s) => s.shouldShow(ref, searchQuery))
         .toList(growable: false);
     // As above, only the column count follows the width; the section widgets
     // are reused by each layout pass.

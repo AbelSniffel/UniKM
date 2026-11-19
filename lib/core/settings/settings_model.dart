@@ -119,16 +119,6 @@ enum TooltipAnimation {
   final String displayName;
 }
 
-/// Section GroupBox title location
-enum SectionTitleLocation {
-  left('Left'),
-  top('Top');
-
-  const SectionTitleLocation(this.displayName);
-
-  final String displayName;
-}
-
 /// Game list view mode
 enum GameListViewMode {
   grid('Grid'),
@@ -229,9 +219,6 @@ class SettingsKeys {
   static const String showDeadlineChip = 'show_deadline_chip';
   static const String slimListView = 'slim_list_view';
 
-  // Toggle & Section Style
-  static const String sectionTitleLocation = 'section_title_location';
-
   // Backup
   static const String autoBackupEnabled = 'auto_backup_enabled';
   static const String autoBackupIntervalMinutes =
@@ -330,10 +317,6 @@ class DefaultSettings {
   // Game List
   static const GameListViewMode gameListViewMode = GameListViewMode.list;
   static const GameSortMode gameSortMode = GameSortMode.deadlineFirst;
-
-  // Toggle & Section Style
-  static const SectionTitleLocation sectionTitleLocation =
-      SectionTitleLocation.top;
 
   // Device Sync
   static const bool syncEnabled = false;
@@ -456,10 +439,6 @@ const enumSettingDefaults = <String, (List<Enum>, Enum)>{
   SettingsKeys.gameSortMode: (
     GameSortMode.values,
     DefaultSettings.gameSortMode,
-  ),
-  SettingsKeys.sectionTitleLocation: (
-    SectionTitleLocation.values,
-    DefaultSettings.sectionTitleLocation,
   ),
 };
 

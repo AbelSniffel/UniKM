@@ -817,11 +817,7 @@ class _RenderBatchPills extends RenderProxyBox {
     );
     canvas.drawRRect(
       shape,
-      Paint()
-        ..color = Color.alphaBlend(
-          theme.accent.withValues(alpha: 0.10 + 0.05 * merge),
-          theme.inputBackground,
-        ),
+      Paint()..color = theme.accent.withValues(alpha: 0.10 + 0.05 * merge),
     );
     // Keep the native selection range, but confine its paint to each pill.
     if (highlights.isNotEmpty) {

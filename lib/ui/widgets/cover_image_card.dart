@@ -132,9 +132,11 @@ class _CoverImageCardState extends State<CoverImageCard> {
           final label = path.isEmpty
               ? 'Choose an image or drop JPG / PNG'
               : path;
-          final image = RepaintBoundary(
-            child: GameCoverImage(theme: theme, coverImage: path),
-          );
+          final image = path.isEmpty
+              ? null
+              : RepaintBoundary(
+                  child: GameCoverImage(theme: theme, coverImage: path),
+                );
           return HoverBuilder(
             cursor: SystemMouseCursors.click,
             builder: (context, hovered) => AnimatedContainer(
@@ -142,7 +144,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(theme.cornerRadius),
-                color: theme.surface,
+                color: image == null ? Colors.transparent : theme.surface,
               ),
               foregroundDecoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(theme.cornerRadius),
@@ -210,10 +212,10 @@ class _CoverImageCardState extends State<CoverImageCard> {
     );
   }
 
-  Widget _buildPreview(AppThemeData theme, Widget image, bool hovered) => Stack(
+  Widget _buildPreview(AppThemeData theme, Widget? art, bool hovered) => Stack(
     fit: StackFit.expand,
     children: [
-      image,
+      art ?? _buildEmptyPrompt(theme, hovered),
       if (widget.isUsed)
         // Past the clipped edge by a pixel, so no sliver of the image shows
         // around it; a fixed pattern size keeps the watermark still while
@@ -239,7 +241,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
           child: Center(
             child: IgnorePointer(
               child: AnimatedOpacity(
-                opacity: hovered || _dragging ? 1 : 0,
+                opacity: _dragging || (hovered && art != null) ? 1 : 0,
                 duration: const Duration(milliseconds: 120),
                 child: Container(
                   padding: const EdgeInsets.all(10),
@@ -287,6 +289,22 @@ class _CoverImageCardState extends State<CoverImageCard> {
         ),
     ],
   );
+
+  /// An empty cover: an empty field's fill, offering to add an image.
+  Widget _buildEmptyPrompt(AppThemeData theme, bool hovered) {
+    final color = hovered || _dragging ? theme.accent : theme.textSecondary;
+    return ColoredBox(
+      color: theme.inputBackground,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: 4,
+        children: [
+          Icon(Icons.add_photo_alternate_outlined, size: 36, color: color),
+          Text('Add cover image', style: TextStyle(color: color)),
+        ],
+      ),
+    );
+  }
 }
 
 // Linux file managers may send a text/uri-list, a plain path, or duplicate
@@ -444,6 +462,7 @@ class _CoverPathDialogState extends State<CoverPathDialog> {
             style: TextStyle(color: theme.textPrimary),
             decoration: InputDecoration(
               labelText: 'File path or image URL',
+              border: theme.resolveInputBorder(labelInside: true),
               hintText: 'https://… or /path/to/cover.png',
               errorText: _error,
               suffixIcon: IconButton(

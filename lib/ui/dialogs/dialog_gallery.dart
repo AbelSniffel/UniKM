@@ -490,7 +490,6 @@ class _DialogGalleryTileState extends State<_DialogGalleryTile> {
     return SectionGroupBox(
       theme: theme,
       title: widget.entry.label,
-      titleLocation: SectionTitleLocation.top,
       headerBottomPadding: 8,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(theme.cornerRadius),

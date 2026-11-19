@@ -29,27 +29,32 @@ class NavButtonGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
+    final radius = theme.cornerRadius * 1.5;
     return Container(
       padding: const EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: (color ?? theme.accent).withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
+        borderRadius: BorderRadius.circular(radius),
       ),
-      child: isHorizontal
-          ? Row(
-              mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
-              spacing: 4,
-              children: [
-                for (final child in children)
-                  expanded ? Expanded(child: child) : child,
-              ],
-            )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 4,
-              children: children,
-            ),
+      child: ConcentricRadius(
+        outer: radius,
+        gap: padding,
+        child: isHorizontal
+            ? Row(
+                mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+                spacing: 4,
+                children: [
+                  for (final child in children)
+                    expanded ? Expanded(child: child) : child,
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 4,
+                children: children,
+              ),
+      ),
     );
   }
 }

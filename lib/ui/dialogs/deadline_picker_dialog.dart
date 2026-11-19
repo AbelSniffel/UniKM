@@ -227,6 +227,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       style: TextStyle(color: theme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Exact date',
+        border: theme.resolveInputBorder(labelInside: true),
         hintText: 'dd/MM/yyyy',
         errorText: _exactDateError,
         errorMaxLines: 2,
@@ -246,6 +247,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       style: TextStyle(color: theme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Expires in',
+        border: theme.resolveInputBorder(labelInside: true),
         hintText: 'Days',
         errorText: _dayAmountError,
         errorMaxLines: 2,

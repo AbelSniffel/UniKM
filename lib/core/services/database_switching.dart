@@ -9,7 +9,7 @@ sealed class DatabaseSwitchRequest {
 }
 
 class OpenDatabaseRequest extends DatabaseSwitchRequest {
-  const OpenDatabaseRequest(this.path, {this.password});
+  const OpenDatabaseRequest(this.path, {this.password, this.announce = true});
 
   /// Path selected by the user.
   ///
@@ -21,13 +21,14 @@ class OpenDatabaseRequest extends DatabaseSwitchRequest {
   /// provided the bootstrap/switch logic will attempt to use this password
   /// and will NOT prompt the user.
   final String? password;
+
+  /// Whether to say which database is now in use. Off when an encryption
+  /// change reopens the same one, which reports the change itself.
+  final bool announce;
 }
 
 class CreateDatabaseRequest extends DatabaseSwitchRequest {
-  const CreateDatabaseRequest({
-    required this.path,
-    required this.encrypted,
-  });
+  const CreateDatabaseRequest({required this.path, required this.encrypted});
 
   /// Target path selected by the user.
   ///
@@ -39,4 +40,5 @@ class CreateDatabaseRequest extends DatabaseSwitchRequest {
   final bool encrypted;
 }
 
-typedef DatabaseSwitchCallback = Future<void> Function(DatabaseSwitchRequest request);
+typedef DatabaseSwitchCallback =
+    Future<void> Function(DatabaseSwitchRequest request);

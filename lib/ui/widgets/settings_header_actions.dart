@@ -1,34 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
-import 'nav_button_group.dart';
 
-/// Settings header actions in a navigation-panel style button group, like
-/// the library's selection bar: a tinted group of separately highlighted
-/// buttons.
-class SettingsHeaderActions extends StatelessWidget {
-  const SettingsHeaderActions({
-    super.key,
-    required this.theme,
-    required this.children,
-    this.expanded = false,
-  });
-
-  final AppThemeData theme;
-  final List<Widget> children;
-
-  /// Fills the width offered, the buttons sharing it, for a header too narrow
-  /// to keep its actions beside the title.
-  final bool expanded;
-
-  @override
-  Widget build(BuildContext context) => NavButtonGroup(
-    isHorizontal: true,
-    expanded: expanded,
-    children: children,
-  );
-}
-
+/// A settings header's action, for its horizontal button group.
 class SettingsHeaderAction extends StatelessWidget {
   const SettingsHeaderAction({
     super.key,

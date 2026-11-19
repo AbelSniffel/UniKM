@@ -246,6 +246,9 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                         style: TextStyle(color: previewTheme.textPrimary),
                         decoration: InputDecoration(
                           labelText: 'Theme name',
+                          border: previewTheme.resolveInputBorder(
+                            labelInside: true,
+                          ),
                           labelStyle: TextStyle(
                             color: previewTheme.textSecondary,
                           ),
@@ -864,8 +867,7 @@ class _SaturationValuePainter extends CustomPainter {
       ..drawCircle(
         center,
         r - 2.5,
-        Paint()
-          ..color = HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
+        Paint()..color = HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
       );
   }
 

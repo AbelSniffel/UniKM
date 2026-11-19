@@ -211,7 +211,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
         title: '${group.title} (${groupTags.length})',
         theme: theme,
         titleIcon: icon,
-        titleLocation: SectionTitleLocation.top,
         headerCrossAxisAlignment: CrossAxisAlignment.center,
         trailing: trailing,
         searchQuery: widget.searchQuery,

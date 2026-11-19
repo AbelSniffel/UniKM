@@ -466,9 +466,11 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       // Set the new database in the notifier - this will trigger all watchers to rebuild
       _activateDatabase(newDb, newSession);
       // Inform the user which file we're now using
-      NotificationManager.instance.success(
-        'Using database: ${p.basename(baseDbPath)}',
-      );
+      if (request is! OpenDatabaseRequest || request.announce) {
+        NotificationManager.instance.success(
+          'Using database: ${p.basename(baseDbPath)}',
+        );
+      }
 
       _setBooting(false);
 

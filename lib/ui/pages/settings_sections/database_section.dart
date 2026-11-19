@@ -35,6 +35,7 @@ import '../../widgets/notification_system.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tinted_tiles.dart';
+import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
@@ -102,6 +103,7 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
                   autofocus: true,
                   decoration: InputDecoration(
                     labelText: 'Database file name',
+                    border: theme.resolveInputBorder(labelInside: true),
                     hintText: selectedType == 'encrypted'
                         ? 'UniKM_keys.enc'
                         : 'UniKM_keys.db',
@@ -176,8 +178,9 @@ class DatabaseHeaderActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
     final switching = ref.watch(databaseSwitchingProvider);
-    return SettingsHeaderActions(
-      theme: theme,
+    // Settings header actions share the selection bar's button group.
+    return NavButtonGroup(
+      isHorizontal: true,
       expanded: expanded,
       children: [
         for (final (icon, tooltip, onTap) in [
@@ -293,7 +296,9 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
       context.appTheme,
       controller.manager,
     );
-    if (password != null) await controller.enable(password);
+    if (password == null) return;
+    await controller.enable(password);
+    NotificationManager.instance.success('Database encryption enabled');
   });
 
   Future<void> _setBiometric(bool on) => _run((controller) async {

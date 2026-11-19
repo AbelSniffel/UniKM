@@ -69,13 +69,16 @@ const Duration kVeryFastAnimation = Duration(milliseconds: 100);
 const Duration kFastAnimation = Duration(milliseconds: 160);
 const Duration kMediumAnimation = Duration(milliseconds: 250);
 
-/// Shared timing for tab selection, tab content, and main-page navigation.
+/// Shared timing for tab selection and tab content.
 const Duration kTabTransition = Duration(milliseconds: 350);
 const Curve kTabTransitionCurve = Curves.easeInOutCubic;
-const Duration kFilterExpandAnimation = Duration(milliseconds: 400);
-const Duration kFilterCollapseAnimation = Duration(milliseconds: 350);
+const Duration kFilterExpandAnimation = Duration(milliseconds: 250);
+const Duration kFilterCollapseAnimation = Duration(milliseconds: 220);
 const Curve kFilterPanelCurve = Curves.easeInOutCubic;
-const Duration kPageTransition = kTabTransition;
+
+/// The cross-fade between main pages, as quick as the navigation panel's
+/// selection moves.
+const Duration kPageTransition = Duration(milliseconds: 200);
 const Curve kPageTransitionCurve = kTabTransitionCurve;
 const Duration kNavPanelMotionAnimation = Duration(milliseconds: 200);
 const Curve kNavPanelMotionCurve = Curves.easeInOutCubic;

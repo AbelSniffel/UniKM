@@ -270,8 +270,10 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
   /// Accent hover
   Color get accentHover => blendColors(baseAccent, Colors.white, 0.15);
 
-  /// Input field background
-  Color get inputBackground => surface.withValues(alpha: 0.0);
+  /// Input field background: a faint lift over whatever the field sits on
+  /// (the page, a groupbox or a dialog), so empty fields still read as boxes.
+  Color get inputBackground =>
+      textPrimary.withValues(alpha: isDark ? 0.06 : 0.07);
 
   /// Input field focused border
   Color get inputFocusedBorder => baseAccent;
@@ -538,6 +540,15 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         filled: true,
         fillColor: inputBackground,
         border: inputBorder,
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.error)
+                ? error
+                : states.contains(WidgetState.focused)
+                ? inputFocusedBorder
+                : textSecondary,
+          ),
+        ),
         suffixIconConstraints: const BoxConstraints(
           minWidth: 42,
           minHeight: kElementHeight,
@@ -628,10 +639,19 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
     );
   }
 
-  WidgetStateInputBorder resolveInputBorder() =>
-      WidgetStateInputBorder.resolveWith(buildInputBorder);
+  /// The border of single-line fields: a faint outline, with an accent
+  /// underline that wraps up the corners on hover and focus. A field with a
+  /// label passes [labelInside], so its label floats inside the box instead
+  /// of across the top edge.
+  WidgetStateInputBorder resolveInputBorder({bool labelInside = false}) =>
+      WidgetStateInputBorder.resolveWith(
+        (states) => buildInputBorder(states, labelInside: labelInside),
+      );
 
-  InputBorder buildInputBorder(Set<WidgetState> states) {
+  InputBorder buildInputBorder(
+    Set<WidgetState> states, {
+    bool labelInside = false,
+  }) {
     final (
       color,
       width,
@@ -642,13 +662,23 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         ? (inputFocusedBorder, 2.5, inputFocusGlow, 18.0, inputBorderWrapFocus)
         : states.contains(WidgetState.hovered)
         ? (inputHoverBorder, 1.5, inputHoverGlow, 12.0, inputBorderWrapHover)
-        : (border, 1.0, Colors.transparent, 0.0, inputBorderWrapDefault);
+        // At rest only the outline shows; the underline fades in from a
+        // clear accent rather than from black.
+        : (
+            inputHoverBorder.withValues(alpha: 0),
+            1.0,
+            Colors.transparent,
+            0.0,
+            inputBorderWrapDefault,
+          );
     return BottomGlowInputBorder(
       borderRadius: BorderRadius.circular(cornerRadius),
       borderSide: BorderSide(color: color, width: width),
       glowColor: glowColor,
       glowExtent: glowExtent,
       wrapExtent: wrapExtent,
+      frameColor: border,
+      labelInside: labelInside,
     );
   }
 
@@ -677,7 +707,8 @@ extension AppThemeContext on BuildContext {
 }
 
 /// An outline drawn as an underline that wraps up the corners by
-/// [wrapExtent], with a glow rising from it.
+/// [wrapExtent], with a glow rising from it, over a 1 px [frameColor]
+/// outline of the whole box.
 class BottomGlowInputBorder extends OutlineInputBorder {
   const BottomGlowInputBorder({
     super.borderSide = const BorderSide(),
@@ -686,11 +717,21 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     required this.glowColor,
     this.glowExtent = 0.0,
     this.wrapExtent = 0.0,
+    this.frameColor = Colors.transparent,
+    this.labelInside = false,
   });
 
   final Color glowColor;
   final double glowExtent;
   final double wrapExtent;
+  final Color frameColor;
+
+  /// Floats a field's label inside the box, below its top edge, as on an
+  /// underlined field, instead of centred on the top edge.
+  final bool labelInside;
+
+  @override
+  bool get isOutline => !labelInside;
 
   @override
   bool operator ==(Object other) =>
@@ -700,7 +741,9 @@ class BottomGlowInputBorder extends OutlineInputBorder {
       other.gapPadding == gapPadding &&
       other.glowColor == glowColor &&
       other.glowExtent == glowExtent &&
-      other.wrapExtent == wrapExtent;
+      other.wrapExtent == wrapExtent &&
+      other.frameColor == frameColor &&
+      other.labelInside == labelInside;
 
   @override
   int get hashCode => Object.hash(
@@ -710,6 +753,8 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor,
     glowExtent,
     wrapExtent,
+    frameColor,
+    labelInside,
   );
 
   @override
@@ -724,6 +769,8 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     Color? glowColor,
     double? glowExtent,
     double? wrapExtent,
+    Color? frameColor,
+    bool? labelInside,
   }) => BottomGlowInputBorder(
     borderSide: borderSide ?? this.borderSide,
     borderRadius: borderRadius ?? this.borderRadius,
@@ -731,6 +778,8 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: glowColor ?? this.glowColor,
     glowExtent: glowExtent ?? this.glowExtent,
     wrapExtent: wrapExtent ?? this.wrapExtent,
+    frameColor: frameColor ?? this.frameColor,
+    labelInside: labelInside ?? this.labelInside,
   );
 
   @override
@@ -741,6 +790,8 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: glowColor.withValues(alpha: glowColor.a * t),
     glowExtent: glowExtent * t,
     wrapExtent: wrapExtent * t,
+    frameColor: frameColor.withValues(alpha: frameColor.a * t),
+    labelInside: labelInside,
   );
 
   /// A plain outline border as a glow border with no glow, so both lerp
@@ -766,6 +817,8 @@ class BottomGlowInputBorder extends OutlineInputBorder {
     glowColor: Color.lerp(a.glowColor, b.glowColor, t)!,
     glowExtent: lerpDouble(a.glowExtent, b.glowExtent, t)!,
     wrapExtent: lerpDouble(a.wrapExtent, b.wrapExtent, t)!,
+    frameColor: Color.lerp(a.frameColor, b.frameColor, t)!,
+    labelInside: t < 0.5 ? a.labelInside : b.labelInside,
   );
 
   @override
@@ -811,6 +864,15 @@ class BottomGlowInputBorder extends OutlineInputBorder {
           ).createShader(glowRect),
       );
       canvas.restore();
+    }
+    if (frameColor.a > 0.0) {
+      canvas.drawRRect(
+        outerRRect.deflate(0.5),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = frameColor,
+      );
     }
     final edge = math.max(wrapExtent, borderSide.width) + borderSide.width;
     canvas.save();
@@ -952,7 +1014,6 @@ class AppNavigationButton extends StatefulWidget {
     this.tooltipMessage,
     this.padding,
     this.alignment = Alignment.center,
-    this.borderRadiusMultiplier = 1.25,
     this.selectedBackgroundColor,
     this.minWidth = 40,
     this.minHeight = 26,
@@ -980,7 +1041,6 @@ class AppNavigationButton extends StatefulWidget {
   final String? tooltipMessage;
   final EdgeInsetsGeometry? padding;
   final AlignmentGeometry alignment;
-  final double borderRadiusMultiplier;
   final Color? selectedBackgroundColor;
   final double minWidth;
   final double minHeight;
@@ -1006,6 +1066,26 @@ class AppNavigationButton extends StatefulWidget {
 
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
+}
+
+/// Rounds the buttons [gap] inside a container with corner radius [outer] to
+/// curve with it: nested corners only look parallel when they share a centre.
+class ConcentricRadius extends InheritedWidget {
+  ConcentricRadius({
+    super.key,
+    required double outer,
+    required double gap,
+    required super.child,
+  }) : radius = math.max(0, outer - gap);
+
+  final double radius;
+
+  static double? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ConcentricRadius>()?.radius;
+
+  @override
+  bool updateShouldNotify(ConcentricRadius oldWidget) =>
+      oldWidget.radius != radius;
 }
 
 class _AppNavigationButtonState extends State<AppNavigationButton>
@@ -1162,7 +1242,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(
-      widget.theme.cornerRadius * widget.borderRadiusMultiplier,
+      ConcentricRadius.maybeOf(context) ?? widget.theme.cornerRadius * 1.25,
     );
 
     final button = AnimatedBuilder(

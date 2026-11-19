@@ -142,8 +142,11 @@ class _GradientBarIconButtonState extends State<GradientBarIconButton> {
             padding: const EdgeInsets.all(8),
             foregroundColor: theme.textSecondary,
             hoverColor: theme.navItemHover,
+            // Curves with the bar's 1.5× corners, 4 px in from them.
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
+              borderRadius: BorderRadius.circular(
+                math.max(0, theme.cornerRadius * 1.5 - 4),
+              ),
             ),
           ),
           icon: AnimatedScale(

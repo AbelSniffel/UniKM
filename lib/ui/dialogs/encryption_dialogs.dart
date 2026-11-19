@@ -167,7 +167,8 @@ class _EnableEncryptionDialogState
 
 /// Shared shell for a password-confirmed change: validates [fields], runs
 /// [action] while blocking dismissal, then reports [successMessage] and
-/// returns true, or shows [errorText] and stays open.
+/// returns true, or stays open showing the error: an incorrect password on
+/// the password field, anything else as [errorText].
 class _PasswordActionDialog extends StatefulWidget {
   const _PasswordActionDialog({
     required this.icon,
@@ -184,9 +185,14 @@ class _PasswordActionDialog extends StatefulWidget {
 
   final IconData icon;
   final String title;
-  final List<Widget> Function(VoidCallback submit) fields;
+
+  /// The fields; the password field shows [passwordError].
+  final List<Widget> Function(VoidCallback submit, String? passwordError)
+  fields;
   final Future<void> Function() action;
-  final String successMessage;
+
+  /// Read once the change succeeds, so it can depend on what was entered.
+  final String Function() successMessage;
   final String Function(Object error) errorText;
   final IconData confirmIcon;
   final String confirmLabel;
@@ -203,6 +209,7 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
   final _form = GlobalKey<FormState>();
   bool _busy = false;
   String? _error;
+  String? _passwordError;
 
   Future<void> _submit() async {
     if (_busy || !_form.currentState!.validate()) return;
@@ -210,14 +217,17 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _passwordError = null;
     });
     try {
       await widget.action();
       if (!mounted) return;
-      NotificationManager.instance.success(widget.successMessage);
+      NotificationManager.instance.success(widget.successMessage());
       // Re-enable popping after the operation; the busy route blocks dismissals.
       setState(() => _busy = false);
       Navigator.of(context).pop(true);
+    } on InvalidPasswordException {
+      if (mounted) setState(() => _passwordError = 'Password is incorrect');
     } catch (error) {
       if (mounted) setState(() => _error = widget.errorText(error));
     } finally {
@@ -252,7 +262,7 @@ class _PasswordActionDialogState extends State<_PasswordActionDialog> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: kDialogSpacing,
                     children: [
-                      ...widget.fields(_submit),
+                      ...widget.fields(_submit, _passwordError),
                       if (_error != null)
                         Text(_error!, style: TextStyle(color: theme.secondary)),
                     ],
@@ -340,14 +350,13 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
       icon: Icons.fingerprint,
       title: '$label Unlock',
       action: () => widget.onPair(_password.text),
-      successMessage: '$label unlock turned on for this database',
-      errorText: (error) => error is InvalidPasswordException
-          ? 'Incorrect password'
-          : '$label was not confirmed, so nothing changed. Try again.',
+      successMessage: () => '$label unlock turned on for this database',
+      errorText: (_) =>
+          '$label was not confirmed, so nothing changed. Try again.',
       confirmIcon: Icons.fingerprint,
       confirmLabel: 'Turn On',
       loadingLabel: 'Confirming...',
-      fields: (submit) => [
+      fields: (submit, passwordError) => [
         Text(
           'Unlock this database with $label instead of its password. Enter '
           'the password once, then confirm with $label. Other databases are '
@@ -357,6 +366,7 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
         PasswordField(
           controller: _password,
           labelText: 'Database Password',
+          errorText: passwordError,
           validator: requiredPassword(),
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => submit(),
@@ -404,17 +414,15 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
     icon: Icons.lock_open,
     title: 'Disable Encryption',
     action: () => widget.onDisable(_password.text),
-    successMessage: 'Database encryption disabled',
-    errorText: (error) => error is InvalidPasswordException
-        ? 'Incorrect password'
-        : 'Failed to disable encryption: $error',
+    successMessage: () => 'Database encryption disabled',
+    errorText: (error) => 'Failed to disable encryption: $error',
     confirmIcon: Icons.lock_open,
     confirmLabel: 'Disable',
     loadingLabel: 'Disabling...',
     warning:
         'Your database will be stored in plain text without password '
         'protection.',
-    fields: (submit) => [
+    fields: (submit, passwordError) => [
       Text(
         'Confirm your password to remove encryption.',
         style: _hintStyle(widget.theme),
@@ -422,6 +430,7 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
       PasswordField(
         controller: _password,
         labelText: 'Enter Password',
+        errorText: passwordError,
         validator: requiredPassword(),
         textInputAction: TextInputAction.done,
         onFieldSubmitted: (_) => submit(),
@@ -472,17 +481,18 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog>
     icon: Icons.key,
     title: 'Change Database Password',
     action: () => widget.onChangePassword(_current.text, _new.text),
-    successMessage: 'Password changed successfully',
-    errorText: (error) => error is InvalidPasswordException
-        ? 'Current password is incorrect'
-        : 'Failed to change password: $error',
+    successMessage: () => _new.text == _current.text
+        ? 'Isn\'t this the same password? Eh?? What are you doing? Smh'
+        : 'Password changed successfully',
+    errorText: (error) => 'Failed to change password: $error',
     confirmIcon: Icons.key,
     confirmLabel: 'Change Password',
     loadingLabel: 'Changing...',
-    fields: (submit) => [
+    fields: (submit, passwordError) => [
       PasswordField(
         controller: _current,
         labelText: 'Current Password',
+        errorText: passwordError,
         textInputAction: TextInputAction.next,
         validator: requiredPassword(message: 'Current password is required'),
       ),
@@ -491,11 +501,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog>
         controller: _new,
         labelText: 'New Password',
         textInputAction: TextInputAction.next,
-        validator: (value) =>
-            requiredPasswordWithLength(
-              emptyMessage: 'New password is required',
-            )(value) ??
-            (value == _current.text ? 'New password must be different' : null),
+        validator: requiredPasswordWithLength(
+          emptyMessage: 'New password is required',
+        ),
       ),
       PasswordField(
         controller: _confirm,

@@ -8,7 +8,6 @@ import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
-import 'settings_control_cards.dart';
 
 /// Card Visual settings section
 class CardDisplaySection extends ConsumerWidget {
@@ -47,17 +46,6 @@ class CardDisplaySection extends ConsumerWidget {
     label: 'Ratings',
     icon: Icons.thumb_up_outlined,
   );
-  static const SettingTextSpec listViewModeSpec = SettingTextSpec(
-    label: 'Density',
-    icon: Icons.view_agenda_outlined,
-  );
-
-  static const SettingsSearchGroup listViewSearchGroup = SettingsSearchGroup(
-    title: 'List View',
-    settings: [listViewModeSpec],
-    extraTexts: ['List view mode', 'regular', 'slim', 'list', 'dense'],
-  );
-
   static const SettingsSearchGroup chipsSearchGroup = SettingsSearchGroup(
     title: 'Card Chips',
     settings: [
@@ -78,61 +66,17 @@ class CardDisplaySection extends ConsumerWidget {
         info: 'Hovering a card shows its hidden chips.',
       );
 
-  static bool supportsListViewMode(TargetPlatform platform) =>
-      switch (platform) {
-        TargetPlatform.linux ||
-        TargetPlatform.macOS ||
-        TargetPlatform.windows => true,
-        _ => false,
-      };
-
-  static List<SettingsSearchGroup> searchGroupsFor(TargetPlatform platform) => [
-    if (supportsListViewMode(platform)) listViewSearchGroup,
-    chipsSearchGroup,
-    displayRulesSearchGroup,
-  ];
+  // List view density lives in the navigation panel's More menu.
+  static const searchGroups = [chipsSearchGroup, displayRulesSearchGroup];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardSettings = ref.watch(gameCardSettingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final showListViewSection =
-        supportsListViewMode(Theme.of(context).platform) &&
-        shouldShowSettingsGroup(searchQuery, listViewSearchGroup);
 
     return SettingsSectionGroups(
       attachesToAbove: attachesToAbove,
       entries: [
-        buildSearchableSectionEntry(
-          visible: showListViewSection,
-          theme: theme,
-          group: listViewSearchGroup,
-          titleIcon: Icons.view_list_outlined,
-          searchQuery: searchQuery,
-          childBuilder: () => SettingsButtonGroupCard<ListViewDensityMode>(
-            theme: theme,
-            label: listViewModeSpec.label,
-            icon: listViewModeSpec.icon,
-            value: resolveListViewDensityMode(
-              slimListView: cardSettings.slimListView,
-            ),
-            // The More menu's list view icons.
-            choices: const [
-              SettingsChoice(
-                ListViewDensityMode.regular,
-                'Regular',
-                icon: Icon(Icons.view_list),
-              ),
-              SettingsChoice(
-                ListViewDensityMode.slim,
-                'Slim',
-                icon: Icon(Icons.view_headline),
-              ),
-            ],
-            onChanged: (value) =>
-                settingsNotifier.setMany(listViewDensityModeSettings(value)),
-          ),
-        ),
         buildSearchableSectionEntry(
           theme: theme,
           group: chipsSearchGroup,

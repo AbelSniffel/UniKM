@@ -8,6 +8,8 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// A [TextFormField] with an obscure-text visibility toggle suffix icon.
 ///
 /// Manages its own `_obscure` state internally so callers don't need a
@@ -29,6 +31,7 @@ class PasswordField extends StatefulWidget {
     this.autofocus = false,
     this.onFieldSubmitted,
     this.textInputAction,
+    this.errorText,
   });
 
   final TextEditingController controller;
@@ -37,6 +40,10 @@ class PasswordField extends StatefulWidget {
   final bool autofocus;
   final ValueChanged<String>? onFieldSubmitted;
   final TextInputAction? textInputAction;
+
+  /// An error from outside the field, such as a rejected password, shown
+  /// while [validator] finds none.
+  final String? errorText;
 
   @override
   State<PasswordField> createState() => _PasswordFieldState();
@@ -54,6 +61,8 @@ class _PasswordFieldState extends State<PasswordField> {
     onFieldSubmitted: widget.onFieldSubmitted,
     decoration: InputDecoration(
       labelText: widget.labelText,
+      errorText: widget.errorText,
+      border: context.appTheme.resolveInputBorder(labelInside: true),
       suffixIcon: IconButton(
         icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
         onPressed: () => setState(() => _obscure = !_obscure),

@@ -1,11 +1,9 @@
 /// Section GroupBox widget
-/// Matches the original Python SectionGroupBox with left/top title positions
 library;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 import '../../core/constants/app_constants.dart';
@@ -56,14 +54,13 @@ class RaisedGroupBoxes extends InheritedWidget {
   bool updateShouldNotify(RaisedGroupBoxes oldWidget) => false;
 }
 
-/// Section groupbox with configurable title position
+/// A titled group of settings or controls, its title above its content.
 class SectionGroupBox extends ConsumerWidget {
   const SectionGroupBox({
     super.key,
     required this.title,
     required this.theme,
     required this.child,
-    this.titleLocation,
     this.padding = const EdgeInsets.all(12),
     this.titleIcon,
     this.trailing,
@@ -80,9 +77,6 @@ class SectionGroupBox extends ConsumerWidget {
   final String title;
   final AppThemeData theme;
   final Widget child;
-
-  /// Optional override. When null, uses `SettingsKeys.sectionTitleLocation`.
-  final SectionTitleLocation? titleLocation;
   final EdgeInsets padding;
   final IconData? titleIcon;
   final Widget? trailing;
@@ -114,8 +108,8 @@ class SectionGroupBox extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
 
-  /// The raised surface under the [fill], see-through while the pattern
-  /// shows on pages ([tinted]). [alternate] takes the darker surface.
+  /// The raised surface, see-through while the pattern shows on pages
+  /// ([tinted]). [alternate] takes the darker surface.
   static Color background(
     AppThemeData theme, {
     required bool tinted,
@@ -126,65 +120,26 @@ class SectionGroupBox extends ConsumerWidget {
               : theme.surface)
           .withValues(alpha: tinted ? patternAlpha : 1);
 
-  /// The raised surface's flat fill: [color] with a hint of the [theme]'s
-  /// accent, keeping its opacity. Dark surfaces take the whole hint; it
-  /// eases off as they lighten, so near-white surfaces stay untinted.
-  static Color fill(AppThemeData theme, Color color) {
-    final lightness = HSLColor.fromColor(color.withValues(alpha: 1)).lightness;
-    final hint =
-        1 -
-        Curves.easeInOut.transform(
-          ((lightness - 0.35) / (0.85 - 0.35)).clamp(0.0, 1.0),
-        );
-    return Color.lerp(
-      color,
-      theme.accent.withValues(alpha: color.a),
-      0.06 * hint,
-    )!;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final spaced = SpacedSettingsGroups.isEnabledOf(context);
-    final SectionTitleLocation effectiveTitleLocation =
-        titleLocation ?? ref.watch(sectionTitleLocationProvider);
-
-    if (spaced) return _buildFlat(effectiveTitleLocation);
+    if (SpacedSettingsGroups.isEnabledOf(context)) return _buildFlat();
     final tinted =
         !RaisedGroupBoxes.isEnabledOf(context) &&
         ref.watch(pagePatternProvider);
     return SearchHighlight(
       query: searchQuery,
       builder: (context, highlightValue) =>
-          _buildFrame(context, highlightValue, effectiveTitleLocation, tinted),
+          _buildFrame(context, highlightValue, tinted),
     );
   }
 
   /// The heading and content alone; a search marks its words in the title.
-  Widget _buildFlat(SectionTitleLocation location) =>
-      location == SectionTitleLocation.left
-      ? Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 12,
-          children: [
-            if (showTitle)
-              SizedBox(
-                width: 150,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 12,
-                  children: [_buildTitleRow(flat: true), ?trailing],
-                ),
-              ),
-            Expanded(child: child),
-          ],
-        )
-      : Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          spacing: 8,
-          children: [if (showTitle) _buildHeader(flat: true), child],
-        );
+  Widget _buildFlat() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    spacing: 8,
+    children: [if (showTitle) _buildHeader(flat: true), child],
+  );
 
   /// Flat headings centre their title on the trailing actions.
   CrossAxisAlignment _alignment(bool flat) =>
@@ -222,12 +177,7 @@ class SectionGroupBox extends ConsumerWidget {
     );
   }
 
-  Widget _buildFrame(
-    BuildContext context,
-    double highlightValue,
-    SectionTitleLocation location,
-    bool tinted,
-  ) {
+  Widget _buildFrame(BuildContext context, double highlightValue, bool tinted) {
     final baseBorderColor = theme.border;
     final effectiveBorderColor =
         Color.lerp(
@@ -264,17 +214,13 @@ class SectionGroupBox extends ConsumerWidget {
       bottom: showBottom ? Radius.circular(cr) : Radius.zero,
     );
 
-    final content = location == SectionTitleLocation.left
-        ? _buildLeftTitle(outerRadius)
-        : _buildTopTitle(outerRadius);
-
     // Paint the background on Material so child controls' ink stays visible.
     final hasCorners = showTop || showBottom;
     final surface = Material(
-      color: fill(theme, bgColor),
+      color: bgColor,
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
-      child: content,
+      child: _buildTopTitle(outerRadius),
     );
     // Keep controls mounted when search filtering changes connected corners.
     final bgLayer = ClipRRect(
@@ -309,72 +255,6 @@ class SectionGroupBox extends ConsumerWidget {
         ],
       ),
       child: body,
-    );
-  }
-
-  Widget _buildLeftTitle(BorderRadius outerRadius) {
-    // Inner left-panel decorative corners.
-    final panelRadius = BorderRadius.only(
-      topLeft: outerRadius.topLeft,
-      bottomRight: outerRadius.bottomRight,
-    );
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title panel
-        if (showTitle)
-          Container(
-            width: 150,
-            padding: padding,
-            decoration: BoxDecoration(
-              // no background color so title blends with box body
-              borderRadius: panelRadius,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(
-                            theme.cornerRadius,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (titleIcon != null) ...[
-                              Icon(titleIcon, size: 18, color: theme.accent),
-                              const SizedBox(width: kElementHSpacing),
-                            ],
-                            Expanded(child: _buildHeaderText()),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (trailing != null) ...[
-                  const SizedBox(height: 12),
-                  trailing!,
-                ],
-              ],
-            ),
-          ),
-        // Content area
-        Expanded(
-          child: Padding(padding: padding, child: child),
-        ),
-      ],
     );
   }
 

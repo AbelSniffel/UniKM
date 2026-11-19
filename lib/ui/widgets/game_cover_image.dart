@@ -180,8 +180,10 @@ class _GameCoverImageState extends State<GameCoverImage> {
     return _buildPlaceholder();
   }
 
-  Widget _buildPlaceholder() => Container(
-    color: theme.cardCoverPlaceholder,
+  // The faint fill of an empty field, so a banner's colour shows through
+  // rather than a grey block.
+  Widget _buildPlaceholder() => ColoredBox(
+    color: theme.inputBackground,
     child: Center(
       child: Icon(
         Icons.videogame_asset_outlined,

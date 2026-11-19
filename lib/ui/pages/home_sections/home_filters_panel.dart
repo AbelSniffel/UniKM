@@ -29,8 +29,10 @@ const double kHomeFilterSidebarWidth = 330;
 const double _kTagListMaxHeight = 112;
 
 /// Below this height, scaled with the text, the sidebar scrolls with the tag
-/// list capped as below the toolbar, rather than the tags filling it.
-const double _kSidebarFillMinHeight = 260;
+/// list capped as below the toolbar, rather than the tags filling it. It
+/// leaves the list at least that cap beside the search and the Show only band
+/// (two rows of toggles in the sidebar).
+const double _kSidebarFillMinHeight = 280;
 
 /// A "show only" option: its label, state and setter.
 typedef HomeFilterOption = ({
@@ -173,13 +175,14 @@ List<Widget> buildHomePlatformAndSort(
   ];
 }
 
-/// One groupbox per filter, each with its own clear button.
+/// One groupbox: the tag filter, with its clear button beside the search,
+/// and the Show only options across its foot.
 class HomeFiltersPanel extends ConsumerStatefulWidget {
   const HomeFiltersPanel({super.key, required this.sidebar});
 
-  /// In the sidebar Show only leads and the tags fill the rest of the
-  /// height. Below the toolbar platform and sort share a row on top, and the
-  /// tags, capped in height, come before Show only.
+  /// In the sidebar the groupbox fills the height, its tag list taking what
+  /// the options leave. Below the toolbar platform and sort share a row on
+  /// top, and the tag list is capped in height.
   final bool sidebar;
 
   @override
@@ -209,56 +212,28 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         .watch(tagsProvider)
         .where((tag) => tag.name.toLowerCase().contains(query))
         .toList();
-    final hasOptions = homeFilterOptions.any((option) => option.isOn(filters));
 
-    Widget clearButton(String id, IconData icon, VoidCallback? onClear) =>
-        Tooltip(
-          message: 'Clear $id',
-          child: ElevatedButton(
-            key: ValueKey('home-filter-clear-$id'),
-            onPressed: onClear,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: const Size(40, 40),
-            ),
-            child: Icon(icon, size: 20),
-          ),
-        );
-
-    // The toggles sit straight on the panel, lined up with the tags
-    // groupbox's content; only they wrap, Clear keeps its place at the end.
-    final options = Row(
-      key: const ValueKey('home-filter-group-options'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: kElementHSpacing,
+    // The Filters button's menu clears them all at once.
+    final options = Wrap(
+      key: const ValueKey('home-filter-options'),
+      spacing: 6,
+      runSpacing: 6,
       children: [
-        Expanded(
-          child: Wrap(
-            key: const ValueKey('home-filter-options'),
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final option in homeFilterOptions)
-                AppActionButton(
-                  label: option.label,
-                  theme: theme,
-                  selected: option.isOn(filters),
-                  onTap: () => option.set(notifier, !option.isOn(filters)),
-                ),
-            ],
+        for (final option in homeFilterOptions)
+          AppActionButton(
+            label: option.label,
+            theme: theme,
+            selected: option.isOn(filters),
+            onTap: () => option.set(notifier, !option.isOn(filters)),
           ),
-        ),
-        clearButton(
-          'options',
-          Icons.filter_alt_off_outlined,
-          hasOptions ? () => clearHomeOptionFilters(notifier) : null,
-        ),
       ],
     );
 
-    // When [fill]ing, the list takes the height left in the groupbox and
-    // scrolls past it; otherwise it scrolls past a fixed cap.
-    Widget tags({required bool fill}) {
+    // The tag search and list, then Show only across the box's foot on its
+    // darker alternate shade. When [fill]ing, the list takes the height left
+    // and scrolls past it, so the options stay in view; otherwise it scrolls
+    // past a fixed cap.
+    Widget filterBox({required bool fill}) {
       final list = TagList(
         tags: matchingTags,
         selectedTagIds: selectedTagIds,
@@ -266,13 +241,8 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         onTagToggled: notifier.toggleTagFilter,
         maxHeight: fill ? double.infinity : _kTagListMaxHeight,
       );
-      return SectionGroupBox(
-        key: const ValueKey('home-filter-group-tags'),
-        title: 'Tags',
-        theme: theme,
-        // A top title, even hidden, lets the content fill a bounded height.
-        titleLocation: SectionTitleLocation.top,
-        showTitle: false,
+      final tags = Padding(
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 6,
@@ -299,16 +269,41 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
                     ),
                   ),
                 ),
-                clearButton(
-                  'tags',
-                  Icons.label_off_outlined,
-                  selectedTagIds.isEmpty
-                      ? null
-                      : () => notifier.setTagFilters([]),
+                Tooltip(
+                  message: 'Clear tags',
+                  child: ElevatedButton(
+                    key: const ValueKey('home-filter-clear-tags'),
+                    onPressed: selectedTagIds.isEmpty
+                        ? null
+                        : () => notifier.setTagFilters([]),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      minimumSize: const Size(40, 40),
+                    ),
+                    child: const Icon(Icons.label_off_outlined, size: 20),
+                  ),
                 ),
               ],
             ),
             if (fill) Flexible(child: list) else list,
+          ],
+        ),
+      );
+      return SectionGroupBox(
+        key: const ValueKey('home-filter-group-tags'),
+        title: 'Tags',
+        theme: theme,
+        // A top title, even hidden, lets the content fill a bounded height.
+        showTitle: false,
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (fill) Expanded(child: tags) else tags,
+            ColoredBox(
+              color: theme.background.withValues(alpha: 0.6),
+              child: Padding(padding: const EdgeInsets.all(12), child: options),
+            ),
           ],
         ),
       );
@@ -322,23 +317,14 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
           final fill =
               constraints.maxHeight >=
               MediaQuery.textScalerOf(context).scale(_kSidebarFillMinHeight);
-          final panel = Column(
-            key: const ValueKey('home-filter-panel'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              options,
-              fill ? Expanded(child: tags(fill: true)) : tags(fill: false),
-            ],
-          );
           return fill
-              ? panel
+              ? filterBox(fill: true)
               : AppScrollbar(
                   controller: _scrollController,
                   child: SingleChildScrollView(
                     controller: _scrollController,
                     primary: false,
-                    child: panel,
+                    child: filterBox(fill: false),
                   ),
                 );
         },
@@ -376,8 +362,7 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
                   ),
               ],
             ),
-            tags(fill: false),
-            options,
+            filterBox(fill: false),
           ],
         ),
       ),

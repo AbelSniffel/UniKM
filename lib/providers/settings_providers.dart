@@ -139,10 +139,6 @@ final appShellSettingsProvider = _settingsSlice(appShellSettingsFromMap);
 
 final backupSettingsProvider = _settingsSlice(backupSettingsFromMap);
 
-final sectionTitleLocationProvider = _setting<SectionTitleLocation>(
-  SettingsKeys.sectionTitleLocation,
-);
-
 final navButtonArrangementHProvider = _setting<NavButtonArrangement>(
   SettingsKeys.navButtonArrangementH,
 );
