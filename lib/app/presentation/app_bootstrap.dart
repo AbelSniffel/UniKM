@@ -32,9 +32,7 @@ import '../../core/services/logging.dart';
 ///
 /// If an encrypted database exists (`.enc`), prompts for password and opens
 /// Drift on a temporary decrypted copy for this session.
-class UniKMBootstrap extends ConsumerStatefulWidget {
-  const UniKMBootstrap({super.key});
-
+class const UniKMBootstrap({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<UniKMBootstrap> createState() => _UniKMBootstrapState();
 }
@@ -117,10 +115,8 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
       return const StartupDatabaseUnlockResult.cancelled();
     }
 
-    final theme = ref.read(themeProvider);
     return DatabaseUnlockDialog.showForStartup(
       dialogContext,
-      theme,
       currentDatabasePath: currentDatabasePath,
       onBiometricUnlock: biometricUnlock,
     );
@@ -422,7 +418,6 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
                 await _promptForPassword(
                   (context, theme) => DatabaseUnlockDialog.show(
                     context,
-                    theme,
                     onBiometricUnlock: biometricUnlock,
                   ),
                 );
@@ -521,7 +516,7 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
           // Every text field, dialogs' included.
           child: Actions(
             actions: {EditableTextTapOutsideIntent: DeferredTapOutsideAction()},
-            child: NotificationHost(theme: theme, child: child!),
+            child: NotificationHost(child: child!),
           ),
         ),
       ),
@@ -599,11 +594,8 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
 
 /// iOS reports Reduce Motion apart from disabled animations. The app's
 /// animations check [MediaQuery.disableAnimationsOf], so both count there.
-class _ReduceMotionAsDisabledAnimations extends StatelessWidget {
-  const _ReduceMotionAsDisabledAnimations({required this.child});
-
-  final Widget child;
-
+class const _ReduceMotionAsDisabledAnimations({required final Widget child})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);

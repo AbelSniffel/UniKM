@@ -8,9 +8,7 @@ import 'app_search_field.dart';
 
 /// A tag name field and Add button that create custom tags one after
 /// another, keeping the field focused for the next name.
-class AddTagField extends ConsumerStatefulWidget {
-  const AddTagField({super.key});
-
+class const AddTagField({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<AddTagField> createState() => _AddTagFieldState();
 }
@@ -74,7 +72,6 @@ class _AddTagFieldState extends ConsumerState<AddTagField> {
         children: [
           Expanded(
             child: AppSearchField(
-              theme: context.appTheme,
               controller: _controller,
               focusNode: _focusNode,
               hintText: 'Enter tag name...',

@@ -4,6 +4,7 @@ library;
 
 import 'dart:io';
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -60,11 +61,9 @@ Future<String> _getCacheFilePath() async {
 }
 
 /// In-memory disk cache (loaded once, write-through updates)
-class _DiskCache {
+class _DiskCache._() {
   static _DiskCache? _instance;
   static _DiskCache get instance => _instance ??= _DiskCache._();
-
-  _DiskCache._();
 
   Map<String, dynamic>? _cache;
   Future<void> _writeTail = Future.value();
@@ -341,61 +340,38 @@ const Map<String, String> _tagMapping = {
   'hack-and-slash': 'Hack and Slash',
 };
 
-enum SteamSearchSource {
+enum SteamSearchSource(final String label) {
   store('Steam Store'),
-  community('Steam Community');
-
-  const SteamSearchSource(this.label);
-  final String label;
+  community('Steam Community'),
 }
 
-enum SteamDataSource {
+enum SteamDataSource(final String label) {
   steamSpy('SteamSpy'),
   storeDetails('Steam Store details'),
-  reviews('Steam Reviews');
-
-  const SteamDataSource(this.label);
-  final String label;
+  reviews('Steam Reviews'),
 }
 
 /// Result from a Steam search, including the services that supplied it.
-class SteamSearchResult {
-  final String appId;
-  final String name;
-  final String? imageUrl;
-  final List<String> tags;
-  final int? reviewScore;
-  final int? reviewCount;
-  final bool isDlc;
-  final String? developer;
-  final SteamSearchSource? searchSource;
-  final List<SteamSearchSource> searchSourcesTried;
-  final List<SteamDataSource> dataSources;
-
-  const SteamSearchResult({
-    required this.appId,
-    required this.name,
-    this.imageUrl,
-    this.tags = const [],
-    this.reviewScore,
-    this.reviewCount,
-    this.isDlc = false,
-    this.developer,
-    this.searchSource,
-    this.searchSourcesTried = const [],
-    this.dataSources = const [],
-  });
-
+class const SteamSearchResult({
+  required final String appId,
+  required final String name,
+  final String? imageUrl,
+  final List<String> tags = const [],
+  final int? reviewScore,
+  final int? reviewCount,
+  final bool isDlc = false,
+  final String? developer,
+  final SteamSearchSource? searchSource,
+  final List<SteamSearchSource> searchSourcesTried = const [],
+  final List<SteamDataSource> dataSources = const [],
+}) {
   @override
   String toString() => 'SteamSearchResult(appId: $appId, name: $name)';
 }
 
 /// Insertion order tracks recency; reads and writes move entries to the end.
-class _LruCache<K, V extends Object> {
-  final int maxSize;
+class _LruCache<K, V extends Object>(final int maxSize) {
   final _cache = <K, V>{};
-
-  _LruCache(this.maxSize);
 
   V? get(K key) {
     final value = _cache.remove(key);
@@ -411,7 +387,7 @@ class _LruCache<K, V extends Object> {
 }
 
 /// Steam integration service
-class SteamService {
+class SteamService({Dio? dio, Directory? imagesDirectory}) {
   // Matching runs per candidate; compile each pattern once.
   static final _addonPattern = RegExp(
     r'\b(dlc|expansion|expansions|season\s*pass|soundtrack|artbook|booster|bonus|pack|skin\s*pack|supporter\s*pack)\b',
@@ -437,9 +413,7 @@ class SteamService {
   DateTime? _lastRequestAt;
   final Duration _minRequestInterval = const Duration(milliseconds: 350);
 
-  SteamService({Dio? dio, Directory? imagesDirectory})
-    : _dio = dio ?? Dio(),
-      _imagesDir = imagesDirectory {
+  this : _dio = dio ?? Dio(), _imagesDir = imagesDirectory {
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 15);
     // Use a more permissive User-Agent and Accept headers like the Sonnet implementation
@@ -806,7 +780,9 @@ class SteamService {
     // name finds it either way.
     final lowerNoEdition = noEdition.toLowerCase();
     if (_looksLikeAddonTitle(lowerNoEdition)) {
-      add(withoutPunctuation(lowerNoEdition.replaceAll(_addonWordPattern, ' ')));
+      add(
+        withoutPunctuation(lowerNoEdition.replaceAll(_addonWordPattern, ' ')),
+      );
     }
     add(cleaned.replaceAll(parentheticalPattern, ' '));
     // The base title before a separator, when it has at least two words.

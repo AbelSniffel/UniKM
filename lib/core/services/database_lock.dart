@@ -10,11 +10,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// Another UniKM window already has [databasePath] open.
-class DatabaseInUseException implements Exception {
-  const DatabaseInUseException(this.databasePath);
-
-  final String databasePath;
-
+class const DatabaseInUseException(final String databasePath)
+    implements Exception {
   @override
   String toString() =>
       '${p.basename(databasePath)} is already open in another UniKM window. '
@@ -23,9 +20,7 @@ class DatabaseInUseException implements Exception {
 
 /// The lock on this process's active database. The operating system releases
 /// it when the process exits, so a crash leaves nothing to clean up.
-class DatabaseLock {
-  DatabaseLock._();
-
+class DatabaseLock._() {
   static String? _heldPath;
   static RandomAccessFile? _held;
 

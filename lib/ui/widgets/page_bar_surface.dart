@@ -4,12 +4,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
 
 /// Full-width page controls with the same raised surface as groupboxes.
-class PageBarSurface extends StatelessWidget {
-  const PageBarSurface({super.key, required this.child, this.isFooter = false});
-
-  final Widget child;
-  final bool isFooter;
-
+class const PageBarSurface({
+  super.key,
+  required final Widget child,
+  final bool isFooter = false,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

@@ -15,18 +15,11 @@ import 'settings_common.dart';
 import 'settings_control_cards.dart';
 
 /// Updates settings section
-class UpdatesSection extends ConsumerStatefulWidget {
-  const UpdatesSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const UpdatesSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerStatefulWidget {
   static const SettingTextSpec includePrereleaseSpec = SettingTextSpec(
     label: 'Pre-releases',
     icon: Icons.science_outlined,
@@ -128,11 +121,12 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final updates = ref.watch(updatesSettingsProvider);
     final nextUpdateCheck = ref.watch(nextAutoUpdateTimeProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final labelStyle = TextStyle(
-      color: widget.theme.textSecondary,
+      color: theme.textSecondary,
       fontSize: 13,
       fontWeight: FontWeight.w500,
     );
@@ -140,14 +134,12 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
       attachesToAbove: widget.attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          theme: widget.theme,
           group: UpdatesSection.searchGroups[0],
           titleIcon: Icons.download_rounded,
           searchQuery: widget.searchQuery,
           childBuilder: () => SettingsControlWrap(
             children: [
               SettingsToggleCard(
-                theme: widget.theme,
                 label: UpdatesSection.autoCheckSpec.label,
                 icon: UpdatesSection.autoCheckSpec.icon,
                 description: _automaticUpdateCheckDescription(
@@ -160,7 +152,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                 ),
               ),
               SettingsToggleCard(
-                theme: widget.theme,
                 label: UpdatesSection.includePrereleaseSpec.label,
                 icon: UpdatesSection.includePrereleaseSpec.icon,
                 value: updates.includePrerelease,
@@ -172,7 +163,6 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           ),
         ),
         buildSearchableSectionEntry(
-          theme: widget.theme,
           group: UpdatesSection.searchGroups[1],
           titleIcon: Icons.code,
           searchQuery: widget.searchQuery,
@@ -197,11 +187,10 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
                   ),
                   Tooltip(
                     key: _tokenInfoKey,
-                    message:
-                        'A personal access token increases GitHub API rate limits.',
+                    message: 'A personal access token increases GitHub API rate limits.',
                     child: IconButton(
                       icon: const Icon(Icons.info_outline, size: 26),
-                      color: widget.theme.accent,
+                      color: theme.accent,
                       onPressed: () =>
                           _tokenInfoKey.currentState?.ensureTooltipVisible(),
                     ),

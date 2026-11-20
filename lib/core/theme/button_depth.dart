@@ -132,24 +132,15 @@ OutlinedBorder _resolveShape(
 }
 
 /// Raised lighting that can stay mounted while a toggle shows inset lighting.
-class ButtonDepthLayer extends StatelessWidget {
-  const ButtonDepthLayer({
-    super.key,
-    required this.outlined,
-    required this.pressed,
-    required this.disabled,
-    required this.shape,
-    required this.textDirection,
-    required this.child,
-  });
-
-  final bool outlined;
-  final bool pressed;
-  final bool disabled;
-  final OutlinedBorder shape;
-  final TextDirection textDirection;
-  final Widget? child;
-
+class const ButtonDepthLayer({
+  super.key,
+  required final bool outlined,
+  required final bool pressed,
+  required final bool disabled,
+  required final OutlinedBorder shape,
+  required final TextDirection textDirection,
+  required final Widget? child,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(
@@ -174,19 +165,12 @@ class ButtonDepthLayer extends StatelessWidget {
 }
 
 /// Inexpensive translucent lighting painted inside the live button outline.
-class ButtonDepthPainter extends CustomPainter {
-  const ButtonDepthPainter(
-    this.depth,
-    this.outlined,
-    this.shape,
-    this.textDirection,
-  );
-
-  final double depth;
-  final bool outlined;
-  final OutlinedBorder shape;
-  final TextDirection textDirection;
-
+class const ButtonDepthPainter(
+  final double depth,
+  final bool outlined,
+  final OutlinedBorder shape,
+  final TextDirection textDirection,
+) extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -226,23 +210,14 @@ Duration _fade(BuildContext context, Duration duration) =>
     MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
 
 /// Fades label and icon colors between their enabled and disabled values.
-class _AnimatedButtonForeground extends StatelessWidget {
-  const _AnimatedButtonForeground({
-    required this.disabled,
-    required this.text,
-    required this.disabledText,
-    required this.icon,
-    required this.disabledIcon,
-    required this.child,
-  });
-
-  final bool disabled;
-  final Color? text;
-  final Color? disabledText;
-  final Color? icon;
-  final Color? disabledIcon;
-  final Widget child;
-
+class const _AnimatedButtonForeground({
+  required final bool disabled,
+  required final Color? text,
+  required final Color? disabledText,
+  required final Color? icon,
+  required final Color? disabledIcon,
+  required final Widget child,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(end: disabled ? 0 : 1),
@@ -262,27 +237,16 @@ class _AnimatedButtonForeground extends StatelessWidget {
 /// Fill on the Material's ink layer, so splashes stay visible above it, and
 /// the elevation shadow painted only outside the outline, so it never shows
 /// through a translucent disabled fill.
-class _AnimatedButtonSurface extends StatelessWidget {
-  const _AnimatedButtonSurface({
-    required this.disabled,
-    required this.pressed,
-    required this.fill,
-    required this.disabledFill,
-    required this.shadow,
-    required this.shape,
-    required this.textDirection,
-    required this.child,
-  });
-
-  final bool disabled;
-  final bool pressed;
-  final Color? fill;
-  final Color? disabledFill;
-  final bool shadow;
-  final OutlinedBorder shape;
-  final TextDirection textDirection;
-  final Widget child;
-
+class const _AnimatedButtonSurface({
+  required final bool disabled,
+  required final bool pressed,
+  required final Color? fill,
+  required final Color? disabledFill,
+  required final bool shadow,
+  required final OutlinedBorder shape,
+  required final TextDirection textDirection,
+  required final Widget child,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(end: disabled ? 0 : 1),
@@ -311,13 +275,11 @@ class _AnimatedButtonSurface extends StatelessWidget {
   );
 }
 
-class _ButtonShadowPainter extends CustomPainter {
-  const _ButtonShadowPainter(this.elevation, this.shape, this.textDirection);
-
-  final double elevation;
-  final OutlinedBorder shape;
-  final TextDirection textDirection;
-
+class const _ButtonShadowPainter(
+  final double elevation,
+  final OutlinedBorder shape,
+  final TextDirection textDirection,
+) extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;

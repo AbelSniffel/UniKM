@@ -18,9 +18,9 @@ import 'tag_list.dart';
 
 /// How long ago [date] was, in whole days, months or years.
 String daysAgoLabel(DateTime date) {
-  final days = DateUtils.dateOnly(
-    DateTime.now(),
-  ).difference(DateUtils.dateOnly(date)).inDays;
+  final days = DateUtils.dateOnly(DateTime.now())
+      .difference(DateUtils.dateOnly(date))
+      .inDays;
   String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'} ago';
   return switch (days) {
     <= 0 => 'Today',
@@ -33,60 +33,38 @@ String daysAgoLabel(DateTime date) {
 
 /// A banner with the cover, title, key and status pills over the cover's
 /// blurred art, then the notes beside the tags and a strip of [stats].
-class GameEditorLayout extends StatelessWidget {
-  const GameEditorLayout({
-    super.key,
-    required this.theme,
-    required this.cover,
-    required this.coverController,
-    required this.actions,
-    this.heading,
-    required this.titleController,
-    required this.onTitleChanged,
-    this.titleValidator,
-    required this.keyField,
-    required this.platform,
-    required this.options,
-    required this.notesController,
-    required this.onNotesChanged,
-    required this.customTags,
-    required this.selectedTagIds,
-    required this.onTagToggled,
-    required this.steamTags,
-    this.stats = const [],
-    this.cornerRadius = 0,
-  });
-
-  final AppThemeData theme;
+class const GameEditorLayout({
+  super.key,
+  required final AppThemeData theme,
 
   /// The cover card, and the path its art is drawn from behind the banner.
-  final Widget cover;
-  final TextEditingController coverController;
+  required final Widget cover,
+  required final TextEditingController coverController,
 
   /// Buttons for the top right of the banner.
-  final List<Widget> actions;
+  required final List<Widget> actions,
 
   /// The dialog's name, at the left of [actions].
-  final String? heading;
-  final TextEditingController titleController;
-  final ValueChanged<String> onTitleChanged;
-  final FormFieldValidator<String>? titleValidator;
-  final Widget keyField;
-  final Widget platform;
-  final Widget options;
-  final TextEditingController notesController;
-  final VoidCallback onNotesChanged;
-  final List<Tag> customTags;
-  final Set<int> selectedTagIds;
-  final ValueChanged<int> onTagToggled;
-  final List<Tag> steamTags;
+  final String? heading,
+  required final TextEditingController titleController,
+  required final ValueChanged<String> onTitleChanged,
+  final FormFieldValidator<String>? titleValidator,
+  required final Widget keyField,
+  required final Widget platform,
+  required final Widget options,
+  required final TextEditingController notesController,
+  required final VoidCallback onNotesChanged,
+  required final List<Tag> customTags,
+  required final Set<int> selectedTagIds,
+  required final ValueChanged<int> onTagToggled,
+  required final List<Tag> steamTags,
 
   /// Figures under the notes and tags, such as [GameStat]s.
-  final List<Widget> stats;
+  final List<Widget> stats = const [],
 
   /// Rounds the backdrop's top corners to the container's.
-  final double cornerRadius;
-
+  final double cornerRadius = 0,
+}) extends StatelessWidget {
   /// Width at which the cover sits beside the title, and the notes beside
   /// the tags.
   static const wideBreakpoint = 760.0;
@@ -303,29 +281,20 @@ class GameEditorLayout extends StatelessWidget {
 /// The top of a banner: [heading] and [actions] in a row of their own,
 /// [info] under them, and [cover]. Wide, the cover rises beside them to the
 /// banner's top; narrow, it sits between them.
-class GameBannerHero extends StatelessWidget {
-  const GameBannerHero({
-    super.key,
-    this.heading,
-    required this.actions,
-    required this.cover,
-    required this.info,
-    required this.wide,
-    required this.coverWidth,
-    this.spacing = 20,
-  });
+class const GameBannerHero({
+  super.key,
 
   /// The dialog's name, at the left of [actions].
-  final String? heading;
-  final List<Widget> actions;
-  final Widget cover;
-  final Widget info;
-  final bool wide;
+  final String? heading,
+  required final List<Widget> actions,
+  required final Widget cover,
+  required final Widget info,
+  required final bool wide,
 
   /// The cover's width, and its gap to [info], when [wide].
-  final double coverWidth;
-  final double spacing;
-
+  required final double coverWidth,
+  final double spacing = 20,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actionRow = BannerHeadingRow(heading: heading, actions: actions);
@@ -360,24 +329,17 @@ class GameBannerHero extends StatelessWidget {
 }
 
 /// [child] over a [GameBannerBackdrop] that runs on under it.
-class GameBanner extends StatelessWidget {
-  const GameBanner({
-    super.key,
-    required this.child,
-    this.coverController,
-    this.cornerRadius = 0,
-    this.solidHeight = GameBannerBackdrop.headerHeight,
-  });
-
-  final Widget child;
-  final TextEditingController? coverController;
-
-  /// How far down the backdrop stays at full strength.
-  final double solidHeight;
+class const GameBanner({
+  super.key,
+  required final Widget child,
+  final TextEditingController? coverController,
 
   /// Rounds the backdrop's top corners to the container's.
-  final double cornerRadius;
+  final double cornerRadius = 0,
 
+  /// How far down the backdrop stays at full strength.
+  final double solidHeight = GameBannerBackdrop.headerHeight,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(
     children: [
@@ -404,19 +366,15 @@ class GameBanner extends StatelessWidget {
 /// (so an empty cover still has some colour), at full strength down to
 /// [solidHeight], then fading out over [fadeLength] so it has no edge of its
 /// own.
-class GameBannerBackdrop extends StatelessWidget {
-  const GameBannerBackdrop({
-    super.key,
-    this.coverController,
-    this.solidHeight = headerHeight,
-  });
+class const GameBannerBackdrop({
+  super.key,
 
   /// The cover whose art is blurred in; without one only the tint shows.
-  final TextEditingController? coverController;
+  final TextEditingController? coverController,
 
   /// How far down the backdrop stays at full strength.
-  final double solidHeight;
-
+  final double solidHeight = headerHeight,
+}) extends StatelessWidget {
   /// Full strength behind a banner's heading row.
   static const headerHeight = 80.0;
 
@@ -481,7 +439,6 @@ class GameBannerBackdrop extends StatelessWidget {
                             child: Transform.scale(
                               scale: 1.4,
                               child: GameCoverImage(
-                                theme: theme,
                                 coverImage: value.text.trim(),
                               ),
                             ),
@@ -512,12 +469,11 @@ class GameBannerBackdrop extends StatelessWidget {
 
 /// A banner's heading in the accent color, with its buttons at the end. Kept
 /// at a button's height when empty, so the content below stays put.
-class BannerHeadingRow extends StatelessWidget {
-  const BannerHeadingRow({super.key, required this.actions, this.heading});
-
-  final String? heading;
-  final List<Widget> actions;
-
+class const BannerHeadingRow({
+  super.key,
+  required final List<Widget> actions,
+  final String? heading,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -540,34 +496,22 @@ class BannerHeadingRow extends StatelessWidget {
 
 /// The game key's field, its placeholder "Key", or with [playfulHints] a
 /// playful line that changes each time the field is emptied.
-class GameKeyField extends StatefulWidget {
-  const GameKeyField({
-    super.key,
-    required this.theme,
-    required this.controller,
-    required this.onChanged,
-    this.validator,
-    this.isVisible = true,
-    this.onVisibilityChanged,
-    this.onCopy,
-    this.playfulHints = false,
-  });
-
-  final AppThemeData theme;
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final FormFieldValidator<String>? validator;
-  final bool isVisible;
+class const GameKeyField({
+  super.key,
+  required final TextEditingController controller,
+  required final ValueChanged<String> onChanged,
+  final FormFieldValidator<String>? validator,
+  final bool isVisible = true,
 
   /// Shows a show/hide button when set.
-  final ValueChanged<bool>? onVisibilityChanged;
+  final ValueChanged<bool>? onVisibilityChanged,
 
   /// Shows a copy button when set.
-  final VoidCallback? onCopy;
+  final VoidCallback? onCopy,
 
   /// Rotates through [hints] in place of the plain "Key" placeholder.
-  final bool playfulHints;
-
+  final bool playfulHints = false,
+}) extends StatefulWidget {
   static const hints = [
     'Where did my key go?',
     'No key, no game',
@@ -619,7 +563,7 @@ class _GameKeyFieldState extends State<GameKeyField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final visible = widget.isVisible;
     return TextFormField(
       key: const ValueKey('game-editor-key'),
@@ -663,19 +607,21 @@ class _GameKeyFieldState extends State<GameKeyField> {
 }
 
 /// One figure in the stat strip: an overline, the value and a detail.
-class GameStat extends StatelessWidget {
-  const GameStat({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.value,
-    this.fallback = '',
-    this.detail,
-    this.tooltip,
-    this.trailing,
-    this.maxLines = 1,
-  });
+class const GameStat({
+  super.key,
+  required final AppThemeData theme,
+  required final String label,
 
+  /// The figure, or null to show [fallback] muted.
+  required final String? value,
+  final String fallback = '',
+  final String? detail,
+  final String? tooltip,
+  final Widget? trailing,
+
+  /// Lines the value may take before it is cut short, for names.
+  final int maxLines = 1,
+}) extends StatelessWidget {
   /// How long ago [date] was, with the day under it and the exact time on
   /// hover.
   factory GameStat.date({
@@ -747,19 +693,6 @@ class GameStat extends StatelessWidget {
 
   static final _day = DateFormat('d MMM yyyy');
   static final _exact = DateFormat('dd/MM/yyyy HH:mm');
-
-  final AppThemeData theme;
-  final String label;
-
-  /// The figure, or null to show [fallback] muted.
-  final String? value;
-  final String fallback;
-  final String? detail;
-  final String? tooltip;
-  final Widget? trailing;
-
-  /// Lines the value may take before it is cut short, for names.
-  final int maxLines;
 
   @override
   Widget build(BuildContext context) {

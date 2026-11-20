@@ -5,7 +5,9 @@ import '../widgets/file_drop_field.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
+
 import '../widgets/app_tab_bar.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -79,11 +81,8 @@ Future<void> _finishRestore(
 }
 
 /// Backup management dialog
-class _BackupDialog extends ConsumerStatefulWidget {
-  const _BackupDialog({this.initialTab = 0});
-
-  final int initialTab;
-
+class const _BackupDialog({final int initialTab = 0})
+    extends ConsumerStatefulWidget {
   @override
   ConsumerState<_BackupDialog> createState() => _BackupDialogState();
 }
@@ -309,7 +308,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
       for (final backup in backups)
         DatabaseFileRow(
           key: ValueKey(backup.filePath),
-          theme: theme,
           title: backup.displayName,
           subtitle: backup.details,
           isEncrypted: backup.isEncrypted,
@@ -350,7 +348,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AppTabBar(
-            theme: theme,
             controller: _tabController,
             tabs: [
               AppTab('Backups (${_backups.length})'),
@@ -416,9 +413,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                             TintedHeading(title: 'Backup File'),
                             const SizedBox(height: 8),
                             FileDropField(
-                              theme: theme,
-                              description:
-                                  'Supports .db, .enc and extensionless SQLite files',
+                              description: 'Supports .db, .enc and extensionless SQLite files',
                               selectedName: _selectedBackupName,
                               selectedIcon: _isEncryptedBackup
                                   ? Icons.lock
@@ -440,7 +435,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                             ],
                             const SizedBox(height: kElementVSpacing),
                             SettingsToggleCard(
-                              theme: theme,
                               icon: Icons.backup_outlined,
                               label: 'Backup current database',
                               value: _createBackupFirst,
@@ -453,8 +447,7 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
                     ),
                     const SizedBox(height: kElementVSpacing),
                     DialogBanner.warning(
-                      message:
-                          'Restoring a backup will replace your current database. This action cannot be undone.',
+                      message: 'Restoring a backup will replace your current database. This action cannot be undone.',
                     ),
                   ],
                 ),
@@ -502,14 +495,11 @@ Future<bool> showRestoreConfirmDialog(
   ProviderContainer container,
   BackupInfo backup,
 ) async {
-  final theme = container.read(themeProvider);
-
   String? password;
   bool createBackupFirst = true;
   if (backup.isEncrypted) {
     password = await DatabaseUnlockDialog.show(
       context,
-      theme,
       title: 'Unlock Backup',
       message: 'This backup is encrypted. Enter its password to restore it.',
       barrierDismissible: true,
@@ -531,7 +521,6 @@ Future<bool> showRestoreConfirmDialog(
           TintedHeading(title: 'Backup to Restore'),
           const SizedBox(height: 8),
           DatabaseFileRow(
-            theme: theme,
             title: backup.displayName,
             subtitle: backup.details,
             isEncrypted: backup.isEncrypted,
@@ -539,7 +528,6 @@ Future<bool> showRestoreConfirmDialog(
           ),
           const SizedBox(height: 16),
           SettingsToggleCard(
-            theme: theme,
             icon: Icons.backup_outlined,
             label: 'Backup current database',
             value: createBackupFirst,

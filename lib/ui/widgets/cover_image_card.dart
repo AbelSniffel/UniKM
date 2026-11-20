@@ -1,4 +1,5 @@
 import 'window_drop_target.dart';
+
 import 'dart:io';
 import 'dart:convert';
 
@@ -19,33 +20,20 @@ import 'used_overlay.dart';
 
 /// A shared cover preview/editor. Image decoding stays inside GameCoverImage;
 /// hovering and dragging only animate the frame around it.
-class CoverImageCard extends StatefulWidget {
-  const CoverImageCard({
-    super.key,
-    required this.theme,
-    required this.controller,
-    required this.onChanged,
-    this.platformSelector,
-    this.isDlc = false,
-    this.isUsed = false,
-    this.hasDeadline = false,
-    this.deadlineDate,
-    this.showPath = true,
-  });
-
-  final AppThemeData theme;
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-  final Widget? platformSelector;
-  final bool isDlc;
-  final bool isUsed;
-  final bool hasDeadline;
-  final DateTime? deadlineDate;
+class const CoverImageCard({
+  super.key,
+  required final TextEditingController controller,
+  required final VoidCallback onChanged,
+  final Widget? platformSelector,
+  final bool isDlc = false,
+  final bool isUsed = false,
+  final bool hasDeadline = false,
+  final DateTime? deadlineDate,
 
   /// Shows the path under the image. Without it, hovering the image names
   /// the path and offers to clear it.
-  final bool showPath;
-
+  final bool showPath = true,
+}) extends StatefulWidget {
   static const preferredWidth = 320.0;
 
   @override
@@ -117,7 +105,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final routeVisible = ModalRoute.of(context)?.isCurrent ?? true;
     return WindowDropTarget(
       enable:
@@ -134,9 +122,7 @@ class _CoverImageCardState extends State<CoverImageCard> {
               : path;
           final image = path.isEmpty
               ? null
-              : RepaintBoundary(
-                  child: GameCoverImage(theme: theme, coverImage: path),
-                );
+              : RepaintBoundary(child: GameCoverImage(coverImage: path));
           return HoverBuilder(
             cursor: SystemMouseCursors.click,
             builder: (context, hovered) => AnimatedContainer(
@@ -227,7 +213,6 @@ class _CoverImageCardState extends State<CoverImageCard> {
           bottom: -1,
           child: UsedOverlay(
             key: const ValueKey('cover-used-overlay'),
-            theme: theme,
             patternSize: const Size(kGridCardWidth, kGridCardHeight),
             gridView: true,
           ),
@@ -365,10 +350,8 @@ Future<bool> _isCoverImageFile(String path) async {
   }
 }
 
-class CoverPathDialog extends StatefulWidget {
-  const CoverPathDialog({super.key, required this.initialPath});
-  final String initialPath;
-
+class const CoverPathDialog({super.key, required final String initialPath})
+    extends StatefulWidget {
   @override
   State<CoverPathDialog> createState() => _CoverPathDialogState();
 }

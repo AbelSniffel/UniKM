@@ -1844,44 +1844,42 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ]);
 }
 
-typedef $$GamesTableCreateCompanionBuilder =
-    GamesCompanion Function({
-      Value<int> id,
-      required String title,
-      required String gameKey,
-      Value<String> platform,
-      Value<DateTime> dateAdded,
-      Value<DateTime> updatedAt,
-      Value<String> notes,
-      Value<bool> isUsed,
-      Value<String> coverImage,
-      Value<bool> hasDeadline,
-      Value<DateTime?> deadlineDate,
-      Value<bool> isDlc,
-      Value<String> steamAppId,
-      Value<String> developer,
-      Value<int> reviewScore,
-      Value<int> reviewCount,
-    });
-typedef $$GamesTableUpdateCompanionBuilder =
-    GamesCompanion Function({
-      Value<int> id,
-      Value<String> title,
-      Value<String> gameKey,
-      Value<String> platform,
-      Value<DateTime> dateAdded,
-      Value<DateTime> updatedAt,
-      Value<String> notes,
-      Value<bool> isUsed,
-      Value<String> coverImage,
-      Value<bool> hasDeadline,
-      Value<DateTime?> deadlineDate,
-      Value<bool> isDlc,
-      Value<String> steamAppId,
-      Value<String> developer,
-      Value<int> reviewScore,
-      Value<int> reviewCount,
-    });
+typedef $$GamesTableCreateCompanionBuilder = GamesCompanion Function({
+  Value<int> id,
+  required String title,
+  required String gameKey,
+  Value<String> platform,
+  Value<DateTime> dateAdded,
+  Value<DateTime> updatedAt,
+  Value<String> notes,
+  Value<bool> isUsed,
+  Value<String> coverImage,
+  Value<bool> hasDeadline,
+  Value<DateTime?> deadlineDate,
+  Value<bool> isDlc,
+  Value<String> steamAppId,
+  Value<String> developer,
+  Value<int> reviewScore,
+  Value<int> reviewCount,
+});
+typedef $$GamesTableUpdateCompanionBuilder = GamesCompanion Function({
+  Value<int> id,
+  Value<String> title,
+  Value<String> gameKey,
+  Value<String> platform,
+  Value<DateTime> dateAdded,
+  Value<DateTime> updatedAt,
+  Value<String> notes,
+  Value<bool> isUsed,
+  Value<String> coverImage,
+  Value<bool> hasDeadline,
+  Value<DateTime?> deadlineDate,
+  Value<bool> isDlc,
+  Value<String> steamAppId,
+  Value<String> developer,
+  Value<int> reviewScore,
+  Value<int> reviewCount,
+});
 
 final class $$GamesTableReferences
     extends BaseReferences<_$AppDatabase, $GamesTable, GameEntry> {
@@ -2356,20 +2354,18 @@ typedef $$GamesTableProcessedTableManager =
       GameEntry,
       PrefetchHooks Function({bool gameTagsRefs})
     >;
-typedef $$TagsTableCreateCompanionBuilder =
-    TagsCompanion Function({
-      Value<int> id,
-      required String name,
-      Value<String> color,
-      Value<bool> isSteamTag,
-    });
-typedef $$TagsTableUpdateCompanionBuilder =
-    TagsCompanion Function({
-      Value<int> id,
-      Value<String> name,
-      Value<String> color,
-      Value<bool> isSteamTag,
-    });
+typedef $$TagsTableCreateCompanionBuilder = TagsCompanion Function({
+  Value<int> id,
+  required String name,
+  Value<String> color,
+  Value<bool> isSteamTag,
+});
+typedef $$TagsTableUpdateCompanionBuilder = TagsCompanion Function({
+  Value<int> id,
+  Value<String> name,
+  Value<String> color,
+  Value<bool> isSteamTag,
+});
 
 final class $$TagsTableReferences
     extends BaseReferences<_$AppDatabase, $TagsTable, TagEntry> {
@@ -2630,18 +2626,16 @@ typedef $$TagsTableProcessedTableManager =
       TagEntry,
       PrefetchHooks Function({bool gameTagsRefs})
     >;
-typedef $$GameTagsTableCreateCompanionBuilder =
-    GameTagsCompanion Function({
-      required int gameId,
-      required int tagId,
-      Value<int> rowid,
-    });
-typedef $$GameTagsTableUpdateCompanionBuilder =
-    GameTagsCompanion Function({
-      Value<int> gameId,
-      Value<int> tagId,
-      Value<int> rowid,
-    });
+typedef $$GameTagsTableCreateCompanionBuilder = GameTagsCompanion Function({
+  required int gameId,
+  required int tagId,
+  Value<int> rowid,
+});
+typedef $$GameTagsTableUpdateCompanionBuilder = GameTagsCompanion Function({
+  Value<int> gameId,
+  Value<int> tagId,
+  Value<int> rowid,
+});
 
 final class $$GameTagsTableReferences
     extends BaseReferences<_$AppDatabase, $GameTagsTable, GameTagEntry> {
@@ -2876,13 +2870,11 @@ class $$GameTagsTableTableManager
               $$GameTagsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$GameTagsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<int> gameId = const Value.absent(),
-                Value<int> tagId = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) =>
-                  GameTagsCompanion(gameId: gameId, tagId: tagId, rowid: rowid),
+          updateCompanionCallback: ({
+            Value<int> gameId = const Value.absent(),
+            Value<int> tagId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => GameTagsCompanion(gameId: gameId, tagId: tagId, rowid: rowid),
           createCompanionCallback:
               ({
                 required int gameId,
@@ -2922,30 +2914,28 @@ class $$GameTagsTableTableManager
                     >
                   >(state) {
                     if (gameId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.gameId,
-                                referencedTable: $$GameTagsTableReferences
-                                    ._gameIdTable(db),
-                                referencedColumn: $$GameTagsTableReferences
-                                    ._gameIdTable(db)
-                                    .id,
-                              )
-                              as T;
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.gameId,
+                        referencedTable: $$GameTagsTableReferences._gameIdTable(
+                          db,
+                        ),
+                        referencedColumn: $$GameTagsTableReferences
+                            ._gameIdTable(db)
+                            .id,
+                      ) as T;
                     }
                     if (tagId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.tagId,
-                                referencedTable: $$GameTagsTableReferences
-                                    ._tagIdTable(db),
-                                referencedColumn: $$GameTagsTableReferences
-                                    ._tagIdTable(db)
-                                    .id,
-                              )
-                              as T;
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.tagId,
+                        referencedTable: $$GameTagsTableReferences._tagIdTable(
+                          db,
+                        ),
+                        referencedColumn: $$GameTagsTableReferences
+                            ._tagIdTable(db)
+                            .id,
+                      ) as T;
                     }
 
                     return state;
@@ -2973,22 +2963,20 @@ typedef $$GameTagsTableProcessedTableManager =
       GameTagEntry,
       PrefetchHooks Function({bool gameId, bool tagId})
     >;
-typedef $$BackupsTableCreateCompanionBuilder =
-    BackupsCompanion Function({
-      Value<int> id,
-      required String filename,
-      Value<DateTime> createdAt,
-      Value<String> label,
-      Value<int> sizeBytes,
-    });
-typedef $$BackupsTableUpdateCompanionBuilder =
-    BackupsCompanion Function({
-      Value<int> id,
-      Value<String> filename,
-      Value<DateTime> createdAt,
-      Value<String> label,
-      Value<int> sizeBytes,
-    });
+typedef $$BackupsTableCreateCompanionBuilder = BackupsCompanion Function({
+  Value<int> id,
+  required String filename,
+  Value<DateTime> createdAt,
+  Value<String> label,
+  Value<int> sizeBytes,
+});
+typedef $$BackupsTableUpdateCompanionBuilder = BackupsCompanion Function({
+  Value<int> id,
+  Value<String> filename,
+  Value<DateTime> createdAt,
+  Value<String> label,
+  Value<int> sizeBytes,
+});
 
 class $$BackupsTableFilterComposer
     extends Composer<_$AppDatabase, $BackupsTable> {

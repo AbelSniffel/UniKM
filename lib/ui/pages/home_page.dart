@@ -17,11 +17,8 @@ import 'home_sections/home_header.dart';
 export '../dialogs/delete_games_dialog.dart' show showDeleteGamesDialog;
 
 /// Home page with game library
-class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key, this.isVeryNarrowLayout = false});
-
-  final bool isVeryNarrowLayout;
-
+class const HomePage({super.key, final bool isVeryNarrowLayout = false})
+    extends ConsumerStatefulWidget {
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
 }

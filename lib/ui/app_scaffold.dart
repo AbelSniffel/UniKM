@@ -21,7 +21,7 @@ import '../providers/app_providers.dart';
 import '../core/models/device_sync_models.dart';
 import 'dialogs/incoming_pair_dialog.dart';
 import 'dialogs/update_dialog.dart';
-import 'dialogs/dialog_gallery.dart' show DialogGalleryHost;
+import 'dialogs/dialog_gallery.dart' show withDialogGallery;
 import 'pages/add_games_page.dart';
 import 'pages/home_page.dart';
 import 'pages/home_sections/selection_ribbon_host.dart';
@@ -39,9 +39,7 @@ import 'widgets/sync_progress_notifications.dart';
 const int _kLargeLibraryNavAnimationThreshold = 250;
 
 /// Main app scaffold
-class AppScaffold extends ConsumerStatefulWidget {
-  const AppScaffold({super.key});
-
+class const AppScaffold({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<AppScaffold> createState() => _AppScaffoldState();
 }
@@ -570,7 +568,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
           items: navItems,
           selectedIndex: NavItem.pages.indexOf(currentNav),
           onItemSelected: onNavItemSelected,
-          theme: theme,
           position: pos,
           appearance: navAppearance,
           gradientAnimation: gradientAnimation,
@@ -631,41 +628,46 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
             ),
           };
     return FocusAnchor(
-      onKeyEvent: (node, event) {
-        final keyboard = HardwareKeyboard.instance;
-        if (event is! KeyDownEvent ||
-            !keyboard.isControlPressed ||
-            !keyboard.isAltPressed) {
-          return KeyEventResult.ignored;
-        }
-        switch (event.logicalKey) {
-          // Ctrl+Alt+D: the developer window.
-          case LogicalKeyboardKey.keyD:
-            DevWindowOverlay.toggle(context);
-          // Ctrl+Alt+G: the dialog gallery, opened or closed.
-          case LogicalKeyboardKey.keyG:
-            final gallery = ref.read(dialogGalleryVisibleProvider.notifier);
-            gallery.set(!ref.read(dialogGalleryVisibleProvider));
-          default:
-            return KeyEventResult.ignored;
-        }
-        return KeyEventResult.handled;
-      },
+      // Builds without dev tools have no shortcuts here.
+      onKeyEvent: kDevTools
+          ? (node, event) {
+              final keyboard = HardwareKeyboard.instance;
+              if (event is! KeyDownEvent ||
+                  !keyboard.isControlPressed ||
+                  !keyboard.isAltPressed) {
+                return KeyEventResult.ignored;
+              }
+              switch (event.logicalKey) {
+                // Ctrl+Alt+D: the developer window.
+                case LogicalKeyboardKey.keyD:
+                  DevWindowOverlay.toggle(context);
+                // Ctrl+Alt+G: the dialog gallery, opened or closed.
+                case LogicalKeyboardKey.keyG:
+                  final gallery = ref.read(
+                    dialogGalleryVisibleProvider.notifier,
+                  );
+                  gallery.set(!ref.read(dialogGalleryVisibleProvider));
+                default:
+                  return KeyEventResult.ignored;
+              }
+              return KeyEventResult.handled;
+            }
+          : null,
       child: Scaffold(
         backgroundColor: theme.background,
         body: Stack(
           children: [
             Column(
               children: [
-                if (_hasDesktopWindowControls) AppTitleBar(theme: theme),
+                if (_hasDesktopWindowControls) AppTitleBar(),
 
                 // Main content with configurable navigation. Panels showing
                 // the pattern line it up across this content, below the
                 // title bar.
                 Expanded(
                   child: PanelPatternWindow(
-                    child: DialogGalleryHost(
-                      child: ClipRect(
+                    child: withDialogGallery(
+                      ClipRect(
                         child: Stack(
                           children: [
                             Positioned.fill(
@@ -757,18 +759,12 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
 /// Keeping all four position slots alive in the widget tree lets the outgoing
 /// panel play its exit animation at the same time as the incoming panel slides
 /// in, instead of the old panel instantly disappearing when the key changes.
-class _NavPositionSlot extends StatefulWidget {
-  const _NavPositionSlot({
-    super.key,
-    required this.position,
-    required this.isActive,
-    required this.child,
-  });
-
-  final NavBarPosition position;
-  final bool isActive;
-  final Widget child;
-
+class const _NavPositionSlot({
+  super.key,
+  required final NavBarPosition position,
+  required final bool isActive,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<_NavPositionSlot> createState() => _NavPositionSlotState();
 }
@@ -840,17 +836,11 @@ class _NavPositionSlotState extends State<_NavPositionSlot>
   }
 }
 
-class _EdgeSlideTransition extends StatelessWidget {
-  const _EdgeSlideTransition({
-    required this.position,
-    required this.animation,
-    required this.child,
-  });
-
-  final NavBarPosition position;
-  final Animation<double> animation;
-  final Widget child;
-
+class const _EdgeSlideTransition({
+  required final NavBarPosition position,
+  required final Animation<double> animation,
+  required final Widget child,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final startOffset = switch (position) {
@@ -879,9 +869,7 @@ class _EdgeSlideTransition extends StatelessWidget {
 /// provide resize borders. This widget restores that behaviour by placing
 /// thin [MouseRegion] + [GestureDetector] strips at all four edges and four
 /// corners, and calling [windowManager.startResizing] on pointer-down.
-class _LinuxResizeFrame extends StatelessWidget {
-  const _LinuxResizeFrame();
-
+class const _LinuxResizeFrame() extends StatelessWidget {
   static const double _edge = 6.0;
   static const double _corner = 12.0;
 

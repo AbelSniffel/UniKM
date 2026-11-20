@@ -15,25 +15,19 @@ import 'package:material_ui/material_ui.dart';
 /// That takes two offscreen layers and a blur, the same again on every frame
 /// for every glowing card. It is drawn once into an image, shared by every
 /// card of the same size, and each paint only draws that image.
-class CardGlowPainter extends CustomPainter {
-  const CardGlowPainter({
-    required this.accentColor,
-    required this.primaryColor,
-    required this.cornerRadius,
-    this.hover,
-    this.devicePixelRatio = 1.0,
-  }) : super(repaint: hover);
-
-  final Color accentColor;
-  final Color primaryColor;
-  final double cornerRadius;
+class const CardGlowPainter({
+  required final Color accentColor,
+  required final Color primaryColor,
+  required final double cornerRadius,
 
   /// How far the hover glow has faded in. A selected card has none: its glow
   /// shows in full.
-  final Animation<double>? hover;
+  final Animation<double>? hover,
 
   /// The pixel density the glow's image is drawn at.
-  final double devicePixelRatio;
+  final double devicePixelRatio = 1.0,
+}) extends CustomPainter {
+  this : super(repaint: hover);
 
   static const double _hoverAlpha = 0.85;
   static const double _selectedAlpha = 0.95;
@@ -68,9 +62,8 @@ class CardGlowPainter extends CustomPainter {
     canvas.drawRect(
       rect,
       Paint()
-        ..shader = LinearGradient(
-          colors: [accentColor, primaryColor],
-        ).createShader(rect),
+        ..shader = LinearGradient(colors: [accentColor, primaryColor])
+            .createShader(rect),
     );
 
     canvas.saveLayer(rect, Paint()..blendMode = BlendMode.dstIn);
@@ -135,26 +128,18 @@ abstract final class _CardGlowImages {
 /// The pattern is many rotated text runs, which cost the same again on every
 /// frame. It is drawn once into an image, shared by every card that needs the
 /// same one, and each paint only draws that image.
-class UsedPatternPainter extends CustomPainter {
-  const UsedPatternPainter({
-    required this.textColor,
-    required this.angleDegrees,
-    required this.patternSize,
-    this.tileToCanvas = false,
-    this.devicePixelRatio = 1.0,
-  });
+class const UsedPatternPainter({
+  required final Color textColor,
+  required final double angleDegrees,
+  required final Size patternSize,
+  final bool tileToCanvas = false,
 
+  /// The pixel density the pattern's image is drawn at.
+  final double devicePixelRatio = 1.0,
+}) extends CustomPainter {
   static const String _label = 'USED';
   static final _textPainterCache = <(Color, double), TextPainter>{};
   static const int _maxCacheEntries = 16;
-
-  final Color textColor;
-  final double angleDegrees;
-  final Size patternSize;
-  final bool tileToCanvas;
-
-  /// The pixel density the pattern's image is drawn at.
-  final double devicePixelRatio;
 
   TextPainter _resolveTextPainter(double fontSize) {
     final quantized = (fontSize * 2).round() / 2;

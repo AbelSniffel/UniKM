@@ -29,12 +29,10 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
 /// This is managed by the application bootstrap.
 /// The revision number is incremented each time the database is switched,
 /// allowing dependent providers to invalidate themselves.
-class DatabaseState {
-  final AppDatabase? database;
-  final int revision;
-
-  const DatabaseState({this.database, this.revision = 0});
-}
+class const DatabaseState({
+  final AppDatabase? database,
+  final int revision = 0,
+});
 
 /// State notifier that manages the active database.
 class DatabaseNotifier extends Notifier<DatabaseState> {

@@ -11,33 +11,22 @@ import '../../core/utils/format_utils.dart';
 
 /// One compact control for enabling a deadline and choosing its date.
 /// Turning it off keeps the last date available when enabled again.
-class DeadlineChip extends StatelessWidget {
-  const DeadlineChip({
-    super.key,
-    required this.theme,
-    required this.hasDeadline,
-    required this.date,
-    required this.onEnabledChanged,
-    required this.onDateChanged,
-    this.firstDate,
-    this.expand = false,
-  });
-
-  final AppThemeData theme;
-  final bool hasDeadline;
-  final DateTime? date;
-  final ValueChanged<bool> onEnabledChanged;
-  final ValueChanged<DateTime> onDateChanged;
-  final DateTime? firstDate;
+class const DeadlineChip({
+  super.key,
+  required final bool hasDeadline,
+  required final DateTime? date,
+  required final ValueChanged<bool> onEnabledChanged,
+  required final ValueChanged<DateTime> onDateChanged,
+  final DateTime? firstDate,
 
   /// Fills the width offered, the date stretching across it, in place of
   /// staying compact.
-  final bool expand;
-
+  final bool expand = false,
+}) extends StatelessWidget {
   Future<void> _chooseDate(BuildContext context) async {
     final selected = await showDeadlinePickerDialog(
       context: context,
-      theme: theme,
+      theme: context.appTheme,
       initialDate: date ?? DateTime.now(),
       firstDate: firstDate,
     );
@@ -48,6 +37,7 @@ class DeadlineChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final label = date == null
         ? 'Select date'
         : dayMonthYearFormat.format(date!);
@@ -75,7 +65,6 @@ class DeadlineChip extends StatelessWidget {
                         context,
                         states,
                         label!,
-                        theme: theme,
                         selected: hasDeadline,
                         gap: 6,
                         // Expanded, the label stays at the start and the

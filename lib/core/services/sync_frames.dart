@@ -19,22 +19,13 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 /// A cover image carried by a sync payload, keyed by its content digest.
-class SyncCover {
-  const SyncCover({
-    required this.digest,
-    required this.fileName,
-    required this.bytes,
-  });
+class const SyncCover({
+  required final String digest,
+  required final String fileName,
+  required final Uint8List bytes,
+});
 
-  final String digest;
-  final String fileName;
-  final Uint8List bytes;
-}
-
-class SyncFrameException implements Exception {
-  const SyncFrameException(this.message);
-  final String message;
-
+class const SyncFrameException(final String message) implements Exception {
   @override
   String toString() => message;
 }
@@ -42,8 +33,8 @@ class SyncFrameException implements Exception {
 /// Buffers one socket so the hello line and the frames after it share a
 /// single subscription. Waits restart whenever bytes arrive, so a large
 /// transfer on a slow link is never cut off by a fixed timeout.
-class SyncByteReader {
-  SyncByteReader(Stream<Uint8List> source) {
+class SyncByteReader(Stream<Uint8List> source) {
+  this {
     _subscription = source.listen(
       (chunk) {
         _chunks.add(chunk);
@@ -154,13 +145,14 @@ class SyncByteReader {
 }
 
 /// One encrypted session over a socket, after both hello lines.
-class SyncChannel {
-  SyncChannel(this._socket, this._reader, this._key, {required bool client})
-    : _direction = client ? 0 : 1;
+class SyncChannel(
+  final Socket _socket,
+  final SyncByteReader _reader,
+  final SecretKey _key, {
+  required bool client,
+}) {
+  this : _direction = client ? 0 : 1;
 
-  final Socket _socket;
-  final SyncByteReader _reader;
-  final SecretKey _key;
   final int _direction;
   int _sentFrames = 0;
   int _receivedFrames = 0;

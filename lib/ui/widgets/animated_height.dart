@@ -7,20 +7,13 @@ import 'package:material_ui/material_ui.dart';
 /// is given at once. An [AnimatedSize] given a loose width animates that too,
 /// so a widening window leaves the box behind, clipping its content. With
 /// animations turned off the child shows as it is.
-class AnimatedHeight extends StatelessWidget {
-  const AnimatedHeight({
-    super.key,
-    required this.duration,
-    required this.curve,
-    this.alignment = Alignment.topCenter,
-    required this.child,
-  });
-
-  final Duration duration;
-  final Curve curve;
-  final AlignmentGeometry alignment;
-  final Widget child;
-
+class const AnimatedHeight({
+  super.key,
+  required final Duration duration,
+  required final Curve curve,
+  final AlignmentGeometry alignment = Alignment.topCenter,
+  required final Widget child,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       // Not a zero duration: that can notify its render object mid-layout.

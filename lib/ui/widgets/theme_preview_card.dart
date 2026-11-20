@@ -5,28 +5,18 @@ import 'preview_card.dart';
 import 'theme_preview_background.dart';
 
 /// One theme preview used at menu size or at the regular Settings card size.
-class ThemePreviewCard extends StatelessWidget {
-  const ThemePreviewCard({
-    super.key,
-    required this.data,
-    required this.selected,
-    required this.onTap,
-    this.onDoubleTap,
-    this.height = PreviewCard.defaultHeight,
-    this.tapKey,
-  });
-
-  final AppThemeData data;
-  final bool selected;
-  final VoidCallback onTap;
-  final VoidCallback? onDoubleTap;
-  final double? height;
-  final Key? tapKey;
-
+class const ThemePreviewCard({
+  super.key,
+  required final AppThemeData data,
+  required final bool selected,
+  required final VoidCallback onTap,
+  final VoidCallback? onDoubleTap,
+  final double? height = PreviewCard.defaultHeight,
+  final Key? tapKey,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PreviewCard(
     name: data.name,
-    theme: context.appTheme,
     isSelected: selected,
     height: height,
     tapKey: tapKey,

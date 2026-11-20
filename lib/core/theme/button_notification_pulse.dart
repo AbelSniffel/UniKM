@@ -2,20 +2,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
 /// A center-out notification wave that tints the surface and foreground together.
-class ButtonNotificationPulse extends StatefulWidget {
-  const ButtonNotificationPulse({
-    super.key,
-    required this.enabled,
-    required this.color,
-    required this.borderRadius,
-    required this.child,
-  });
-
-  final bool enabled;
-  final Color color;
-  final BorderRadius borderRadius;
-  final Widget child;
-
+class const ButtonNotificationPulse({
+  super.key,
+  required final bool enabled,
+  required final Color color,
+  required final BorderRadius borderRadius,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<ButtonNotificationPulse> createState() =>
       _ButtonNotificationPulseState();
@@ -76,19 +69,12 @@ class _ButtonNotificationPulseState extends State<ButtonNotificationPulse>
   }
 }
 
-class _PulseDecoration extends Decoration {
-  const _PulseDecoration({
-    required this.progress,
-    required this.color,
-    required this.borderRadius,
-    required this.reducedMotion,
-  });
-
-  final Animation<double> progress;
-  final Color color;
-  final BorderRadius borderRadius;
-  final bool reducedMotion;
-
+class const _PulseDecoration({
+  required final Animation<double> progress,
+  required final Color color,
+  required final BorderRadius borderRadius,
+  required final bool reducedMotion,
+}) extends Decoration {
   @override
   BoxPainter createBoxPainter([VoidCallback? onChanged]) =>
       _PulsePainter(this, onChanged);
@@ -128,12 +114,11 @@ class _PulseDecoration extends Decoration {
   }
 }
 
-class _PulsePainter extends BoxPainter {
-  _PulsePainter(this.decoration, super.onChanged) {
+class _PulsePainter(final _PulseDecoration decoration, super.onChanged)
+    extends BoxPainter {
+  this {
     decoration.progress.addListener(_repaint);
   }
-
-  final _PulseDecoration decoration;
 
   void _repaint() => onChanged?.call();
 
@@ -150,11 +135,10 @@ class _PulsePainter extends BoxPainter {
   }
 }
 
-class _PulseContent extends SingleChildRenderObjectWidget {
-  const _PulseContent({required this.decoration, required super.child});
-
-  final _PulseDecoration decoration;
-
+class const _PulseContent({
+  required final _PulseDecoration decoration,
+  required super.child,
+}) extends SingleChildRenderObjectWidget {
   @override
   _RenderPulseContent createRenderObject(BuildContext context) =>
       _RenderPulseContent(decoration);
@@ -166,11 +150,8 @@ class _PulseContent extends SingleChildRenderObjectWidget {
   ) => renderObject.decoration = decoration;
 }
 
-class _RenderPulseContent extends RenderProxyBox {
-  _RenderPulseContent(this._decoration);
-
-  _PulseDecoration _decoration;
-
+class _RenderPulseContent(var _PulseDecoration _decoration)
+    extends RenderProxyBox {
   set decoration(_PulseDecoration value) {
     if (attached) _decoration.progress.removeListener(markNeedsPaint);
     _decoration = value;

@@ -5,27 +5,16 @@ final _lineBreakPattern = RegExp(r'\r?\n');
 final _titleKeyLinePattern = RegExp(r'^(.+?)\s+([A-Za-z0-9-]{15,})$');
 final _nonAlphanumericPattern = RegExp(r'[^A-Za-z0-9]');
 
-class SteamKm1ImportedGame {
-  const SteamKm1ImportedGame({
-    required this.title,
-    required this.key,
-    this.category,
-    this.appId,
-    this.iconPath,
-    this.reviewScore,
-    this.reviewCount,
-    this.developer,
-  });
-
-  final String title;
-  final String key;
-  final String? category;
-  final String? appId;
-  final String? iconPath;
-  final int? reviewScore;
-  final int? reviewCount;
-  final String? developer;
-}
+class const SteamKm1ImportedGame({
+  required final String title,
+  required final String key,
+  final String? category,
+  final String? appId,
+  final String? iconPath,
+  final int? reviewScore,
+  final int? reviewCount,
+  final String? developer,
+});
 
 bool looksLikeSteamKm1JsonExportData(Object? data) {
   if (data is List) {

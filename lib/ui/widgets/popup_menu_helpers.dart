@@ -48,34 +48,21 @@ Size anchoredMenuSize(MediaQueryData media, Size max) => Size(
 /// menu opens through this. [width] pins the menu to a fixed width (a select
 /// control's own); otherwise it sizes to its items. It never outgrows the
 /// screen, and scrolls past [maxHeight].
-class AppMenuAnchor extends StatelessWidget {
-  const AppMenuAnchor({
-    super.key,
-    required this.menuChildren,
-    required this.builder,
-    this.controller,
-    this.childFocusNode,
-    this.onOpen,
-    this.onClose,
-    this.alignment = Alignment.bottomLeft,
-    this.alignmentOffset = const Offset(0, 4),
-    this.width,
-    this.maxHeight,
-  });
-
-  final List<Widget> menuChildren;
-  final MenuAnchorChildBuilder builder;
-  final MenuController? controller;
-  final FocusNode? childFocusNode;
-  final VoidCallback? onOpen;
-  final VoidCallback? onClose;
+class const AppMenuAnchor({
+  super.key,
+  required final List<Widget> menuChildren,
+  required final MenuAnchorChildBuilder builder,
+  final MenuController? controller,
+  final FocusNode? childFocusNode,
+  final VoidCallback? onOpen,
+  final VoidCallback? onClose,
 
   /// Where the menu sits against its anchor; bottom aligns open downward.
-  final Alignment alignment;
-  final Offset alignmentOffset;
-  final double? width;
-  final double? maxHeight;
-
+  final Alignment alignment = Alignment.bottomLeft,
+  final Offset alignmentOffset = const Offset(0, 4),
+  final double? width,
+  final double? maxHeight,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -225,18 +212,14 @@ void showAppContextMenu({
 
 /// A [button] that opens a [panel] (not a list of items) under its left edge,
 /// on the app's menu surface. The panel may take up to [maxSize] of the screen.
-class AnchoredPanelMenu extends StatefulWidget {
-  const AnchoredPanelMenu({
-    super.key,
-    required this.maxSize,
-    required this.panel,
-    required this.button,
-  });
-
-  final Size maxSize;
-  final Widget Function(Size size, ScrollController scrollController) panel;
-  final Widget Function(FocusNode focusNode, VoidCallback toggle) button;
-
+class const AnchoredPanelMenu({
+  super.key,
+  required final Size maxSize,
+  required final Widget Function(Size size, ScrollController scrollController)
+  panel,
+  required final Widget Function(FocusNode focusNode, VoidCallback toggle)
+  button,
+}) extends StatefulWidget {
   @override
   State<AnchoredPanelMenu> createState() => _AnchoredPanelMenuState();
 }

@@ -15,9 +15,7 @@ typedef CoverStamp = ({int size, int modifiedMillis, String digest});
 /// timezone formatting and sub-second precision are not shared state.
 ///
 /// Everything here is synchronous so it can run inside a background isolate.
-class SyncEntryFingerprint {
-  SyncEntryFingerprint._();
-
+class SyncEntryFingerprint._() {
   static const DartSha256 _sha256 = DartSha256();
 
   /// Cover digests for this isolate, keyed by the raw cover path. Many games

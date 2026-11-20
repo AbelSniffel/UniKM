@@ -13,41 +13,27 @@ Duration _statusDuration(BuildContext context) =>
     ? Duration.zero
     : const Duration(milliseconds: 120);
 
-class AppActionButton extends StatelessWidget {
-  const AppActionButton({
-    super.key,
-    required this.label,
-    this.icon,
-    required this.theme,
-    required this.onTap,
-    this.selected,
-    this.accentColor,
-    this.deleteOnHover = false,
-    this.showStatus = true,
-    this.readOnly = false,
-    this.transparentWhenIdle = false,
-    this.depthStrength = SettingsCardInset.defaultDepthStrength,
-  });
-  final String label;
-  final IconData? icon;
-  final AppThemeData theme;
-  final VoidCallback? onTap;
+class const AppActionButton({
+  super.key,
+  required final String label,
+  final IconData? icon,
+  required final VoidCallback? onTap,
 
   /// Null for an ordinary action; false/true enables the fixed toggle indicator.
-  final bool? selected;
+  final bool? selected,
 
   /// Selected text, indicator, and highlighted border color.
-  final Color? accentColor;
+  final Color? accentColor,
 
   /// Morph the fixed suffix into a delete mark while hovering an action tag.
-  final bool deleteOnHover;
-  final bool showStatus;
-  final bool readOnly;
+  final bool deleteOnHover = false,
+  final bool showStatus = true,
+  final bool readOnly = false,
 
   /// Hide an off toggle's surface only while it is neither hovered nor active.
-  final bool transparentWhenIdle;
-  final double depthStrength;
-
+  final bool transparentWhenIdle = false,
+  final double depthStrength = SettingsCardInset.defaultDepthStrength,
+}) extends StatelessWidget {
   static const toggleHorizontalPadding = 10.0;
   static const statusSize = 14.0;
   static const statusSpacing = 4.0;
@@ -62,7 +48,6 @@ class AppActionButton extends StatelessWidget {
     BuildContext context,
     Set<WidgetState> states,
     Widget label, {
-    required AppThemeData theme,
     required bool selected,
     Color? accentColor,
     bool deleteOnHover = false,
@@ -94,7 +79,6 @@ class AppActionButton extends StatelessWidget {
           selected: selected,
           deleteHovered: deleteOnHover && hovered,
           visible: shown,
-          theme: theme,
           accentColor: accentColor,
         ),
       ],
@@ -219,6 +203,7 @@ class AppActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final materialTheme = Theme.of(context);
     final style = styleFor(
       theme,
@@ -257,7 +242,6 @@ class AppActionButton extends StatelessWidget {
                           context,
                           states,
                           label!,
-                          theme: theme,
                           selected: selected!,
                           accentColor: accentColor,
                           deleteOnHover: deleteOnHover,
@@ -294,24 +278,15 @@ class AppActionButton extends StatelessWidget {
 }
 
 /// A fixed-size status slot, shared by ordinary and compound toggle buttons.
-class AppButtonSelectionIndicator extends StatelessWidget {
-  const AppButtonSelectionIndicator({
-    super.key,
-    required this.selected,
-    required this.theme,
-    this.accentColor,
-    this.deleteHovered = false,
-    this.visible = true,
-  });
-
-  final Color? accentColor;
-  final bool selected;
-  final bool deleteHovered;
+class const AppButtonSelectionIndicator({
+  super.key,
+  required final bool selected,
+  final Color? accentColor,
+  final bool deleteHovered = false,
 
   /// Whether the mark is shown; hiding it shrinks it away to nothing.
-  final bool visible;
-  final AppThemeData theme;
-
+  final bool visible = true,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: AppActionButton.statusSize,
@@ -330,8 +305,8 @@ class AppButtonSelectionIndicator extends StatelessWidget {
                 progress: progress.dx,
                 deleteProgress: progress.dy,
                 color: Color.lerp(
-                  theme.textHint,
-                  accentColor ?? theme.accent,
+                  context.appTheme.textHint,
+                  accentColor ?? context.appTheme.accent,
                   math.max(progress.dx, progress.dy),
                 )!,
               ),
@@ -343,16 +318,11 @@ class AppButtonSelectionIndicator extends StatelessWidget {
   );
 }
 
-class ToggleIndicatorPainter extends CustomPainter {
-  const ToggleIndicatorPainter({
-    required this.color,
-    required this.progress,
-    required this.deleteProgress,
-  });
-  final Color color;
-  final double progress;
-  final double deleteProgress;
-
+class const ToggleIndicatorPainter({
+  required final Color color,
+  required final double progress,
+  required final double deleteProgress,
+}) extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     Offset scale(Offset point) =>

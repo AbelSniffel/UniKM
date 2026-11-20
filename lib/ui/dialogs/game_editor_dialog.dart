@@ -43,21 +43,14 @@ Future<bool?> showGameEditorDialog(
 );
 
 /// Game Editor dialog
-class GameEditorDialog extends ConsumerStatefulWidget {
-  const GameEditorDialog({
-    super.key,
-    // Allow passing just a game (legacy) or list+id
-    this.game,
-    this.gameIds,
-    this.initialGameId,
-    this.onViewedGame,
-  });
-
-  final Game? game;
-  final List<int>? gameIds;
-  final int? initialGameId;
-  final Future<void> Function(int gameId)? onViewedGame;
-
+class const GameEditorDialog({
+  super.key,
+  // Allow passing just a game (legacy) or list+id
+  final Game? game,
+  final List<int>? gameIds,
+  final int? initialGameId,
+  final Future<void> Function(int gameId)? onViewedGame,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<GameEditorDialog> createState() => _GameEditorDialogState();
 }
@@ -539,7 +532,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
       cornerRadius: theme.cornerRadius,
       heading: 'Game Editor',
       cover: CoverImageCard(
-        theme: theme,
         isDlc: _isDlc,
         isUsed: _isUsed,
         hasDeadline: _hasDeadline,
@@ -575,7 +567,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
       titleController: _fields.title,
       onTitleChanged: (_) => _markChanged(),
       keyField: GameKeyField(
-        theme: theme,
         controller: _fields.gameKey,
         onChanged: (_) => _markChanged(),
         isVisible: _isKeyVisible,
@@ -584,7 +575,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         playfulHints: true,
       ),
       platform: PlatformMenuButton(
-        theme: theme,
         value: _platform,
         tooltip: 'Selected platform: $_platform. Choose platform',
         includeAutoDetect: false,
@@ -594,7 +584,6 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         isDlc: _isDlc,
         onDlcChanged: (value) => _edit(() => _isDlc = value),
         deadline: DeadlineChip(
-          theme: theme,
           hasDeadline: _hasDeadline,
           date: _deadlineDate,
           firstDate: DateTime(2020),

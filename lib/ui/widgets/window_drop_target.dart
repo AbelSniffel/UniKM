@@ -6,22 +6,14 @@ import 'package:flutter/widgets.dart';
 /// Receives file drops anywhere in the window while this area is active.
 /// The most recently mounted visible target owns the drop, so dialogs take
 /// precedence and retained tabs or pages cannot import the same file twice.
-class WindowDropTarget extends StatefulWidget {
-  const WindowDropTarget({
-    super.key,
-    required this.child,
-    this.enable = true,
-    this.onDragEntered,
-    this.onDragExited,
-    this.onDragDone,
-  });
-
-  final Widget child;
-  final bool enable;
-  final OnDragCallback<DropEventDetails>? onDragEntered;
-  final OnDragCallback<DropEventDetails>? onDragExited;
-  final OnDragDoneCallback? onDragDone;
-
+class const WindowDropTarget({
+  super.key,
+  required final Widget child,
+  final bool enable = true,
+  final OnDragCallback<DropEventDetails>? onDragEntered,
+  final OnDragCallback<DropEventDetails>? onDragExited,
+  final OnDragDoneCallback? onDragDone,
+}) extends StatefulWidget {
   @override
   State<WindowDropTarget> createState() => _WindowDropTargetState();
 }

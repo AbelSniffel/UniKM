@@ -7,21 +7,15 @@ import '../../core/theme/app_slider_theme.dart';
 
 /// Shows [message] above [child] in the theme sliders' value bubble while a
 /// mouse hovers it, or briefly after a touch.
-class SliderStyleTooltip extends StatefulWidget {
-  const SliderStyleTooltip({
-    super.key,
-    required this.message,
-    required this.child,
-    this.color,
-  });
-
-  final String message;
-  final Widget child;
+class const SliderStyleTooltip({
+  super.key,
+  required final String message,
+  required final Widget child,
 
   /// The bubble's fill instead of the sliders' accent; its label turns
   /// black on light fills to stay readable.
-  final Color? color;
-
+  final Color? color,
+}) extends StatefulWidget {
   @override
   State<SliderStyleTooltip> createState() => _SliderStyleTooltipState();
 }
@@ -134,23 +128,14 @@ class _SliderStyleTooltipState extends State<SliderStyleTooltip>
 
 /// Paints the slider value indicator over the overlay, its tip just above
 /// the top centre of [target].
-class _ValueBubble extends LeafRenderObjectWidget {
-  const _ValueBubble({
-    required this.target,
-    required this.label,
-    required this.scale,
-    required this.sliderTheme,
-    required this.textScale,
-    required this.textDirection,
-  });
-
-  final RenderBox target;
-  final String label;
-  final double scale;
-  final SliderThemeData sliderTheme;
-  final double textScale;
-  final TextDirection textDirection;
-
+class const _ValueBubble({
+  required final RenderBox target,
+  required final String label,
+  required final double scale,
+  required final SliderThemeData sliderTheme,
+  required final double textScale,
+  required final TextDirection textDirection,
+}) extends LeafRenderObjectWidget {
   @override
   _RenderValueBubble createRenderObject(BuildContext context) =>
       _RenderValueBubble(this);
@@ -164,11 +149,7 @@ class _ValueBubble extends LeafRenderObjectWidget {
     ..markNeedsPaint();
 }
 
-class _RenderValueBubble extends RenderBox {
-  _RenderValueBubble(this.bubble);
-
-  _ValueBubble bubble;
-
+class _RenderValueBubble(var _ValueBubble bubble) extends RenderBox {
   @override
   bool get sizedByParent => true;
 

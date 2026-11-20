@@ -5,26 +5,19 @@ import '../../core/theme/app_theme.dart';
 /// The rounded, accent-tinted container that holds a run of
 /// [AppNavigationButton]s, in a row or a column. The navigation panel and the
 /// settings page's section list both group their buttons with it.
-class NavButtonGroup extends StatelessWidget {
-  const NavButtonGroup({
-    super.key,
-    required this.isHorizontal,
-    required this.children,
-    this.color,
-    this.expanded = false,
-  });
-
-  /// Space between the group's edge and its buttons.
-  static const double padding = 4;
-
-  final bool isHorizontal;
-  final List<Widget> children;
+class const NavButtonGroup({
+  super.key,
+  required final bool isHorizontal,
+  required final List<Widget> children,
 
   /// The group's tint; the theme's accent by default.
-  final Color? color;
+  final Color? color,
 
   /// A horizontal group that fills the width offered, its buttons sharing it.
-  final bool expanded;
+  final bool expanded = false,
+}) extends StatelessWidget {
+  /// Space between the group's edge and its buttons.
+  static const double padding = 4;
 
   @override
   Widget build(BuildContext context) {

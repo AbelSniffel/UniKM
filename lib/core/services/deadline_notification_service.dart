@@ -41,9 +41,7 @@ const Duration _deadlineToastDuration = Duration(seconds: 10);
 ///
 /// The timer runs once every 24 hours so users receive at most one notification
 /// batch per day. An immediate check is also performed at app startup.
-class DeadlineNotificationService {
-  DeadlineNotificationService._();
-
+class DeadlineNotificationService._() {
   static final DeadlineNotificationService instance =
       DeadlineNotificationService._();
 
@@ -289,8 +287,7 @@ class DeadlineNotificationService {
         android: AndroidNotificationDetails(
           'unikm_fetch_progress',
           'Steam Data Fetch',
-          channelDescription:
-              'Progress for Steam data fetch operations running in the background',
+          channelDescription: 'Progress for Steam data fetch operations running in the background',
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,

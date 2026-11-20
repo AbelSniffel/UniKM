@@ -45,11 +45,10 @@ RRect _handleRect(Offset center, double cornerRadius, {double gap = 0}) {
   );
 }
 
-class AppSliderThumbShape extends SliderComponentShape {
-  const AppSliderThumbShape({required this.cornerRadius, this.outlineColor});
-  final double cornerRadius;
-  final Color? outlineColor;
-
+class const AppSliderThumbShape({
+  required final double cornerRadius,
+  final Color? outlineColor,
+}) extends SliderComponentShape {
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
       const Size(kSliderHandleSize, kSliderHandleSize);
@@ -119,10 +118,8 @@ class AppSliderThumbShape extends SliderComponentShape {
 
 /// A value bubble with the theme's corner radius, pointing down at the
 /// value from just above the handle's ring.
-class AppSliderValueIndicatorShape extends SliderComponentShape {
-  const AppSliderValueIndicatorShape({required this.cornerRadius});
-  final double cornerRadius;
-
+class const AppSliderValueIndicatorShape({required final double cornerRadius})
+    extends SliderComponentShape {
   static const _padding = EdgeInsets.symmetric(horizontal: 12, vertical: 6);
   static const _pointer = 6.0;
   static const _edgeGap = 8.0;
@@ -203,10 +200,8 @@ class AppSliderValueIndicatorShape extends SliderComponentShape {
   }
 }
 
-class AppSliderOverlayShape extends SliderComponentShape {
-  const AppSliderOverlayShape({required this.cornerRadius});
-  final double cornerRadius;
-
+class const AppSliderOverlayShape({required final double cornerRadius})
+    extends SliderComponentShape {
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size(
     kSliderHandleSize + kSliderHandleGap * 2,
@@ -237,9 +232,8 @@ class AppSliderOverlayShape extends SliderComponentShape {
   }
 }
 
-class AppSliderTickMarkShape extends SliderTickMarkShape {
-  const AppSliderTickMarkShape({required this.cornerRadius});
-  final double cornerRadius;
+class const AppSliderTickMarkShape({required final double cornerRadius})
+    extends SliderTickMarkShape {
   static const size = 4.0;
 
   @override
@@ -292,12 +286,10 @@ class AppSliderTickMarkShape extends SliderTickMarkShape {
 
 /// A transparent cutout makes the handle clear on solid and HSV tracks, and
 /// the track looks pressed into the surface.
-class AppSliderTrackShape extends SliderTrackShape {
-  const AppSliderTrackShape({required this.cornerRadius, this.colors});
-
-  final double cornerRadius;
-  final List<Color>? colors;
-
+class const AppSliderTrackShape({
+  required final double cornerRadius,
+  final List<Color>? colors,
+}) extends SliderTrackShape {
   // Flutter gives discrete tick marks a half-track-height inset. Opt into
   // that same positioning for the handle, even with square theme corners.
   @override

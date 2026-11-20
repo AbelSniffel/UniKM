@@ -12,20 +12,13 @@ const double kFamilyTitleStackWidth = kSettingsCompactLayoutBreakpoint - 10;
 /// A settings panel's header, on top of its groups with a line between
 /// them: an accent tint with the icon in its own square and the title
 /// beside it.
-class GroupBoxFamilyTitle extends StatelessWidget {
-  const GroupBoxFamilyTitle({
-    super.key,
-    required this.theme,
-    required this.title,
-    required this.icon,
-    this.trailingBuilder,
-  });
-
-  final Widget Function(bool expanded)? trailingBuilder;
-  final AppThemeData theme;
-  final String title;
-  final IconData icon;
-
+class const GroupBoxFamilyTitle({
+  super.key,
+  required final AppThemeData theme,
+  required final String title,
+  required final IconData icon,
+  final Widget Function(bool expanded)? trailingBuilder,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(8),

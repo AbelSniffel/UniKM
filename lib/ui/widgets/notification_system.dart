@@ -16,14 +16,26 @@ import '../../core/constants/app_constants.dart';
 import 'tinted_card.dart';
 
 /// Notification types
-enum NotificationType { success, error, warning, info, update, download, steam }
+enum NotificationType() {
+  success,
+  error,
+  warning,
+  info,
+  update,
+  download,
+  steam,
+}
 
 /// How a notification's main action is drawn. [text] sits beside the
 /// progress or under the message; the others fill the toast's width.
-enum NotificationActionStyle { text, outlined, elevated }
+enum NotificationActionStyle() {
+  text,
+  outlined,
+  elevated,
+}
 
 /// Notification positions
-enum NotificationPosition {
+enum NotificationPosition() {
   topLeft,
   topCenter,
   topRight,
@@ -33,55 +45,39 @@ enum NotificationPosition {
 }
 
 /// Notification data
-class AppNotification {
-  AppNotification({
-    String? id,
-    required this.message,
-    required this.type,
-    this.title,
-    this.progress,
-    this.progressLabel,
-    this.onTap,
-    this.actionLabel,
-    this.onAction,
-    this.actionStyle = NotificationActionStyle.text,
-    this.actionIcon,
-    this.secondaryActionLabel,
-    this.onSecondaryAction,
-    this.isDismissing = false,
-    this.dismissible = true,
-    this.autoDismiss,
-  }) : id = id ?? const Uuid().v4();
-
-  final String id;
-  final String message;
-  final NotificationType type;
-  final String? title;
-  final double? progress;
+class AppNotification({
+  String? id,
+  required final String message,
+  required final NotificationType type,
+  final String? title,
+  final double? progress,
 
   /// The large figure beside [progress], such as a count while fetching;
   /// without it the toast shows the percentage. Cleared with the progress.
-  final String? progressLabel;
-  final VoidCallback? onTap;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  final NotificationActionStyle actionStyle;
+  final String? progressLabel,
+  final VoidCallback? onTap,
+  final String? actionLabel,
+  final VoidCallback? onAction,
+  final NotificationActionStyle actionStyle = NotificationActionStyle.text,
 
   /// Draws a text action as this icon, with [actionLabel] as its
   /// accessibility label.
-  final IconData? actionIcon;
-  final String? secondaryActionLabel;
-  final VoidCallback? onSecondaryAction;
-  final bool isDismissing;
+  final IconData? actionIcon,
+  final String? secondaryActionLabel,
+  final VoidCallback? onSecondaryAction,
+  final bool isDismissing = false,
 
   /// When false the user cannot close the notification; it stays until the
   /// task that owns it completes or dismisses it.
-  final bool dismissible;
+  final bool dismissible = true,
 
   /// When the scheduled auto-dismiss started and how long it lasts, for the
   /// toast's countdown line; null while the notification stays.
-  final ({DateTime start, Duration length})? autoDismiss;
+  final ({DateTime start, Duration length})? autoDismiss,
+}) {
+  this : id = id ?? const Uuid().v4();
 
+  final String id;
   AppNotification copyWith({
     String? message,
     NotificationType? type,
@@ -121,12 +117,7 @@ class AppNotification {
 }
 
 /// Handle for a notification that can be updated/dismissed.
-class NotificationHandle {
-  NotificationHandle(this._manager, this.id);
-
-  final NotificationManager _manager;
-  final String id;
-
+class NotificationHandle(final NotificationManager _manager, final String id) {
   void update({
     String? message,
     NotificationType? type,
@@ -185,9 +176,7 @@ class NotificationHandle {
 }
 
 /// Notification manager singleton
-class NotificationManager {
-  NotificationManager._();
-
+class NotificationManager._() {
   static final NotificationManager instance = NotificationManager._();
 
   static const Duration dismissAnimationDuration = Duration(milliseconds: 200);
@@ -431,20 +420,13 @@ class NotificationManager {
 
 /// Shows notifications above [child], the app's navigator, so they stay
 /// readable and usable over a dialog and its backdrop.
-class NotificationHost extends StatelessWidget {
-  const NotificationHost({super.key, required this.theme, required this.child});
-
-  final AppThemeData theme;
-  final Widget child;
-
+class const NotificationHost({super.key, required final Widget child})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _NotificationHostStack(
     children: [
       child,
-      NotificationOverlay(
-        theme: theme,
-        position: NotificationManager.instance.position,
-      ),
+      NotificationOverlay(position: NotificationManager.instance.position),
     ],
   );
 }
@@ -453,18 +435,16 @@ class NotificationHost extends StatelessWidget {
 /// every layer, so a toast always lost to the page beneath it. In debug
 /// builds, while the inspector selects, the page is hidden from its search
 /// where the pointer is over the notifications.
-class _NotificationHostStack extends Stack {
-  const _NotificationHostStack({required super.children})
-    : super(fit: StackFit.expand);
+class const _NotificationHostStack({required super.children}) extends Stack {
+  this : super(fit: StackFit.expand);
 
   @override
   RenderStack createRenderObject(BuildContext context) =>
       _RenderNotificationHostStack(textDirection: Directionality.of(context));
 }
 
-class _RenderNotificationHostStack extends RenderStack {
-  _RenderNotificationHostStack({super.textDirection})
-    : super(fit: StackFit.expand);
+class _RenderNotificationHostStack({super.textDirection}) extends RenderStack {
+  this : super(fit: StackFit.expand);
 
   /// The last pointer position, which the inspector selects at.
   Offset? _pointer;
@@ -517,16 +497,10 @@ class _RenderNotificationHostStack extends RenderStack {
 }
 
 /// Notification overlay widget
-class NotificationOverlay extends StatelessWidget {
-  const NotificationOverlay({
-    super.key,
-    required this.theme,
-    this.position = NotificationPosition.topRight,
-  });
-
-  final AppThemeData theme;
-  final NotificationPosition position;
-
+class const NotificationOverlay({
+  super.key,
+  final NotificationPosition position = NotificationPosition.topRight,
+}) extends StatelessWidget {
   /// How many notifications show at once; newer ones wait their turn.
   static const maxVisible = 8;
 
@@ -566,7 +540,6 @@ class NotificationOverlay extends StatelessWidget {
                   NotificationToast(
                     key: ValueKey(n.id),
                     notification: n,
-                    theme: theme,
                     onDismiss: () => NotificationManager.instance.dismiss(n.id),
                   ),
               ],
@@ -580,18 +553,11 @@ class NotificationOverlay extends StatelessWidget {
 
 /// Individual notification toast. Its keyed state retains the entry animation
 /// and drag position when other notifications are dismissed or updated.
-class NotificationToast extends StatefulWidget {
-  const NotificationToast({
-    super.key,
-    required this.notification,
-    required this.theme,
-    required this.onDismiss,
-  });
-
-  final AppNotification notification;
-  final AppThemeData theme;
-  final VoidCallback onDismiss;
-
+class const NotificationToast({
+  super.key,
+  required final AppNotification notification,
+  required final VoidCallback onDismiss,
+}) extends StatefulWidget {
   @override
   State<NotificationToast> createState() => _NotificationToastState();
 }
@@ -762,7 +728,7 @@ class _NotificationToastState extends State<NotificationToast>
   /// across the card under them. While it is set to close by itself, a
   /// lighter fill behind it all shrinks toward the start as time runs out.
   Widget _buildSurface(double maxWidth) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final notification = widget.notification;
     final color = _getTypeColor();
     final progress = notification.progress?.clamp(0.0, 1.0);
@@ -892,9 +858,9 @@ class _NotificationToastState extends State<NotificationToast>
   };
 
   Color _getTypeColor() => switch (widget.notification.type) {
-    NotificationType.success => widget.theme.success,
-    NotificationType.error => widget.theme.error,
-    NotificationType.warning => widget.theme.warning,
-    _ => widget.theme.accent,
+    NotificationType.success => context.appTheme.success,
+    NotificationType.error => context.appTheme.error,
+    NotificationType.warning => context.appTheme.warning,
+    _ => context.appTheme.accent,
   };
 }

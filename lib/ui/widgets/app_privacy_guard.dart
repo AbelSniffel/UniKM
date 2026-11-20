@@ -10,23 +10,17 @@ import '../../core/services/key_privacy.dart';
 /// Wraps the app to lock it after [lockAfter] without input, clear expired
 /// key copies from the clipboard, and keep the app out of the recent-apps
 /// preview while [hideInRecents] is on.
-class AppPrivacyGuard extends StatefulWidget {
-  const AppPrivacyGuard({
-    super.key,
-    required this.lockAfter,
-    required this.onLock,
-    required this.hideInRecents,
-    required this.child,
-  });
+class const AppPrivacyGuard({
+  super.key,
 
   /// Idle time before [onLock] runs; null never locks.
-  final Duration? lockAfter;
+  required final Duration? lockAfter,
 
   /// Runs on each check once the app has been idle for [lockAfter].
-  final VoidCallback onLock;
-  final bool hideInRecents;
-  final Widget child;
-
+  required final VoidCallback onLock,
+  required final bool hideInRecents,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<AppPrivacyGuard> createState() => _AppPrivacyGuardState();
 }

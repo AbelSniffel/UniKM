@@ -12,15 +12,10 @@ import '../core/settings/settings_model.dart';
 import '../core/theme/app_theme.dart';
 import 'settings_providers.dart';
 
-class ThemeImportResult {
-  const ThemeImportResult({
-    required this.importedCount,
-    required this.invalidCount,
-  });
-
-  final int importedCount;
-  final int invalidCount;
-}
+class const ThemeImportResult({
+  required final int importedCount,
+  required final int invalidCount,
+});
 
 // =============================================================================
 // THEME PROVIDER
@@ -133,9 +128,8 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     for (final rawTheme in rawThemes) {
       try {
-        final parsed = AppThemeData.fromJson(
-          rawTheme,
-        ).copyWith(id: AppThemeData.generateThemeId());
+        final parsed = AppThemeData.fromJson(rawTheme)
+            .copyWith(id: AppThemeData.generateThemeId());
 
         customThemes.add(jsonEncode(parsed.toJson()));
         importedCount++;

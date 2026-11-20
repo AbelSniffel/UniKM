@@ -59,19 +59,12 @@ DateTime _clampDate(DateTime value, DateTime firstDate, DateTime lastDate) =>
     ? lastDate
     : value;
 
-class _DeadlinePickerDialog extends StatefulWidget {
-  const _DeadlinePickerDialog({
-    required this.initialDate,
-    required this.firstDate,
-    required this.lastDate,
-    required this.currentDate,
-  });
-
-  final DateTime initialDate;
-  final DateTime firstDate;
-  final DateTime lastDate;
-  final DateTime currentDate;
-
+class const _DeadlinePickerDialog({
+  required final DateTime initialDate,
+  required final DateTime firstDate,
+  required final DateTime lastDate,
+  required final DateTime currentDate,
+}) extends StatefulWidget {
   @override
   State<_DeadlinePickerDialog> createState() => _DeadlinePickerDialogState();
 }
@@ -278,9 +271,8 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
             border: Border.all(color: theme.border),
           ),
           child: DatePickerTheme(
-            data: DatePickerTheme.of(
-              context,
-            ).copyWith(todayBorder: BorderSide.none),
+            data: DatePickerTheme.of(context)
+                .copyWith(todayBorder: BorderSide.none),
             child: CalendarDatePicker(
               key: ValueKey(
                 'deadline_calendar_${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}',
@@ -324,12 +316,10 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
 
 /// The chosen date, tinted by how soon it is due like the game card badges,
 /// with the days left as large as the stats tiles' numbers.
-class _SelectedDateCard extends StatelessWidget {
-  const _SelectedDateCard({required this.date, required this.daysLeft});
-
-  final DateTime date;
-  final int daysLeft;
-
+class const _SelectedDateCard({
+  required final DateTime date,
+  required final int daysLeft,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

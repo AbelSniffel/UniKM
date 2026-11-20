@@ -28,9 +28,7 @@ final _ribbonSelectedCountProvider = gamesProvider.select(
 
 // ---------------------------------------------------------------------------
 
-class SelectionRibbon extends ConsumerWidget {
-  const SelectionRibbon({super.key});
-
+class const SelectionRibbon({super.key}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedCount = ref.watch(_ribbonSelectedCountProvider);
@@ -201,9 +199,7 @@ class SelectionRibbon extends ConsumerWidget {
 }
 
 /// Every selected game as a [TintedChip] in one horizontally scrolling row.
-class _SelectedGamesStrip extends ConsumerStatefulWidget {
-  const _SelectedGamesStrip();
-
+class const _SelectedGamesStrip() extends ConsumerStatefulWidget {
   @override
   ConsumerState<_SelectedGamesStrip> createState() =>
       _SelectedGamesStripState();
@@ -293,47 +289,32 @@ class _SelectedGamesStripState extends ConsumerState<_SelectedGamesStrip> {
 
 // ---------------------------------------------------------------------------
 
-enum _RibbonActionGroup { game, selection, steam, destructive }
-
-class _RibbonAction {
-  const _RibbonAction({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.group = _RibbonActionGroup.game,
-    this.tooltip,
-    this.selected = false,
-    this.busy = false,
-    this.destructive = false,
-  });
-
-  final String id;
-  final _RibbonActionGroup group;
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final String? tooltip;
-  final bool selected;
-  final bool busy;
-  final bool destructive;
+enum _RibbonActionGroup() {
+  game,
+  selection,
+  steam,
+  destructive,
 }
 
-class _RibbonBar extends StatelessWidget {
-  const _RibbonBar({
-    required this.theme,
-    required this.selectedCount,
-    required this.isMultiSelectEnabled,
-    required this.actions,
-    required this.onClose,
-  });
+class const _RibbonAction({
+  required final String id,
+  required final String label,
+  required final IconData icon,
+  required final VoidCallback? onPressed,
+  final _RibbonActionGroup group = _RibbonActionGroup.game,
+  final String? tooltip,
+  final bool selected = false,
+  final bool busy = false,
+  final bool destructive = false,
+});
 
-  final AppThemeData theme;
-  final int selectedCount;
-  final bool isMultiSelectEnabled;
-  final List<_RibbonAction> actions;
-  final VoidCallback onClose;
-
+class const _RibbonBar({
+  required final AppThemeData theme,
+  required final int selectedCount,
+  required final bool isMultiSelectEnabled,
+  required final List<_RibbonAction> actions,
+  required final VoidCallback onClose,
+}) extends StatelessWidget {
   /// Icon-only navigation buttons, 4 px smaller than the navigation panel's.
   static const double _button = 36;
   static const double _gap = 8;
@@ -410,7 +391,6 @@ class _RibbonBar extends StatelessWidget {
     bool destructive = false,
   }) => AppNavigationButton(
     key: key,
-    theme: theme,
     isSelected: selected,
     isEnabled: onTap != null,
     isHorizontal: true,
@@ -469,10 +449,8 @@ class _RibbonBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final countStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-            color: theme.accent,
-            fontWeight: FontWeight.w600,
-          );
+          final countStyle = Theme.of(context).textTheme.bodyMedium!
+              .copyWith(color: theme.accent, fontWeight: FontWeight.w600);
           const singleGroupWidth = _groupEdges + _button;
           // Room for the close button, which is larger on touch platforms.
           const clearWidth = 40.0;
@@ -605,11 +583,8 @@ class _RibbonBar extends StatelessWidget {
 /// A button group that folds sideways in as [child] arrives and out once it
 /// is gone, keeping the last group on screen while it folds away. Its gap to
 /// the group before it folds with it.
-class _FoldingGroup extends StatefulWidget {
-  const _FoldingGroup({super.key, required this.child});
-
-  final Widget? child;
-
+class const _FoldingGroup({super.key, required final Widget? child})
+    extends StatefulWidget {
   @override
   State<_FoldingGroup> createState() => _FoldingGroupState();
 }

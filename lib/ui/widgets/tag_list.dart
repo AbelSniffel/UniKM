@@ -31,45 +31,35 @@ import 'app_progress_indicator.dart';
 
 /// A performant, reusable tag list that supports selection, scrolling, and
 /// virtualized rendering for large tag collections.
-class TagList extends StatefulWidget {
-  const TagList({
-    super.key,
-    required this.tags,
-    required this.theme,
-    this.selectedTagIds,
-    this.allSelected = false,
-    this.deleteOnTap = false,
-    this.onTagToggled,
-    this.maxHeight,
-    this.maxRows,
-  });
+class const TagList({
+  super.key,
 
   /// Tags to display.
-  final List<Tag> tags;
+  required final List<Tag> tags,
 
   /// Current app theme.
-  final AppThemeData theme;
+  required final AppThemeData theme,
 
   /// Set of selected tag IDs. Chips for these tags appear selected.
-  final Set<int>? selectedTagIds;
+  final Set<int>? selectedTagIds,
 
   /// When true, all tags appear selected. Ignored when [selectedTagIds] is set.
-  final bool allSelected;
+  final bool allSelected = false,
 
   /// The existing click callback deletes a custom tag rather than filtering it.
-  final bool deleteOnTap;
+  final bool deleteOnTap = false,
 
   /// Called when a tag chip is tapped. Receives the tag ID.
-  final ValueChanged<int>? onTagToggled;
+  final ValueChanged<int>? onTagToggled,
 
   /// Maximum height for the tag list scroll area. When set, the widget wraps
   /// itself in a [ConstrainedBox] and enables scrolling automatically.
-  final double? maxHeight;
+  final double? maxHeight,
 
   /// Shows at most this many rows of tags and scrolls past them; fewer tags
   /// take only the height they need.
-  final int? maxRows;
-
+  final int? maxRows,
+}) extends StatefulWidget {
   @override
   State<TagList> createState() => _TagListState();
 }
@@ -258,9 +248,8 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
                 thumbVisibility: true,
                 trackVisibility: true,
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
                   child: ListView.custom(
                     controller: _scrollController,
                     padding: EdgeInsets.zero,
@@ -298,9 +287,8 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     List<Tag> tags,
     double width,
   ) {
-    final style = Theme.of(
-      context,
-    ).textTheme.labelLarge!.copyWith(color: Colors.black);
+    final style = Theme.of(context).textTheme.labelLarge!
+        .copyWith(color: Colors.black);
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     final locale = Localizations.maybeLocaleOf(context);
@@ -422,14 +410,12 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
 
 /// Supply the exact extent already known from flow layout, so scroll positions
 /// do not change as the final (unpadded) row enters the viewport.
-class _TagRowDelegate extends SliverChildBuilderDelegate {
-  _TagRowDelegate({
-    required NullableIndexedWidgetBuilder builder,
-    required int childCount,
-    required this.totalExtent,
-  }) : super(builder, childCount: childCount);
-
-  final double totalExtent;
+class _TagRowDelegate({
+  required NullableIndexedWidgetBuilder builder,
+  required int childCount,
+  required final double totalExtent,
+}) extends SliverChildBuilderDelegate {
+  this : super(builder, childCount: childCount);
 
   @override
   double? estimateMaxScrollOffset(

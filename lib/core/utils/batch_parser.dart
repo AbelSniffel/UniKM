@@ -3,32 +3,22 @@ import '../constants/platform_patterns.dart';
 final RegExp _titleTrailing = RegExp(r'[\s:;\-,|]+$');
 
 /// Parsed values and source offsets shared by batch import and its inline editor.
-class BatchLineParts {
-  const BatchLineParts({
-    required this.title,
-    required this.key,
-    required this.titleEnd,
-    required this.keyStart,
-    this.keyEnd,
-    this.dateStart,
-    this.deadline,
-  });
-
-  final String title;
-  final String key;
-  final int titleEnd;
-  final int keyStart;
+class const BatchLineParts({
+  required final String title,
+  required final String key,
+  required final int titleEnd,
+  required final int keyStart,
 
   /// Where the key ends when a deadline date follows it; otherwise the key
   /// runs to the end of the line.
-  final int? keyEnd;
+  final int? keyEnd,
 
   /// Where the trailing deadline date starts, when the line has one.
-  final int? dateStart;
+  final int? dateStart,
 
   /// The deadline written after the key, as a local date.
-  final DateTime? deadline;
-}
+  final DateTime? deadline,
+});
 
 BatchLineParts? parseBatchLine(String raw) {
   final line = raw.trim();
@@ -114,22 +104,15 @@ final _trailingDatePattern = RegExp(
 }
 
 /// Result from parsing a batch line
-class ParsedBatchEntry {
-  ParsedBatchEntry({
-    required this.title,
-    required this.key,
-    required this.platform,
-    this.deadline,
-  });
-
-  final String title;
-  final String key;
-  final String platform;
+class ParsedBatchEntry({
+  required final String title,
+  required final String key,
+  required final String platform,
 
   /// A deadline written on the line itself; it takes precedence over the
   /// batch's shared deadline for this entry only.
-  final DateTime? deadline;
-
+  final DateTime? deadline,
+}) {
   @override
   String toString() =>
       'ParsedBatchEntry(title: $title, key: $key, platform: $platform, '

@@ -7,21 +7,14 @@ typedef DialogPreviewPresenter = Future<T?> Function<T>(WidgetBuilder builder);
 
 /// The gallery captures real dialog builders, rather than maintaining copies.
 /// Its scope also supplies fixtures for dialogs that normally read local files.
-class AppDialogPreviewScope extends InheritedWidget {
-  const AppDialogPreviewScope({
-    super.key,
-    required this.present,
-    required this.databaseFiles,
-    required this.steamCachedAt,
-    this.steamResult,
-    required super.child,
-  });
-
-  final DialogPreviewPresenter present;
-  final Map<String, DatabaseFileInfo> databaseFiles;
-  final SteamSearchResult? steamResult;
-  final DateTime steamCachedAt;
-
+class const AppDialogPreviewScope({
+  super.key,
+  required final DialogPreviewPresenter present,
+  required final Map<String, DatabaseFileInfo> databaseFiles,
+  required final DateTime steamCachedAt,
+  final SteamSearchResult? steamResult,
+  required super.child,
+}) extends InheritedWidget {
   // Non-listening access is intentional: some dialogs read fixtures in initState.
   static AppDialogPreviewScope? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<AppDialogPreviewScope>();
@@ -71,17 +64,15 @@ Future<T?> showAppDialog<T>({
 
 /// A dialog that grows from 90% as its route fades it in, and closes faster
 /// than it opens.
-class _AppDialogRoute<T> extends DialogRoute<T> {
-  _AppDialogRoute({
-    required super.context,
-    required super.builder,
-    super.barrierColor,
-    super.barrierDismissible,
-    super.themes,
-    super.traversalEdgeBehavior,
-    super.animationStyle,
-  });
-
+class _AppDialogRoute<T>({
+  required super.context,
+  required super.builder,
+  super.barrierColor,
+  super.barrierDismissible,
+  super.themes,
+  super.traversalEdgeBehavior,
+  super.animationStyle,
+}) extends DialogRoute<T> {
   static const closeDuration = Duration(milliseconds: 160);
   static final _scale = Tween<double>(begin: 0.9, end: 1);
 

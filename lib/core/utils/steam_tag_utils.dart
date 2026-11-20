@@ -3,9 +3,7 @@ library;
 import '../../models/game.dart';
 import '../database/database.dart';
 
-class SteamTagUtils {
-  SteamTagUtils._();
-
+class SteamTagUtils._() {
   static Future<List<Tag>> ensureSteamTags({
     required AppDatabase db,
     required Iterable<String> tagNames,

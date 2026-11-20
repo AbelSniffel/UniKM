@@ -20,9 +20,7 @@ import 'package:cryptography/cryptography.dart';
 /// Peer identity verification strategy:
 /// static public-key fingerprints are pinned during pairing and must be
 /// verified by the caller during handshake before deriving/accepting a session.
-class SyncCrypto {
-  SyncCrypto._();
-
+class SyncCrypto._() {
   static final _x25519 = X25519();
   static final _hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
 

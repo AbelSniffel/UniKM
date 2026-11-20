@@ -16,39 +16,24 @@ import '../../providers/app_providers.dart';
 import '../../ui/widgets/notification_system.dart';
 
 /// Update state
-class UpdateState {
-  const UpdateState({
-    this.isChecking = false,
-    this.hasChecked = false,
-    this.isDownloading = false,
-    this.hasUpdate = false,
-    this.release,
-    this.downloadProgress = 0,
-    this.downloadedBytes = 0,
-    this.totalBytes = 0,
-    this.error,
-    this.downloadedFilePath,
-    this.allReleases = const [],
-    this.switchingToVersion,
-  });
-
-  final bool isChecking;
-  final bool hasChecked;
-  final bool isDownloading;
-  final bool hasUpdate;
-  final GitHubRelease? release;
-  final double downloadProgress;
-  final int downloadedBytes;
-  final int totalBytes;
-  final String? error;
-  final String? downloadedFilePath;
+class const UpdateState({
+  final bool isChecking = false,
+  final bool hasChecked = false,
+  final bool isDownloading = false,
+  final bool hasUpdate = false,
+  final GitHubRelease? release,
+  final double downloadProgress = 0,
+  final int downloadedBytes = 0,
+  final int totalBytes = 0,
+  final String? error,
+  final String? downloadedFilePath,
 
   /// All available releases (for changelog / version switcher).
-  final List<GitHubRelease> allReleases;
+  final List<GitHubRelease> allReleases = const [],
 
   /// Version being installed via the version switcher (null = none in progress).
-  final String? switchingToVersion;
-
+  final String? switchingToVersion,
+}) {
   String? get latestVersion => release?.version;
   String? get downloadUrl => release?.downloadUrl;
   String? get downloadSize => release?.formattedSize;
@@ -106,7 +91,7 @@ class UpdateState {
 // "no change" value distinct from an explicit null.
 const Object _unset = Object();
 
-enum UpdatePreviewState {
+enum UpdatePreviewState() {
   idle,
   checking,
   upToDate,
@@ -145,8 +130,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     tagName: 'v9.9.9',
     version: '9.9.9',
     name: 'UniKM 9.9.9',
-    body:
-        '## Preview build\n\nThis is a dev-only preview release used to style the update UI.',
+    body: '## Preview build\n\nThis is a dev-only preview release used to style the update UI.',
     htmlUrl: 'https://github.com/example/unikm/releases/tag/v9.9.9',
     publishedAt: DateTime(2026, 3, 6),
     isPrerelease: false,

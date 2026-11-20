@@ -7,18 +7,12 @@ import '../../core/theme/app_theme.dart';
 
 /// Shared footer for the navigation picker and the Appearance theme group.
 /// Edit and Delete slide in and out beside Create as callers enable them.
-class ThemePickerActions extends StatelessWidget {
-  const ThemePickerActions({
-    super.key,
-    required this.onCreate,
-    this.onEdit,
-    this.onDelete,
-  });
-
-  final VoidCallback onCreate;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
+class const ThemePickerActions({
+  super.key,
+  required final VoidCallback onCreate,
+  final VoidCallback? onEdit,
+  final VoidCallback? onDelete,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -79,10 +73,8 @@ class ThemePickerActions extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               style: ElevatedButton.styleFrom(
-                textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+                textStyle: Theme.of(context).textTheme.labelLarge!
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
                 minimumSize: Size(0, height),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.standard,

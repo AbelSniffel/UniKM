@@ -10,13 +10,11 @@ import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/password_field.dart';
 
-class StartupDatabaseUnlockResult {
-  const StartupDatabaseUnlockResult._({
-    this.password,
-    this.selectedDatabasePath,
-    this.cancelled = false,
-  });
-
+class const StartupDatabaseUnlockResult._({
+  final String? password,
+  final String? selectedDatabasePath,
+  final bool cancelled = false,
+}) {
   const StartupDatabaseUnlockResult.unlock(String value)
     : this._(password: value);
 
@@ -24,43 +22,24 @@ class StartupDatabaseUnlockResult {
     : this._(selectedDatabasePath: value);
 
   const StartupDatabaseUnlockResult.cancelled() : this._(cancelled: true);
-
-  final String? password;
-  final String? selectedDatabasePath;
-  final bool cancelled;
 }
 
-class _StartupDatabaseSelection {
-  const _StartupDatabaseSelection(this.path);
+class const _StartupDatabaseSelection(final String path);
 
-  final String path;
-}
-
-class DatabaseUnlockDialog extends StatefulWidget {
-  const DatabaseUnlockDialog({
-    super.key,
-    required this.theme,
-    this.title = 'Unlock Database',
-    this.message =
-        'This database is encrypted. Enter the password to continue.',
-    this.currentDatabasePath,
-    this.allowChangeDatabase = false,
-    this.onBiometricUnlock,
-  });
-
-  final AppThemeData theme;
-  final String title;
-  final String message;
-  final String? currentDatabasePath;
-  final bool allowChangeDatabase;
+class const DatabaseUnlockDialog({
+  super.key,
+  final String title = 'Unlock Database',
+  final String message =
+      'This database is encrypted. Enter the password to continue.',
+  final String? currentDatabasePath,
+  final bool allowChangeDatabase = false,
 
   /// Reads the password with a biometric check, for a database paired on
   /// this phone. It is tried once when the dialog opens.
-  final Future<String?> Function()? onBiometricUnlock;
-
+  final Future<String?> Function()? onBiometricUnlock,
+}) extends StatefulWidget {
   static Future<String?> show(
-    BuildContext context,
-    AppThemeData theme, {
+    BuildContext context, {
     String title = 'Unlock Database',
     String message =
         'This database is encrypted. Enter the password to continue.',
@@ -70,7 +49,6 @@ class DatabaseUnlockDialog extends StatefulWidget {
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (_) => DatabaseUnlockDialog(
-      theme: theme,
       title: title,
       message: message,
       onBiometricUnlock: onBiometricUnlock,
@@ -78,8 +56,7 @@ class DatabaseUnlockDialog extends StatefulWidget {
   );
 
   static Future<StartupDatabaseUnlockResult> showForStartup(
-    BuildContext context,
-    AppThemeData theme, {
+    BuildContext context, {
     required String currentDatabasePath,
     Future<String?> Function()? onBiometricUnlock,
   }) async {
@@ -87,7 +64,6 @@ class DatabaseUnlockDialog extends StatefulWidget {
       context: context,
       barrierDismissible: false,
       builder: (_) => DatabaseUnlockDialog(
-        theme: theme,
         currentDatabasePath: currentDatabasePath,
         allowChangeDatabase: true,
         onBiometricUnlock: onBiometricUnlock,
@@ -187,7 +163,7 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
         children: [
           Text(
             widget.message,
-            style: TextStyle(color: widget.theme.textSecondary),
+            style: TextStyle(color: context.appTheme.textSecondary),
           ),
           const SizedBox(height: kDialogSpacing),
           PasswordField(

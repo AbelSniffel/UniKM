@@ -10,18 +10,12 @@ import 'tinted_card.dart';
 
 /// A section title with an optional count or note on the right, and an
 /// optional [action] after it.
-class TintedHeading extends StatelessWidget {
-  const TintedHeading({
-    super.key,
-    required this.title,
-    this.trailing,
-    this.action,
-  });
-
-  final String title;
-  final String? trailing;
-  final Widget? action;
-
+class const TintedHeading({
+  super.key,
+  required final String title,
+  final String? trailing,
+  final Widget? action,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -63,41 +57,27 @@ class TintedHeading extends StatelessWidget {
 /// A tile with [onTap] is raised and bordered like the settings cards,
 /// outlined in its colour on hover and pressed in while held or chosen; one
 /// without stays flat.
-class TintedOptionTile extends StatefulWidget {
-  const TintedOptionTile({
-    super.key,
-    required this.theme,
-    required this.title,
-    this.icon,
-    this.subtitle,
-    this.details,
-    this.selected,
-    this.highlighted = false,
-    this.onTap,
-    this.color,
-    this.trailing,
-  });
-
-  final AppThemeData theme;
-  final IconData? icon;
-  final String title;
-  final String? subtitle;
+class const TintedOptionTile({
+  super.key,
+  required final String title,
+  final IconData? icon,
+  final String? subtitle,
 
   /// Replaces [subtitle], for rich or styled text.
-  final Widget? details;
-  final Widget? trailing;
+  final Widget? details,
 
   /// Null for an action rather than a choice.
-  final bool? selected;
+  final bool? selected,
 
   /// Tints and presses in an action like a chosen tile, even while it takes
   /// no taps, keeping its [trailing], such as the current database.
-  final bool highlighted;
-  final VoidCallback? onTap;
+  final bool highlighted = false,
+  final VoidCallback? onTap,
 
   /// The tint; the accent by default.
-  final Color? color;
-
+  final Color? color,
+  final Widget? trailing,
+}) extends StatefulWidget {
   @override
   State<TintedOptionTile> createState() => _TintedOptionTileState();
 }
@@ -108,7 +88,7 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final color = widget.color ?? theme.accent;
     final chosen = widget.selected ?? widget.highlighted;
     final tappable = widget.onTap != null;

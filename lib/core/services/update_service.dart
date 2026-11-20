@@ -3,8 +3,10 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' show Abi;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -18,8 +20,7 @@ import '../utils/format_utils.dart';
 import '../constants/app_constants.dart';
 
 /// Thrown when an in-progress download is cancelled by the user.
-class DownloadCancelledException implements Exception {
-  const DownloadCancelledException();
+class const DownloadCancelledException() implements Exception {
   @override
   String toString() => 'Download cancelled';
 }
@@ -35,39 +36,22 @@ List<String> get _platformExtensions {
 }
 
 /// Represents a GitHub release
-class GitHubRelease {
-  const GitHubRelease({
-    required this.tagName,
-    required this.version,
-    required this.name,
-    required this.body,
-    required this.htmlUrl,
-    required this.publishedAt,
-    required this.isPrerelease,
-    this.downloadUrl,
-    this.downloadSize,
-  });
-
+class const GitHubRelease({
+  required final String tagName,
+  required final String version,
+  required final String name,
+  required final String body,
+  required final String htmlUrl,
+  required final DateTime publishedAt,
+  required final bool isPrerelease,
+  final String? downloadUrl,
+  final int? downloadSize,
+}) {
   factory GitHubRelease.fromJson(Map<String, dynamic> json) {
-    String? downloadUrl;
-    int? downloadSize;
-
-    // Find the best asset for the current platform by preferred extension order.
-    final assets = json['assets'] as List<dynamic>? ?? [];
-    final extensions = _platformExtensions;
-
-    for (final ext in extensions) {
-      for (final asset in assets) {
-        final assetName = asset['name'] as String? ?? '';
-        if (assetName.toLowerCase().endsWith(ext.toLowerCase())) {
-          downloadUrl = asset['browser_download_url'] as String?;
-          downloadSize = asset['size'] as int?;
-          break;
-        }
-      }
-      if (downloadUrl != null) break;
-    }
-
+    final asset = installerAsset(
+      json['assets'] as List<dynamic>? ?? const [],
+      androidAbi: Platform.isAndroid ? Abi.current() : null,
+    );
     final tagName = json['tag_name'] as String? ?? '';
     // Remove 'v' prefix if present for version comparison
     final version = tagName.startsWith('v') ? tagName.substring(1) : tagName;
@@ -78,12 +62,53 @@ class GitHubRelease {
       name: json['name'] as String? ?? tagName,
       body: json['body'] as String? ?? '',
       htmlUrl: json['html_url'] as String? ?? '',
-      publishedAt: DateTime.tryParse(json['published_at'] as String? ?? '') ?? DateTime.now(),
+      publishedAt:
+          DateTime.tryParse(json['published_at'] as String? ?? '') ??
+          DateTime.now(),
       isPrerelease: json['prerelease'] as bool? ?? false,
-      downloadUrl: downloadUrl,
-      downloadSize: downloadSize,
+      downloadUrl: asset?['browser_download_url'] as String?,
+      downloadSize: asset?['size'] as int?,
     );
   }
+
+  /// The release asset that installs here: the first named with the most
+  /// preferred installer extension. An Android phone, [androidAbi] given,
+  /// takes the APK named for its CPU type and, failing that, an APK named for
+  /// none, which carries them all, like the single APK up to 1.3.0.
+  @visibleForTesting
+  static Map<String, dynamic>? installerAsset(
+    List<dynamic> assets, {
+    Abi? androidAbi,
+  }) {
+    final named = [
+      for (final asset in assets.cast<Map<String, dynamic>>())
+        ((asset['name'] as String? ?? '').toLowerCase(), asset),
+    ];
+    if (androidAbi != null) {
+      final apks = named.where((a) => a.$1.endsWith('.apk'));
+      final cpu = _apkCpuNames[androidAbi];
+      final own = apks.where((a) => cpu != null && a.$1.contains(cpu));
+      final combined = apks.where(
+        (a) => !_apkCpuNames.values.any(a.$1.contains),
+      );
+      return (own.firstOrNull ?? combined.firstOrNull)?.$2;
+    }
+    for (final ext in _platformExtensions) {
+      final match = named
+          .where((a) => a.$1.endsWith(ext.toLowerCase()))
+          .firstOrNull;
+      if (match != null) return match.$2;
+    }
+    return null;
+  }
+
+  /// The CPU types Flutter builds APKs for, as Android names them in the
+  /// file names of `flutter build apk --split-per-abi`.
+  static const _apkCpuNames = {
+    Abi.androidArm64: 'arm64-v8a',
+    Abi.androidArm: 'armeabi-v7a',
+    Abi.androidX64: 'x86_64',
+  };
 
   /// Reconstruct from a cached JSON map (written by [toJson]).
   factory GitHubRelease.fromCacheJson(Map<String, dynamic> json) =>
@@ -93,7 +118,9 @@ class GitHubRelease {
         name: json['name'] as String? ?? '',
         body: json['body'] as String? ?? '',
         htmlUrl: json['htmlUrl'] as String? ?? '',
-        publishedAt: DateTime.tryParse(json['publishedAt'] as String? ?? '') ?? DateTime.now(),
+        publishedAt:
+            DateTime.tryParse(json['publishedAt'] as String? ?? '') ??
+            DateTime.now(),
         isPrerelease: json['isPrerelease'] as bool? ?? false,
         downloadUrl: json['downloadUrl'] as String?,
         downloadSize: json['downloadSize'] as int?,
@@ -111,36 +138,19 @@ class GitHubRelease {
     if (downloadSize != null) 'downloadSize': downloadSize,
   };
 
-  final String tagName;
-  final String version;
-  final String name;
-  final String body;
-  final String htmlUrl;
-  final DateTime publishedAt;
-  final bool isPrerelease;
-  final String? downloadUrl;
-  final int? downloadSize;
-
   /// Format download size as human-readable string
   String get formattedSize => formatFileSize(downloadSize);
 }
 
 /// Result of an update check
-class UpdateCheckResult {
-  const UpdateCheckResult({
-    required this.hasUpdate,
-    this.release,
-    this.error,
-    this.releases = const [],
-  });
-
-  final bool hasUpdate;
-  final GitHubRelease? release;
+class const UpdateCheckResult({
+  required final bool hasUpdate,
+  final GitHubRelease? release,
+  final String? error,
 
   /// Every release fetched by the check, for the changelog and version list.
-  final List<GitHubRelease> releases;
-  final String? error;
-
+  final List<GitHubRelease> releases = const [],
+}) {
   bool get isError => error != null;
 }
 
@@ -148,8 +158,7 @@ class UpdateCheckResult {
 typedef DownloadProgressCallback = void Function(int received, int total);
 
 class UpdateDownloadResult {
-  const UpdateDownloadResult.local(this.filePath)
-    : openedExternally = false;
+  const UpdateDownloadResult.local(this.filePath) : openedExternally = false;
 
   const UpdateDownloadResult.external()
     : filePath = null,
@@ -160,17 +169,14 @@ class UpdateDownloadResult {
 }
 
 /// Update service for checking and downloading GitHub releases
-class UpdateService {
-  UpdateService({
-    String? customRepo,
-    this._githubToken,
-    this._githubClient,
-  }) : _repo = customRepo ?? kGitHubRepo;
+class UpdateService({
+  String? customRepo,
+  final String? _githubToken,
+  final http.Client? _githubClient,
+}) {
+  this : _repo = customRepo ?? kGitHubRepo;
 
   final String _repo;
-  final String? _githubToken;
-  final http.Client? _githubClient;
-
   // The active download's client; null (or another client) means cancelled.
   http.Client? _activeDownloadClient;
 
@@ -408,7 +414,9 @@ class UpdateService {
         mode: LaunchMode.externalApplication,
       );
       if (!launched) {
-        throw StateError('Unable to hand off the update download to the system downloader');
+        throw StateError(
+          'Unable to hand off the update download to the system downloader',
+        );
       }
       return const UpdateDownloadResult.external();
     }
@@ -436,7 +444,9 @@ class UpdateService {
       final response = await client.send(request);
 
       if (response.statusCode != 200) {
-        throw HttpException('Failed to download update: ${response.statusCode}');
+        throw HttpException(
+          'Failed to download update: ${response.statusCode}',
+        );
       }
 
       sink = file.openWrite();
@@ -447,7 +457,9 @@ class UpdateService {
         await sink!.flush();
         await sink!.close();
         sink = null;
-        try { await partial.delete(); } catch (_) {}
+        try {
+          await partial.delete();
+        } catch (_) {}
         throw const DownloadCancelledException();
       }
 
@@ -471,8 +483,12 @@ class UpdateService {
     } catch (e) {
       if (e is DownloadCancelledException) rethrow;
       // Unexpected error — clean up partial file.
-      try { await sink?.close(); } catch (_) {}
-      try { if (file != null && await file.exists()) await file.delete(); } catch (_) {}
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        if (file != null && await file.exists()) await file.delete();
+      } catch (_) {}
       rethrow;
     } finally {
       client.close();
@@ -580,11 +596,10 @@ class UpdateService {
       }
 
       if (extension == '.msi') {
-        await _throwIfProcessFailsQuickly(
-          'msiexec',
-          ['/i', filePath],
-          runInShell: true,
-        );
+        await _throwIfProcessFailsQuickly('msiexec', [
+          '/i',
+          filePath,
+        ], runInShell: true);
         return true;
       }
 
@@ -597,7 +612,11 @@ class UpdateService {
     if (Platform.isMacOS || Platform.isLinux) {
       final opener = Platform.isMacOS ? 'open' : 'xdg-open';
       final args = [filePath];
-      _throwIfProcessResultFailed(opener, args, await Process.run(opener, args));
+      _throwIfProcessResultFailed(
+        opener,
+        args,
+        await Process.run(opener, args),
+      );
       return false;
     }
 
@@ -608,7 +627,9 @@ class UpdateService {
       return false;
     }
 
-    throw UnsupportedError('Automatic installer launch is not supported on this platform');
+    throw UnsupportedError(
+      'Automatic installer launch is not supported on this platform',
+    );
   }
 
   // ---------------------------------------------------------------------------

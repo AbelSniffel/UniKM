@@ -8,12 +8,11 @@ import 'package:flutter/widgets.dart';
 /// after a text field lets go or a focused control goes away. Shortcuts only
 /// reach the focused widget and those around it, so the page alone would
 /// pass keys by every shortcut inside it.
-class FocusAnchor extends StatefulWidget {
-  const FocusAnchor({super.key, required this.child, this.onKeyEvent});
-
-  final Widget child;
-  final FocusOnKeyEventCallback? onKeyEvent;
-
+class const FocusAnchor({
+  super.key,
+  required final Widget child,
+  final FocusOnKeyEventCallback? onKeyEvent,
+}) extends StatefulWidget {
   @override
   State<FocusAnchor> createState() => _FocusAnchorState();
 }

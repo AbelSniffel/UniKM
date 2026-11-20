@@ -4,16 +4,11 @@ import '../../core/theme/app_theme.dart';
 
 /// Snap Material's implicit colors on theme changes, retaining its normal
 /// interaction animations on subsequent frames and keeping button state mounted.
-class ButtonThemeSync extends StatefulWidget {
-  const ButtonThemeSync({
-    super.key,
-    required this.theme,
-    required this.builder,
-  });
-
-  final AppThemeData theme;
-  final Widget Function(BuildContext context, bool snapTheme) builder;
-
+class const ButtonThemeSync({
+  super.key,
+  required final AppThemeData theme,
+  required final Widget Function(BuildContext context, bool snapTheme) builder,
+}) extends StatefulWidget {
   @override
   State<ButtonThemeSync> createState() => _ButtonThemeSyncState();
 }

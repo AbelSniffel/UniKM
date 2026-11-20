@@ -7,18 +7,12 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Selection rectangle overlay for drag-select
-class SelectionOverlay extends StatelessWidget {
-  const SelectionOverlay({
-    super.key,
-    required this.startPosition,
-    required this.currentPosition,
-    required this.selectedCount,
-  });
-
-  final Offset startPosition;
-  final Offset currentPosition;
-  final int selectedCount;
-
+class const SelectionOverlay({
+  super.key,
+  required final Offset startPosition,
+  required final Offset currentPosition,
+  required final int selectedCount,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -41,10 +35,7 @@ class SelectionOverlay extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   color: theme.accent.withValues(alpha: 0.10),
-                  border: Border.all(
-                    color: selectionBorderColor,
-                    width: 3,
-                  ),
+                  border: Border.all(color: selectionBorderColor, width: 3),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),

@@ -48,11 +48,7 @@ List<Map<String, Object>> buildDeadlineSchedule(
 }
 
 /// Retain only names that will be displayed, even for very large libraries.
-class _DeadlineGroup {
-  _DeadlineGroup(this.day, this.kind);
-
-  final DateTime day;
-  final int kind;
+class _DeadlineGroup(final DateTime day, final int kind) {
   final names = <String>[];
   int count = 0;
 }

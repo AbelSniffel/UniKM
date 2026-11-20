@@ -25,9 +25,8 @@ import 'game_card_reveal.dart';
 /// which can lie past the end of a shorter layout: the library then starts
 /// at that layout's end at once, instead of springing back to it over an
 /// empty page.
-class LibraryScrollController extends ScrollController {
-  LibraryScrollController({super.initialScrollOffset});
-
+class LibraryScrollController({super.initialScrollOffset})
+    extends ScrollController {
   @override
   ScrollPosition createScrollPosition(
     ScrollPhysics physics,
@@ -43,16 +42,14 @@ class LibraryScrollController extends ScrollController {
   );
 }
 
-class _LibraryScrollPosition extends ScrollPositionWithSingleContext {
-  _LibraryScrollPosition({
-    required super.physics,
-    required super.context,
-    super.initialPixels,
-    super.keepScrollOffset,
-    super.oldPosition,
-    super.debugLabel,
-  });
-
+class _LibraryScrollPosition({
+  required super.physics,
+  required super.context,
+  super.initialPixels,
+  super.keepScrollOffset,
+  super.oldPosition,
+  super.debugLabel,
+}) extends ScrollPositionWithSingleContext {
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
     // Past the end without scrolling there, as after a layout switch or when
@@ -68,24 +65,15 @@ class _LibraryScrollPosition extends ScrollPositionWithSingleContext {
   }
 }
 
-class GameLibraryView extends ConsumerStatefulWidget {
-  const GameLibraryView({
-    super.key,
-    required this.scrollController,
-    this.animateEntries = false,
-    required this.gameListFocusNode,
-    required this.onSelectAll,
-    required this.onDeleteSelection,
-    required this.onCopySelection,
-  });
-
-  final ScrollController scrollController;
-  final bool animateEntries;
-  final FocusNode gameListFocusNode;
-  final VoidCallback onSelectAll;
-  final Future<void> Function() onDeleteSelection;
-  final Future<void> Function() onCopySelection;
-
+class const GameLibraryView({
+  super.key,
+  required final ScrollController scrollController,
+  final bool animateEntries = false,
+  required final FocusNode gameListFocusNode,
+  required final VoidCallback onSelectAll,
+  required final Future<void> Function() onDeleteSelection,
+  required final Future<void> Function() onCopySelection,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<GameLibraryView> createState() => _GameLibraryViewState();
 }
@@ -193,7 +181,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
             FocusScope.of(context).requestFocus(widget.gameListFocusNode);
           }
         },
-        child: _buildGameList(theme, gameIds, viewMode, slimList),
+        child: _buildGameList(gameIds, viewMode, slimList),
       ),
     );
   }
@@ -310,7 +298,6 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
   );
 
   Widget _buildGameList(
-    AppThemeData theme,
     List<int> gameIds,
     GameListViewMode viewMode,
     bool slimList,
@@ -394,21 +381,13 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
   );
 }
 
-class _GameLibraryDragSelectionLayer extends ConsumerStatefulWidget {
-  const _GameLibraryDragSelectionLayer({
-    required this.gameIds,
-    required this.viewMode,
-    required this.scrollController,
-    required this.listItemExtent,
-    required this.child,
-  });
-
-  final List<int> gameIds;
-  final GameListViewMode viewMode;
-  final ScrollController scrollController;
-  final double listItemExtent;
-  final Widget child;
-
+class const _GameLibraryDragSelectionLayer({
+  required final List<int> gameIds,
+  required final GameListViewMode viewMode,
+  required final ScrollController scrollController,
+  required final double listItemExtent,
+  required final Widget child,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_GameLibraryDragSelectionLayer> createState() =>
       _GameLibraryDragSelectionLayerState();

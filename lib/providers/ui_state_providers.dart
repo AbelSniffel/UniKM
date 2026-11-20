@@ -33,21 +33,19 @@ class DesktopWindowSession {
 // =============================================================================
 
 /// The top-level navigation destinations in the app.
-enum NavItem {
+enum NavItem(
+  final String label,
+  final IconData selectedIcon,
+  final IconData unselectedIcon,
+) {
   home('Library', Icons.home, Icons.home_outlined),
   addGames('Add', Icons.add_circle, Icons.add_circle_outline),
   updates('Updates', Icons.download_rounded, Icons.download_rounded),
   settings('Settings', Icons.settings, Icons.settings_outlined);
 
-  const NavItem(this.label, this.selectedIcon, this.unselectedIcon);
-
   /// The destinations with a navigation button, in order. Updates opens from
   /// the navigation panel's More menu.
   static const pages = [home, addGames, settings];
-
-  final String label;
-  final IconData selectedIcon;
-  final IconData unselectedIcon;
 }
 
 /// Current navigation state. [NavItem.updates] opens a dialog instead of a
@@ -135,61 +133,36 @@ class AddGamesSelectedTabNotifier extends Notifier<int> {
   void setIndex(int index) => state = index.clamp(0, 1);
 }
 
-class AddGamesSingleEntryDraft {
-  const AddGamesSingleEntryDraft({
-    this.title = '',
-    this.gameKey = '',
-    this.notes = '',
-    this.coverImage = '',
-    this.platform = kAutoDetectPlatformValue,
-    this.hasDeadline = false,
-    this.deadlineDate,
-    this.isDlc = false,
-    this.isUsed = false,
-    this.selectedTagIds = const <int>{},
-    this.fetchedSteamTags = const <Tag>[],
-    this.steamPreview,
-    this.singleSteamCacheAt,
-  });
-
-  final String title;
-  final String gameKey;
-  final String notes;
-  final String coverImage;
-  final String platform;
-  final bool hasDeadline;
-  final DateTime? deadlineDate;
-  final bool isDlc;
-  final bool isUsed;
-  final Set<int> selectedTagIds;
-  final List<Tag> fetchedSteamTags;
-  final SteamSearchResult? steamPreview;
-  final DateTime? singleSteamCacheAt;
-}
+class const AddGamesSingleEntryDraft({
+  final String title = '',
+  final String gameKey = '',
+  final String notes = '',
+  final String coverImage = '',
+  final String platform = kAutoDetectPlatformValue,
+  final bool hasDeadline = false,
+  final DateTime? deadlineDate,
+  final bool isDlc = false,
+  final bool isUsed = false,
+  final Set<int> selectedTagIds = const <int>{},
+  final List<Tag> fetchedSteamTags = const <Tag>[],
+  final SteamSearchResult? steamPreview,
+  final DateTime? singleSteamCacheAt,
+});
 
 final addGamesSingleEntryDraftProvider = sessionValueProvider(
   const AddGamesSingleEntryDraft(),
 );
 
-class AddGamesBatchDraft {
-  const AddGamesBatchDraft({
-    this.text = '',
-    this.platform = kAutoDetectPlatformValue,
-    this.hasDeadline = false,
-    this.deadlineDate,
-    this.parsedGames = const <ParsedBatchEntry>[],
-    this.steamResults = const <String, SteamSearchResult?>{},
-    this.steamErrors = const <String, String?>{},
-  });
-
-  final String text;
-  final String platform;
-  final bool hasDeadline;
-  final DateTime? deadlineDate;
-  final List<ParsedBatchEntry> parsedGames;
-  final Map<String, SteamSearchResult?> steamResults;
-  final Map<String, String?> steamErrors;
-}
+class const AddGamesBatchDraft({
+  final String text = '',
+  final String platform = kAutoDetectPlatformValue,
+  final bool hasDeadline = false,
+  final DateTime? deadlineDate,
+  final List<ParsedBatchEntry> parsedGames = const <ParsedBatchEntry>[],
+  final Map<String, SteamSearchResult?> steamResults =
+      const <String, SteamSearchResult?>{},
+  final Map<String, String?> steamErrors = const <String, String?>{},
+});
 
 final addGamesBatchDraftProvider = sessionValueProvider(
   const AddGamesBatchDraft(),
@@ -281,19 +254,16 @@ class PageNotificationsNotifier extends Notifier<Set<NavItem>> {
 // DRAG SELECTION
 // =============================================================================
 
-enum DragSelectionMode { select, deselect }
+enum DragSelectionMode() {
+  select,
+  deselect,
+}
 
-class DragSelectionState {
-  const DragSelectionState({
-    this.isActive = false,
-    this.mode,
-    this.visitedIds = const {},
-  });
-
-  final bool isActive;
-  final DragSelectionMode? mode;
-  final Set<int> visitedIds;
-
+class const DragSelectionState({
+  final bool isActive = false,
+  final DragSelectionMode? mode,
+  final Set<int> visitedIds = const {},
+}) {
   DragSelectionState copyWith({
     bool? isActive,
     DragSelectionMode? mode,

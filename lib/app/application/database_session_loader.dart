@@ -8,23 +8,15 @@ import '../../core/services/legacy_db_converter.dart';
 import '../../core/services/logging.dart';
 
 /// An initialized connection and the persistence session that owns its file.
-class OpenedDatabase {
-  const OpenedDatabase({
-    required this.database,
-    required this.conversion,
-    this.encryptedSession,
-  });
-
-  final AppDatabase database;
-  final EncryptedDbSession? encryptedSession;
-  final LegacyDbConversionResult conversion;
-}
+class const OpenedDatabase({
+  required final AppDatabase database,
+  required final LegacyDbConversionResult conversion,
+  final EncryptedDbSession? encryptedSession,
+});
 
 /// Opens and closes database files without depending on dialogs or providers.
 /// Startup and database switching share migration and initialization behavior.
-class DatabaseSessionLoader {
-  const DatabaseSessionLoader();
-
+class const DatabaseSessionLoader() {
   static String basePath(String selectedPath) =>
       selectedPath.toLowerCase().endsWith('.enc')
       ? selectedPath.substring(0, selectedPath.length - 4)

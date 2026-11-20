@@ -9,16 +9,11 @@ import '../../core/constants/app_constants.dart';
 /// Animates [child]'s box from its old height when [tab] changes. Any other
 /// height change, such as cards reflowing in a resizing window, applies at
 /// once, which an [AnimatedSize] cannot tell apart.
-class TabHeightTransition extends StatefulWidget {
-  const TabHeightTransition({
-    super.key,
-    required this.tab,
-    required this.child,
-  });
-
-  final Object tab;
-  final Widget child;
-
+class const TabHeightTransition({
+  super.key,
+  required final Object tab,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<TabHeightTransition> createState() => _TabHeightTransitionState();
 }
@@ -69,12 +64,11 @@ class _TabHeightTransitionState extends State<TabHeightTransition>
   );
 }
 
-class _HeightFrom extends SingleChildRenderObjectWidget {
-  const _HeightFrom({required this.from, required this.t, super.child});
-
-  final double? from;
-  final double t;
-
+class const _HeightFrom({
+  required final double? from,
+  required final double t,
+  super.child,
+}) extends SingleChildRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderHeightFrom()
     ..from = from

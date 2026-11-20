@@ -8,33 +8,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // =============================================================================
 
 /// Status of a game in a batch fetch operation
-enum GameFetchStatus { waiting, processing, done, error }
+enum GameFetchStatus() {
+  waiting,
+  processing,
+  done,
+  error,
+}
 
 /// State for tracking batch Steam data fetch operations
-class BatchFetchState {
-  const BatchFetchState({
-    this.isActive = false,
-    this.gameStatuses = const {},
-    this.currentGameId,
-    this.totalGames = 0,
-    this.completedGames = 0,
-  });
-
+class const BatchFetchState({
   /// Whether a batch fetch is currently active
-  final bool isActive;
+  final bool isActive = false,
 
   /// Map of game ID to its fetch status
-  final Map<int, GameFetchStatus> gameStatuses;
+  final Map<int, GameFetchStatus> gameStatuses = const {},
 
   /// Currently processing game ID
-  final int? currentGameId;
+  final int? currentGameId,
 
   /// Total games in the batch
-  final int totalGames;
+  final int totalGames = 0,
 
   /// Number of completed games (done or error)
-  final int completedGames;
-
+  final int completedGames = 0,
+}) {
   /// Get status for a specific game
   GameFetchStatus? getStatus(int gameId) => gameStatuses[gameId];
 

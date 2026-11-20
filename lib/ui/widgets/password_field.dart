@@ -22,29 +22,19 @@ import '../../core/theme/app_theme.dart';
 ///   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
 /// )
 /// ```
-class PasswordField extends StatefulWidget {
-  const PasswordField({
-    super.key,
-    required this.controller,
-    this.labelText = 'Password',
-    this.validator,
-    this.autofocus = false,
-    this.onFieldSubmitted,
-    this.textInputAction,
-    this.errorText,
-  });
-
-  final TextEditingController controller;
-  final String labelText;
-  final FormFieldValidator<String>? validator;
-  final bool autofocus;
-  final ValueChanged<String>? onFieldSubmitted;
-  final TextInputAction? textInputAction;
+class const PasswordField({
+  super.key,
+  required final TextEditingController controller,
+  final String labelText = 'Password',
+  final FormFieldValidator<String>? validator,
+  final bool autofocus = false,
+  final ValueChanged<String>? onFieldSubmitted,
+  final TextInputAction? textInputAction,
 
   /// An error from outside the field, such as a rejected password, shown
   /// while [validator] finds none.
-  final String? errorText;
-
+  final String? errorText,
+}) extends StatefulWidget {
   @override
   State<PasswordField> createState() => _PasswordFieldState();
 }

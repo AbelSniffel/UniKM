@@ -14,23 +14,17 @@ import 'settings_card_layout.dart';
 /// Uses settings-card row sizing with equal widths, retaining state when
 /// resizing changes the number of columns. Card content is built outside the
 /// layout callback; only inexpensive sizing wrappers change on resize.
-class PreviewCardWrap extends StatelessWidget {
-  const PreviewCardWrap({
-    super.key,
-    required this.children,
-    this.spacing = 8,
-    this.runSpacing = 8,
-    this.fillWhenAlone = false,
-  }) : assert(spacing >= 0),
-       assert(runSpacing >= 0);
-
-  final List<Widget> children;
-  final double spacing;
-  final double runSpacing;
+class const PreviewCardWrap({
+  super.key,
+  required final List<Widget> children,
+  final double spacing = 8,
+  final double runSpacing = 8,
 
   /// A lone card takes the whole row, rather than the capped width it would
   /// share with others, so a collection of one leaves no empty space.
-  final bool fillWhenAlone;
+  final bool fillWhenAlone = false,
+}) extends StatelessWidget {
+  this : assert(spacing >= 0), assert(runSpacing >= 0);
 
   @override
   Widget build(BuildContext context) {
@@ -64,42 +58,26 @@ class PreviewCardWrap extends StatelessWidget {
 }
 
 /// The compact preview surface shared by the theme menu and Settings cards.
-class PreviewCard extends StatefulWidget {
-  const PreviewCard({
-    super.key,
-    required this.name,
-    required this.theme,
-    required this.isSelected,
-    required this.backgroundBuilder,
-    this.onTap,
-    this.onDoubleTap,
-    this.icon,
-    this.height = defaultHeight,
-    this.backgroundIconColor,
-    this.foreground,
-    this.tapKey,
-  });
-
-  /// A card's height in Settings.
-  static const double defaultHeight = 68;
-
-  final String name;
-  final AppThemeData theme;
-  final bool isSelected;
-
-  final Widget Function(BuildContext context, double backgroundRadius)
-  backgroundBuilder;
-  final VoidCallback? onTap;
-  final VoidCallback? onDoubleTap;
-  final IconData? icon;
-  final Color? backgroundIconColor;
-
-  /// Interactive preview content above the card ink (for example a switch).
-  final Widget? foreground;
+class const PreviewCard({
+  super.key,
+  required final String name,
+  required final bool isSelected,
+  required final Widget Function(BuildContext context, double backgroundRadius)
+  backgroundBuilder,
+  final VoidCallback? onTap,
+  final VoidCallback? onDoubleTap,
+  final IconData? icon,
 
   /// Null lets a menu grid provide the height.
-  final double? height;
-  final Key? tapKey;
+  final double? height = defaultHeight,
+  final Color? backgroundIconColor,
+
+  /// Interactive preview content above the card ink (for example a switch).
+  final Widget? foreground,
+  final Key? tapKey,
+}) extends StatefulWidget {
+  /// A card's height in Settings.
+  static const double defaultHeight = 68;
 
   @override
   State<PreviewCard> createState() => _PreviewCardState();
@@ -159,7 +137,7 @@ class _PreviewCardState extends State<PreviewCard> {
   @override
   Widget build(BuildContext context) {
     const borderWidth = 0.0;
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final outerRadius = BorderRadius.circular(theme.cornerRadius);
     final innerRadius = math.max(0.0, theme.cornerRadius - borderWidth);
     final selected = widget.isSelected;
@@ -205,8 +183,7 @@ class _PreviewCardState extends State<PreviewCard> {
       ),
     );
     final selection = onSelection(
-      (t) =>
-          t == 0 ? const SizedBox.shrink() : _SelectionRing(theme: theme, t: t),
+      (t) => t == 0 ? const SizedBox.shrink() : _SelectionRing(t: t),
     );
     final background = widget.backgroundBuilder(context, theme.cornerRadius);
     return Semantics(
@@ -325,34 +302,29 @@ class _PreviewCardState extends State<PreviewCard> {
 
 /// The selected look: an accent ring over the card's edge, with the preview
 /// keeping its own colours behind a thin gap in the panel colour.
-class _SelectionRing extends StatelessWidget {
-  const _SelectionRing({required this.theme, required this.t});
-
+class const _SelectionRing({required final double t}) extends StatelessWidget {
   static const double width = 2;
-
-  final AppThemeData theme;
-  final double t;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     key: const ValueKey('preview-selection-overlay'),
     decoration: BoxDecoration(
       border: Border.all(
-        color: theme.accent.withValues(alpha: t),
+        color: context.appTheme.accent.withValues(alpha: t),
         width: width,
       ),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
+      borderRadius: BorderRadius.circular(context.appTheme.cornerRadius),
     ),
     child: Padding(
       padding: const EdgeInsets.all(width),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border.all(
-            color: theme.surface.withValues(alpha: t),
+            color: context.appTheme.surface.withValues(alpha: t),
             width: width,
           ),
           borderRadius: BorderRadius.circular(
-            math.max(0.0, theme.cornerRadius - width),
+            math.max(0.0, context.appTheme.cornerRadius - width),
           ),
         ),
       ),

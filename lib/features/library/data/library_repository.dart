@@ -4,11 +4,7 @@ import '../../../core/database/database.dart';
 import '../../../models/game.dart' as model;
 
 /// Owns atomic game and tag edits for one database session.
-class LibraryRepository {
-  const LibraryRepository(this.database);
-
-  final AppDatabase database;
-
+class const LibraryRepository(final AppDatabase database) {
   /// Read only journaled changes after the initial snapshot. The cursor, rows,
   /// and relationships are read in one transaction so concurrent writes cannot
   /// be skipped or expose half an edit. Drift coalesces transaction wakeups.
@@ -28,9 +24,10 @@ class LibraryRepository {
                 cursor == null || origin != nextOrigin || revision < cursor!;
             final ids = full
                 ? null
-                : (await database.getSyncRecords(
-                    sinceRevision: cursor!,
-                  )).map((record) => record['id']).whereType<int>().toSet();
+                : (await database.getSyncRecords(sinceRevision: cursor!))
+                      .map((record) => record['id'])
+                      .whereType<int>()
+                      .toSet();
             final entries = full
                 ? await database.getAllGames()
                 : await database.getGamesByIds(ids!);

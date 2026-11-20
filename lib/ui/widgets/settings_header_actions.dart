@@ -3,30 +3,20 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/app_theme.dart';
 
 /// A settings header's action, for its horizontal button group.
-class SettingsHeaderAction extends StatelessWidget {
-  const SettingsHeaderAction({
-    super.key,
-    required this.theme,
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.badgeCount,
-  });
-
-  final AppThemeData theme;
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
+class const SettingsHeaderAction({
+  super.key,
+  required final IconData icon,
+  required final String tooltip,
+  required final VoidCallback? onTap,
 
   /// A count on the icon, such as how many versions are skipped.
-  final int? badgeCount;
-
+  final int? badgeCount,
+}) extends StatelessWidget {
   @override
   // A fixed height keeps the button 32 px in headers that offer more.
   Widget build(BuildContext context) => SizedBox(
     height: 32,
     child: AppNavigationButton(
-      theme: theme,
       isSelected: false,
       isEnabled: onTap != null,
       isHorizontal: true,
@@ -36,8 +26,8 @@ class SettingsHeaderAction extends StatelessWidget {
           ? null
           : (context, color, size) => Badge.count(
               count: badgeCount!,
-              backgroundColor: theme.accent,
-              textColor: theme.accent.computeLuminance() > 0.3
+              backgroundColor: context.appTheme.accent,
+              textColor: context.appTheme.accent.computeLuminance() > 0.3
                   ? Colors.black
                   : Colors.white,
               child: Icon(icon, color: color, size: size),

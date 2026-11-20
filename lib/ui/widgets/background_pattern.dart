@@ -17,11 +17,8 @@ import '../../providers/app_providers.dart';
 /// Marks the window the panel pattern is laid out across: the app's content,
 /// below the title bar, so edge decorations stay in view. It wraps the
 /// content once; a surface outside it is a window of its own.
-class PanelPatternWindow extends StatelessWidget {
-  const PanelPatternWindow({super.key, required this.child});
-
-  final Widget child;
-
+class const PanelPatternWindow({super.key, required final Widget child})
+    extends StatelessWidget {
   static final _link = LayerLink();
 
   @override
@@ -33,21 +30,15 @@ class PanelPatternWindow extends StatelessWidget {
 /// its part of the window-wide pattern, so panels line up wherever they sit.
 /// A [page] surface has the app background instead, and a much fainter
 /// pattern while pages show it.
-class PanelPatternSurface extends ConsumerWidget {
-  const PanelPatternSurface({
-    super.key,
-    this.page = false,
-    this.strength = 1,
-    required this.child,
-  });
-
-  final bool page;
+class const PanelPatternSurface({
+  super.key,
+  final bool page = false,
 
   /// How strongly a panel shows the pattern, relative to the navigation
   /// panel; it applies whether or not pages show the pattern too.
-  final double strength;
-  final Widget child;
-
+  final double strength = 1,
+  required final Widget child,
+}) extends ConsumerWidget {
   /// How much fainter the pattern is behind pages than on panels.
   static const double pageStrength = 0.3;
 
@@ -79,18 +70,12 @@ class PanelPatternSurface extends ConsumerWidget {
   }
 }
 
-class _PanelPatternSurface extends SingleChildRenderObjectWidget {
-  const _PanelPatternSurface({
-    required this.color,
-    required this.pattern,
-    required this.pixelRatio,
-    super.child,
-  });
-
-  final Color color;
-  final BackgroundPatternPainter pattern;
-  final double pixelRatio;
-
+class const _PanelPatternSurface({
+  required final Color color,
+  required final BackgroundPatternPainter pattern,
+  required final double pixelRatio,
+  super.child,
+}) extends SingleChildRenderObjectWidget {
   @override
   _RenderPanelPatternSurface createRenderObject(BuildContext context) =>
       _RenderPanelPatternSurface(color, pattern, pixelRatio);
@@ -110,9 +95,11 @@ class _PanelPatternSurface extends SingleChildRenderObjectWidget {
 /// repaints it, and hover repaints inside the panel reuse the recording.
 /// The recording draws [_PatternTiles], so a surface that grows, as in a
 /// window resize, only draws the tiles it newly reaches.
-class _RenderPanelPatternSurface extends RenderProxyBox {
-  _RenderPanelPatternSurface(this._color, this._pattern, this._pixelRatio);
-
+class _RenderPanelPatternSurface(
+  var Color _color,
+  var BackgroundPatternPainter _pattern,
+  var double _pixelRatio,
+) extends RenderProxyBox {
   /// Extra pattern recorded around the surface, so small moves reuse it.
   static const double _margin = 64;
   static final _surfaces = <_RenderPanelPatternSurface>{};
@@ -131,7 +118,6 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
   /// The [PanelPatternWindow] this surface sits in, found when it attaches.
   RenderLeaderLayer? _window;
 
-  Color _color;
   set color(Color value) {
     if (value == _color) return;
     _color = value;
@@ -140,7 +126,6 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
     markNeedsPaint();
   }
 
-  BackgroundPatternPainter _pattern;
   set pattern(BackgroundPatternPainter value) {
     if (!value.shouldRepaint(_pattern)) return;
     final wasVisible = _pattern.isVisible;
@@ -150,7 +135,6 @@ class _RenderPanelPatternSurface extends RenderProxyBox {
     markNeedsPaint();
   }
 
-  double _pixelRatio;
   set pixelRatio(double value) {
     if (value == _pixelRatio) return;
     _pixelRatio = value;
@@ -383,32 +367,23 @@ abstract final class _PatternTiles {
 /// Paints a background pattern [style] in the theme's colors. Surfaces draw
 /// their area of a window-sized pattern with [paintArea]; as a
 /// [CustomPainter] it fills a preview card on its own.
-class BackgroundPatternPainter extends CustomPainter {
-  const BackgroundPatternPainter({
-    required this.theme,
-    required this.style,
-    this.angle = DefaultSettings.patternAngle,
-    this.wave = DefaultSettings.patternWave,
-    this.strength = 1,
-    this.preview = false,
-  });
-
-  final AppThemeData theme;
-  final NavPanelOverlayStyle style;
+class const BackgroundPatternPainter({
+  required final AppThemeData theme,
+  required final NavPanelOverlayStyle style,
 
   /// Degrees clockwise: the stripes' slant from vertical. Fixed to the
   /// pattern, so it never changes as panels resize or move.
-  final int angle;
+  final int angle = DefaultSettings.patternAngle,
 
   /// How the Lines style sways: 0 straight, 0.5 smooth waves, 1 zigzag.
-  final double wave;
+  final double wave = DefaultSettings.patternWave,
 
   /// Scales every color's opacity, from the pattern strength setting.
-  final double strength;
+  final double strength = 1,
 
   /// Stronger colors for small preview cards.
-  final bool preview;
-
+  final bool preview = false,
+}) extends CustomPainter {
   bool get isVisible => strength > 0 && style != NavPanelOverlayStyle.none;
 
   /// [color] at [alpha], scaled by [strength].

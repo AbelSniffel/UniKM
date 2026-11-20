@@ -7,19 +7,16 @@ import 'app_progress_indicator.dart';
 /// Prepares pages once per database session. Hidden pages retain fields
 /// and scroll positions, but cannot paint, receive focus, or run tickers.
 /// Riverpod also pauses hidden consumers through TickerMode.
-class AppPageStack extends StatefulWidget {
-  const AppPageStack({
-    super.key,
-    required this.index,
-    required this.children,
-    this.preload = true,
-  }) : assert(index >= 0 && index < children.length);
+class const AppPageStack({
+  super.key,
+  required final int index,
+  required final List<Widget> children,
 
   /// Prepare all pages behind a loading screen, one page per frame.
   /// Disable for callers that explicitly need lazy mounting.
-  final bool preload;
-  final int index;
-  final List<Widget> children;
+  final bool preload = true,
+}) extends StatefulWidget {
+  this : assert(index >= 0 && index < children.length);
 
   @override
   State<AppPageStack> createState() => _AppPageStackState();
@@ -53,9 +50,9 @@ class _AppPageStackState extends State<AppPageStack>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _preloadScheduled = false;
       if (!mounted || !_preloading) return;
-      final next = Iterable<int>.generate(
-        widget.children.length,
-      ).where((index) => !_visited.contains(index)).firstOrNull;
+      final next = Iterable<int>.generate(widget.children.length)
+          .where((index) => !_visited.contains(index))
+          .firstOrNull;
       setState(() {
         if (next == null) {
           // The last page has now completed its first build and layout.
@@ -179,12 +176,10 @@ class _AppPageStackState extends State<AppPageStack>
 /// Window metrics bypass render constraints through MediaQuery, while responsive
 /// parent configuration can also rebuild a hidden page. Retain both alongside
 /// inherited themes and catch up atomically before the page becomes visible.
-class _RetainedPageEnvironment extends StatefulWidget {
-  const _RetainedPageEnvironment({required this.active, required this.child});
-
-  final bool active;
-  final Widget child;
-
+class const _RetainedPageEnvironment({
+  required final bool active,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<_RetainedPageEnvironment> createState() =>
       _RetainedPageEnvironmentState();
@@ -229,11 +224,10 @@ class _RetainedPageEnvironmentState extends State<_RetainedPageEnvironment> {
 /// changes size. Preserve hidden-page constraints during ribbon/nav animations;
 /// first layout still runs for preloading, and showing a page catches up before
 /// paint. This also avoids rebuilding hidden LayoutBuilders on every frame.
-class _RetainedPageLayout extends SingleChildRenderObjectWidget {
-  const _RetainedPageLayout({required this.visible, required super.child});
-
-  final bool visible;
-
+class const _RetainedPageLayout({
+  required final bool visible,
+  required super.child,
+}) extends SingleChildRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) =>
       _RenderRetainedPageLayout(visible);
@@ -245,10 +239,7 @@ class _RetainedPageLayout extends SingleChildRenderObjectWidget {
   ) => renderObject.visible = visible;
 }
 
-class _RenderRetainedPageLayout extends RenderProxyBox {
-  _RenderRetainedPageLayout(this._visible);
-
-  bool _visible;
+class _RenderRetainedPageLayout(var bool _visible) extends RenderProxyBox {
   BoxConstraints? _lastVisibleConstraints;
 
   set visible(bool value) {

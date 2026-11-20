@@ -5,9 +5,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 
 import '../../core/theme/app_theme.dart';
 
-class AppFpsCounter extends StatefulWidget {
-  const AppFpsCounter({super.key});
-
+class const AppFpsCounter({super.key}) extends StatefulWidget {
   @override
   State<AppFpsCounter> createState() => _AppFpsCounterState();
 }

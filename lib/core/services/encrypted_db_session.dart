@@ -15,21 +15,17 @@ import '../../shared/storage/encrypted_save_coordinator.dart';
 import '../database/database.dart';
 import 'encryption_manager.dart';
 
-class EncryptedDbSession {
-  EncryptedDbSession({
-    required this.baseDbPath,
-    required this.tempDbPath,
-    required this.password,
-  }) : encryptionManager = EncryptionManager(baseDbPath);
-
+class EncryptedDbSession({
   /// Base path (without `.enc`) used by [EncryptionManager].
-  final String baseDbPath;
+  required final String baseDbPath,
 
   /// Temporary plaintext SQLite database file path.
-  final String tempDbPath;
+  required final String tempDbPath,
 
   /// Password used to decrypt/encrypt for this session (in-memory only).
-  final String password;
+  required final String password,
+}) {
+  this : encryptionManager = EncryptionManager(baseDbPath);
 
   final EncryptionManager encryptionManager;
 

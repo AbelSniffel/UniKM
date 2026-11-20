@@ -35,17 +35,16 @@ typedef BiometricPairing = ({
 ///
 /// Which files are paired is also kept in plain preferences, so checking
 /// whether to offer the prompt never shows it.
-class BiometricUnlock {
-  BiometricUnlock(
-    this._prefs, {
-    this._storage = const FlutterSecureStorage(),
-    LocalAuthentication? auth,
-    bool? supported,
-  }) : _auth = auth ?? LocalAuthentication(),
-       _supported = supported ?? platformSupported;
+class BiometricUnlock(
+  final SharedPreferences _prefs, {
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(),
+  LocalAuthentication? auth,
+  bool? supported,
+}) {
+  this
+    : _auth = auth ?? LocalAuthentication(),
+      _supported = supported ?? platformSupported;
 
-  final SharedPreferences _prefs;
-  final FlutterSecureStorage _storage;
   final LocalAuthentication _auth;
   final bool _supported;
 

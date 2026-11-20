@@ -37,21 +37,13 @@ import 'update_dialog.dart';
 
 /// Add new dialog families here using their real opener or widget. Closures are
 /// recreated after hot reload, including dialogs implemented with inline builders.
-class DialogGalleryEntry {
-  const DialogGalleryEntry(
-    this.id,
-    this.label,
-    this.open, {
-    this.viewport = const Size(680, 820),
-    this.cachedSteam = false,
-  });
-
-  final String id;
-  final String label;
-  final FutureOr<Object?> Function(BuildContext context) open;
-  final Size viewport;
-  final bool cachedSteam;
-}
+class const DialogGalleryEntry(
+  final String id,
+  final String label,
+  final FutureOr<Object?> Function(BuildContext context) open, {
+  final Size viewport = const Size(680, 820),
+  final bool cachedSteam = false,
+});
 
 final galleryDate = DateTime(2026, 10, 17, 14, 30);
 final galleryTags = [
@@ -229,19 +221,18 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
   DialogGalleryEntry(
     'change-database',
     'Change database',
-    (c) => showChangeDatabaseDialog(c, _theme(c)),
+    (c) => showChangeDatabaseDialog(c),
   ),
   DialogGalleryEntry(
     'unlock-database',
     'Unlock database / backup',
-    (c) => DatabaseUnlockDialog.show(c, _theme(c)),
+    (c) => DatabaseUnlockDialog.show(c),
   ),
   DialogGalleryEntry(
     'unlock-startup',
     'Unlock database • startup',
     (c) => DatabaseUnlockDialog.showForStartup(
       c,
-      _theme(c),
       currentDatabasePath: '/preview/UniKM/collection.db.enc',
     ),
   ),
@@ -258,12 +249,12 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
   DialogGalleryEntry(
     'disable-encryption',
     'Disable encryption',
-    (c) => DisableEncryptionDialog.show(c, _theme(c), (_) async {}),
+    (c) => DisableEncryptionDialog.show(c, (_) async {}),
   ),
   DialogGalleryEntry(
     'change-password',
     'Change password',
-    (c) => ChangePasswordDialog.show(c, _theme(c), (_, _) async {}),
+    (c) => ChangePasswordDialog.show(c, (_, _) async {}),
   ),
   DialogGalleryEntry(
     'biometric-pair',
@@ -373,7 +364,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
   DialogGalleryEntry(
     'skipped-versions',
     'Skipped versions',
-    (c) => _widget(c, (_) => SkippedVersionsDialog(theme: _theme(c))),
+    (c) => _widget(c, (_) => const SkippedVersionsDialog()),
   ),
   for (final confirmation in _confirmations)
     DialogGalleryEntry(
@@ -447,8 +438,7 @@ const _confirmations =
       (
         id: 'cleanup-tags',
         title: 'One-time Cleanup',
-        message:
-            'Remove 4 old default tags (non-Steam)?\n\nThey will also be removed from any games.\nThis button disappears after running once.',
+        message: 'Remove 4 old default tags (non-Steam)?\n\nThey will also be removed from any games.\nThis button disappears after running once.',
         action: 'Remove',
         destructive: true,
         icon: Icons.delete_forever,
@@ -456,8 +446,7 @@ const _confirmations =
       (
         id: 'unused-tags',
         title: 'Clear Unused Tags',
-        message:
-            'Delete Steam and old default tags not used by any game? Other custom tags stay.',
+        message: 'Delete Steam and old default tags not used by any game? Other custom tags stay.',
         action: 'Delete',
         destructive: true,
         icon: Icons.delete_forever,
@@ -473,8 +462,7 @@ const _confirmations =
       (
         id: 'replace-data',
         title: 'Replace all data?',
-        message:
-            'This will delete all existing games, tags, and backups before importing.',
+        message: 'This will delete all existing games, tags, and backups before importing.',
         action: 'Replace',
         destructive: true,
         icon: Icons.warning_amber_rounded,
@@ -482,8 +470,7 @@ const _confirmations =
       (
         id: 'reset-settings',
         title: 'Reset Settings?',
-        message:
-            'This will reset all settings, library filters, and sorting to their default values. Your database choice, games, and data will be kept.',
+        message: 'This will reset all settings, library filters, and sorting to their default values. Your database choice, games, and data will be kept.',
         action: 'Reset',
         destructive: true,
         icon: Icons.warning_amber_rounded,
@@ -531,9 +518,7 @@ class _GallerySettings extends SettingsNotifier {
   Future<void> resetToDefaults() async => state = build();
 }
 
-class _GalleryTheme extends ThemeNotifier {
-  _GalleryTheme(this.initialTheme);
-  final AppThemeData initialTheme;
+class _GalleryTheme(final AppThemeData initialTheme) extends ThemeNotifier {
   @override
   AppThemeData build() => initialTheme;
 }
@@ -566,8 +551,7 @@ class _GallerySync extends DeviceSyncNotifier {
   Future<void> discoverPeers() async {}
 }
 
-class _GalleryBackups extends BackupService {
-  _GalleryBackups({required super.ref});
+class _GalleryBackups({required super.ref}) extends BackupService {
   @override
   Future<List<BackupInfo>> listBackups() async => [
     galleryBackup,
@@ -613,8 +597,7 @@ class _GalleryUpdates extends UpdateNotifier {
       UpdateService().compareVersions(a, b);
 }
 
-class _GallerySyncService extends DeviceSyncService {
-  _GallerySyncService({required super.ref});
+class _GallerySyncService({required super.ref}) extends DeviceSyncService {
   @override
   Stream<SyncEvent> get syncEvents => const Stream.empty();
   @override

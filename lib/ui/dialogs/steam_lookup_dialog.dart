@@ -348,30 +348,23 @@ Future<void> performSteamBatchLookup(
 /// cached match, which Fetch Fresh replaces from Steam, or searches Steam
 /// when it is given none. Save closes it with a [SteamLookupChoice]; a
 /// batch's never searches, closing with whether to use the cache.
-class SteamLookupDialog extends ConsumerStatefulWidget {
-  const SteamLookupDialog({
-    super.key,
-    required this.title,
-    this.gameCount = 1,
-    this.result,
-    this.fromCache = false,
-    this.cachedAt,
-  });
+class const SteamLookupDialog({
+  super.key,
 
   /// The title looked up.
-  final String title;
+  required final String title,
 
   /// The games sharing these choices; more than one is a batch, shown by
   /// its first game.
-  final int gameCount;
+  final int gameCount = 1,
 
   /// The match shown at first; without one Steam is searched.
-  final SteamSearchResult? result;
+  final SteamSearchResult? result,
 
   /// Whether [result] is the cached match, cached at [cachedAt] if known.
-  final bool fromCache;
-  final DateTime? cachedAt;
-
+  final bool fromCache = false,
+  final DateTime? cachedAt,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<SteamLookupDialog> createState() => _SteamLookupDialogState();
 }
@@ -757,12 +750,10 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
 
 /// A cover with a spinner on its placeholder while [cover] downloads and
 /// while the image it names decodes.
-class _LoadingCover extends StatefulWidget {
-  const _LoadingCover({required this.cover});
-
+class const _LoadingCover({
   /// The cover's path once downloaded, or null for none.
-  final Future<String?> cover;
-
+  required final Future<String?> cover,
+}) extends StatefulWidget {
   @override
   State<_LoadingCover> createState() => _LoadingCoverState();
 }
@@ -798,10 +789,7 @@ class _LoadingCoverState extends State<_LoadingCover>
           if (downloaded)
             CoverLoadScope(
               listener: this,
-              child: GameCoverImage(
-                theme: context.appTheme,
-                coverImage: snapshot.data,
-              ),
+              child: GameCoverImage(coverImage: snapshot.data),
             ),
           if (!downloaded || _decoding.isNotEmpty)
             const Center(child: AppCircularProgressIndicator(size: 24)),

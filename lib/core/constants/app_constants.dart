@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/animation.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 
 // =============================================================================
 // APP INFO
@@ -9,6 +10,14 @@ import 'package:flutter/animation.dart';
 const String kAppName = 'UniKM';
 const String kAppVersion = '1.4.0';
 const String kGitHubRepo = 'AbelSniffel/UniKM';
+
+/// Whether the developer window and the dialog gallery are built in: in debug
+/// and profile builds, and in a release built with --dart-define=DEV_TOOLS=true.
+/// Other release builds leave them out, code and all.
+const bool kDevTools = bool.fromEnvironment(
+  'DEV_TOOLS',
+  defaultValue: !kReleaseMode,
+);
 
 // =============================================================================
 // DIMENSIONS - UI ELEMENTS

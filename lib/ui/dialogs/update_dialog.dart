@@ -31,9 +31,7 @@ Future<void> showUpdateDialog(BuildContext context) =>
 Future<void> _openExternal(Uri uri) =>
     launchUrl(uri, mode: LaunchMode.externalApplication);
 
-class UpdateDialog extends ConsumerWidget {
-  const UpdateDialog({super.key});
-
+class const UpdateDialog({super.key}) extends ConsumerWidget {
   Future<void> _showInFolder(String filePath) async {
     if (Platform.isWindows) {
       await Process.run('explorer', ['/select,', filePath]);
@@ -113,7 +111,7 @@ class UpdateDialog extends ConsumerWidget {
             ),
             () => showAppDialog<void>(
               context: context,
-              builder: (_) => SkippedVersionsDialog(theme: theme),
+              builder: (_) => const SkippedVersionsDialog(),
             ),
           ),
         titleAction(
@@ -173,11 +171,8 @@ class UpdateDialog extends ConsumerWidget {
 
 /// What the update is doing, tinted by its outcome: an icon, the versions
 /// involved, the download size and, while downloading, its progress.
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.state});
-
-  final UpdateState state;
-
+class const _StatusCard({required final UpdateState state})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -286,13 +281,10 @@ class _StatusCard extends StatelessWidget {
 }
 
 /// Dialog that lists all skipped versions with unskip controls.
-class SkippedVersionsDialog extends ConsumerWidget {
-  const SkippedVersionsDialog({super.key, required this.theme});
-
-  final AppThemeData theme;
-
+class const SkippedVersionsDialog({super.key}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     final skipped = ref.watch(
       updatesSettingsProvider.select((s) => s.skippedVersions),
     );
@@ -351,12 +343,10 @@ class SkippedVersionsDialog extends ConsumerWidget {
 
 /// One release's notes at a time, picked from every known release, with
 /// the installer for each.
-class _ReleaseNotes extends ConsumerStatefulWidget {
-  const _ReleaseNotes({required this.releases, this.updateRelease});
-
-  final List<GitHubRelease> releases;
-  final GitHubRelease? updateRelease;
-
+class const _ReleaseNotes({
+  required final List<GitHubRelease> releases,
+  final GitHubRelease? updateRelease,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ReleaseNotes> createState() => _ReleaseNotesState();
 }
@@ -458,7 +448,6 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
             Expanded(
               child: SettingsChoiceCard<String>(
                 key: const ValueKey('changelog-version-selector'),
-                theme: theme,
                 label: 'Selected Version',
                 menuMaxHeight: kDropdownMenuMaxHeight * 2,
                 value: release.tagName,
@@ -540,12 +529,11 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
 /// a stall. Once the dialog has opened, the rest is laid out a slice per
 /// frame, so the scrollbar soon knows their full height instead of
 /// estimating it from the blocks seen so far.
-class _NotesPanel extends StatefulWidget {
-  const _NotesPanel({super.key, required this.header, required this.body});
-
-  final List<Widget> header;
-  final String body;
-
+class const _NotesPanel({
+  super.key,
+  required final List<Widget> header,
+  required final String body,
+}) extends StatefulWidget {
   @override
   State<_NotesPanel> createState() => _NotesPanelState();
 }
@@ -666,12 +654,12 @@ class _NotesPanelState extends State<_NotesPanel> {
 
 /// Markdown as a sliver list, so only the blocks in view are built and laid
 /// out. Each block keeps its own width, as in [MarkdownBody].
-class _SliverMarkdown extends MarkdownWidget {
-  const _SliverMarkdown({
-    required super.data,
-    super.styleSheet,
-    super.onTapLink,
-  }) : super(styleSheetTheme: null, fitContent: true);
+class const _SliverMarkdown({
+  required super.data,
+  super.styleSheet,
+  super.onTapLink,
+}) extends MarkdownWidget {
+  this : super(styleSheetTheme: null, fitContent: true);
 
   @override
   Widget build(BuildContext context, List<Widget>? children) => SliverList.list(

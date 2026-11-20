@@ -18,20 +18,15 @@ import 'sync_entry_fingerprint.dart';
 import 'sync_frames.dart';
 import 'steam_service.dart';
 
-class SyncPayloadCodec {
-  SyncPayloadCodec({
-    required this.getDatabase,
-    this.exportSteamCache = exportSteamCacheSnapshotForSync,
-    this.imagesRoot,
-  });
-
-  final AppDatabase? Function() getDatabase;
-  final Future<Map<String, dynamic>> Function() exportSteamCache;
+class SyncPayloadCodec({
+  required final AppDatabase? Function() getDatabase,
+  final Future<Map<String, dynamic>> Function() exportSteamCache =
+      exportSteamCacheSnapshotForSync,
 
   /// Folder holding the cover images. Defaults to the `images` folder beside
   /// the default database.
-  final Future<Directory> Function()? imagesRoot;
-
+  final Future<Directory> Function()? imagesRoot,
+}) {
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
   /// Digest state is shared by every codec bound to the same open database,
@@ -285,9 +280,8 @@ class SyncPayloadCodec {
       ]);
       // 128 bits is ample to detect a changed record; the full digest below
       // still covers the whole manifest.
-      hashes[syncId] = SyncEntryFingerprint.hashBytes(
-        utf8.encode(signature),
-      ).substring(0, 32);
+      hashes[syncId] = SyncEntryFingerprint.hashBytes(utf8.encode(signature))
+          .substring(0, 32);
     }
     return (hashes: hashes, covers: SyncEntryFingerprint.coverCache);
   }
@@ -454,9 +448,8 @@ class SyncPayloadCodec {
 
   static String _legacyIdentity(Map<String, dynamic> data) {
     final key = base64Url.encode(utf8.encode(data['gameKey'] as String? ?? ''));
-    final added = DateTime.tryParse(
-      data['dateAdded'] as String? ?? '',
-    )?.millisecondsSinceEpoch;
+    final added = DateTime.tryParse(data['dateAdded'] as String? ?? '')
+        ?.millisecondsSinceEpoch;
     return 'legacy-wire:${data['id']}:$key:${added == null ? 0 : added ~/ 1000}';
   }
 
@@ -716,9 +709,8 @@ class SyncPayloadCodec {
             !_modern(data) ||
             _compareVersions(data, previous) > 0 ||
             _compareVersions(data, previous) == 0 &&
-                SyncEntryFingerprint.fromPayload(
-                      data,
-                    ).compareTo(SyncEntryFingerprint.fromPayload(previous)) >
+                SyncEntryFingerprint.fromPayload(data)
+                        .compareTo(SyncEntryFingerprint.fromPayload(previous)) >
                     0) {
           incomingByIdentity[identity] = data;
         }

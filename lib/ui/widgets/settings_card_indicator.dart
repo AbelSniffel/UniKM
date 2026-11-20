@@ -3,15 +3,17 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/app_theme.dart';
 
 /// A small corner dot that grows when on; inset so it clears the card corner.
-class SettingsCardMiniDot extends StatelessWidget {
-  const SettingsCardMiniDot({
-    super.key,
-    required this.value,
-    required this.enabled,
-    this.outlineColor,
-    this.glow = true,
-  });
+class const SettingsCardMiniDot({
+  super.key,
+  required final bool value,
+  required final bool enabled,
 
+  /// A 2px ring drawn around the dot while it is on.
+  final Color? outlineColor,
+
+  /// An accent glow around the dot while it is on.
+  final bool glow = true,
+}) extends StatelessWidget {
   /// The corner it takes, padding included, which a card's content clears.
   static const double extent = _gap + _dot + _inset;
 
@@ -21,15 +23,6 @@ class SettingsCardMiniDot extends StatelessWidget {
   /// Between the dot and the content beside or below it.
   static const double _gap = 4;
   static const double _dot = 18;
-
-  final bool value;
-  final bool enabled;
-
-  /// A 2px ring drawn around the dot while it is on.
-  final Color? outlineColor;
-
-  /// An accent glow around the dot while it is on.
-  final bool glow;
 
   @override
   Widget build(BuildContext context) {

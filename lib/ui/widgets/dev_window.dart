@@ -18,10 +18,8 @@ import 'app_tab_bar.dart';
 import 'notification_system.dart';
 import 'update_status_icons.dart';
 
-class DevWindowOverlay extends ConsumerStatefulWidget {
-  const DevWindowOverlay({super.key, required this.onClose});
-  final VoidCallback onClose;
-
+class const DevWindowOverlay({super.key, required final VoidCallback onClose})
+    extends ConsumerStatefulWidget {
   static OverlayEntry? _overlayEntry;
 
   static void _close() {
@@ -199,7 +197,6 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         AppActionButton(
           label: label,
           icon: icon,
-          theme: theme,
           onTap: () => ref.read(settingsProvider.notifier).set(key, !value),
           selected: value,
         );
@@ -376,8 +373,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               () => _firewallAction(
                 (sync) => sync.clearLinuxFirewallAccess(),
                 'Could not remove firewall rules.',
-                command:
-                    'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
+                command: 'sudo ufw delete allow 45871/udp && sudo ufw delete allow 45872/tcp',
                 success: 'Firewall rules removed for UniKM.',
               ),
             ),
@@ -413,9 +409,8 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
               ),
               clipBehavior: Clip.antiAlias,
               child: DefaultTextStyle(
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium!.copyWith(color: theme.textPrimary),
+                style: Theme.of(context).textTheme.bodyMedium!
+                    .copyWith(color: theme.textPrimary),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -431,7 +426,6 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                           children: [
                             _dragHandle(theme),
                             AppTabBar(
-                              theme: theme,
                               selectedIndex: _tab,
                               onChanged: (index) =>
                                   setState(() => _tab = index),
@@ -522,12 +516,11 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
 
 /// Places the panel at its dragged position, kept 12 px inside the window
 /// at whatever height its tab gives it.
-class _PanelLayout extends SingleChildLayoutDelegate {
-  _PanelLayout(this.position) : super(relayout: position);
+class _PanelLayout(final ValueListenable<Offset> position)
+    extends SingleChildLayoutDelegate {
+  this : super(relayout: position);
 
   static const _margin = 12.0;
-  final ValueListenable<Offset> position;
-
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final width = math.min(360.0, constraints.maxWidth - _margin * 2);

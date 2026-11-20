@@ -1,12 +1,17 @@
 import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/models/device_sync_models.dart';
 import '../../providers/app_providers.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/pair_code_widgets.dart';
 
-enum IncomingPairDialogResult { declined, resolved }
+enum IncomingPairDialogResult() {
+  declined,
+  resolved,
+}
 
 /// Dialog shown on the receiver side when an incoming pair request arrives.
 ///
@@ -14,10 +19,10 @@ enum IncomingPairDialogResult { declined, resolved }
 /// when nothing between them swapped those keys. The user checks that the
 /// codes match and pairs, or declines. Closes on its own when pairing
 /// completes, is canceled on the other device, or times out.
-class IncomingPairDialog extends ConsumerStatefulWidget {
-  const IncomingPairDialog({super.key, required this.request});
-  final PendingPairRequest request;
-
+class const IncomingPairDialog({
+  super.key,
+  required final PendingPairRequest request,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<IncomingPairDialog> createState() => _IncomingPairDialogState();
 }

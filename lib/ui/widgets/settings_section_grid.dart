@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+
 import 'multi_child_render_box.dart';
 import 'tab_height_transition.dart';
 
@@ -25,17 +26,13 @@ int settingsSectionColumnCount(double availableWidth) => availableWidth.isFinite
 
 /// Packs whole settings sections into equal-width columns without reparenting
 /// their controls when the window is resized.
-class SettingsSectionGrid extends MultiChildRenderObjectWidget {
-  const SettingsSectionGrid({
-    super.key,
-    required this.columns,
-    required this.spacing,
-    required super.children,
-  }) : assert(columns > 0),
-       assert(spacing >= 0);
-
-  final int columns;
-  final double spacing;
+class const SettingsSectionGrid({
+  super.key,
+  required final int columns,
+  required final double spacing,
+  required super.children,
+}) extends MultiChildRenderObjectWidget {
+  this : assert(columns > 0), assert(spacing >= 0);
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -50,14 +47,11 @@ class SettingsSectionGrid extends MultiChildRenderObjectWidget {
       );
 }
 
-class _RenderSettingsSectionGrid extends MultiChildRenderBox
-    with PendingHeightPlacement {
-  _RenderSettingsSectionGrid(this._columns, this._spacing, this._textDirection);
-
-  int _columns;
-  double _spacing;
-  TextDirection _textDirection;
-
+class _RenderSettingsSectionGrid(
+  var int _columns,
+  var double _spacing,
+  var TextDirection _textDirection,
+) extends MultiChildRenderBox with PendingHeightPlacement {
   void update(int columns, double spacing, TextDirection textDirection) {
     if (_columns == columns &&
         _spacing == spacing &&

@@ -14,28 +14,20 @@ import '../widgets/password_field.dart';
 ///
 /// The [title], [message], and [confirmLabel] parameters allow reuse for
 /// related flows such as creating a password for a new encrypted database.
-class EnableEncryptionDialog extends ConsumerStatefulWidget {
-  const EnableEncryptionDialog({
-    super.key,
-    required this.theme,
-    this.encryptionManager,
-    this.title = 'Enable Encryption',
-    this.message,
-    this.confirmLabel = 'Enable',
-  });
-
-  final AppThemeData theme;
-  final EncryptionManager? encryptionManager;
+class const EnableEncryptionDialog({
+  super.key,
+  required final AppThemeData theme,
+  final EncryptionManager? encryptionManager,
 
   /// Title shown in the dialog header.
-  final String title;
+  final String title = 'Enable Encryption',
 
   /// Instructional message below the header.
-  final String? message;
+  final String? message,
 
   /// Label for the confirm button.
-  final String confirmLabel;
-
+  final String confirmLabel = 'Enable',
+}) extends ConsumerStatefulWidget {
   static Future<String?> _show(
     BuildContext context,
     EnableEncryptionDialog dialog,
@@ -146,8 +138,7 @@ class _EnableEncryptionDialogState
               ),
               const SizedBox(height: kDialogSpacing),
               DialogBanner.warning(
-                message:
-                    'WARNING: If you forget your password, your data cannot be recovered!',
+                message: 'WARNING: If you forget your password, your data cannot be recovered!',
               ),
             ],
           ),
@@ -169,38 +160,28 @@ class _EnableEncryptionDialogState
 /// [action] while blocking dismissal, then reports [successMessage] and
 /// returns true, or stays open showing the error: an incorrect password on
 /// the password field, anything else as [errorText].
-class _PasswordActionDialog extends StatefulWidget {
-  const _PasswordActionDialog({
-    required this.icon,
-    required this.title,
-    required this.fields,
-    required this.action,
-    required this.successMessage,
-    required this.errorText,
-    required this.confirmIcon,
-    required this.confirmLabel,
-    required this.loadingLabel,
-    this.warning,
-  });
-
-  final IconData icon;
-  final String title;
+class const _PasswordActionDialog({
+  required final IconData icon,
+  required final String title,
 
   /// The fields; the password field shows [passwordError].
-  final List<Widget> Function(VoidCallback submit, String? passwordError)
-  fields;
-  final Future<void> Function() action;
+  required final List<Widget> Function(
+    VoidCallback submit,
+    String? passwordError,
+  )
+  fields,
+  required final Future<void> Function() action,
 
   /// Read once the change succeeds, so it can depend on what was entered.
-  final String Function() successMessage;
-  final String Function(Object error) errorText;
-  final IconData confirmIcon;
-  final String confirmLabel;
-  final String loadingLabel;
+  required final String Function() successMessage,
+  required final String Function(Object error) errorText,
+  required final IconData confirmIcon,
+  required final String confirmLabel,
+  required final String loadingLabel,
 
   /// Pinned above the buttons, outside the scrolling content.
-  final String? warning;
-
+  final String? warning,
+}) extends StatefulWidget {
   @override
   State<_PasswordActionDialog> createState() => _PasswordActionDialogState();
 }
@@ -320,11 +301,10 @@ TextStyle _hintStyle(AppThemeData theme) =>
 
 /// Asks for the database password before pairing biometric unlock, which
 /// then shows the system prompt. Returns whether the pairing was saved.
-class BiometricPairDialog extends StatefulWidget {
-  const BiometricPairDialog({super.key, required this.onPair});
-
-  final Future<void> Function(String password) onPair;
-
+class const BiometricPairDialog({
+  super.key,
+  required final Future<void> Function(String password) onPair,
+}) extends StatefulWidget {
   static Future<bool> show(
     BuildContext context,
     Future<void> Function(String password) onPair,
@@ -378,25 +358,17 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
 
 /// Confirms the password, then removes encryption from the database.
 /// Returns whether encryption was removed.
-class DisableEncryptionDialog extends StatefulWidget {
-  const DisableEncryptionDialog({
-    super.key,
-    required this.theme,
-    required this.onDisable,
-  });
-
-  final AppThemeData theme;
-  final Future<void> Function(String password) onDisable;
-
+class const DisableEncryptionDialog({
+  super.key,
+  required final Future<void> Function(String password) onDisable,
+}) extends StatefulWidget {
   static Future<bool> show(
     BuildContext context,
-    AppThemeData theme,
     Future<void> Function(String password) onDisable,
   ) async =>
       await showAppDialog<bool>(
         context: context,
-        builder: (_) =>
-            DisableEncryptionDialog(theme: theme, onDisable: onDisable),
+        builder: (_) => DisableEncryptionDialog(onDisable: onDisable),
       ) ??
       false;
 
@@ -425,7 +397,7 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
     fields: (submit, passwordError) => [
       Text(
         'Confirm your password to remove encryption.',
-        style: _hintStyle(widget.theme),
+        style: _hintStyle(context.appTheme),
       ),
       PasswordField(
         controller: _password,
@@ -440,29 +412,23 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
 }
 
 /// Changes the password of an encrypted database. Returns whether it changed.
-class ChangePasswordDialog extends StatefulWidget {
-  const ChangePasswordDialog({
-    super.key,
-    required this.theme,
-    required this.onChangePassword,
-  });
-
-  final AppThemeData theme;
-  final Future<void> Function(String currentPassword, String newPassword)
-  onChangePassword;
-
+class const ChangePasswordDialog({
+  super.key,
+  required final Future<void> Function(
+    String currentPassword,
+    String newPassword,
+  )
+  onChangePassword,
+}) extends StatefulWidget {
   static Future<bool> show(
     BuildContext context,
-    AppThemeData theme,
     Future<void> Function(String currentPassword, String newPassword)
     onChangePassword,
   ) async =>
       await showAppDialog<bool>(
         context: context,
-        builder: (_) => ChangePasswordDialog(
-          theme: theme,
-          onChangePassword: onChangePassword,
-        ),
+        builder: (_) =>
+            ChangePasswordDialog(onChangePassword: onChangePassword),
       ) ??
       false;
 
@@ -496,7 +462,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog>
         textInputAction: TextInputAction.next,
         validator: requiredPassword(message: 'Current password is required'),
       ),
-      Divider(height: 37 - 2 * kDialogSpacing, color: widget.theme.border),
+      Divider(height: 37 - 2 * kDialogSpacing, color: context.appTheme.border),
       PasswordField(
         controller: _new,
         labelText: 'New Password',

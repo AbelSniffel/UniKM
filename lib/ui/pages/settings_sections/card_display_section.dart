@@ -10,18 +10,11 @@ import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
 
 /// Card Visual settings section
-class CardDisplaySection extends ConsumerWidget {
-  const CardDisplaySection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const CardDisplaySection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerWidget {
   static const SettingTextSpec showPlatformSpec = SettingTextSpec(
     label: 'Platform',
     icon: Icons.storefront_outlined,
@@ -71,6 +64,7 @@ class CardDisplaySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     final cardSettings = ref.watch(gameCardSettingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
@@ -78,7 +72,6 @@ class CardDisplaySection extends ConsumerWidget {
       attachesToAbove: attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          theme: theme,
           group: chipsSearchGroup,
           titleIcon: Icons.style_outlined,
           searchQuery: searchQuery,
@@ -113,7 +106,6 @@ class CardDisplaySection extends ConsumerWidget {
           ),
         ),
         buildSearchableSectionEntry(
-          theme: theme,
           group: displayRulesSearchGroup,
           titleIcon: Icons.visibility_outlined,
           searchQuery: searchQuery,

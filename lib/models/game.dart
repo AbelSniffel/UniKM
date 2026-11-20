@@ -11,45 +11,29 @@ import '../core/utils/color_utils.dart';
 import '../shared/time/calendar_date.dart';
 
 /// Extended game model with tags and computed properties
-class Game {
+class Game({
+  required final int id,
+  required final String title,
+  required final String gameKey,
+  required final String platform,
+  required final DateTime dateAdded,
+  DateTime? updatedAt,
+  final String notes = '',
+  final bool isUsed = false,
+  final String coverImage = '',
+  final bool hasDeadline = false,
+  final DateTime? deadlineDate,
+  final bool isDlc = false,
+  final String steamAppId = '',
+  final String developer = '',
+  final int reviewScore = 0,
+  final int reviewCount = 0,
+  List<Tag> tags = const [],
+}) {
   static const _unchanged = Object();
-  Game({
-    required this.id,
-    required this.title,
-    required this.gameKey,
-    required this.platform,
-    required this.dateAdded,
-    DateTime? updatedAt,
-    this.notes = '',
-    this.isUsed = false,
-    this.coverImage = '',
-    this.hasDeadline = false,
-    this.deadlineDate,
-    this.isDlc = false,
-    this.steamAppId = '',
-    this.developer = '',
-    this.reviewScore = 0,
-    this.reviewCount = 0,
-    List<Tag> tags = const [],
-  }) : tags = List.unmodifiable(tags),
-       updatedAt = updatedAt ?? dateAdded;
+  this : tags = List.unmodifiable(tags), updatedAt = updatedAt ?? dateAdded;
 
-  final int id;
-  final String title;
-  final String gameKey;
-  final String platform;
-  final DateTime dateAdded;
   final DateTime updatedAt;
-  final String notes;
-  final bool isUsed;
-  final String coverImage;
-  final bool hasDeadline;
-  final DateTime? deadlineDate;
-  final bool isDlc;
-  final String steamAppId;
-  final String developer;
-  final int reviewScore;
-  final int reviewCount;
   final List<Tag> tags;
 
   /// Create from database entry
@@ -213,19 +197,12 @@ class Game {
 }
 
 /// Tag model with color parsing
-class Tag {
-  Tag({
-    required this.id,
-    required this.name,
-    required this.colorHex,
-    this.isSteamTag = false,
-  });
-
-  final int id;
-  final String name;
-  final String colorHex;
-  final bool isSteamTag;
-
+class Tag({
+  required final int id,
+  required final String name,
+  required final String colorHex,
+  final bool isSteamTag = false,
+}) {
   /// Cached parsed color (lazy initialization)
   Color? _cachedColor;
 

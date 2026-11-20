@@ -26,12 +26,11 @@ import '../../widgets/game_tile.dart';
 import '../../widgets/game_tile_render.dart';
 
 /// Tracks revealed entries for one library session without keeping cards alive.
-class GameCardRevealCoordinator {
-  GameCardRevealCoordinator({this.scrollReveals = true});
-
+class GameCardRevealCoordinator({
   /// Whether cards scrolled into view reveal. If not, only the cards built
   /// before the first scroll do.
-  final bool scrollReveals;
+  final bool scrollReveals = true,
+}) {
   bool _scrolledOn = false;
   final _revealedIds = <int>{};
   final _cards = <GameCardReveal>{};

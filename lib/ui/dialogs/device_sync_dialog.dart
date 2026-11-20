@@ -58,14 +58,12 @@ Future<bool?> showChooseSyncDirectionDialog({
         ),
       // Each direction merges its changes into the other library.
       TintedOptionTile(
-        theme: theme,
         icon: Icons.download,
         title: 'Receive',
         subtitle: 'Merge $peerName\'s changes into this library',
         onTap: () => Navigator.pop(ctx, false),
       ),
       TintedOptionTile(
-        theme: theme,
         icon: Icons.upload,
         title: 'Send',
         subtitle: 'Merge this library\'s changes into $peerName',
@@ -106,21 +104,13 @@ Future<bool> showOutgoingPairCodeDialog({
   return confirmed.future;
 }
 
-class _OutgoingPairDialog extends StatefulWidget {
-  const _OutgoingPairDialog({
-    required this.peerName,
-    required this.code,
-    required this.confirmed,
-    required this.onCancel,
-    required this.pairingResult,
-  });
-
-  final String peerName;
-  final String code;
-  final Completer<bool> confirmed;
-  final void Function() onCancel;
-  final Future<void> pairingResult;
-
+class const _OutgoingPairDialog({
+  required final String peerName,
+  required final String code,
+  required final Completer<bool> confirmed,
+  required final void Function() onCancel,
+  required final Future<void> pairingResult,
+}) extends StatefulWidget {
   @override
   State<_OutgoingPairDialog> createState() => _OutgoingPairDialogState();
 }
@@ -196,9 +186,7 @@ class _OutgoingPairDialogState extends State<_OutgoingPairDialog> {
   }
 }
 
-class _DeviceSyncDialog extends ConsumerStatefulWidget {
-  const _DeviceSyncDialog();
-
+class const _DeviceSyncDialog() extends ConsumerStatefulWidget {
   @override
   ConsumerState<_DeviceSyncDialog> createState() => _DeviceSyncDialogState();
 }
@@ -283,7 +271,6 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
           child: Semantics(
             label: 'Enable Local Device Sync',
             child: AppToggleSwitch(
-              theme: theme,
               value: syncAsync.asData?.value.enabled ?? false,
               onChanged: syncAsync.asData == null ? null : notifier.setEnabled,
             ),
@@ -322,12 +309,10 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
   }
 }
 
-class _SyncContent extends ConsumerWidget {
-  const _SyncContent({required this.sync, required this.theme});
-
-  final DeviceSyncSnapshot sync;
-  final AppThemeData theme;
-
+class const _SyncContent({
+  required final DeviceSyncSnapshot sync,
+  required final AppThemeData theme,
+}) extends ConsumerWidget {
   static const _placeholderNames = {
     '',
     'localhost',
@@ -707,28 +692,18 @@ class _SyncContent extends ConsumerWidget {
 /// A device as a tile tinted with its state's colour (neutral grey while
 /// offline): its type icon, its name, address and state, and its actions. Paired
 /// devices show their last sync on hovering the icon.
-class _DeviceTile extends StatelessWidget {
-  const _DeviceTile({
-    super.key,
-    required this.icon,
-    required this.color,
-    required this.name,
-    required this.address,
-    required this.status,
-    required this.pairedId,
-    required this.actions,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String name;
-  final String address;
-  final String status;
+class const _DeviceTile({
+  super.key,
+  required final IconData icon,
+  required final Color color,
+  required final String name,
+  required final String address,
+  required final String status,
 
   /// The peer id of a paired device, for its last sync.
-  final String? pairedId;
-  final Widget actions;
-
+  required final String? pairedId,
+  required final Widget actions,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -767,30 +742,17 @@ class _DeviceTile extends StatelessWidget {
   }
 }
 
-class _UnifiedDeviceRow {
-  const _UnifiedDeviceRow({
-    required this.id,
-    required this.name,
-    required this.host,
-    required this.port,
-    this.discovered,
-    this.trusted,
-    this.pendingRequest,
-  });
+class const _UnifiedDeviceRow({
+  required final String id,
+  required final String name,
+  required final String host,
+  required final int port,
+  final DiscoveredSyncPeer? discovered,
+  final TrustedSyncPeer? trusted,
+  final PendingPairRequest? pendingRequest,
+});
 
-  final String id;
-  final String name;
-  final String host;
-  final int port;
-  final DiscoveredSyncPeer? discovered;
-  final TrustedSyncPeer? trusted;
-  final PendingPairRequest? pendingRequest;
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error});
-
-  final String error;
+class const _ErrorView({required final String error}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -808,9 +770,7 @@ class _ErrorView extends StatelessWidget {
 }
 
 // Match the click-to-show info buttons used on the settings page.
-class _IncompatibleSyncInfoButton extends StatefulWidget {
-  const _IncompatibleSyncInfoButton();
-
+class const _IncompatibleSyncInfoButton() extends StatefulWidget {
   @override
   State<_IncompatibleSyncInfoButton> createState() =>
       _IncompatibleSyncInfoButtonState();

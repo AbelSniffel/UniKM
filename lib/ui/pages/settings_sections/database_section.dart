@@ -44,12 +44,10 @@ import 'settings_control_cards.dart';
 /// Shows a dialog that asks the user which kind of database to create.
 ///
 /// Returns the selected database creation config or `null` if cancelled.
-class CreateDatabaseChoiceResult {
-  const CreateDatabaseChoiceResult({required this.encrypted, this.fileName});
-
-  final bool encrypted;
-  final String? fileName;
-}
+class const CreateDatabaseChoiceResult({
+  required final bool encrypted,
+  final String? fileName,
+});
 
 Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
   BuildContext context,
@@ -88,7 +86,6 @@ Future<CreateDatabaseChoiceResult?> showCreateDatabaseChoiceDialog(
               ),
             ])
               TintedOptionTile(
-                theme: theme,
                 icon: icon,
                 title: title,
                 subtitle: subtitle,
@@ -169,14 +166,10 @@ Future<void> _createDatabase(BuildContext context, WidgetRef ref) async {
 }
 
 /// Icon actions shared by the Database header and selected subpage.
-class DatabaseHeaderActions extends ConsumerWidget {
-  const DatabaseHeaderActions({super.key, this.expanded = false});
-
-  final bool expanded;
-
+class const DatabaseHeaderActions({super.key, final bool expanded = false})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
     final switching = ref.watch(databaseSwitchingProvider);
     // Settings header actions share the selection bar's button group.
     return NavButtonGroup(
@@ -192,12 +185,7 @@ class DatabaseHeaderActions extends ConsumerWidget {
             switching ? null : () => _createDatabase(context, ref),
           ),
         ])
-          SettingsHeaderAction(
-            theme: theme,
-            icon: icon,
-            tooltip: tooltip,
-            onTap: onTap,
-          ),
+          SettingsHeaderAction(icon: icon, tooltip: tooltip, onTap: onTap),
       ],
     );
   }
@@ -241,13 +229,11 @@ final _biometricStateProvider =
 /// Encryption, password and biometric unlock controls for the active
 /// database. Each toggle follows the real state, so a cancelled flow leaves
 /// it unchanged.
-class _EncryptionControls extends ConsumerStatefulWidget {
-  const _EncryptionControls({required this.builder});
-
+class const _EncryptionControls({
   /// Places the header [action] (change password, when encrypted) and the
   /// toggle [cards].
-  final Widget Function(Widget? action, Widget cards) builder;
-
+  required final Widget Function(Widget? action, Widget cards) builder,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_EncryptionControls> createState() =>
       _EncryptionControlsState();
@@ -284,11 +270,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
 
   Future<void> _setEncrypted(bool on) => _run((controller) async {
     if (!on) {
-      await DisableEncryptionDialog.show(
-        context,
-        context.appTheme,
-        controller.disable,
-      );
+      await DisableEncryptionDialog.show(context, controller.disable);
       return;
     }
     final password = await EnableEncryptionDialog.show(
@@ -339,7 +321,6 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
                   ? () => _run(
                       (controller) => ChangePasswordDialog.show(
                         context,
-                        context.appTheme,
                         controller.changePassword,
                       ),
                     )
@@ -353,14 +334,12 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
         spacing: 8,
         children: [
           SettingsToggleCard(
-            theme: theme,
             label: DatabaseSection.encryptionSpec.label,
             icon: DatabaseSection.encryptionSpec.icon,
             value: encrypted,
             onChanged: enabled ? _setEncrypted : null,
           ),
           SettingsToggleCard(
-            theme: theme,
             label: '${BiometricUnlock.label} unlock',
             icon: DatabaseSection.biometricSpec.icon,
             description: biometricHint,
@@ -376,18 +355,11 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
 }
 
 /// Database and security settings section
-class DatabaseSection extends ConsumerStatefulWidget {
-  const DatabaseSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const DatabaseSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerStatefulWidget {
   static const SettingTextSpec activeDatabaseSpec = SettingTextSpec(
     label: 'Change Database',
     icon: Icons.description_outlined,
@@ -592,7 +564,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
           builder: (position, isAlternate) => _EncryptionControls(
             builder: (passwordAction, cards) => SectionGroupBox(
               title: DatabaseSection.dataManagementSearchGroup.title,
-              theme: widget.theme,
               titleIcon: Icons.backup,
               searchQuery: widget.searchQuery,
               groupPosition: position,
@@ -606,7 +577,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   // The active file's name; a tap opens the Change Database
                   // dialog, which also shows the full path.
                   TintedOptionTile(
-                    theme: widget.theme,
                     icon: DatabaseSection.activeDatabaseSpec.icon,
                     title: DatabaseSection.activeDatabaseSpec.label,
                     subtitle: _isLoading
@@ -614,13 +584,12 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                         : 'Current: ${p.basename(_activeDbPath)}',
                     onTap: _isLoading || databaseSwitching
                         ? null
-                        : () => showChangeDatabaseDialog(context, widget.theme),
+                        : () => showChangeDatabaseDialog(context),
                   ),
                   // The countdown to the next auto backup stays current.
                   _EveryMinute(
                     enabled: nextBackupTime != null,
                     builder: (context) => TintedOptionTile(
-                      theme: widget.theme,
                       icon: DatabaseSection.backupManagerSpec.icon,
                       title: DatabaseSection.backupManagerSpec.label,
                       subtitle: switch (nextBackupTime) {
@@ -643,7 +612,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
           visible: shows(DatabaseSection.databaseSyncSearchGroup),
           builder: (position, isAlternate) => SectionGroupBox(
             title: DatabaseSection.databaseSyncSearchGroup.title,
-            theme: widget.theme,
             titleIcon: Icons.sync,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
             searchQuery: widget.searchQuery,
@@ -654,7 +622,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
               spacing: kElementVSpacing,
               children: [
                 TintedOptionTile(
-                  theme: widget.theme,
                   icon: DatabaseSection.deviceSyncSpec.icon,
                   title: DatabaseSection.deviceSyncSpec.label,
                   subtitle:
@@ -667,7 +634,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   onTap: () => showDeviceSyncDialog(context),
                 ),
                 buildSpecToggleSettingList(
-                  theme: widget.theme,
+                  theme: context.appTheme,
                   entries: [
                     (
                       spec: DatabaseSection.enableLocalDeviceSyncSpec,
@@ -692,7 +659,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
           visible: shows(DatabaseSection.keyVisibilitySearchGroup),
           builder: (position, isAlternate) => SectionGroupBox(
             title: DatabaseSection.keyVisibilitySearchGroup.title,
-            theme: widget.theme,
             titleIcon: Icons.security,
             headerCrossAxisAlignment: CrossAxisAlignment.center,
             trailing: switch (DatabaseSection.keyVisibilitySearchGroup.info) {
@@ -723,14 +689,12 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                     ),
                 ])
                   SettingsToggleCard(
-                    theme: widget.theme,
                     label: spec.label,
                     icon: spec.icon,
                     value: value,
                     onChanged: settingsNotifier.setter(key),
                   ),
                 SettingsChoiceCard<int>(
-                  theme: widget.theme,
                   label: DatabaseSection.autoLockSpec.label,
                   icon: DatabaseSection.autoLockSpec.icon,
                   value: security.autoLockMinutes,
@@ -752,11 +716,8 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
   }
 }
 
-class _ChangeDatabaseDialog extends ConsumerStatefulWidget {
-  const _ChangeDatabaseDialog({required this.container});
-
-  final ProviderContainer container;
-
+class const _ChangeDatabaseDialog({required final ProviderContainer container})
+    extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ChangeDatabaseDialog> createState() =>
       _ChangeDatabaseDialogState();
@@ -976,7 +937,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
           children: [
             FileDropField(
               key: const ValueKey('change-database-drop'),
-              theme: theme,
               description: 'Supports .db, .enc and extensionless SQLite files',
               enabled: !_isLoading && !_choosingFile,
               onBrowse: _openDatabase,
@@ -998,7 +958,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
               const Center(child: AppCircularProgressIndicator(size: 20))
             else
               DatabaseFileRow(
-                theme: theme,
                 title: p.basename(_activeFilePath),
                 subtitle: _activeFilePath,
                 isEncrypted:
@@ -1054,7 +1013,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                             ),
                             child: DatabaseFileRow(
                               key: ValueKey(basePath),
-                              theme: theme,
                               title: p.basename(resolvedPath),
                               subtitle: sizeBytes == null
                                   ? resolvedPath
@@ -1109,10 +1067,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
 // PUBLIC HELPER — callable from anywhere in the app
 // =============================================================================
 
-Future<void> showChangeDatabaseDialog(
-  BuildContext context,
-  AppThemeData theme,
-) {
+Future<void> showChangeDatabaseDialog(BuildContext context) {
   final container = ProviderScope.containerOf(context, listen: false);
   return showAppDialog<void>(
     context: context,
@@ -1121,12 +1076,10 @@ Future<void> showChangeDatabaseDialog(
 }
 
 /// Rebuilds once a minute while [enabled], so a countdown stays current.
-class _EveryMinute extends StatefulWidget {
-  const _EveryMinute({required this.enabled, required this.builder});
-
-  final bool enabled;
-  final WidgetBuilder builder;
-
+class const _EveryMinute({
+  required final bool enabled,
+  required final WidgetBuilder builder,
+}) extends StatefulWidget {
   @override
   State<_EveryMinute> createState() => _EveryMinuteState();
 }

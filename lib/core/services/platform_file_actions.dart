@@ -9,19 +9,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class PlatformSaveTarget {
-  const PlatformSaveTarget({
-    required this.file,
-    required this.shouldShareAfterWrite,
-  });
+class const PlatformSaveTarget({
+  required final File file,
+  required final bool shouldShareAfterWrite,
+});
 
-  final File file;
-  final bool shouldShareAfterWrite;
-}
-
-class PlatformFileActions {
-  const PlatformFileActions._();
-
+class const PlatformFileActions._() {
   static bool get isMobilePlatform => Platform.isAndroid || Platform.isIOS;
 
   static bool get supportsDragAndDrop => !isMobilePlatform;

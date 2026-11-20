@@ -15,22 +15,16 @@ typedef BarSegment = ({String label, int count, Color color});
 
 /// A bar as tall as a slider track, split into [segments] by count. Each
 /// part shows its count and share in a slider value bubble.
-class SegmentedBar extends StatelessWidget {
-  const SegmentedBar({
-    super.key,
-    required this.segments,
-    this.formatCount = _plain,
-    this.gap = 2,
-  });
-
-  final List<BarSegment> segments;
+class const SegmentedBar({
+  super.key,
+  required final List<BarSegment> segments,
 
   /// Writes a count in the bubbles, such as a file size.
-  final String Function(int count) formatCount;
+  final String Function(int count) formatCount = _plain,
 
   /// The separator between parts, in the dialog's background colour.
-  final double gap;
-
+  final double gap = 2,
+}) extends StatelessWidget {
   static String _plain(int count) => '$count';
 
   /// Splits [width] by [counts], keeping every share wide enough to hover.
@@ -105,28 +99,19 @@ class SegmentedBar extends StatelessWidget {
 
 /// A small chip tinted with [color]: a swatch, [label] and an optional bold
 /// [value]. Faded chips stand back.
-class TintedChip extends StatelessWidget {
-  const TintedChip({
-    super.key,
-    required this.color,
-    required this.label,
-    this.value,
-    this.faded = false,
-    this.maxLines,
-    this.onTap,
-  });
-
-  final Color color;
-  final String label;
-  final String? value;
-  final bool faded;
+class const TintedChip({
+  super.key,
+  required final Color color,
+  required final String label,
+  final String? value,
+  final bool faded = false,
 
   /// Truncates the label with an ellipsis instead of wrapping it.
-  final int? maxLines;
+  final int? maxLines,
 
   /// Makes the chip tappable.
-  final VoidCallback? onTap;
-
+  final VoidCallback? onTap,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

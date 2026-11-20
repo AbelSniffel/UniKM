@@ -65,22 +65,14 @@ ButtonStyle themedFilledButtonStyle(
   );
 }
 
-class DialogInteractionScope extends StatelessWidget {
-  const DialogInteractionScope({
-    super.key,
-    required this.child,
-    this.onPrimaryAction,
-    this.onDismiss,
-    this.enableEscapeDismiss = true,
-    this.enableEnterToPrimary = true,
-  });
-
-  final Widget child;
-  final VoidCallback? onPrimaryAction;
-  final VoidCallback? onDismiss;
-  final bool enableEscapeDismiss;
-  final bool enableEnterToPrimary;
-
+class const DialogInteractionScope({
+  super.key,
+  required final Widget child,
+  final VoidCallback? onPrimaryAction,
+  final VoidCallback? onDismiss,
+  final bool enableEscapeDismiss = true,
+  final bool enableEnterToPrimary = true,
+}) extends StatelessWidget {
   /// Enter belongs to a focused multiline text field.
   bool _shouldHandlePrimaryAction() {
     final focused = FocusManager.instance.primaryFocus?.context?.widget;
@@ -135,33 +127,25 @@ class DialogInteractionScope extends StatelessWidget {
 ///   title: DialogHeader(icon: Icons.lock, title: 'Enable Encryption'),
 /// )
 /// ```
-class DialogHeader extends StatelessWidget {
-  const DialogHeader({
-    super.key,
-    this.icon,
-    required this.title,
-    this.iconColor,
-    this.iconSize,
-    this.titleColor,
-    this.showCloseButton = false,
-  });
+class const DialogHeader({
+  super.key,
 
   /// Optional leading icon. When null no icon or spacing is rendered.
-  final IconData? icon;
-  final String title;
+  final IconData? icon,
+  required final String title,
 
   /// Defaults to the theme's accent.
-  final Color? iconColor;
+  final Color? iconColor,
 
   /// Defaults to 28 when [showCloseButton] is true, else platform default.
-  final double? iconSize;
+  final double? iconSize,
 
   /// Defaults to the theme's primary text colour.
-  final Color? titleColor;
+  final Color? titleColor,
 
   /// If true, adds a themed close `IconButton` at the trailing edge.
-  final bool showCloseButton;
-
+  final bool showCloseButton = false,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -198,11 +182,8 @@ class DialogHeader extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// Shared warning banner for destructive actions and security notices.
-class DialogBanner extends StatelessWidget {
-  const DialogBanner.warning({super.key, required this.message});
-
-  final String message;
-
+class const DialogBanner.warning({super.key, required final String message})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -244,49 +225,34 @@ class DialogBanner extends StatelessWidget {
 ///   isLoading: _isLoading,
 /// )
 /// ```
-class DialogActionBar extends StatelessWidget {
-  const DialogActionBar({
-    super.key,
-    required this.onConfirm,
-    this.onCancel,
-    this.showCancel = false,
-    this.cancelLabel = 'Cancel',
-    this.confirmIcon,
-    this.confirmLabel = 'Confirm',
-    this.loadingLabel,
-    this.isLoading = false,
-    this.isEnabled = true,
-    this.destructive = false,
-    this.spinnerSize = 16,
-  });
-
-  /// Called when Cancel is pressed. If null, pops the current route.
-  final VoidCallback? onCancel;
-
-  /// Whether to show the cancel button.
-  final bool showCancel;
+class const DialogActionBar({
+  super.key,
 
   /// Called when the primary button is pressed.
-  final VoidCallback? onConfirm;
+  required final VoidCallback? onConfirm,
 
-  final String cancelLabel;
-  final IconData? confirmIcon;
-  final String confirmLabel;
+  /// Called when Cancel is pressed. If null, pops the current route.
+  final VoidCallback? onCancel,
+
+  /// Whether to show the cancel button.
+  final bool showCancel = false,
+  final String cancelLabel = 'Cancel',
+  final IconData? confirmIcon,
+  final String confirmLabel = 'Confirm',
 
   /// Label shown while [isLoading] is true. Falls back to [confirmLabel].
-  final String? loadingLabel;
-
-  final bool isLoading;
+  final String? loadingLabel,
+  final bool isLoading = false,
 
   /// Extra disable condition (ANDed with !isLoading).
-  final bool isEnabled;
+  final bool isEnabled = true,
 
   /// When true the primary button uses the themed destructive style.
-  final bool destructive;
+  final bool destructive = false,
 
   /// Size of the loading spinner. Defaults to 16.
-  final double spinnerSize;
-
+  final double spinnerSize = 16,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -356,85 +322,59 @@ class DialogActionBar extends StatelessWidget {
 ///
 /// Override [backgroundColor] when a dialog intentionally uses the page
 /// background colour instead of the elevated surface colour.
-class ThemedAlertDialog extends StatelessWidget {
-  const ThemedAlertDialog({
-    super.key,
-    this.theme,
-    this.title,
-    this.content,
-    this.contentChildren,
-    this.contentSpacing = 0,
-    this.body,
-    this.actions,
-    this.below,
-    this.showCloseButton = true,
-    this.titleActions,
-    this.backgroundColor,
-    this.padding = kDialogContentPadding,
-    this.bleedContent = false,
-    this.backdrop,
-    this.spacing = 8.0,
-    this.maxWidth = 600.0,
-    this.maxHeight,
-    this.fullscreen = false,
-  });
-
-  final AppThemeData? theme;
-  final bool fullscreen;
-
-  /// The dialog background colour. Defaults to [AppThemeData.surface].
-  final Color? backgroundColor;
-
-  final Widget? title;
-  final Widget? content;
+class const ThemedAlertDialog({
+  super.key,
+  final Widget? title,
+  final Widget? content,
 
   /// The [content] when it is null, stacked [contentSpacing] apart and
   /// stretched to the dialog's width.
-  final List<Widget>? contentChildren;
-  final double contentSpacing;
+  final List<Widget>? contentChildren,
+  final double contentSpacing = 0,
 
   /// A non-scrollable flexible widget placed below [content] and above [actions].
   /// Expands to fill the remaining height. Use this for widgets such as [TabBarView]
   /// that manage their own scrolling. When provided, the dialog fills [maxHeight].
-  final Widget? body;
-
-  final List<Widget>? actions;
+  final Widget? body,
+  final List<Widget>? actions,
 
   /// An optional widget rendered below the dialog box (outside the Material
   /// surface). When provided the outer dialog becomes transparent so the
   /// dialog box and this widget can sit in a Column together.
-  final Widget? below;
-
-  final bool showCloseButton;
+  final Widget? below,
+  final bool showCloseButton = true,
 
   /// Optional icon buttons inserted between the title and the close button.
-  final List<Widget>? titleActions;
+  final List<Widget>? titleActions,
+
+  /// The dialog background colour. Defaults to [AppThemeData.surface].
+  final Color? backgroundColor,
 
   /// Uniform padding applied to all four sides of the dialog content area.
   /// Defaults to [kDialogContentPadding].
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry padding = kDialogContentPadding,
 
   /// Lets [content] reach the dialog's edges, such as a banner, while the
   /// title and actions keep [padding].
-  final bool bleedContent;
+  final bool bleedContent = false,
 
   /// Painted behind the whole dialog from its top, actions included, such
   /// as a banner's art fading out; it sets its own height.
-  final Widget? backdrop;
+  final Widget? backdrop,
 
   /// Vertical gap inserted between title → content and content → actions rows.
-  final double spacing;
+  final double spacing = 8.0,
 
   /// Maximum dialog width. Defaults to 600.
-  final double maxWidth;
+  final double maxWidth = 600.0,
 
   /// Maximum dialog height. When null defaults to 85 % of the screen height.
-  final double? maxHeight;
-
+  final double? maxHeight,
+  final bool fullscreen = false,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme =
-        this.theme ?? Theme.of(context).extension<AppThemeData>() ?? kDarkTheme;
+    final theme = context.appTheme;
     final screenHeight = MediaQuery.sizeOf(context).height;
     final effectiveMaxHeight = fullscreen
         ? screenHeight

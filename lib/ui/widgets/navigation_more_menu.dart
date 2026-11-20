@@ -28,16 +28,10 @@ import 'popup_menu_helpers.dart';
 
 /// The meatball button that ends the navigation panel's last button group.
 /// It carries the Updates dot.
-class NavigationMoreMenuButton extends ConsumerStatefulWidget {
-  const NavigationMoreMenuButton({
-    super.key,
-    required this.theme,
-    required this.position,
-  });
-
-  final AppThemeData theme;
-  final NavBarPosition position;
-
+class const NavigationMoreMenuButton({
+  super.key,
+  required final NavBarPosition position,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<NavigationMoreMenuButton> createState() =>
       _NavigationMoreMenuButtonState();
@@ -48,7 +42,7 @@ class _NavigationMoreMenuButtonState
     with MenuToggle {
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final grid = ref.watch(viewModeProvider) == GameListViewMode.grid;
     final density = resolveListViewDensityMode(
       slimListView: ref.watch(
@@ -97,7 +91,7 @@ class _NavigationMoreMenuButtonState
         appMenuDivider(theme),
         appMenuItem(
           theme,
-          leading: _UpdateIcon(theme: theme),
+          leading: const _UpdateIcon(),
           onPressed: () =>
               ref.read(updateDialogOpenProvider.notifier).set(true),
           child: const Text('Updates'),
@@ -109,7 +103,6 @@ class _NavigationMoreMenuButtonState
           expanded: controller.isOpen,
           child: AppNavigationButton(
             key: const ValueKey('nav-more-menu'),
-            theme: theme,
             isSelected: false,
             isEnabled: true,
             isHorizontal:
@@ -129,11 +122,7 @@ class _NavigationMoreMenuButtonState
 
 /// Updates' state: a spinner while checking or downloading, and the accent
 /// while an update waits. It watches only while the menu is open.
-class _UpdateIcon extends ConsumerWidget {
-  const _UpdateIcon({required this.theme});
-
-  final AppThemeData theme;
-
+class const _UpdateIcon() extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final (:busy, :ready) = ref.watch(
@@ -151,7 +140,7 @@ class _UpdateIcon extends ConsumerWidget {
     return Icon(
       ready ? Icons.file_download_done : Icons.download_rounded,
       size: 18,
-      color: ready || available ? theme.accent : null,
+      color: ready || available ? context.appTheme.accent : null,
     );
   }
 }

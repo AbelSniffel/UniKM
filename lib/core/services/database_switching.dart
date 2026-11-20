@@ -4,41 +4,36 @@
 /// connection through the database providers.
 library;
 
-sealed class DatabaseSwitchRequest {
-  const DatabaseSwitchRequest();
-}
+sealed class const DatabaseSwitchRequest();
 
-class OpenDatabaseRequest extends DatabaseSwitchRequest {
-  const OpenDatabaseRequest(this.path, {this.password, this.announce = true});
-
+class const OpenDatabaseRequest(
   /// Path selected by the user.
   ///
   /// May be either a plain sqlite file (e.g. `.db`) or an encrypted file
   /// (e.g. `.enc`).
-  final String path;
+  final String path, {
 
   /// Optional password to use when opening an encrypted database. When
   /// provided the bootstrap/switch logic will attempt to use this password
   /// and will NOT prompt the user.
-  final String? password;
+  final String? password,
 
   /// Whether to say which database is now in use. Off when an encryption
   /// change reopens the same one, which reports the change itself.
-  final bool announce;
-}
+  final bool announce = true,
+}) extends DatabaseSwitchRequest;
 
-class CreateDatabaseRequest extends DatabaseSwitchRequest {
-  const CreateDatabaseRequest({required this.path, required this.encrypted});
-
+class const CreateDatabaseRequest({
   /// Target path selected by the user.
   ///
   /// If `encrypted == true`, this may end with `.enc` or any other filename;
   /// the encrypted file will be written as `$basePath.enc`.
-  final String path;
+  required final String path,
 
   /// Whether the newly created database should be encrypted.
-  final bool encrypted;
-}
+  required final bool encrypted,
+}) extends DatabaseSwitchRequest;
 
-typedef DatabaseSwitchCallback =
-    Future<void> Function(DatabaseSwitchRequest request);
+typedef DatabaseSwitchCallback = Future<void> Function(
+  DatabaseSwitchRequest request,
+);

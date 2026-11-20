@@ -4,11 +4,7 @@ import 'settings_model.dart';
 
 /// Reads legacy preferences, encodes values, and preserves library paths and
 /// custom themes when resetting. It has no provider or presentation dependency.
-class SettingsStore {
-  const SettingsStore(this._prefs);
-
-  final SharedPreferences _prefs;
-
+class const SettingsStore(final SharedPreferences _prefs) {
   Map<String, dynamic> load() {
     // Retain old button positions; centered buttons map to the split layout.
     final legacyArrangementH = switch (_prefs.getString(

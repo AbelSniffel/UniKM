@@ -13,37 +13,25 @@ import 'theme_icons.dart';
 import 'app_slider_theme.dart';
 import 'button_depth.dart';
 import 'button_notification_pulse.dart';
+
 import 'package:flutter/foundation.dart';
+
 import '../utils/color_utils.dart';
 
 /// App theme configuration with 3 base colors
-class AppThemeData extends ThemeExtension<AppThemeData> {
-  const AppThemeData({
-    this.id = '',
-    required this.name,
-    required this.baseBackground,
-    required this.baseSecondary,
-    required this.baseAccent,
-    this.iconData,
-    this.cornerRadius = 8.0,
-    this.scrollbarRadius = 8.0,
-    this.inputPaddingVertical = 10.0,
-    this.inputPaddingHorizontal = 12.0,
-    this.progressIndicatorStrokeWidth = 3.0,
-  });
-
-  final String id;
-  final String name;
-  final Color baseBackground;
-  final Color baseSecondary;
-  final Color baseAccent;
-  final IconData? iconData;
-  final double cornerRadius;
-  final double scrollbarRadius;
-  final double inputPaddingHorizontal;
-  final double inputPaddingVertical;
-  final double progressIndicatorStrokeWidth;
-
+class const AppThemeData({
+  final String id = '',
+  required final String name,
+  required final Color baseBackground,
+  required final Color baseSecondary,
+  required final Color baseAccent,
+  final IconData? iconData,
+  final double cornerRadius = 8.0,
+  final double scrollbarRadius = 8.0,
+  final double inputPaddingVertical = 10.0,
+  final double inputPaddingHorizontal = 12.0,
+  final double progressIndicatorStrokeWidth = 3.0,
+}) extends ThemeExtension<AppThemeData> {
   /// Every field, for comparing themes by value. `==` stays identity:
   /// providers compare their states with it.
   Record get equalityKey => (
@@ -484,8 +472,7 @@ class AppThemeData extends ThemeExtension<AppThemeData> {
         style: withButtonDepth(
           ElevatedButton.styleFrom(
             backgroundColor: primaryButton,
-            foregroundColor:
-                primaryButtonText, // add shadow for the text to improve contrast
+            foregroundColor: primaryButtonText, // add shadow for the text to improve contrast
             disabledBackgroundColor: primaryButtonDisabled,
             disabledForegroundColor: primaryButtonDisabledText,
             shape: rounded,
@@ -709,27 +696,19 @@ extension AppThemeContext on BuildContext {
 /// An outline drawn as an underline that wraps up the corners by
 /// [wrapExtent], with a glow rising from it, over a 1 px [frameColor]
 /// outline of the whole box.
-class BottomGlowInputBorder extends OutlineInputBorder {
-  const BottomGlowInputBorder({
-    super.borderSide = const BorderSide(),
-    super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
-    super.gapPadding = 4.0,
-    required this.glowColor,
-    this.glowExtent = 0.0,
-    this.wrapExtent = 0.0,
-    this.frameColor = Colors.transparent,
-    this.labelInside = false,
-  });
-
-  final Color glowColor;
-  final double glowExtent;
-  final double wrapExtent;
-  final Color frameColor;
+class const BottomGlowInputBorder({
+  super.borderSide = const BorderSide(),
+  super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
+  super.gapPadding = 4.0,
+  required final Color glowColor,
+  final double glowExtent = 0.0,
+  final double wrapExtent = 0.0,
+  final Color frameColor = Colors.transparent,
 
   /// Floats a field's label inside the box, below its top edge, as on an
   /// underlined field, instead of centred on the top edge.
-  final bool labelInside;
-
+  final bool labelInside = false,
+}) extends OutlineInputBorder {
   @override
   bool get isOutline => !labelInside;
 
@@ -894,15 +873,11 @@ class BottomGlowInputBorder extends OutlineInputBorder {
 
 /// A box's whole outline, with [glowColor] glowing inward from every side.
 /// Between states the color, width and glow blend; nothing grows.
-class FramedInputBorder extends OutlineInputBorder {
-  const FramedInputBorder({
-    super.borderSide = const BorderSide(),
-    super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
-    required this.glowColor,
-  });
-
-  final Color glowColor;
-
+class const FramedInputBorder({
+  super.borderSide = const BorderSide(),
+  super.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
+  required final Color glowColor,
+}) extends OutlineInputBorder {
   static const _glowDepth = 18.0;
 
   @override
@@ -998,72 +973,48 @@ class FramedInputBorder extends OutlineInputBorder {
   }
 }
 
-enum AppNavigationButtonVariant { navigation, settingsSection }
+enum AppNavigationButtonVariant() {
+  navigation,
+  settingsSection,
+}
 
-class AppNavigationButton extends StatefulWidget {
-  const AppNavigationButton({
-    super.key,
-    required this.theme,
-    required this.isSelected,
-    required this.isEnabled,
-    required this.isHorizontal,
-    required this.onTap,
-    this.iconData,
-    this.labelText,
-    this.iconBuilder,
-    this.tooltipMessage,
-    this.padding,
-    this.alignment = Alignment.center,
-    this.selectedBackgroundColor,
-    this.minWidth = 40,
-    this.minHeight = 26,
-    this.duration = Duration.zero,
-    this.variant = AppNavigationButtonVariant.navigation,
-    this.iconSize = kIconSize,
-    this.labelVisible = true,
-    this.labelFadeDuration = Duration.zero,
-    this.labelFadeCurve = Curves.easeOut,
-    this.hideIconWithLabel = false,
-    this.hasNotification = false,
-    this.tint,
-    this.trailing,
-  });
-
-  final AppThemeData theme;
-  final bool isSelected;
-  final bool isEnabled;
-  final bool isHorizontal;
-  final VoidCallback? onTap;
-  final IconData? iconData;
-  final String? labelText;
+class const AppNavigationButton({
+  super.key,
+  required final bool isSelected,
+  required final bool isEnabled,
+  required final bool isHorizontal,
+  required final VoidCallback? onTap,
+  final IconData? iconData,
+  final String? labelText,
   final Widget Function(BuildContext context, Color color, double size)?
-  iconBuilder;
-  final String? tooltipMessage;
-  final EdgeInsetsGeometry? padding;
-  final AlignmentGeometry alignment;
-  final Color? selectedBackgroundColor;
-  final double minWidth;
-  final double minHeight;
-  final Duration duration;
-  final AppNavigationButtonVariant variant;
-  final double iconSize;
-  final bool labelVisible;
-  final Duration labelFadeDuration;
-  final Curve labelFadeCurve;
+  iconBuilder,
+  final String? tooltipMessage,
+  final EdgeInsetsGeometry? padding,
+  final AlignmentGeometry alignment = Alignment.center,
+  final Color? selectedBackgroundColor,
+  final double minWidth = 40,
+  final double minHeight = 26,
+  final Duration duration = Duration.zero,
+  final AppNavigationButtonVariant variant =
+      AppNavigationButtonVariant.navigation,
+  final double iconSize = kIconSize,
+  final bool labelVisible = true,
+  final Duration labelFadeDuration = Duration.zero,
+  final Curve labelFadeCurve = Curves.easeOut,
 
   /// Shrinks the icon away as the label grows in, for text-only buttons that
   /// still show an icon while collapsed.
-  final bool hideIconWithLabel;
-  final bool hasNotification;
+  final bool hideIconWithLabel = false,
+  final bool hasNotification = false,
 
   /// The color of the hover and press highlights, at the navigation item
   /// strengths; the theme's accent by default.
-  final Color? tint;
+  final Color? tint,
 
   /// Sits after a horizontal button's label without growing on hover, such
   /// as a menu chevron.
-  final Widget? trailing;
-
+  final Widget? trailing,
+}) extends StatefulWidget {
   @override
   State<AppNavigationButton> createState() => _AppNavigationButtonState();
 }
@@ -1146,8 +1097,8 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   /// Primary text blended toward [selected] by [selectionT], or muted
   /// while disabled.
   Color _foreground(Color selected, double selectionT) => widget.isEnabled
-      ? Color.lerp(widget.theme.textPrimary, selected, selectionT)!
-      : widget.theme.textSecondary.withValues(alpha: 0.5);
+      ? Color.lerp(context.appTheme.textPrimary, selected, selectionT)!
+      : context.appTheme.textSecondary.withValues(alpha: 0.5);
 
   double _labelVisibilityT() {
     if (widget.labelText == null || widget.labelFadeDuration == Duration.zero) {
@@ -1234,15 +1185,16 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   }
 
   Color get _hoverColor =>
-      widget.tint?.withValues(alpha: 0.30) ?? widget.theme.navItemHover;
+      widget.tint?.withValues(alpha: 0.30) ?? context.appTheme.navItemHover;
 
   Color get _pressedColor =>
-      widget.tint?.withValues(alpha: 0.40) ?? widget.theme.navItemSelected;
+      widget.tint?.withValues(alpha: 0.40) ?? context.appTheme.navItemSelected;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     final borderRadius = BorderRadius.circular(
-      ConcentricRadius.maybeOf(context) ?? widget.theme.cornerRadius * 1.25,
+      ConcentricRadius.maybeOf(context) ?? theme.cornerRadius * 1.25,
     );
 
     final button = AnimatedBuilder(
@@ -1282,10 +1234,10 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
                     selectionT,
                   ) ??
                   Colors.transparent;
-        final iconColor = _foreground(widget.theme.accent, selectionT);
+        final iconColor = _foreground(theme.accent, selectionT);
         final labelStyle = TextStyle(
           fontSize: 14,
-          color: _foreground(widget.theme.textPrimary, selectionT),
+          color: _foreground(theme.textPrimary, selectionT),
         );
         final iconScale = widget.isEnabled
             ? 1 + math.max(selectionT, hoverT) * _hoverIconBoost
@@ -1302,7 +1254,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
             borderRadius: borderRadius,
             child: ButtonNotificationPulse(
               enabled: widget.hasNotification && widget.isEnabled,
-              color: widget.theme.secondary,
+              color: theme.secondary,
               borderRadius: borderRadius,
               child: InkWell(
                 onTap: widget.isEnabled ? widget.onTap : null,
@@ -1344,11 +1296,8 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
 
 /// A progress bar as tall as a slider track: an accent fill over a faint
 /// accent track, like the update dialog's download bar.
-class AppLinearProgressBar extends StatelessWidget {
-  const AppLinearProgressBar({super.key, required this.value});
-
-  final double? value;
-
+class const AppLinearProgressBar({super.key, required final double? value})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

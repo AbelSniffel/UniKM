@@ -21,31 +21,24 @@ import 'settings_sections/settings_sections.dart';
 
 /// Every section widget shares this constructor shape, so the definitions
 /// below pass constructor tear-offs.
-typedef _SettingsSectionBuilder =
-    Widget Function({required AppThemeData theme, required String searchQuery});
+typedef _SettingsSectionBuilder = Widget Function({
+  required String searchQuery,
+});
 
-typedef _SectionExtraMatch =
-    bool Function(WidgetRef ref, bool Function(String) matchesSearch);
+typedef _SectionExtraMatch = bool Function(
+  WidgetRef ref,
+  bool Function(String) matchesSearch,
+);
 
-class _SettingsSectionDefinition {
-  const _SettingsSectionDefinition({
-    required this.id,
-    required this.railLabel,
-    required this.headerTitle,
-    required this.icon,
-    required this.searchGroups,
-    required this.builder,
-    this.extraMatch,
-  });
-
-  final String id;
-  final String railLabel;
-  final String headerTitle;
-  final IconData icon;
-  final List<SettingsSearchGroup> searchGroups;
-  final _SettingsSectionBuilder builder;
-  final _SectionExtraMatch? extraMatch;
-
+class const _SettingsSectionDefinition({
+  required final String id,
+  required final String railLabel,
+  required final String headerTitle,
+  required final IconData icon,
+  required final List<SettingsSearchGroup> searchGroups,
+  required final _SettingsSectionBuilder builder,
+  final _SectionExtraMatch? extraMatch,
+}) {
   bool shouldShow(WidgetRef ref, String query) =>
       query.isEmpty ||
       searchGroups.any((group) => matchesSettingsSearchGroup(query, group)) ||
@@ -158,9 +151,7 @@ const double _settingsRailWidth =
     (_settingsRailOuterPadding + NavButtonGroup.padding) * 2;
 
 /// Settings page
-class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key});
-
+class const SettingsPage({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
@@ -253,17 +244,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 /// The section list beside the page: icon-only buttons, named in tooltips.
-class _SettingsSectionRail extends ConsumerWidget {
-  const _SettingsSectionRail({
-    required this.selectedSection,
-    required this.isSearching,
-    required this.onSectionSelected,
-  });
-
-  final String selectedSection;
-  final bool isSearching;
-  final ValueChanged<String> onSectionSelected;
-
+class const _SettingsSectionRail({
+  required final String selectedSection,
+  required final bool isSearching,
+  required final ValueChanged<String> onSectionSelected,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
@@ -295,7 +280,6 @@ class _SettingsSectionRail extends ConsumerWidget {
                   for (final (id, label, icon) in _settingsRailSections)
                     AppNavigationButton(
                       key: ValueKey<String>('settings-rail-$id'),
-                      theme: theme,
                       isSelected: !isSearching && selectedSection == id,
                       isEnabled: !isSearching,
                       isHorizontal: false,
@@ -313,37 +297,24 @@ class _SettingsSectionRail extends ConsumerWidget {
   }
 }
 
-class _SettingsPageBody extends ConsumerWidget {
-  const _SettingsPageBody({
-    required this.sectionIndex,
-    required this.scrollController,
-    required this.searchController,
-    required this.searchQuery,
-    required this.selectedSection,
-    required this.showSectionPicker,
-    required this.onSectionSelected,
-    required this.onSearchChanged,
-    required this.sections,
-  });
-
-  final int sectionIndex;
-  final ScrollController scrollController;
-  final TextEditingController searchController;
-  final String searchQuery;
-  final String selectedSection;
-  final bool showSectionPicker;
+class const _SettingsPageBody({
+  required final int sectionIndex,
+  required final ScrollController scrollController,
+  required final TextEditingController searchController,
+  required final String searchQuery,
+  required final String selectedSection,
+  required final bool showSectionPicker,
 
   /// Null while searching, which shows every section.
-  final ValueChanged<String>? onSectionSelected;
-  final ValueChanged<String> onSearchChanged;
-  final List<_SettingsSectionDefinition> sections;
-
+  required final ValueChanged<String>? onSectionSelected,
+  required final ValueChanged<String> onSearchChanged,
+  required final List<_SettingsSectionDefinition> sections,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
 
     final search = AppSearchField(
-      theme: theme,
       controller: searchController,
       hintText: 'Search settings...',
       onChanged: onSearchChanged,
@@ -393,7 +364,6 @@ class _SettingsPageBody extends ConsumerWidget {
         RepaintBoundary(
           key: ValueKey('settings-section-card-${section.id}'),
           child: SettingsSectionFamily(
-            theme: theme,
             header: GroupBoxFamilyTitle(
               key: ValueKey<String>(
                 'settings-section-header-${section.headerTitle}',
@@ -411,7 +381,7 @@ class _SettingsPageBody extends ConsumerWidget {
                 _ => null,
               },
             ),
-            child: section.builder(theme: theme, searchQuery: searchQuery),
+            child: section.builder(searchQuery: searchQuery),
           ),
         ),
     ];

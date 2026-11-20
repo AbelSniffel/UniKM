@@ -19,10 +19,8 @@ const _joinedSeparatorExtraWidth = 12.0;
 const _platformGutter = 28.0;
 const _platformIconSlotWidth = 26.0;
 
-class _BatchLine {
-  _BatchLine(this.text, this.offset) : parts = parseBatchLine(text);
-  final String text;
-  final int offset;
+class _BatchLine(final String text, final int offset) {
+  this : parts = parseBatchLine(text);
   final BatchLineParts? parts;
 }
 
@@ -143,21 +141,14 @@ class BatchGamesEditingController extends TextEditingController {
 
 /// One native multiline editor with decorative, text-sized title/key pills.
 /// Its visual divider introduces no separate field or pointer/keyboard target.
-class BatchGamesEditor extends StatefulWidget {
-  const BatchGamesEditor({
-    super.key,
-    required this.controller,
-    required this.theme,
-    required this.onChanged,
-    this.platformOverride,
-  });
-  final BatchGamesEditingController controller;
-  final AppThemeData theme;
-  final ValueChanged<String> onChanged;
+class const BatchGamesEditor({
+  super.key,
+  required final BatchGamesEditingController controller,
+  required final ValueChanged<String> onChanged,
 
   /// Null detects each key; a selected platform overrides every row.
-  final GamePlatform? platformOverride;
-
+  final GamePlatform? platformOverride,
+}) extends StatefulWidget {
   @override
   State<BatchGamesEditor> createState() => _BatchGamesEditorState();
 }
@@ -299,11 +290,9 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyLarge!.copyWith(
-      color: widget.theme.textPrimary,
-      fontSize: 14,
-      height: 2.7,
-    );
+    final theme = context.appTheme;
+    final style = Theme.of(context).textTheme.bodyLarge!
+        .copyWith(color: theme.textPrimary, fontSize: 14, height: 2.7);
     final textInset = widget.controller.text.isNotEmpty
         ? _platformGutter + _pillHorizontalPadding + 4
         : _focus.hasFocus
@@ -312,7 +301,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
     final field = _BatchPillSurface(
       key: _surfaceKey,
       controller: widget.controller,
-      theme: widget.theme,
+      theme: theme,
       focusNode: _focus,
       selectionColor:
           DefaultSelectionStyle.of(context).selectionColor ??
@@ -337,7 +326,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
                       ? Icon(
                           Icons.chevron_right,
                           key: ValueKey('batch-active-row-$row'),
-                          color: widget.theme.accent,
+                          color: theme.accent,
                           size: 18,
                         )
                       : _rowPlatformIcon(lines[row], row),
@@ -385,9 +374,8 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                hintText:
-                    'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
-                hintStyle: TextStyle(color: widget.theme.textHint, height: 2.7),
+                hintText: 'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
+                hintStyle: TextStyle(color: theme.textHint, height: 2.7),
               ),
               onChanged: widget.onChanged,
             ),
@@ -404,12 +392,12 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
         decoration: InputDecoration(
           constraints: const BoxConstraints(),
           filled: true,
-          fillColor: widget.theme.inputBackground,
+          fillColor: theme.inputBackground,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 6,
             vertical: 12,
           ),
-          border: widget.theme.resolveFramedInputBorder(),
+          border: theme.resolveFramedInputBorder(),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) => ListenableBuilder(
@@ -468,8 +456,8 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
         platform: platform,
         size: 18,
         color: platform == GamePlatform.other && widget.platformOverride == null
-            ? widget.theme.textHint
-            : widget.theme.accent,
+            ? context.appTheme.textHint
+            : context.appTheme.accent,
       ),
     );
   }
@@ -480,15 +468,11 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
 }
 
 /// The editor determines the height; indicators follow its rendered row centers.
-class _BatchRows extends MultiChildRenderObjectWidget {
-  const _BatchRows({
-    required this.lines,
-    required this.iconRows,
-    required super.children,
-  });
-  final List<_BatchLine> lines;
-  final List<int> iconRows;
-
+class const _BatchRows({
+  required final List<_BatchLine> lines,
+  required final List<int> iconRows,
+  required super.children,
+}) extends MultiChildRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) =>
       _RenderBatchRows(lines, iconRows);
@@ -501,11 +485,8 @@ class _BatchRows extends MultiChildRenderObjectWidget {
   }
 }
 
-class _RenderBatchRows extends MultiChildRenderBox {
-  _RenderBatchRows(this.lines, this.iconRows);
-  List<_BatchLine> lines;
-  List<int> iconRows;
-
+class _RenderBatchRows(var List<_BatchLine> lines, var List<int> iconRows)
+    extends MultiChildRenderBox {
   @override
   void performLayout() {
     final input = firstChild!;
@@ -590,24 +571,16 @@ RenderEditable? _findEditable(RenderObject root) {
   return result;
 }
 
-class _BatchPillSurface extends SingleChildRenderObjectWidget {
-  const _BatchPillSurface({
-    super.key,
-    required this.controller,
-    required this.theme,
-    required this.focusNode,
-    required this.selectionColor,
-    required this.animation,
-    required this.merge,
-    required super.child,
-  });
-  final BatchGamesEditingController controller;
-  final AppThemeData theme;
-  final FocusNode focusNode;
-  final Color selectionColor;
-  final Animation<double> animation;
-  final double Function(int) merge;
-
+class const _BatchPillSurface({
+  super.key,
+  required final BatchGamesEditingController controller,
+  required final AppThemeData theme,
+  required final FocusNode focusNode,
+  required final Color selectionColor,
+  required final Animation<double> animation,
+  required final double Function(int) merge,
+  required super.child,
+}) extends SingleChildRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) =>
       _RenderBatchPills(this);
@@ -619,10 +592,8 @@ class _BatchPillSurface extends SingleChildRenderObjectWidget {
   ) => renderObject.configuration = this;
 }
 
-class _RenderBatchPills extends RenderProxyBox {
-  _RenderBatchPills(this._configuration);
-  _BatchPillSurface _configuration;
-
+class _RenderBatchPills(var _BatchPillSurface _configuration)
+    extends RenderProxyBox {
   set configuration(_BatchPillSurface value) {
     if (attached) _unlisten();
     _configuration = value;

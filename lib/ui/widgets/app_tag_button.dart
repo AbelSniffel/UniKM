@@ -21,35 +21,23 @@ import 'settings_card_inset.dart';
 /// outline, label color fade and ink (surface, hover, focus and press
 /// highlights and the theme's splash), and [Focus] and [Actions] for the
 /// keyboard. Read-only chips ([onTap] null) show as on and take no input.
-class AppTagButton extends StatefulWidget {
-  const AppTagButton({
-    super.key,
-    required this.tag,
-    required this.theme,
-    this.isSelected = false,
-    this.onTap,
-    this.deleteOnTap = false,
-  });
-
-  final Tag tag;
-  final AppThemeData theme;
-  final bool isSelected;
-  final VoidCallback? onTap;
+class const AppTagButton({
+  super.key,
+  required final Tag tag,
+  required final AppThemeData theme,
+  final bool isSelected = false,
+  final VoidCallback? onTap,
 
   /// A custom tag's mark turns into a cross while hovered.
-  final bool deleteOnTap;
-
+  final bool deleteOnTap = false,
+}) extends StatefulWidget {
   @override
   State<AppTagButton> createState() => _AppTagButtonState();
 }
 
 /// A value easing to its latest target as [TweenAnimationBuilder] does; its
 /// controller is made on the first change that takes time.
-class _Ease<T extends Object> {
-  _Ease(this._end, this.curve);
-
-  final Curve curve;
-  T _end;
+class _Ease<T extends Object>(var T _end, final Curve curve) {
   Tween<T>? _tween;
   AnimationController? _controller;
 
@@ -405,9 +393,8 @@ class _AppTagButtonState extends State<AppTagButton>
               animationDuration: _snapTheme
                   ? Duration.zero
                   : kThemeChangeDuration,
-              textStyle: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: foreground),
+              textStyle: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: foreground),
               shape: shape.copyWith(
                 side: _idle
                     ? BorderSide.none
@@ -426,11 +413,8 @@ class _AppTagButtonState extends State<AppTagButton>
 }
 
 /// The painted chip, under the chip's [Material].
-class _TagChipBox extends LeafRenderObjectWidget {
-  const _TagChipBox({required this.state});
-
-  final _AppTagButtonState state;
-
+class const _TagChipBox({required final _AppTagButtonState state})
+    extends LeafRenderObjectWidget {
   @override
   _RenderTagChip createRenderObject(BuildContext context) {
     final box = _RenderTagChip(state);
@@ -487,10 +471,9 @@ typedef _Look = ({
   double ratio,
 });
 
-class _RenderTagChip extends RenderBox implements MouseTrackerAnnotation {
-  _RenderTagChip(this.state);
-
-  final _AppTagButtonState state;
+class _RenderTagChip(final _AppTagButtonState state)
+    extends RenderBox
+    implements MouseTrackerAnnotation {
   final _painter = TextPainter(maxLines: 1, ellipsis: '…');
 
   _Look? _look;

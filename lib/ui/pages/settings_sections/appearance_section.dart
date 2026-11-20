@@ -6,8 +6,10 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
+
 import '../../widgets/animated_popover.dart';
 import '../../widgets/app_dialog.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -32,18 +34,11 @@ import 'settings_control_cards.dart';
 import 'settings_theme_editor.dart';
 
 /// Appearance settings section
-class AppearanceSection extends ConsumerWidget {
-  const AppearanceSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const AppearanceSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerWidget {
   static const SettingTextSpec backgroundPatternSpec = SettingTextSpec(
     label: 'Background pattern',
     description: 'Decorates the navigation panel, other panels and pages',
@@ -153,7 +148,6 @@ class AppearanceSection extends ConsumerWidget {
       entries: [
         buildSearchableSectionEntry(
           visible: showThemeSection,
-          theme: theme,
           group: themeSearchGroup,
           titleIcon: Icons.color_lens,
           searchQuery: searchQuery,
@@ -162,7 +156,6 @@ class AppearanceSection extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppTabBar(
-                theme: theme,
                 tabs: const [AppTab('Default'), AppTab('Custom')],
                 selectedIndex: visibleTab,
                 onChanged: (index) => ref
@@ -183,7 +176,9 @@ class AppearanceSection extends ConsumerWidget {
                             child: Text(
                               'No custom themes yet.\nCreate one from your current colors.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: theme.textSecondary),
+                              style: TextStyle(
+                                color: context.appTheme.textSecondary,
+                              ),
                             ),
                           ),
                         )
@@ -335,23 +330,18 @@ Future<void> _exportTheme(
 }
 
 /// Import/export actions shared by the Appearance and search-result headers.
-class ThemeHeaderActions extends ConsumerWidget {
-  const ThemeHeaderActions({super.key, this.expanded = false});
-
-  final bool expanded;
-
+class const ThemeHeaderActions({super.key, final bool expanded = false})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
     final buttons = <Widget>[
       SettingsHeaderAction(
-        theme: theme,
         icon: Icons.download,
         tooltip: 'Import Theme',
         onTap: () => _importThemes(context, ref),
       ),
       SettingsHeaderAction(
-        theme: theme,
         icon: Icons.upload,
         tooltip: 'Export Theme',
         onTap: theme.id.isEmpty
@@ -371,17 +361,11 @@ class ThemeHeaderActions extends ConsumerWidget {
 // Background pattern selector
 // ---------------------------------------------------------------------------
 
-class _BackgroundPatternSection extends ConsumerStatefulWidget {
-  const _BackgroundPatternSection({
-    required this.searchQuery,
-    this.groupPosition = SectionGroupPosition.only,
-    this.isAlternate = false,
-  });
-
-  final String searchQuery;
-  final SectionGroupPosition groupPosition;
-  final bool isAlternate;
-
+class const _BackgroundPatternSection({
+  required final String searchQuery,
+  final SectionGroupPosition groupPosition = SectionGroupPosition.only,
+  final bool isAlternate = false,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_BackgroundPatternSection> createState() =>
       _BackgroundPatternSectionState();
@@ -418,7 +402,6 @@ class _BackgroundPatternSectionState
 
     return SectionGroupBox(
       title: AppearanceSection.backgroundPatternSearchGroup.title,
-      theme: theme,
       titleIcon: Icons.layers_outlined,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
       searchQuery: widget.searchQuery,
@@ -534,7 +517,6 @@ class _BackgroundPatternSectionState
                     curve: Curves.easeOut,
                     child: PreviewCard(
                       name: style.displayName,
-                      theme: theme,
                       isSelected: saved == style,
                       onTap: () => settingsNotifier.set(
                         SettingsKeys.navPanelOverlayStyle,
@@ -558,7 +540,6 @@ class _BackgroundPatternSectionState
             ],
           ),
           SettingsToggleCard(
-            theme: theme,
             label: seasonalSpec.label,
             // Names the pattern standing in for the chosen one.
             description: seasonal && pattern != saved
@@ -576,12 +557,8 @@ class _BackgroundPatternSectionState
 
 /// The strength button's water drop: filled from the bottom up to 100%,
 /// with a sparkle beside it beyond that.
-class _StrengthDropPainter extends CustomPainter {
-  const _StrengthDropPainter(this.strength, this.color);
-
-  final double strength;
-  final Color color;
-
+class const _StrengthDropPainter(final double strength, final Color color)
+    extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / 24);

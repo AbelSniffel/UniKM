@@ -10,16 +10,11 @@ import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/search_highlight.dart';
 
 /// Responsive settings cards with shared widths across each row.
-class SettingsControlWrap extends StatelessWidget {
-  const SettingsControlWrap({
-    super.key,
-    required this.children,
-    this.minimumCardWidth = kInteractionCardMinWidth,
-  });
-
-  final List<Widget> children;
-  final double minimumCardWidth;
-
+class const SettingsControlWrap({
+  super.key,
+  required final List<Widget> children,
+  final double minimumCardWidth = kInteractionCardMinWidth,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
@@ -48,39 +43,27 @@ class SettingsControlWrap extends StatelessWidget {
   }
 }
 
-class SettingsChoice<T> {
-  const SettingsChoice(this.value, this.label, {this.icon});
-
-  final T value;
-  final String label;
+class const SettingsChoice<T>(
+  final T value,
+  final String label, {
 
   /// What a [SettingsButtonGroupCard] button shows; the label becomes its
   /// tooltip.
-  final Widget? icon;
-}
+  final Widget? icon,
+});
 
 /// A toggle setting as a whole-card button, its state shown by a corner dot
 /// that grows when on.
-class SettingsToggleCard extends StatelessWidget {
-  const SettingsToggleCard({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.description,
-    this.icon,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
+class const SettingsToggleCard({
+  super.key,
+  required final String label,
+  required final bool value,
+  required final ValueChanged<bool>? onChanged,
+  final String? description,
 
   /// Shown in a tinted square before the label: the accent while on.
-  final IconData? icon;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
+  final IconData? icon,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
@@ -108,26 +91,17 @@ class SettingsToggleCard extends StatelessWidget {
 }
 
 /// A whole-card action for status and management settings.
-class SettingsActionCard extends StatelessWidget {
-  const SettingsActionCard({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.actionLabel,
-    required this.onTap,
-    this.description,
-    this.actionIcon,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
-  final String actionLabel;
-  final IconData? actionIcon;
-  final VoidCallback? onTap;
-
+class const SettingsActionCard({
+  super.key,
+  required final String label,
+  required final String actionLabel,
+  required final VoidCallback? onTap,
+  final String? description,
+  final IconData? actionIcon,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final theme = context.appTheme;
     // Flexible in rows sized to their content, so the action takes only the
     // width it needs and leaves the rest to the label.
     final text = Flexible(
@@ -173,33 +147,20 @@ class SettingsActionCard extends StatelessWidget {
   }
 }
 
-class SettingsChoiceCard<T> extends StatefulWidget {
-  const SettingsChoiceCard({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.value,
-    required this.choices,
-    required this.onChanged,
-    this.description,
-    this.icon,
-    this.menuMaxHeight = kDropdownMenuMaxHeight,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
+class const SettingsChoiceCard<T>({
+  super.key,
+  required final String label,
+  required final T value,
+  required final List<SettingsChoice<T>> choices,
+  required final ValueChanged<T>? onChanged,
+  final String? description,
 
   /// Shown in a tinted square before the label.
-  final IconData? icon;
-
-  final T value;
-  final List<SettingsChoice<T>> choices;
-  final ValueChanged<T>? onChanged;
+  final IconData? icon,
 
   /// The menu scrolls past this height, for long lists of choices.
-  final double menuMaxHeight;
-
+  final double menuMaxHeight = kDropdownMenuMaxHeight,
+}) extends StatefulWidget {
   @override
   State<SettingsChoiceCard<T>> createState() => _SettingsChoiceCardState<T>();
 }
@@ -221,7 +182,7 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final selected = widget.choices
         .where((choice) => choice.value == widget.value)
         .firstOrNull;
@@ -276,31 +237,19 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
 /// A card with its choices as a row of buttons, in the navigation panel's
 /// button group like settings headers' actions, the selected one highlighted.
 /// Only the buttons take taps, so the card itself never lights up.
-class SettingsButtonGroupCard<T> extends StatelessWidget {
-  const SettingsButtonGroupCard({
-    super.key,
-    required this.theme,
-    required this.label,
-    required this.value,
-    required this.choices,
-    required this.onChanged,
-    this.description,
-    this.icon,
-  });
-
-  final AppThemeData theme;
-  final String label;
-  final String? description;
-
-  /// Shown in a tinted square before the label.
-  final IconData? icon;
-
-  final T value;
+class const SettingsButtonGroupCard<T>({
+  super.key,
+  required final String label,
+  required final T value,
 
   /// One button each, showing its icon.
-  final List<SettingsChoice<T>> choices;
-  final ValueChanged<T>? onChanged;
+  required final List<SettingsChoice<T>> choices,
+  required final ValueChanged<T>? onChanged,
+  final String? description,
 
+  /// Shown in a tinted square before the label.
+  final IconData? icon,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttons = [for (final choice in choices) _button(choice)];
@@ -346,7 +295,6 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
       child: SizedBox(
         height: 28,
         child: AppNavigationButton(
-          theme: theme,
           isSelected: selected,
           isEnabled: choose != null,
           isHorizontal: true,
@@ -365,42 +313,29 @@ class SettingsButtonGroupCard<T> extends StatelessWidget {
   }
 }
 
-class _SettingsControlCard extends StatefulWidget {
-  const _SettingsControlCard({
-    required this.label,
-    required this.description,
-    required this.active,
-    required this.enabled,
-    required this.trailing,
-    this.icon,
-    this.onTap,
-    this.toggle = false,
-    this.raised = false,
-    this.fitTrailingBesideLabel = false,
-  });
-
-  final String label;
-  final String? description;
-  final bool active;
-  final bool enabled;
-  final Widget trailing;
-  final IconData? icon;
-
-  /// A toggle card, with the corner dot in place of a trailing control.
-  final bool toggle;
-
-  /// Raises the card like an off toggle card; toggle cards always are, the
-  /// other cards rest flat without it.
-  final bool raised;
+class const _SettingsControlCard({
+  required final String label,
+  required final String? description,
+  required final bool active,
+  required final bool enabled,
+  required final Widget trailing,
+  final IconData? icon,
 
   /// Without it, the card takes no taps or hover itself and leaves them to
   /// its controls.
-  final VoidCallback? onTap;
+  final VoidCallback? onTap,
+
+  /// A toggle card, with the corner dot in place of a trailing control.
+  final bool toggle = false,
+
+  /// Raises the card like an off toggle card; toggle cards always are, the
+  /// other cards rest flat without it.
+  final bool raised = false,
 
   /// Shrinks a trailing control that scales down into the room beside the
   /// label's one line, down to a third of the row.
-  final bool fitTrailingBesideLabel;
-
+  final bool fitTrailingBesideLabel = false,
+}) extends StatefulWidget {
   @override
   State<_SettingsControlCard> createState() => _SettingsControlCardState();
 }
@@ -504,9 +439,8 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         onTap: widget.onTap,
         child: Padding(
           // The option tiles' padding: text alone starts further in.
-          padding: EdgeInsets.all(
-            _cardPadding,
-          ).copyWith(left: icon == null ? 14 : null),
+          padding: EdgeInsets.all(_cardPadding)
+              .copyWith(left: icon == null ? 14 : null),
           child: Opacity(
             opacity: widget.enabled ? 1 : 0.42,
             // The icon and control sit on the label's row, and the

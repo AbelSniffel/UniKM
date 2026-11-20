@@ -4,22 +4,15 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 
 /// An anchored panel with independently timed opening and closing transitions.
-class AnimatedPopover extends StatefulWidget {
-  const AnimatedPopover({
-    super.key,
-    required this.theme,
-    required this.child,
-    required this.builder,
-    this.onOpenChanged,
-  });
-
-  final AppThemeData theme;
-  final Widget child;
-  final Widget Function(BuildContext context, VoidCallback toggle) builder;
+class const AnimatedPopover({
+  super.key,
+  required final Widget child,
+  required final Widget Function(BuildContext context, VoidCallback toggle)
+  builder,
 
   /// Called as the panel starts opening (true) or closing (false).
-  final ValueChanged<bool>? onOpenChanged;
-
+  final ValueChanged<bool>? onOpenChanged,
+}) extends StatefulWidget {
   @override
   State<AnimatedPopover> createState() => _AnimatedPopoverState();
 }
@@ -114,11 +107,11 @@ class _AnimatedPopoverState extends State<AnimatedPopover>
                     child: FadeTransition(
                       opacity: _opacity,
                       child: Material(
-                        color: widget.theme.surface,
+                        color: context.appTheme.surface,
                         surfaceTintColor: Colors.transparent,
                         elevation: 3,
                         borderRadius: BorderRadius.circular(
-                          widget.theme.cornerRadius,
+                          context.appTheme.cornerRadius,
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: SizeTransition(
@@ -153,19 +146,12 @@ class _AnimatedPopoverState extends State<AnimatedPopover>
   }
 }
 
-class _PopoverPosition extends SingleChildLayoutDelegate {
-  const _PopoverPosition({
-    required this.anchor,
-    required this.heightFactor,
-    required this.padding,
-    required this.direction,
-  });
-
-  final Rect anchor;
-  final double heightFactor;
-  final EdgeInsets padding;
-  final TextDirection direction;
-
+class const _PopoverPosition({
+  required final Rect anchor,
+  required final double heightFactor,
+  required final EdgeInsets padding,
+  required final TextDirection direction,
+}) extends SingleChildLayoutDelegate {
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       constraints.loosen().deflate(padding);
@@ -196,36 +182,27 @@ class _PopoverPosition extends SingleChildLayoutDelegate {
 
 /// A header icon button that opens a popover with a titled slider, such as
 /// the gradient bar's animation speed.
-class SliderPopoverButton extends StatelessWidget {
-  const SliderPopoverButton({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.slider,
-    this.action,
-    this.onOpenChanged,
-  });
+class const SliderPopoverButton({
+  super.key,
 
   /// Heads the popover and is the button's tooltip.
-  final String title;
+  required final String title,
 
   /// The current value, in the accent right after the title.
-  final String value;
-  final Widget icon;
-  final Widget slider;
+  required final String value,
+  required final Widget icon,
+  required final Widget slider,
 
   /// An extra button at the end of the title row.
-  final Widget? action;
+  final Widget? action,
 
   /// Called as the popover starts opening (true) or closing (false).
-  final ValueChanged<bool>? onOpenChanged;
-
+  final ValueChanged<bool>? onOpenChanged,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
     return AnimatedPopover(
-      theme: theme,
       onOpenChanged: onOpenChanged,
       child: SizedBox(
         width: 300,
@@ -271,9 +248,8 @@ class SliderPopoverButton extends StatelessWidget {
               ),
               // Without side padding, so the track lines up with the title row.
               SliderTheme(
-                data: SliderTheme.of(
-                  context,
-                ).copyWith(padding: const EdgeInsets.symmetric(vertical: 8)),
+                data: SliderTheme.of(context)
+                    .copyWith(padding: const EdgeInsets.symmetric(vertical: 8)),
                 child: slider,
               ),
             ],

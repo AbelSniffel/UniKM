@@ -4,17 +4,11 @@ import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
-class LegacyDbConversionResult {
-  const LegacyDbConversionResult({
-    required this.converted,
-    this.reason,
-    this.actions = const <String>[],
-  });
-
-  final bool converted;
-  final String? reason;
-  final List<String> actions;
-}
+class const LegacyDbConversionResult({
+  required final bool converted,
+  final String? reason,
+  final List<String> actions = const <String>[],
+});
 
 // One source for required columns, SQL defaults, and NULL repair. Keep the
 // insertion order so conversion reports remain stable for existing databases.
@@ -33,10 +27,7 @@ const _layoutColumns = <String, Map<String, (String, String?)>>{
     'date_added': ('INTEGER', '0'),
     'updated_at': ('INTEGER', '0'),
   },
-  'tags': {
-    'color': ('TEXT', "'#0078d4'"),
-    'is_steam_tag': ('INTEGER', '0'),
-  },
+  'tags': {'color': ('TEXT', "'#0078d4'"), 'is_steam_tag': ('INTEGER', '0')},
 };
 
 final _nullDefaults = {
@@ -189,17 +180,18 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         : <String>{};
 
     final missingCoreLayout =
-      !_tableExists(db, 'tags') ||
-      !_tableExists(db, 'game_tags') ||
-      !_tableExists(db, 'backups') ||
-      !gameColumns.containsAll(_layoutColumns['games']!.keys) ||
-      !tagColumns.containsAll(_layoutColumns['tags']!.keys);
+        !_tableExists(db, 'tags') ||
+        !_tableExists(db, 'game_tags') ||
+        !_tableExists(db, 'backups') ||
+        !gameColumns.containsAll(_layoutColumns['games']!.keys) ||
+        !tagColumns.containsAll(_layoutColumns['tags']!.keys);
 
     final hasPendingLegacyData =
-      [..._gameCopiesBeforeDates, ..._gameCopiesAfterDates].any(
-        (copy) => _hasPendingCopy(db, copy, gameColumns),
-      ) ||
-      _tagCopies.any((copy) => _hasPendingCopy(db, copy, tagColumns));
+        [
+          ..._gameCopiesBeforeDates,
+          ..._gameCopiesAfterDates,
+        ].any((copy) => _hasPendingCopy(db, copy, gameColumns)) ||
+        _tagCopies.any((copy) => _hasPendingCopy(db, copy, tagColumns));
 
     final needsNullSanitization = _nullDefaults.entries.any(
       (table) => table.value.keys.any(
@@ -213,10 +205,10 @@ Future<LegacyDbConversionResult> convertLegacyDbToCurrentLayoutIfNeeded(
         _hasTextTimestampValues(db, 'games', 'deadline_date');
 
     final needsConversion =
-      missingCoreLayout ||
-      hasPendingLegacyData ||
-      needsNullSanitization ||
-      needsTimestampNormalization;
+        missingCoreLayout ||
+        hasPendingLegacyData ||
+        needsNullSanitization ||
+        needsTimestampNormalization;
 
     if (!needsConversion) {
       return const LegacyDbConversionResult(
@@ -351,9 +343,7 @@ bool _hasRowWhere(
   String condition,
 ) {
   if (!_getTableColumns(db, table).contains(column)) return false;
-  return db
-      .select('SELECT 1 FROM $table WHERE $condition LIMIT 1')
-      .isNotEmpty;
+  return db.select('SELECT 1 FROM $table WHERE $condition LIMIT 1').isNotEmpty;
 }
 
 bool _hasTextTimestampValues(
@@ -377,9 +367,7 @@ bool _setDefaultForNulls(
   String defaultSql,
 ) {
   if (!_hasNullValues(db, table, column)) return false;
-  db.execute(
-    'UPDATE $table SET $column = $defaultSql WHERE $column IS NULL',
-  );
+  db.execute('UPDATE $table SET $column = $defaultSql WHERE $column IS NULL');
   return true;
 }
 
@@ -392,11 +380,9 @@ bool _hasMissingOrZeroValues(
 bool _normalizeTextDateColumnToEpoch(
   sqlite3.Database db,
   String table,
-  String column,
-  {
+  String column, {
   required String fallbackSql,
-}
-) {
+}) {
   final beforeCount = _countTextTimestampValues(db, table, column);
   if (beforeCount == 0) return false;
 

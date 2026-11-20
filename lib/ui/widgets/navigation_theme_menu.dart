@@ -18,11 +18,10 @@ import 'theme_preview_card.dart';
 import 'theme_picker_actions.dart';
 
 /// A small, keyboard-accessible theme picker anchored to the navigation bar.
-class NavigationThemeMenuButton extends ConsumerStatefulWidget {
-  const NavigationThemeMenuButton({super.key, required this.position});
-
-  final NavBarPosition position;
-
+class const NavigationThemeMenuButton({
+  super.key,
+  required final NavBarPosition position,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<NavigationThemeMenuButton> createState() =>
       _NavigationThemeMenuButtonState();
@@ -84,7 +83,6 @@ class _NavigationThemeMenuButtonState
       builder: (context, controller, _) => Focus(
         focusNode: _menuFocus,
         child: GradientBarIconButton(
-          theme: theme,
           tooltip: 'Change theme',
           icon: current.icon,
           grown: controller.isOpen,
@@ -101,24 +99,15 @@ class _NavigationThemeMenuButtonState
 
 /// An icon button on the navigation gradient bar. Its icon grows while
 /// hovered or [grown], easing in and out like the navigation buttons'.
-class GradientBarIconButton extends StatefulWidget {
-  const GradientBarIconButton({
-    super.key,
-    required this.theme,
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.grown = false,
-  });
-
-  final AppThemeData theme;
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
+class const GradientBarIconButton({
+  super.key,
+  required final String tooltip,
+  required final IconData icon,
+  required final VoidCallback onPressed,
 
   /// Keeps the icon grown, such as while the button's menu is open.
-  final bool grown;
-
+  final bool grown = false,
+}) extends StatefulWidget {
   @override
   State<GradientBarIconButton> createState() => _GradientBarIconButtonState();
 }
@@ -128,7 +117,7 @@ class _GradientBarIconButtonState extends State<GradientBarIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -160,19 +149,12 @@ class _GradientBarIconButtonState extends State<GradientBarIconButton> {
   }
 }
 
-class _ThemePicker extends ConsumerStatefulWidget {
-  const _ThemePicker({
-    required this.onSelected,
-    required this.onCreate,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final ValueChanged<AppThemeData> onSelected;
-  final VoidCallback onCreate;
-  final ValueChanged<AppThemeData> onEdit;
-  final ValueChanged<AppThemeData> onDelete;
-
+class const _ThemePicker({
+  required final ValueChanged<AppThemeData> onSelected,
+  required final VoidCallback onCreate,
+  required final ValueChanged<AppThemeData> onEdit,
+  required final ValueChanged<AppThemeData> onDelete,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ThemePicker> createState() => _ThemePickerState();
 }
@@ -209,9 +191,8 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
     final rows = (themes.length / columns).ceil();
     final contentHeight = rows * tileHeight + math.max(0, rows - 1) * 6 + 6;
     final gridHeight = themes.isEmpty ? 104.0 : math.min(224.0, contentHeight);
-    final tabLabelStyle = Theme.of(
-      context,
-    ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.bold);
+    final tabLabelStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(fontWeight: FontWeight.bold);
     final tabHeight = ['Default', 'Custom']
         .map((label) {
           final painter = TextPainter(
@@ -284,7 +265,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             AppTabBar(
-                              theme: theme,
                               tabs: const [AppTab('Default'), AppTab('Custom')],
                               selectedIndex: selectedTab,
                               onChanged: ref
@@ -377,9 +357,7 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
 
 /// Clips only below the bottom edge, so the content's shadows still show at
 /// the sides and top while the footer covers what lies beneath.
-class _BottomEdgeClipper extends CustomClipper<Rect> {
-  const _BottomEdgeClipper();
-
+class const _BottomEdgeClipper() extends CustomClipper<Rect> {
   @override
   Rect getClip(Size size) =>
       Rect.fromLTRB(-size.width, -size.height, size.width * 2, size.height);

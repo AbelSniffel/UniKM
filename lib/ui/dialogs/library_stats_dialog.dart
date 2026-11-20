@@ -17,11 +17,8 @@ Future<void> showLibraryStatsDialog(BuildContext context, List<Game> games) =>
       builder: (_) => LibraryStatsDialog(games: games),
     );
 
-class LibraryStatsDialog extends ConsumerWidget {
-  const LibraryStatsDialog({super.key, required this.games});
-
-  final List<Game> games;
-
+class const LibraryStatsDialog({super.key, required final List<Game> games})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
@@ -107,12 +104,8 @@ class LibraryStatsDialog extends ConsumerWidget {
 }
 
 /// A large number over its caption.
-class _StatTile extends StatelessWidget {
-  const _StatTile(this.label, this.value);
-
-  final String label;
-  final int value;
-
+class const _StatTile(final String label, final int value)
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -148,12 +141,8 @@ class _StatTile extends StatelessWidget {
 }
 
 /// A titled [SegmentedBar] over a legend with every count.
-class _StatBar extends StatelessWidget {
-  const _StatBar(this.title, this.segments);
-
-  final String title;
-  final List<BarSegment> segments;
-
+class const _StatBar(final String title, final List<BarSegment> segments)
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,

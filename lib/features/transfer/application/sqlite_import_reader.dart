@@ -6,12 +6,10 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../../../core/services/legacy_db_converter.dart';
 
-class SqliteImportData {
-  const SqliteImportData({required this.tables, required this.conversion});
-
-  final Map<String, List<Map<String, dynamic>>> tables;
-  final LegacyDbConversionResult conversion;
-}
+class const SqliteImportData({
+  required final Map<String, List<Map<String, dynamic>>> tables,
+  required final LegacyDbConversionResult conversion,
+});
 
 /// Read and normalize a private copy off the UI isolate. The worker can be
 /// stopped without touching the source or the user's active database.

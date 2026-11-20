@@ -9,7 +9,10 @@ import '../../core/theme/app_theme.dart';
 
 /// The card's scale: [compact] for list rows and choices, [large] for the
 /// status card heading a dialog or a notification.
-enum TintedCardSize { compact, large }
+enum TintedCardSize() {
+  compact,
+  large,
+}
 
 /// A card tinted with [color] (the accent by default): [icon] in its own
 /// tinted square (a spinner while [busy]), or [leading] in its place (or
@@ -20,34 +23,51 @@ enum TintedCardSize { compact, large }
 ///
 /// The [highlighted] card is tinted more strongly and outlined in its colour.
 /// A card with [onTap] has an ink splash.
-class TintedCard extends StatelessWidget {
-  const TintedCard({
-    super.key,
-    required this.title,
-    this.titleColor,
-    this.icon,
-    this.leading,
-    this.busy = false,
-    this.subtitle,
-    this.details,
-    this.figure,
-    this.figureCaption,
-    this.trailing,
-    this.children = const [],
-    this.color,
-    this.size = TintedCardSize.compact,
-    this.highlighted = false,
-    this.fill,
-    this.side,
-    this.onTap,
-    this.onHover,
-    this.onHighlightChanged,
-    this.backdrop,
-    this.shadows,
-    this.background,
-    this.liveRegion = false,
-  });
+class const TintedCard({
+  super.key,
+  required final String title,
 
+  /// Overrides the title's colour, such as a chosen choice tile's tint.
+  final Color? titleColor,
+  final IconData? icon,
+
+  /// Replaces the icon square, such as a cover or a [tile] around a preview.
+  final Widget? leading,
+  final bool busy = false,
+  final String? subtitle,
+
+  /// Replaces [subtitle], for rich or styled text.
+  final Widget? details,
+
+  /// A number as large as the stats tiles' numbers, in the card's colour.
+  final String? figure,
+  final String? figureCaption,
+  final Widget? trailing,
+  final List<Widget> children = const [],
+  final Color? color,
+  final TintedCardSize size = TintedCardSize.compact,
+  final bool highlighted = false,
+
+  /// Overrides the tint, such as a choice tile easing between its tints.
+  final Color? fill,
+
+  /// Overrides the outline.
+  final BorderSide? side,
+  final VoidCallback? onTap,
+  final ValueChanged<bool>? onHover,
+  final ValueChanged<bool>? onHighlightChanged,
+
+  /// An opaque colour under the tint, for a card floating over other content.
+  final Color? backdrop,
+  final List<BoxShadow>? shadows,
+
+  /// Fills the card behind its content, over the tint, such as a
+  /// notification's countdown.
+  final Widget? background,
+
+  /// Announces the title when it changes.
+  final bool liveRegion = false,
+}) extends StatelessWidget {
   /// The card's tint.
   static const double fillAlpha = 0.125;
 
@@ -59,49 +79,6 @@ class TintedCard extends StatelessWidget {
 
   /// The icon square's tint, over the card's.
   static const double tileAlpha = 0.25;
-
-  final String title;
-
-  /// Overrides the title's colour, such as a chosen choice tile's tint.
-  final Color? titleColor;
-  final IconData? icon;
-
-  /// Replaces the icon square, such as a cover or a [tile] around a preview.
-  final Widget? leading;
-  final bool busy;
-  final String? subtitle;
-
-  /// Replaces [subtitle], for rich or styled text.
-  final Widget? details;
-
-  /// A number as large as the stats tiles' numbers, in the card's colour.
-  final String? figure;
-  final String? figureCaption;
-  final Widget? trailing;
-  final List<Widget> children;
-  final Color? color;
-  final TintedCardSize size;
-  final bool highlighted;
-
-  /// Overrides the tint, such as a choice tile easing between its tints.
-  final Color? fill;
-
-  /// Overrides the outline.
-  final BorderSide? side;
-  final VoidCallback? onTap;
-  final ValueChanged<bool>? onHover;
-  final ValueChanged<bool>? onHighlightChanged;
-
-  /// An opaque colour under the tint, for a card floating over other content.
-  final Color? backdrop;
-  final List<BoxShadow>? shadows;
-
-  /// Fills the card behind its content, over the tint, such as a
-  /// notification's countdown.
-  final Widget? background;
-
-  /// Announces the title when it changes.
-  final bool liveRegion;
 
   /// Secondary detail text, such as a subtitle's own line; larger on a
   /// [TintedCardSize.large] card.

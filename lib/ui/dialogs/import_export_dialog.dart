@@ -5,10 +5,13 @@ import '../widgets/file_drop_field.dart';
 
 import '../../features/transfer/application/library_import.dart';
 import '../../features/transfer/application/library_export.dart';
+
 import 'dart:convert';
 import 'dart:async';
+
 import '../../features/transfer/application/sqlite_import_reader.dart';
 import '../../features/transfer/application/import_image_checkpoint.dart';
+
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -38,7 +41,14 @@ import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/tinted_tiles.dart';
 
-enum _ImportFileKind { sqlite, encrypted, json, csv, txt, unsupported }
+enum _ImportFileKind() {
+  sqlite,
+  encrypted,
+  json,
+  csv,
+  txt,
+  unsupported,
+}
 
 typedef _DialogOption = ({
   String value,
@@ -112,7 +122,6 @@ List<Widget> _optionTiles(
 ) => [
   for (final option in options)
     TintedOptionTile(
-      theme: theme,
       icon: option.icon,
       title: option.title,
       subtitle: option.subtitle,
@@ -135,9 +144,7 @@ Future<void> showImportDialog(BuildContext context) => showAppDialog<void>(
 );
 
 /// Export dialog
-class ExportDialog extends ConsumerStatefulWidget {
-  const ExportDialog({super.key});
-
+class const ExportDialog({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<ExportDialog> createState() => _ExportDialogState();
 }
@@ -246,7 +253,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
     final hasEncryptedSession = ref.watch(encryptedDbSessionProvider) != null;
     final showsAdditionalInfo = _exportFormat != 'db' && _exportFormat != 'enc';
 
@@ -261,7 +267,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
           children: [
             TintedHeading(title: 'Format'),
             ..._optionTiles(
-              theme,
+              ref.watch(themeProvider),
               [
                 _exportFormatOptions.first,
                 if (hasEncryptedSession) _encryptedExportFormatOption,
@@ -283,20 +289,17 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
                 runSpacing: 8,
                 children: [
                   AppActionButton(
-                    theme: theme,
                     label: 'Used Keys',
                     selected: _includeUsed,
                     onTap: () => setState(() => _includeUsed = !_includeUsed),
                   ),
                   if (_exportFormat != 'txt') ...[
                     AppActionButton(
-                      theme: theme,
                       label: 'Tags',
                       selected: _includeTags,
                       onTap: () => setState(() => _includeTags = !_includeTags),
                     ),
                     AppActionButton(
-                      theme: theme,
                       label: 'Notes',
                       selected: _includeNotes,
                       onTap: () =>
@@ -322,9 +325,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 }
 
 /// Import dialog
-class ImportDialog extends ConsumerStatefulWidget {
-  const ImportDialog({super.key});
-
+class const ImportDialog({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<ImportDialog> createState() => _ImportDialogState();
 }
@@ -414,8 +415,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       theme: theme,
       title: 'Replace all data?',
       titleIcon: Icons.warning_amber_rounded,
-      message:
-          'This will delete all existing games, tags, and backups before importing.',
+      message: 'This will delete all existing games, tags, and backups before importing.',
       confirmLabel: 'Replace',
       destructive: true,
     );
@@ -708,7 +708,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       _checkImport();
       final password = await DatabaseUnlockDialog.show(
         context,
-        ref.read(themeProvider),
         title: 'Unlock $appName Backup',
         message:
             'This $appName backup is encrypted. Enter the password to import it.',
@@ -1001,9 +1000,7 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
             ),
             FileDropField(
               key: const ValueKey('import-source-file-target'),
-              theme: theme,
-              description:
-                  'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
+              description: 'Supports SQLite, .enc, .json, .csv, .txt and compatible .bak backups',
               selectedName: _selectedFile == null
                   ? null
                   : p.basename(_selectedFile!),
@@ -1027,7 +1024,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
               (value) => setState(() => _importMode = value),
             ),
             SettingsToggleCard(
-              theme: theme,
               icon: Icons.content_copy_outlined,
               label: 'Allow duplicate keys',
               value: _allowDuplicates,

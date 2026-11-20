@@ -39,27 +39,16 @@ Future<void> _bumpSyncDbRevision(Ref ref, AppDatabase db) async {
 }
 
 /// State for the games list with filtering and sorting
-class GamesState {
-  const GamesState({
-    this.games = const [],
-    this.isLoading = false,
-    this.error,
-    this.filter = const LibraryFilter(),
-    this.sortMode = GameSortMode.deadlineFirst,
-    this.selectedGameIds = const {},
-    this.filteredGames = const [],
-    this.queryIndex,
-  });
-
-  final List<Game> games;
-  final bool isLoading;
-  final String? error;
-  final LibraryFilter filter;
-  final GameSortMode sortMode;
-  final Set<int> selectedGameIds;
-  final List<Game> filteredGames;
-  final LibraryQueryIndex? queryIndex;
-
+class const GamesState({
+  final List<Game> games = const [],
+  final bool isLoading = false,
+  final String? error,
+  final LibraryFilter filter = const LibraryFilter(),
+  final GameSortMode sortMode = GameSortMode.deadlineFirst,
+  final Set<int> selectedGameIds = const {},
+  final List<Game> filteredGames = const [],
+  final LibraryQueryIndex? queryIndex,
+}) {
   GamesState copyWith({
     List<Game>? games,
     bool? isLoading,
@@ -633,9 +622,7 @@ final activeFiltersProvider = Provider<LibraryFilter>(
 /// Selected games in selection order. Filters never hide a selected game, so
 /// the list always matches the selection count.
 final selectedGamesProvider = Provider<List<Game>>((ref) {
-  final selectedIds = ref.watch(
-    gamesProvider.select((s) => s.selectedGameIds),
-  );
+  final selectedIds = ref.watch(gamesProvider.select((s) => s.selectedGameIds));
   if (selectedIds.isEmpty) return const [];
   // Shared and rebuilt only when the games change, not on each selection
   // change while dragging a selection across the library.

@@ -17,13 +17,10 @@ Future<void> _toggleMaximized() async => await windowManager.isMaximized()
     : windowManager.maximize();
 
 /// The program title bar, shared by the main window and full-page tools.
-class AppTitleBar extends ConsumerWidget {
-  const AppTitleBar({super.key, required this.theme});
-
-  final AppThemeData theme;
-
+class const AppTitleBar({super.key}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     // the dragging/ double‑tap region intentionally excludes the window buttons
     // so that their taps are delivered immediately rather than being delayed by
     // the ancestor gesture recognizer. an Expanded makes it stretch to take up
@@ -66,7 +63,7 @@ class AppTitleBar extends ConsumerWidget {
 
                   // Menu button with Import/Export options
                   _MenuButton(),
-                  _SyncButton(theme: theme),
+                  const _SyncButton(),
 
                   const Spacer(),
                 ],
@@ -99,9 +96,7 @@ class AppTitleBar extends ConsumerWidget {
 }
 
 /// Menu button with Import/Export options
-class _MenuButton extends StatefulWidget {
-  const _MenuButton();
-
+class const _MenuButton() extends StatefulWidget {
   @override
   State<_MenuButton> createState() => _MenuButtonState();
 }
@@ -126,7 +121,7 @@ class _MenuButtonState extends State<_MenuButton> {
           (
             Icons.swap_horiz,
             'Change Database',
-            () => showChangeDatabaseDialog(context, theme),
+            () => showChangeDatabaseDialog(context),
           ),
         ])
           appMenuItem(
@@ -145,15 +140,11 @@ class _MenuButtonState extends State<_MenuButton> {
   }
 }
 
-class _SyncButton extends ConsumerWidget {
-  const _SyncButton({required this.theme});
-
-  final AppThemeData theme;
-
+class const _SyncButton() extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final (:icon, :color) = deviceSyncIcon(
-      theme,
+      context.appTheme,
       ref.watch(deviceSyncProvider).asData?.value,
     );
 
@@ -171,25 +162,16 @@ class _SyncButton extends ConsumerWidget {
 
 /// Shared pointer and hover handling for the title-bar actions and the
 /// window buttons.
-class _TitleBarActionButton extends StatefulWidget {
-  const _TitleBarActionButton({
-    required this.icon,
-    required this.onPressed,
-    this.width = 36,
-    this.color,
-    this.hoverColor,
-    this.hoverIconColor,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-  final double width;
-  final Color? color;
+class const _TitleBarActionButton({
+  required final IconData icon,
+  required final VoidCallback onPressed,
+  final double width = 36,
+  final Color? color,
 
   /// Tints the hover background and, unless [hoverIconColor] is set, the icon.
-  final Color? hoverColor;
-  final Color? hoverIconColor;
-
+  final Color? hoverColor,
+  final Color? hoverIconColor,
+}) extends StatefulWidget {
   @override
   State<_TitleBarActionButton> createState() => _TitleBarActionButtonState();
 }

@@ -9,22 +9,17 @@ import 'package:path/path.dart' as p;
 
 import 'encryption_manager.dart';
 
-enum EncryptedImportKind {
+enum EncryptedImportKind() {
   uniKmDatabase,
   steamKm1Json,
   steamKm2Database,
   unknown,
 }
 
-class PreparedEncryptedDatabaseImport {
-  const PreparedEncryptedDatabaseImport({
-    required this.databasePath,
-    required this.cleanupPaths,
-  });
-
-  final String databasePath;
-  final List<String> cleanupPaths;
-
+class const PreparedEncryptedDatabaseImport({
+  required final String databasePath,
+  required final List<String> cleanupPaths,
+}) {
   Future<void> dispose() async {
     for (final path in cleanupPaths.reversed) {
       try {
@@ -88,7 +83,9 @@ Future<String> decryptSteamKm1JsonExport(File file, String password) async {
   try {
     raw = Uint8List.fromList(base64.decode(encoded));
   } catch (_) {
-    throw const FormatException('SteamKM1 encrypted export is not valid base64');
+    throw const FormatException(
+      'SteamKM1 encrypted export is not valid base64',
+    );
   }
 
   if (raw.length <= _steamKm1SaltLength + _steamKm1IvLength) {
@@ -96,7 +93,10 @@ Future<String> decryptSteamKm1JsonExport(File file, String password) async {
   }
 
   final salt = raw.sublist(0, _steamKm1SaltLength);
-  final iv = raw.sublist(_steamKm1SaltLength, _steamKm1SaltLength + _steamKm1IvLength);
+  final iv = raw.sublist(
+    _steamKm1SaltLength,
+    _steamKm1SaltLength + _steamKm1IvLength,
+  );
   final ciphertext = raw.sublist(_steamKm1SaltLength + _steamKm1IvLength);
   if (ciphertext.isEmpty || ciphertext.length % _aesBlockSize != 0) {
     throw const FormatException('SteamKM1 encrypted export is malformed');
@@ -122,7 +122,9 @@ Future<String> decryptSteamKm1JsonExport(File file, String password) async {
   try {
     return utf8.decode(unpadded);
   } catch (_) {
-    throw InvalidPasswordException('Incorrect password or corrupted SteamKM1 backup');
+    throw InvalidPasswordException(
+      'Incorrect password or corrupted SteamKM1 backup',
+    );
   }
 }
 
@@ -190,7 +192,9 @@ Future<PreparedEncryptedDatabaseImport> decryptSteamKm2DatabaseToTemp(
     try {
       await tempDir?.delete(recursive: true);
     } catch (_) {}
-    throw InvalidPasswordException('Incorrect password or corrupted SteamKM2 backup');
+    throw InvalidPasswordException(
+      'Incorrect password or corrupted SteamKM2 backup',
+    );
   }
 }
 
@@ -207,7 +211,11 @@ Future<PreparedEncryptedDatabaseImport> decryptUniKmDatabaseToTemp(
     final tempDbPath = await manager.decryptToTemp(password);
     return PreparedEncryptedDatabaseImport(
       databasePath: tempDbPath,
-      cleanupPaths: <String>[File(tempDbPath).parent.path, tempEncryptedPath, tempDir.path],
+      cleanupPaths: <String>[
+        File(tempDbPath).parent.path,
+        tempEncryptedPath,
+        tempDir.path,
+      ],
     );
   } catch (_) {
     try {
@@ -219,7 +227,8 @@ Future<PreparedEncryptedDatabaseImport> decryptUniKmDatabaseToTemp(
 
 bool _looksLikeSteamKm2EncryptedDatabase(Uint8List bytes) {
   if (bytes.length < 4) return false;
-  return ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == _steamKm2Magic;
+  return ascii.decode(bytes.sublist(0, 4), allowInvalid: true) ==
+      _steamKm2Magic;
 }
 
 bool _looksLikeUniKmEncryptedDatabase(Uint8List bytes) =>
@@ -258,9 +267,7 @@ Future<crypto.SecretKey> _deriveSecretKey({
 }
 
 /// Leaves padding to [_removePkcs7Padding].
-class _NoPadding extends crypto.PaddingAlgorithm {
-  const _NoPadding();
-
+class const _NoPadding() extends crypto.PaddingAlgorithm {
   @override
   int getBlockPadding(int blockLength, Uint8List bytes) => 0;
 
@@ -275,12 +282,16 @@ Uint8List _removePkcs7Padding(Uint8List data) {
 
   final padLength = data.last;
   if (padLength <= 0 || padLength > _aesBlockSize || padLength > data.length) {
-    throw InvalidPasswordException('Incorrect password or corrupted SteamKM1 backup');
+    throw InvalidPasswordException(
+      'Incorrect password or corrupted SteamKM1 backup',
+    );
   }
 
   for (var i = data.length - padLength; i < data.length; i++) {
     if (data[i] != padLength) {
-      throw InvalidPasswordException('Incorrect password or corrupted SteamKM1 backup');
+      throw InvalidPasswordException(
+        'Incorrect password or corrupted SteamKM1 backup',
+      );
     }
   }
 

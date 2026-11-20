@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/settings/settings_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
@@ -19,12 +20,14 @@ void showDialogGallery(BuildContext context) => ProviderScope.containerOf(
   listen: false,
 ).read(dialogGalleryVisibleProvider.notifier).set(true);
 
+/// [child] under a [DialogGalleryHost] in builds with dev tools, or alone: a
+/// constant choice, so release builds drop the gallery's code.
+Widget withDialogGallery(Widget child) =>
+    kDevTools ? DialogGalleryHost(child: child) : child;
+
 /// Keeps normal pages mounted while opening a temporary page below the title bar.
-class DialogGalleryHost extends ConsumerWidget {
-  const DialogGalleryHost({super.key, required this.child});
-
-  final Widget child;
-
+class const DialogGalleryHost({super.key, required final Widget child})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final visible = ref.watch(dialogGalleryVisibleProvider);
@@ -60,9 +63,7 @@ class DialogGalleryHost extends ConsumerWidget {
 
 /// Real dialogs on a canvas, with isolated data. Every preview stays built,
 /// so panning and zooming only move the canvas.
-class DialogGallery extends ConsumerStatefulWidget {
-  const DialogGallery({super.key});
-
+class const DialogGallery({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<DialogGallery> createState() => _DialogGalleryState();
 }
@@ -402,14 +403,11 @@ class _DialogGalleryState extends ConsumerState<DialogGallery> {
   );
 }
 
-class _DialogGalleryTile extends StatefulWidget {
-  const _DialogGalleryTile({
-    super.key,
-    required this.entry,
-    required this.theme,
-  });
-  final DialogGalleryEntry entry;
-  final AppThemeData theme;
+class const _DialogGalleryTile({
+  super.key,
+  required final DialogGalleryEntry entry,
+  required final AppThemeData theme,
+}) extends StatefulWidget {
   @override
   State<_DialogGalleryTile> createState() => _DialogGalleryTileState();
 }
@@ -441,16 +439,14 @@ class _DialogGalleryTileState extends State<_DialogGalleryTile> {
     final generation = _generation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || generation != _generation) return;
-      Future<Object?>.sync(() => widget.entry.open(previewContext)).catchError((
-        Object error,
-        StackTrace stack,
-      ) {
-        if (mounted && generation == _generation) {
-          _error = error.toString();
-          _contentRevision.value++;
-        }
-        return null;
-      });
+      Future<Object?>.sync(() => widget.entry.open(previewContext))
+          .catchError((Object error, StackTrace stack) {
+            if (mounted && generation == _generation) {
+              _error = error.toString();
+              _contentRevision.value++;
+            }
+            return null;
+          });
     });
   }
 
@@ -488,7 +484,6 @@ class _DialogGalleryTileState extends State<_DialogGalleryTile> {
     final theme = widget.theme;
     final viewport = widget.entry.viewport;
     return SectionGroupBox(
-      theme: theme,
       title: widget.entry.label,
       headerBottomPadding: 8,
       child: ClipRRect(

@@ -2,25 +2,22 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 /// A change remains dirty until an attempt covering that generation completes.
 /// New edits during a transfer therefore cannot be cleared by its completion.
-class PeerSyncWork {
-  const PeerSyncWork({required this.peerId, required this.generation});
+class const PeerSyncWork({
+  required final String peerId,
+  required final int generation,
+});
 
-  final String peerId;
-  final int generation;
+enum PeerSyncOutcome() {
+  settled,
+  deferred,
+  failed,
 }
 
-enum PeerSyncOutcome { settled, deferred, failed }
-
-class _PendingPeerSync {
-  _PendingPeerSync({
-    required this.generation,
-    required this.readyAt,
-    required this.order,
-  });
-
-  int generation;
-  DateTime readyAt;
-  int order;
+class _PendingPeerSync({
+  required var int generation,
+  required var DateTime readyAt,
+  required var int order,
+}) {
   int failures = 0;
 }
 
@@ -28,18 +25,12 @@ class _PendingPeerSync {
 ///
 /// Clock and timer ownership belongs to the caller, so this state machine is
 /// deterministic and can be tested without real sockets or wall-clock delays.
-class PeerSyncQueue {
-  PeerSyncQueue({
-    this.coalesceWindow = const Duration(milliseconds: 100),
-    this.retryDelay = const Duration(seconds: 1),
-    this.maximumRetryDelay = const Duration(seconds: 30),
-    this.deferDelay = const Duration(seconds: 1),
-  });
-
-  final Duration coalesceWindow;
-  final Duration retryDelay;
-  final Duration maximumRetryDelay;
-  final Duration deferDelay;
+class PeerSyncQueue({
+  final Duration coalesceWindow = const Duration(milliseconds: 100),
+  final Duration retryDelay = const Duration(seconds: 1),
+  final Duration maximumRetryDelay = const Duration(seconds: 30),
+  final Duration deferDelay = const Duration(seconds: 1),
+}) {
   final Set<String> _peers = {};
   final Map<String, _PendingPeerSync> _pending = {};
   int _generation = 0;

@@ -17,37 +17,26 @@ import '../../core/theme/app_theme.dart';
 
 /// Animated gradient bar with multiple animation styles.
 /// Uses [Ticker] for frame-synced updates and [RepaintBoundary] for isolation.
-class AnimatedGradientBar extends ConsumerStatefulWidget {
-  const AnimatedGradientBar({
-    super.key,
-    this.theme,
-    this.animationStyle = GradientAnimation.scroll,
-    this.height = 48.0,
-    this.width,
-    this.colors,
-    this.isVertical = false,
-    this.isPlaying = true,
-    this.autoPauseWhenNotVisible = false,
-    this.optimizeForPreview = false,
-    this.maxFps = 60.0,
-    this.flipWaveForLeftVertical = false,
-  }) : assert(
-         theme != null || colors != null,
-         'Either theme or colors must be provided',
-       ),
-       assert(maxFps > 0, 'maxFps must be > 0');
-
-  final AppThemeData? theme;
-  final GradientAnimation animationStyle;
-  final double height;
-  final double? width;
-  final List<Color>? colors;
-  final bool isVertical;
-  final bool isPlaying;
-  final bool autoPauseWhenNotVisible;
-  final bool optimizeForPreview;
-  final double maxFps;
-  final bool flipWaveForLeftVertical;
+class const AnimatedGradientBar({
+  super.key,
+  final AppThemeData? theme,
+  final GradientAnimation animationStyle = GradientAnimation.scroll,
+  final double height = 48.0,
+  final double? width,
+  final List<Color>? colors,
+  final bool isVertical = false,
+  final bool isPlaying = true,
+  final bool autoPauseWhenNotVisible = false,
+  final bool optimizeForPreview = false,
+  final double maxFps = 60.0,
+  final bool flipWaveForLeftVertical = false,
+}) extends ConsumerStatefulWidget {
+  this
+    : assert(
+        theme != null || colors != null,
+        'Either theme or colors must be provided',
+      ),
+      assert(maxFps > 0, 'maxFps must be > 0');
 
   List<Color> get gradientColors => colors ?? [theme!.accent, theme!.secondary];
 
@@ -311,32 +300,22 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
   }
 }
 
-class _GradientPainter extends CustomPainter {
-  _GradientPainter(
-    this.animation,
-    this.style,
-    this.primary,
-    this.accent,
-    this.bg,
-    this.vert,
-    this.lightweight,
-    this.flipWaveForLeftVertical,
-    this.spiralMesh,
-    this.helixMesh,
-    this.pixelRatio,
-  ) : super(repaint: animation);
+class _GradientPainter(
+  final ValueNotifier<double> animation,
+  final GradientAnimation style,
+  final Color primary,
+  final Color accent,
+  final Color bg,
+  final bool vert,
+  final bool lightweight,
+  final bool flipWaveForLeftVertical,
+  final _SpiralMesh? spiralMesh,
+  final _HelixMesh? helixMesh,
+  final double pixelRatio,
+) extends CustomPainter {
+  this : super(repaint: animation);
 
-  final ValueNotifier<double> animation;
   double get progress => animation.value;
-  final GradientAnimation style;
-  final Color primary, accent, bg;
-  final bool vert;
-  final bool lightweight;
-  final bool flipWaveForLeftVertical;
-  final _SpiralMesh? spiralMesh;
-  final _HelixMesh? helixMesh;
-  final double pixelRatio;
-
   final _paint = Paint()..isAntiAlias = false;
 
   // Heart and Scanner share the exact same translucent resting color.
@@ -882,13 +861,13 @@ class _GradientPainter extends CustomPainter {
 
 /// Shared topology and reused motion buffers with stable crossing order.
 /// State owns the current native mesh and releases replaced buffers.
-class _HelixMesh {
-  _HelixMesh(
-    this.primary,
-    this.accent,
-    this.lightweight, {
-    int turnOffset = 0,
-  }) {
+class _HelixMesh(
+  final Color primary,
+  final Color accent,
+  final bool lightweight, {
+  int turnOffset = 0,
+}) {
+  this {
     _source = turnOffset == 0
         ? (lightweight ? _previewGeometry : _geometry)
         : _HelixGeometry(lightweight ? 18 : 32, turnOffset: turnOffset);
@@ -911,9 +890,6 @@ class _HelixMesh {
   static const turns = 6;
   static final _geometry = _HelixGeometry(32);
   static final _previewGeometry = _HelixGeometry(18);
-  final Color primary;
-  final Color accent;
-  final bool lightweight;
   late final _HelixGeometry _source;
   late final Int32List _colors;
   ui.Vertices? _vertices;
@@ -1074,8 +1050,8 @@ class _HelixMesh {
   }
 }
 
-class _HelixGeometry {
-  _HelixGeometry(int segments, {int turnOffset = 0}) {
+class _HelixGeometry(int segments, {int turnOffset = 0}) {
+  this {
     final points = <double>[];
     final triangles = <int>[];
     final lighting = <(bool, double, double, bool)>[];
@@ -1170,8 +1146,8 @@ class _HelixGeometry {
 
 /// Stable random spatial frequencies/phases create different, smooth width
 /// and motion profiles without per-frame random sampling.
-class _HelixRandomProfile {
-  _HelixRandomProfile(int seed, {bool gentle = false}) {
+class _HelixRandomProfile(int seed, {bool gentle = false}) {
+  this {
     final random = math.Random(seed);
     frequencies = [
       0.35 + random.nextDouble() * 0.20,
@@ -1222,8 +1198,12 @@ class _HelixRandomProfile {
 
 /// Fixed, shared projection geometry with a palette-specific native mesh.
 /// State owns the native resource so theme changes and unmounting release it.
-class _SpiralMesh {
-  _SpiralMesh(this.primary, this.accent, this.lightweight) {
+class _SpiralMesh(
+  final Color primary,
+  final Color accent,
+  final bool lightweight,
+) {
+  this {
     _source = lightweight ? _previewGeometry : _geometry;
     _colors = Int32List(_source.shading.length);
     final seamColor = Color.lerp(primary, accent, 0.5)!;
@@ -1256,9 +1236,6 @@ class _SpiralMesh {
     1,
     1,
   ]);
-  final Color primary;
-  final Color accent;
-  final bool lightweight;
   late final _SpiralGeometry _source;
   late final Int32List _colors;
   ui.Vertices? _vertices;
@@ -1301,8 +1278,8 @@ class _SpiralMesh {
   }
 }
 
-class _SpiralGeometry {
-  _SpiralGeometry(int rows, List<double> ridgeStops) {
+class _SpiralGeometry(int rows, List<double> ridgeStops) {
+  this {
     final points = <double>[];
     final triangles = <int>[];
     final shades = <(bool, double, double, bool)>[];
@@ -1361,35 +1338,25 @@ class _SpiralGeometry {
 }
 
 /// Preview widget for gradient effects in settings
-class GradientEffectPreview extends StatelessWidget {
-  const GradientEffectPreview({
-    super.key,
-    required this.effect,
-    required this.theme,
-    this.isSelected = false,
-    this.isPlaying = true,
-    this.onTap,
-  });
-
-  final GradientAnimation effect;
-  final AppThemeData theme;
-  final bool isSelected;
-  final bool isPlaying;
-  final VoidCallback? onTap;
-
+class const GradientEffectPreview({
+  super.key,
+  required final GradientAnimation effect,
+  final bool isSelected = false,
+  final bool isPlaying = true,
+  final VoidCallback? onTap,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PreviewCard(
     name: effect.displayName,
-    theme: theme,
     isSelected: isSelected,
     onTap: onTap,
     backgroundBuilder: (context, _) => Stack(
       children: [
         // base surface and animated gradient
-        Container(color: theme.surface),
+        Container(color: context.appTheme.surface),
         Positioned.fill(
           child: AnimatedGradientBar(
-            theme: theme,
+            theme: context.appTheme,
             animationStyle: effect,
             isPlaying: isPlaying,
             autoPauseWhenNotVisible: true,

@@ -4,11 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 NotifierProvider<SessionValue<T>, T> sessionValueProvider<T>(T initialValue) =>
     NotifierProvider<SessionValue<T>, T>(() => SessionValue(initialValue));
 
-class SessionValue<T> extends Notifier<T> {
-  SessionValue(this.initialValue);
-
-  final T initialValue;
-
+class SessionValue<T>(final T initialValue) extends Notifier<T> {
   @override
   T build() => initialValue;
 

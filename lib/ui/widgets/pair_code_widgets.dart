@@ -12,11 +12,12 @@ import '../../core/theme/app_theme.dart';
 ///
 /// Numbers are arranged as two groups of three separated by a dash, each
 /// digit sitting above a themed underline.
-class PairCodeDisplay extends StatelessWidget {
-  const PairCodeDisplay({super.key, required this.code});
+class const PairCodeDisplay({
+  super.key,
 
   /// The 6-digit code string to display. May be shorter during animation.
-  final String code;
+  required final String code,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -43,12 +44,10 @@ class PairCodeDisplay extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// A row of six code cells split into two groups by an em-dash separator.
-class _PairCodeRow extends StatelessWidget {
-  const _PairCodeRow({required this.chars});
-
+class const _PairCodeRow({
   /// Exactly 6 entries; null means the slot is empty.
-  final List<String?> chars;
-
+  required final List<String?> chars,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget cell(int i) => _PairCodeCell(char: chars[i]);
@@ -79,10 +78,8 @@ class _PairCodeRow extends StatelessWidget {
 
 /// One digit cell: digit text above an underline bar.
 /// No background — only the underline carries the theme colour.
-class _PairCodeCell extends StatelessWidget {
-  const _PairCodeCell({required this.char});
-
-  final String? char;
+class const _PairCodeCell({required final String? char})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

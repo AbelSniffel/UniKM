@@ -5,18 +5,12 @@ import '../../core/theme/app_theme.dart';
 import 'popup_menu_helpers.dart';
 
 /// Lookup details anchored to the header, using the theme icon menu's motion.
-class SteamLookupInfoMenu extends StatelessWidget {
-  const SteamLookupInfoMenu({
-    super.key,
-    required this.theme,
-    required this.searchedTitle,
-    required this.result,
-  });
-
-  final AppThemeData theme;
-  final String searchedTitle;
-  final SteamSearchResult result;
-
+class const SteamLookupInfoMenu({
+  super.key,
+  required final AppThemeData theme,
+  required final String searchedTitle,
+  required final SteamSearchResult result,
+}) extends StatelessWidget {
   Widget _section({
     required IconData icon,
     required String label,

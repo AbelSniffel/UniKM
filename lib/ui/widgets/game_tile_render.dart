@@ -30,10 +30,14 @@ import 'game_card_tags.dart';
 import 'game_cover_image.dart';
 import 'platform_icon.dart';
 
-enum GameTileDesign { grid, list, slim }
+enum GameTileDesign() {
+  grid,
+  list,
+  slim,
+}
 
 /// Where the tile's widgets sit: tooltips over its chips, a fetch spinner.
-enum GameTileSlot {
+enum GameTileSlot() {
   newChip,
   deadline,
   rating,
@@ -78,38 +82,26 @@ typedef GameTileData = ({
   bool tagsVisible,
 });
 
-class GameTileBox extends MultiChildRenderObjectWidget {
-  const GameTileBox({
-    super.key,
-    required this.data,
-    required this.vsync,
-    required this.onPointer,
-    required this.onEnter,
-    required this.onExit,
-    required this.onCoverError,
-    this.coverListener,
-    this.reveal,
-    this.onRevealPaint,
-    super.children,
-  });
-
-  final GameTileData data;
-  final TickerProvider vsync;
-  final ValueChanged<PointerEvent> onPointer;
-  final PointerEnterEventListener onEnter;
-  final PointerExitEventListener onExit;
+class const GameTileBox({
+  super.key,
+  required final GameTileData data,
+  required final TickerProvider vsync,
+  required final ValueChanged<PointerEvent> onPointer,
+  required final PointerEnterEventListener onEnter,
+  required final PointerExitEventListener onExit,
 
   /// Called after the frame in which the cover failed to load.
-  final VoidCallback onCoverError;
+  required final VoidCallback onCoverError,
 
   /// Told while the cover loads, as [GameCoverImage] tells its scope.
-  final CoverLoadListener? coverListener;
+  final CoverLoadListener? coverListener,
 
   /// How far the card has revealed, if it reveals, and what to call when it
   /// is first painted in view.
-  final Animation<double>? reveal;
-  final VoidCallback? onRevealPaint;
-
+  final Animation<double>? reveal,
+  final VoidCallback? onRevealPaint,
+  super.children,
+}) extends MultiChildRenderObjectWidget {
   @override
   RenderGameTile createRenderObject(BuildContext context) {
     final tile = RenderGameTile(data: data, vsync: vsync);
@@ -131,15 +123,11 @@ class GameTileBox extends MultiChildRenderObjectWidget {
 }
 
 /// Places [child] over one of the tile's chips, or where its spinner spins.
-class GameTileSlotWidget extends ParentDataWidget<GameTileParentData> {
-  const GameTileSlotWidget({
-    super.key,
-    required this.slot,
-    required super.child,
-  });
-
-  final GameTileSlot slot;
-
+class const GameTileSlotWidget({
+  super.key,
+  required final GameTileSlot slot,
+  required super.child,
+}) extends ParentDataWidget<GameTileParentData> {
   @override
   void applyParentData(RenderObject renderObject) {
     final data = renderObject.parentData! as GameTileParentData;
@@ -157,13 +145,12 @@ class GameTileParentData extends ContainerBoxParentData<RenderBox> {
 }
 
 /// A badge: a decorated box and what is drawn in it, at [offset] in the card.
-class _Chip {
-  _Chip(this.size, this.decoration, this.contents, {this.slot});
-
-  final Size size;
-  final BoxDecoration decoration;
-  final List<(TextPainter, Offset)> contents;
-  final GameTileSlot? slot;
+class _Chip(
+  final Size size,
+  final BoxDecoration decoration,
+  final List<(TextPainter, Offset)> contents, {
+  final GameTileSlot? slot,
+}) {
   Offset offset = Offset.zero;
 
   Rect get rect => offset & size;
@@ -225,25 +212,26 @@ bool _fadeLayer(Canvas canvas, int alpha, [Rect? bounds]) {
 /// A fetch status overlay fading in or out, as [AnimatedSwitcher] fades them.
 typedef _Fade = ({GameFetchStatus status, AnimationController controller});
 
-class RenderGameTile extends RenderBox
+class RenderGameTile({
+  required var GameTileData _data,
+  required final TickerProvider vsync,
+}) extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, GameTileParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, GameTileParentData>,
         RevealViewportBox
     implements MouseTrackerAnnotation {
   /// Its callbacks are set as [GameTileBox] updates it.
-  RenderGameTile({required GameTileData data, required this.vsync})
-    : _data = data {
-    _selectTo(data.selected, animate: false);
-    _switchFetch(null, data.fetchStatus);
+  this {
+    _selectTo(_data.selected, animate: false);
+    _switchFetch(null, _data.fetchStatus);
     for (final fade in [..._fades, ..._fetchIcons]) {
       fade.controller.value = 1;
     }
-    _tintTo = _tintFor(data);
-    _tagsShown = data.tagsVisible;
+    _tintTo = _tintFor(_data);
+    _tagsShown = _data.tagsVisible;
   }
 
-  final TickerProvider vsync;
   late ValueChanged<PointerEvent> onPointer;
   @override
   late PointerEnterEventListener onEnter;
@@ -252,7 +240,6 @@ class RenderGameTile extends RenderBox
   late VoidCallback onCoverError;
   CoverLoadListener? coverListener;
 
-  GameTileData _data;
   GameTileData get data => _data;
   set data(GameTileData value) {
     if (identical(value, _data)) return;
@@ -1029,9 +1016,8 @@ class RenderGameTile extends RenderBox
     }
     _extrasLaidOut = _extrasController?.value ?? 1;
     final box = hasBox
-        ? BoxConstraints.loose(
-            const Size(double.infinity, 32),
-          ).constrain(_extrasSize)
+        ? BoxConstraints.loose(const Size(double.infinity, 32))
+              .constrain(_extrasSize)
         : Size.zero;
 
     // A row of the title, then the chips, 10 in from the sides, 6 from the
@@ -1705,9 +1691,8 @@ class RenderGameTile extends RenderBox
     canvas
       ..save()
       ..clipRRect(
-        BorderRadius.horizontal(
-          left: Radius.circular(theme.cornerRadius),
-        ).toRRect(cover),
+        BorderRadius.horizontal(left: Radius.circular(theme.cornerRadius))
+            .toRRect(cover),
       );
     _paintCover(canvas, cover);
     canvas.restore();

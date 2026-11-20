@@ -3,7 +3,9 @@
 library;
 
 import 'package:material_ui/material_ui.dart';
+
 import '../widgets/app_tab_bar.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/platform_patterns.dart';
@@ -32,7 +34,10 @@ import '../widgets/app_progress_indicator.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Action to take when a duplicate key is found
-enum DuplicateAction { addAnyway, skip }
+enum DuplicateAction() {
+  addAnyway,
+  skip,
+}
 
 /// Shared duplicate-key warning with a compact, scrollable list.
 Future<DuplicateAction?> showDuplicateKeyDialog(
@@ -77,9 +82,8 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
                   title: game.title,
                   details: Text(
                     key,
-                    style: TintedCard.detailStyle(
-                      theme,
-                    ).copyWith(fontFamily: 'monospace'),
+                    style: TintedCard.detailStyle(theme)
+                        .copyWith(fontFamily: 'monospace'),
                   ),
                 );
               },
@@ -102,9 +106,7 @@ Future<DuplicateAction?> showDuplicateKeyDialog(
 );
 
 /// Add games page
-class AddGamesPage extends ConsumerStatefulWidget {
-  const AddGamesPage({super.key});
-
+class const AddGamesPage({super.key}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<AddGamesPage> createState() => _AddGamesPageState();
 }
@@ -145,15 +147,12 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: AppTabBar(
-            theme: theme,
             controller: _tabController,
             tabs: const [AppTab('Single Game'), AppTab('Multiple Games')],
           ),
@@ -181,9 +180,7 @@ bool _syncBlocksAdding(WidgetRef ref) {
   return busy;
 }
 
-class _SingleEntryTab extends ConsumerStatefulWidget {
-  const _SingleEntryTab();
-
+class const _SingleEntryTab() extends ConsumerStatefulWidget {
   @override
   ConsumerState<_SingleEntryTab> createState() => _SingleEntryTabState();
 }
@@ -468,7 +465,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                 cornerRadius: theme.cornerRadius,
                 cover: CoverImageCard(
                   key: _coverCardKey,
-                  theme: theme,
                   isDlc: _isDlc,
                   isUsed: _isUsed,
                   hasDeadline: _hasDeadline,
@@ -506,7 +502,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   _saveDraft();
                 },
                 keyField: GameKeyField(
-                  theme: theme,
                   controller: _fields.gameKey,
                   validator: (value) => value == null || value.trim().isEmpty
                       ? 'Key is required'
@@ -514,7 +509,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   onChanged: _handleKeyChanged,
                 ),
                 platform: PlatformMenuButton(
-                  theme: theme,
                   value: _platform,
                   detectedPlatform: _resolvedGamePlatform,
                   tooltip: '$_gameKeyPlatformTooltip. Choose platform',
@@ -524,7 +518,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   isDlc: _isDlc,
                   onDlcChanged: (value) => _update(() => _isDlc = value),
                   deadline: DeadlineChip(
-                    theme: theme,
                     hasDeadline: _hasDeadline,
                     date: _deadlineDate,
                     onEnabledChanged: (value) =>
@@ -600,9 +593,7 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
 }
 
 /// Batch add tab
-class _BatchAddTab extends ConsumerStatefulWidget {
-  const _BatchAddTab();
-
+class const _BatchAddTab() extends ConsumerStatefulWidget {
   @override
   ConsumerState<_BatchAddTab> createState() => _BatchAddTabState();
 }
@@ -883,7 +874,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                                 : const Icon(Icons.cloud_download_outlined),
                           ),
                         PlatformMenuButton(
-                          theme: theme,
                           value: _platform,
                           tooltip: _platform == kAutoDetectPlatformValue
                               ? 'Platform Override: Disabled'
@@ -904,7 +894,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                     const SizedBox(height: 16),
                     BatchGamesEditor(
                       controller: _textController,
-                      theme: theme,
                       platformOverride: _platform == kAutoDetectPlatformValue
                           ? null
                           : GamePlatform.fromDisplayName(_platform),
@@ -913,7 +902,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                     const SizedBox(height: 12),
                     // Applied to every game pasted, across the full width.
                     DeadlineChip(
-                      theme: theme,
                       hasDeadline: _hasDeadline,
                       date: _deadlineDate,
                       firstDate: DateTime.now(),
@@ -980,11 +968,8 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
 /// A pinned action bar styled like the settings section list: the
 /// navigation panel's color and pattern, a little stronger than the page's,
 /// with a top border and a soft shadow.
-class _ActionRibbon extends StatelessWidget {
-  const _ActionRibbon({super.key, required this.child});
-
-  final Widget child;
-
+class const _ActionRibbon({super.key, required final Widget child})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

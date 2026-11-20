@@ -9,15 +9,13 @@ import '../../widgets/section_groupbox.dart';
 import 'settings_control_cards.dart';
 
 /// Canonical setting text metadata that can drive both UI labels and search index text.
-class SettingTextSpec {
-  const SettingTextSpec({required this.label, this.description, this.icon});
-
-  final String label;
-  final String? description;
+class const SettingTextSpec({
+  required final String label,
+  final String? description,
 
   /// Leads the setting's card.
-  final IconData? icon;
-
+  final IconData? icon,
+}) {
   List<String> get indexTexts => [
     label,
     if (description != null && description!.trim().isNotEmpty) description!,
@@ -43,13 +41,14 @@ const double kSettingsGroupSpacing = 20;
 /// [builder] receives the computed [SectionGroupPosition] and [isAlternate]
 /// flag so it can forward them to the underlying [SectionGroupBox] or
 /// [SearchableSectionGroupBox].
-class SectionGroupEntry {
-  const SectionGroupEntry({required this.visible, required this.builder});
-
-  final bool visible;
-  final Widget Function(SectionGroupPosition position, bool isAlternate)
-  builder;
-}
+class const SectionGroupEntry({
+  required final bool visible,
+  required final Widget Function(
+    SectionGroupPosition position,
+    bool isAlternate,
+  )
+  builder,
+});
 
 /// Builds a [SectionGroupEntry] for the common searchable section pattern.
 ///
@@ -59,7 +58,6 @@ class SectionGroupEntry {
 /// content until the connected strip decides they are visible.
 SectionGroupEntry buildSearchableSectionEntry({
   bool? visible,
-  required AppThemeData theme,
   required SettingsSearchGroup group,
   required String searchQuery,
   required Widget Function() childBuilder,
@@ -79,7 +77,6 @@ SectionGroupEntry buildSearchableSectionEntry({
         : SectionGroupBox(
             title: group.title,
             showTitle: showTitle,
-            theme: theme,
             titleIcon: titleIcon,
             searchQuery: searchQuery,
             // Attached boxes drop the top corners that meet the header.
@@ -102,11 +99,8 @@ SectionGroupEntry buildSearchableSectionEntry({
 }
 
 /// An info icon whose tooltip also opens on tap, for a group's title bar.
-class SettingsInfoButton extends StatefulWidget {
-  const SettingsInfoButton({super.key, required this.message});
-
-  final String message;
-
+class const SettingsInfoButton({super.key, required final String message})
+    extends StatefulWidget {
   @override
   State<SettingsInfoButton> createState() => _SettingsInfoButtonState();
 }
@@ -146,19 +140,14 @@ class _SettingsInfoButtonState extends State<SettingsInfoButton> {
 /// Invisible entries (where [SectionGroupEntry.visible] is false) are
 /// filtered out before position/alternation is computed, so the result is
 /// always correct regardless of how many groups are hidden by search.
-class SettingsSectionGroups extends StatelessWidget {
-  const SettingsSectionGroups({
-    super.key,
-    required this.entries,
-    this.attachesToAbove = false,
-  });
-
-  final List<SectionGroupEntry> entries;
+class const SettingsSectionGroups({
+  super.key,
+  required final List<SectionGroupEntry> entries,
 
   /// When true, the first visible group has its top corner radius suppressed so
   /// it attaches seamlessly to a header widget placed directly above the strip.
-  final bool attachesToAbove;
-
+  final bool attachesToAbove = false,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visible = entries.indexed.where((entry) => entry.$2.visible).toList();
@@ -213,20 +202,13 @@ class SettingsSectionGroups extends StatelessWidget {
 
 /// A text field styled to match the settings UI.  Many sections previously
 /// duplicated identical [InputDecoration] code.
-class ThemedTextField extends StatelessWidget {
-  const ThemedTextField({
-    super.key,
-    this.controller,
-    this.hintText,
-    this.obscureText = false,
-    this.onChanged,
-  });
-
-  final TextEditingController? controller;
-  final String? hintText;
-  final bool obscureText;
-  final ValueChanged<String>? onChanged;
-
+class const ThemedTextField({
+  super.key,
+  final TextEditingController? controller,
+  final String? hintText,
+  final bool obscureText = false,
+  final ValueChanged<String>? onChanged,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -244,21 +226,14 @@ class ThemedTextField extends StatelessWidget {
 }
 
 /// Search descriptor for a settings group.
-class SettingsSearchGroup {
-  const SettingsSearchGroup({
-    required this.title,
-    this.settings = const [],
-    this.extraTexts = const [],
-    this.info,
-  });
-
-  final String title;
-  final List<SettingTextSpec> settings;
-  final List<String> extraTexts;
+class const SettingsSearchGroup({
+  required final String title,
+  final List<SettingTextSpec> settings = const [],
+  final List<String> extraTexts = const [],
 
   /// General notes on the group, behind an info button in its title bar.
-  final String? info;
-
+  final String? info,
+}) {
   List<String> get indexTexts => [
     title,
     ...settings.expand((setting) => setting.indexTexts),
@@ -271,12 +246,11 @@ bool matchesSettingsSearchGroup(String query, SettingsSearchGroup group) =>
     group.indexTexts.any((text) => settingsSearchMatches(query, text));
 
 /// Setting row that takes a canonical [SettingTextSpec].
-class SpecSettingRow extends StatelessWidget {
-  const SpecSettingRow({super.key, required this.spec, required this.child});
-
-  final SettingTextSpec spec;
-  final Widget child;
-
+class const SpecSettingRow({
+  super.key,
+  required final SettingTextSpec spec,
+  required final Widget child,
+}) extends StatelessWidget {
   /// The settings search when it matches the label, else empty.
   String _matchedQuery(BuildContext context) {
     final query = SettingsSearchScope.queryOf(context);
@@ -337,7 +311,6 @@ Widget buildSpecToggleSettingList({
     children: [
       for (final entry in entries)
         SettingsToggleCard(
-          theme: theme,
           label: entry.spec.label,
           description: entry.spec.description,
           icon: entry.spec.icon,

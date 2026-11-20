@@ -9,20 +9,12 @@ import '../../core/theme/app_theme.dart';
 
 /// A dot toggle with an optional state word before it ("On", "Off" or
 /// "Disabled" by default; an empty [label] shows the dot alone).
-class AppToggleSwitch extends StatefulWidget {
-  const AppToggleSwitch({
-    super.key,
-    required this.value,
-    required this.onChanged,
-    required this.theme,
-    this.label,
-  });
-
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-  final AppThemeData theme;
-  final String? label;
-
+class const AppToggleSwitch({
+  super.key,
+  required final bool value,
+  required final ValueChanged<bool>? onChanged,
+  final String? label,
+}) extends StatefulWidget {
   /// Whether the toggle is disabled (onChanged is null)
   bool get isDisabled => onChanged == null;
 
@@ -99,13 +91,13 @@ class _AppToggleSwitchState extends State<AppToggleSwitch>
     final opacity = widget.isDisabled ? 0.4 : 1.0;
     return Color.lerp(
       offColor,
-      widget.theme.accent,
+      context.appTheme.accent,
       progress,
     )!.withValues(alpha: (opacity * alpha).clamp(0.0, 1.0));
   }
 
   Widget _buildDot() {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final offColor = Color.alphaBlend(theme.textHint, theme.surface);
     return HoverBuilder(
       enabled: !widget.isDisabled,
@@ -178,8 +170,8 @@ class _AppToggleSwitchState extends State<AppToggleSwitch>
     final labelStyle = TextStyle(
       fontWeight: FontWeight.w500,
       color: widget.value && !disabled
-          ? widget.theme.accent
-          : widget.theme.textSecondary,
+          ? context.appTheme.accent
+          : context.appTheme.textSecondary,
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -201,9 +193,7 @@ class _AppToggleSwitchState extends State<AppToggleSwitch>
   }
 }
 
-class _OffSpringCurve extends Curve {
-  const _OffSpringCurve();
-
+class const _OffSpringCurve() extends Curve {
   static const double _peakV = 0.35;
   static const double _undershootD = -0.20;
 
@@ -219,9 +209,7 @@ class _OffSpringCurve extends Curve {
   }
 }
 
-class _OnSpringCurve extends Curve {
-  const _OnSpringCurve();
-
+class const _OnSpringCurve() extends Curve {
   static const double _peakT = 0.58;
   static const double _overshoot = 1.35;
 

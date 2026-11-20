@@ -3,19 +3,19 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 /// Expanding ink whose radius follows a button that resizes during the gesture.
-class LiveSizeInkRipple extends InteractiveInkFeature {
-  LiveSizeInkRipple({
-    required super.controller,
-    required super.referenceBox,
-    required super.color,
-    required this.position,
-    required this.textDirection,
-    this.rectCallback,
-    this.borderRadius,
-    this.radius,
-    super.customBorder,
-    super.onRemoved,
-  }) {
+class LiveSizeInkRipple({
+  required super.controller,
+  required super.referenceBox,
+  required super.color,
+  required final Offset position,
+  required final TextDirection textDirection,
+  final RectCallback? rectCallback,
+  final BorderRadius? borderRadius,
+  final double? radius,
+  super.customBorder,
+  super.onRemoved,
+}) extends InteractiveInkFeature {
+  this {
     _expansion = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: controller.vsync,
@@ -36,11 +36,6 @@ class LiveSizeInkRipple extends InteractiveInkFeature {
 
   static const splashFactory = _LiveSizeInkRippleFactory();
 
-  final Offset position;
-  final TextDirection textDirection;
-  final RectCallback? rectCallback;
-  final BorderRadius? borderRadius;
-  final double? radius;
   late final AnimationController _expansion;
   late final AnimationController _opacity;
 
@@ -86,9 +81,7 @@ class LiveSizeInkRipple extends InteractiveInkFeature {
   }
 }
 
-class _LiveSizeInkRippleFactory extends InteractiveInkFeatureFactory {
-  const _LiveSizeInkRippleFactory();
-
+class const _LiveSizeInkRippleFactory() extends InteractiveInkFeatureFactory {
   @override
   InteractiveInkFeature create({
     required MaterialInkController controller,

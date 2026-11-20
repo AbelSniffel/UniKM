@@ -10,43 +10,27 @@ const supportedDeviceSyncProtocol = 4;
 // Sync snapshot — UI state for the device sync dialog and notifier.
 // ---------------------------------------------------------------------------
 
-class DeviceSyncSnapshot {
-  const DeviceSyncSnapshot({
-    required this.enabled,
-    required this.autoOnStartup,
-    required this.deviceId,
-    required this.status,
-    required this.trustedPeers,
-    required this.discoveredPeers,
-    required this.pendingPairRequests,
-    required this.lastSyncAt,
-    this.lastTrustedPeerId,
-    this.statusMessage,
-    this.firewallStatusMessage,
-    this.dbMismatchPeerIds = const {},
-    this.activeSyncPeerId,
-  });
-
-  final bool enabled;
-  final bool autoOnStartup;
-  final String deviceId;
-  final DeviceSyncStatus status;
-  final List<TrustedSyncPeer> trustedPeers;
-  final List<DiscoveredSyncPeer> discoveredPeers;
-  final List<PendingPairRequest> pendingPairRequests;
-  final DateTime? lastSyncAt;
-  final String? lastTrustedPeerId;
-  final String? statusMessage;
-  final String? firewallStatusMessage;
+class const DeviceSyncSnapshot({
+  required final bool enabled,
+  required final bool autoOnStartup,
+  required final String deviceId,
+  required final DeviceSyncStatus status,
+  required final List<TrustedSyncPeer> trustedPeers,
+  required final List<DiscoveredSyncPeer> discoveredPeers,
+  required final List<PendingPairRequest> pendingPairRequests,
+  required final DateTime? lastSyncAt,
+  final String? lastTrustedPeerId,
+  final String? statusMessage,
+  final String? firewallStatusMessage,
 
   /// Peer IDs whose active database file differs from ours.
   /// Auto-sync is suppressed for these peers until files match.
-  final Set<String> dbMismatchPeerIds;
+  final Set<String> dbMismatchPeerIds = const {},
 
   /// The peer ID currently being synced (initiator side only).
   /// Null when no sync is in progress.
-  final String? activeSyncPeerId;
-
+  final String? activeSyncPeerId,
+}) {
   DeviceSyncSnapshot copyWith({
     bool? enabled,
     bool? autoOnStartup,
@@ -95,25 +79,18 @@ class DeviceSyncSnapshot {
 // Sync import result — summary of what happened when remote games were applied.
 // ---------------------------------------------------------------------------
 
-class SyncImportResult {
-  const SyncImportResult({
-    required this.inserted,
-    required this.updated,
-    required this.conflicts,
-    this.deleted = 0,
-  });
-
+class const SyncImportResult({
   /// Games that were new on the remote and inserted locally.
-  final int inserted;
+  required final int inserted,
 
   /// Games that existed locally but were replaced by the fresher remote copy.
-  final int updated;
+  required final int updated,
 
   /// Competing edits detected. Modern sync deterministically resolves their
   /// logical versions; legacy sync retains protected local edits.
-  final int conflicts;
-  final int deleted;
-
+  required final int conflicts,
+  final int deleted = 0,
+}) {
   bool get hasConflicts => conflicts > 0;
   int get total => inserted + updated + deleted;
 }
@@ -122,97 +99,59 @@ class SyncImportResult {
 // Sync events — emitted by DeviceSyncService to notify the UI layer.
 // ---------------------------------------------------------------------------
 
-abstract class SyncEvent {
-  const SyncEvent();
-}
+abstract class const SyncEvent();
 
-class PeerTrustedEvent extends SyncEvent {
-  const PeerTrustedEvent(this.peer);
-  final TrustedSyncPeer peer;
-}
+class const PeerTrustedEvent(final TrustedSyncPeer peer) extends SyncEvent;
 
-class PeerRemovedEvent extends SyncEvent {
-  const PeerRemovedEvent(this.peerId);
-  final String peerId;
-}
+class const PeerRemovedEvent(final String peerId) extends SyncEvent;
 
-class PeerOfflineEvent extends SyncEvent {
-  const PeerOfflineEvent(this.peerId);
-  final String peerId;
-}
+class const PeerOfflineEvent(final String peerId) extends SyncEvent;
 
 /// A hint to check a peer's authenticated state, never a data mutation itself.
-class SyncChangeAvailableEvent extends SyncEvent {
-  const SyncChangeAvailableEvent({this.peerId});
-  final String? peerId;
-}
+class const SyncChangeAvailableEvent({final String? peerId})
+    extends SyncEvent {}
 
-class PeerAvailableEvent extends SyncEvent {
-  const PeerAvailableEvent(this.peer);
-  final DiscoveredSyncPeer peer;
-}
+class const PeerAvailableEvent(final DiscoveredSyncPeer peer)
+    extends SyncEvent {}
 
-class SyncDataAppliedEvent extends SyncEvent {
-  const SyncDataAppliedEvent(this.result);
-  final SyncImportResult result;
-}
+class const SyncDataAppliedEvent(final SyncImportResult result)
+    extends SyncEvent {}
 
-class SyncTransferActivityEvent extends SyncEvent {
-  const SyncTransferActivityEvent({required this.active, this.message});
-  final bool active;
-  final String? message;
-}
+class const SyncTransferActivityEvent({
+  required final bool active,
+  final String? message,
+}) extends SyncEvent;
 
 /// Progress of one sync transfer, shown as a notification that stays until
 /// the transfer ends. [progress] runs from 0 to 1.
-class SyncProgressEvent extends SyncEvent {
-  const SyncProgressEvent({
-    required this.transferId,
-    required this.title,
-    required this.message,
-    this.progress = 0,
-    this.finished = false,
-    this.failed = false,
-  });
-  final String transferId;
-  final String title;
-  final String message;
-  final double progress;
-  final bool finished;
-  final bool failed;
-}
+class const SyncProgressEvent({
+  required final String transferId,
+  required final String title,
+  required final String message,
+  final double progress = 0,
+  final bool finished = false,
+  final bool failed = false,
+}) extends SyncEvent;
 
-class PairRequestReceivedEvent extends SyncEvent {
-  const PairRequestReceivedEvent(this.request);
-  final PendingPairRequest request;
-}
+class const PairRequestReceivedEvent(final PendingPairRequest request)
+    extends SyncEvent {}
 
-class PairRequestTimedOutEvent extends SyncEvent {
-  const PairRequestTimedOutEvent(this.request);
-  final PendingPairRequest request;
-}
+class const PairRequestTimedOutEvent(final PendingPairRequest request)
+    extends SyncEvent {}
 
-class PairRequestCanceledEvent extends SyncEvent {
-  const PairRequestCanceledEvent(this.request);
-  final PendingPairRequest request;
-}
+class const PairRequestCanceledEvent(final PendingPairRequest request)
+    extends SyncEvent {}
 
-class DbMismatchDetectedEvent extends SyncEvent {
-  const DbMismatchDetectedEvent({
-    required this.peerId,
-    required this.peerName,
-    required this.localDbName,
-    required this.remoteDbName,
-  });
-  final String peerId;
-  final String peerName;
-  final String localDbName;
-  final String remoteDbName;
-}
+class const DbMismatchDetectedEvent({
+  required final String peerId,
+  required final String peerName,
+  required final String localDbName,
+  required final String remoteDbName,
+}) extends SyncEvent;
 
 // ---------------------------------------------------------------------------
 
-enum DeviceSyncStatus {
+enum DeviceSyncStatus() {
   idle,
   discovering,
   connecting,
@@ -221,7 +160,12 @@ enum DeviceSyncStatus {
   error,
 }
 
-enum SyncDeviceType { desktop, mobile, web, unknown }
+enum SyncDeviceType() {
+  desktop,
+  mobile,
+  web,
+  unknown,
+}
 
 // The wire names are the enum names.
 SyncDeviceType syncDeviceTypeFromWire(String? value) =>
@@ -230,31 +174,19 @@ SyncDeviceType syncDeviceTypeFromWire(String? value) =>
 
 String syncDeviceTypeToWire(SyncDeviceType value) => value.name;
 
-class TrustedSyncPeer {
-  const TrustedSyncPeer({
-    required this.id,
-    required this.name,
-    required this.host,
-    required this.port,
-    this.deviceType = SyncDeviceType.unknown,
-    this.fingerprint,
-    this.pairingId = '',
-    this.transferPort,
-    this.lastSeenAtIso,
-  });
-
-  final String id;
-  final String name;
-  final String host;
-  final int port;
-  final SyncDeviceType deviceType;
-  final String? fingerprint;
+class const TrustedSyncPeer({
+  required final String id,
+  required final String name,
+  required final String host,
+  required final int port,
+  final SyncDeviceType deviceType = SyncDeviceType.unknown,
+  final String? fingerprint,
 
   /// Identifies this consent to pair; old removal messages cannot revoke it.
-  final String pairingId;
-  final int? transferPort;
-  final String? lastSeenAtIso;
-
+  final String pairingId = '',
+  final int? transferPort,
+  final String? lastSeenAtIso,
+}) {
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -306,27 +238,16 @@ class TrustedSyncPeer {
   );
 }
 
-class DiscoveredSyncPeer {
-  const DiscoveredSyncPeer({
-    required this.id,
-    required this.name,
-    required this.host,
-    required this.port,
-    this.transferPort,
-    this.syncProtocol = supportedDeviceSyncProtocol,
-    this.deviceType = SyncDeviceType.unknown,
-  });
-
-  final String id;
-  final String name;
-  final String host;
-  final int port;
-  final int? transferPort;
-  final int syncProtocol;
-
+class const DiscoveredSyncPeer({
+  required final String id,
+  required final String name,
+  required final String host,
+  required final int port,
+  final int? transferPort,
+  final int syncProtocol = supportedDeviceSyncProtocol,
+  final SyncDeviceType deviceType = SyncDeviceType.unknown,
+}) {
   bool get isSyncCompatible => syncProtocol == supportedDeviceSyncProtocol;
-  final SyncDeviceType deviceType;
-
   TrustedSyncPeer toTrustedPeer() => TrustedSyncPeer(
     id: id,
     name: name,
@@ -338,21 +259,14 @@ class DiscoveredSyncPeer {
   );
 }
 
-class PendingPairRequest {
-  const PendingPairRequest({
-    required this.requestId,
-    required this.peer,
-    required this.requestedAt,
-    required this.code,
-  });
-
-  final String requestId;
-  final DiscoveredSyncPeer peer;
-  final DateTime requestedAt;
+class const PendingPairRequest({
+  required final String requestId,
+  required final DiscoveredSyncPeer peer,
+  required final DateTime requestedAt,
 
   /// The 6-digit code both devices show; the user checks that they match.
-  final String code;
-}
+  required final String code,
+});
 
 List<TrustedSyncPeer> decodeTrustedPeers(String raw) {
   if (raw.trim().isEmpty) return const [];

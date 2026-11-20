@@ -4,33 +4,22 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
 
-class AppTab {
-  const AppTab(this.label, {this.icon});
-
-  final String label;
-  final IconData? icon;
-}
+class const AppTab(final String label, {final IconData? icon});
 
 /// A connected pill with rounded outer ends and square internal edges.
 /// Existing tab views keep their controller; standalone panels use an index.
-class AppTabBar extends StatelessWidget {
-  const AppTabBar({
-    super.key,
-    required this.theme,
-    required this.tabs,
-    this.controller,
-    this.selectedIndex = 0,
-    this.onChanged,
-  }) : assert(tabs.length > 0),
-       assert(controller != null || onChanged != null),
-       assert(controller == null || controller.length == tabs.length),
-       assert(selectedIndex >= 0 && selectedIndex < tabs.length);
-
-  final AppThemeData theme;
-  final List<AppTab> tabs;
-  final TabController? controller;
-  final int selectedIndex;
-  final ValueChanged<int>? onChanged;
+class const AppTabBar({
+  super.key,
+  required final List<AppTab> tabs,
+  final TabController? controller,
+  final int selectedIndex = 0,
+  final ValueChanged<int>? onChanged,
+}) extends StatelessWidget {
+  this
+    : assert(tabs.length > 0),
+      assert(controller != null || onChanged != null),
+      assert(controller == null || controller.length == tabs.length),
+      assert(selectedIndex >= 0 && selectedIndex < tabs.length);
 
   @override
   Widget build(BuildContext context) {
@@ -44,10 +33,10 @@ class AppTabBar extends StatelessWidget {
   }
 
   Widget _buildTabs(BuildContext context, int selected) {
+    final theme = context.appTheme;
     final radius = Radius.circular(theme.cornerRadius * 1.25);
-    final labelStyle = Theme.of(
-      context,
-    ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.bold);
+    final labelStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(fontWeight: FontWeight.bold);
     Widget buildRow(bool showIcons) => FocusTraversalGroup(
       child: IntrinsicHeight(
         child: Row(
@@ -142,24 +131,15 @@ class AppTabBar extends StatelessWidget {
 /// One tab's surface: the unselected tab fill easing into the selected one
 /// (with the text color) as [selected] changes, the tab's depth gradient, and
 /// its hover, splash and press highlights. [builder] gets the text color.
-class AppTabSurface extends StatelessWidget {
-  const AppTabSurface({
-    super.key,
-    required this.selected,
-    required this.borderRadius,
-    required this.onTap,
-    required this.builder,
-    this.padding = EdgeInsets.zero,
-    this.onHover,
-  });
-
-  final bool selected;
-  final BorderRadius borderRadius;
-  final VoidCallback? onTap;
-  final ValueChanged<bool>? onHover;
-  final EdgeInsetsGeometry padding;
-  final Widget Function(BuildContext context, Color color) builder;
-
+class const AppTabSurface({
+  super.key,
+  required final bool selected,
+  required final BorderRadius borderRadius,
+  required final VoidCallback? onTap,
+  required final Widget Function(BuildContext context, Color color) builder,
+  final EdgeInsetsGeometry padding = EdgeInsets.zero,
+  final ValueChanged<bool>? onHover,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -207,20 +187,14 @@ class AppTabSurface extends StatelessWidget {
 /// out while the next slides in. Unlike [TabBarView] it sizes to the current
 /// tab, so the outgoing tab keeps its own height without adding to the panel.
 /// Fixed-height tab views use [AppTabView].
-class AppTabTransition extends StatefulWidget {
-  const AppTabTransition({
-    super.key,
-    required this.index,
-    required this.child,
-    this.slide = true,
-  });
-
-  final int index;
-  final Widget child;
+class const AppTabTransition({
+  super.key,
+  required final int index,
+  required final Widget child,
 
   /// False fades the new content in place, for page-like section switches.
-  final bool slide;
-
+  final bool slide = true,
+}) extends StatefulWidget {
   @override
   State<AppTabTransition> createState() => _AppTabTransitionState();
 }
@@ -322,15 +296,12 @@ class _AppTabTransitionState extends State<AppTabTransition> {
 
 /// Controller-driven tabs use Flutter's native [TabBarView] slide and swipe.
 /// Visited pages retain their fields and scroll position while hidden.
-class AppTabView extends StatelessWidget {
-  const AppTabView({
-    super.key,
-    required this.controller,
-    required this.children,
-  }) : assert(controller.length == children.length);
-
-  final TabController controller;
-  final List<Widget> children;
+class const AppTabView({
+  super.key,
+  required final TabController controller,
+  required final List<Widget> children,
+}) extends StatelessWidget {
+  this : assert(controller.length == children.length);
 
   @override
   Widget build(BuildContext context) {
@@ -350,11 +321,7 @@ class AppTabView extends StatelessWidget {
   }
 }
 
-class _KeepAlive extends StatefulWidget {
-  const _KeepAlive({required this.child});
-
-  final Widget child;
-
+class const _KeepAlive({required final Widget child}) extends StatefulWidget {
   @override
   State<_KeepAlive> createState() => _KeepAliveState();
 }

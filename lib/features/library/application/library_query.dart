@@ -3,28 +3,17 @@ import '../../../core/settings/settings_model.dart';
 import '../../../shared/time/calendar_date.dart';
 
 /// What the library is narrowed to; the default shows every game.
-class LibraryFilter {
-  const LibraryFilter({
-    this.searchQuery = '',
-    this.platformFilter,
-    this.tagFilters = const [],
-    this.showDeadlineOnly = false,
-    this.showDlcOnly = false,
-    this.showUsedOnly = false,
-    this.showNoPicturesOnly = false,
-    this.showNoTagsOnly = false,
-  });
-
+class const LibraryFilter({
+  final String searchQuery = '',
+  final String? platformFilter,
+  final List<int> tagFilters = const [],
+  final bool showDeadlineOnly = false,
+  final bool showDlcOnly = false,
+  final bool showUsedOnly = false,
+  final bool showNoPicturesOnly = false,
+  final bool showNoTagsOnly = false,
+}) {
   static const _unset = Object();
-
-  final String searchQuery;
-  final String? platformFilter;
-  final List<int> tagFilters;
-  final bool showDeadlineOnly;
-  final bool showDlcOnly;
-  final bool showUsedOnly;
-  final bool showNoPicturesOnly;
-  final bool showNoTagsOnly;
 
   LibraryFilter copyWith({
     String? searchQuery,
@@ -51,9 +40,8 @@ class LibraryFilter {
 
 /// Searchable values are normalized once per library snapshot. Ordering is
 /// cached across filter edits and invalidated by sort mode or calendar day.
-class LibraryQueryIndex {
-  LibraryQueryIndex(List<Game> games, {LibraryQueryIndex? previous})
-    : games = List.unmodifiable(games) {
+class LibraryQueryIndex(List<Game> games, {LibraryQueryIndex? previous}) {
+  this : games = List.unmodifiable(games) {
     for (var i = 0; i < games.length; i++) {
       final game = games[i];
       final old = previous != null && i < previous.games.length

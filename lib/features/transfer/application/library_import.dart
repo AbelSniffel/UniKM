@@ -6,29 +6,29 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/database.dart';
 
-class ImportCancelled implements Exception {
-  const ImportCancelled();
+class const ImportCancelled() implements Exception {
   @override
   String toString() => 'Import cancelled';
 }
 
 typedef ImportTagSpec = ({String name, String color, bool isSteamTag});
 
-enum ImportMode { merge, update, addAnyway, replace }
+enum ImportMode() {
+  merge,
+  update,
+  addAnyway,
+  replace,
+}
 
-class ImportRecord {
-  ImportRecord(this.game, this.tagNames);
-  final GamesCompanion game;
+class ImportRecord(final GamesCompanion game, final List<String>? tagNames) {
   // null preserves existing tags when the source omits the tags field.
-  final List<String>? tagNames;
 }
 
-class ImportResult {
-  const ImportResult(this.imported, this.updated, this.skipped);
-  final int imported;
-  final int updated;
-  final int skipped;
-}
+class const ImportResult(
+  final int imported,
+  final int updated,
+  final int skipped,
+) {}
 
 /// Keeps CSV fields as strings so activation keys retain leading zeroes.
 final libraryCsv = Csv(autoDetect: false);
@@ -136,10 +136,7 @@ List<ImportRecord> parseLibraryJson(String content) {
 
 /// Commits a parsed import as one transaction, including tags and sync metadata.
 /// No UI, provider, notification, or file-system dependencies.
-class LibraryImporter {
-  const LibraryImporter(this.database);
-  final AppDatabase database;
-
+class const LibraryImporter(final AppDatabase database) {
   Future<ImportResult> commit(
     List<ImportRecord> records,
     ImportMode mode, {

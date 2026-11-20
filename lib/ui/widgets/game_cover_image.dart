@@ -17,34 +17,23 @@ abstract interface class CoverLoadListener {
   void coverSettled(Object cover);
 }
 
-class CoverLoadScope extends InheritedWidget {
-  const CoverLoadScope({
-    super.key,
-    required this.listener,
-    required super.child,
-  });
-
-  final CoverLoadListener listener;
-
+class const CoverLoadScope({
+  super.key,
+  required final CoverLoadListener listener,
+  required super.child,
+}) extends InheritedWidget {
   @override
   bool updateShouldNotify(CoverLoadScope oldWidget) =>
       listener != oldWidget.listener;
 }
 
-class GameCoverImage extends StatefulWidget {
-  const GameCoverImage({
-    super.key,
-    required this.theme,
-    required this.coverImage,
-    this.onError,
-  });
-
-  final AppThemeData theme;
-  final String? coverImage;
+class const GameCoverImage({
+  super.key,
+  required final String? coverImage,
 
   /// Called once if the image fails to load (URL 404, missing file, etc.).
-  final VoidCallback? onError;
-
+  final VoidCallback? onError,
+}) extends StatefulWidget {
   @override
   State<GameCoverImage> createState() => _GameCoverImageState();
 
@@ -83,7 +72,7 @@ class _GameCoverImageState extends State<GameCoverImage> {
   int? _cacheWidth;
   Timer? _settle;
 
-  AppThemeData get theme => widget.theme;
+  AppThemeData get theme => context.appTheme;
 
   int _heldCacheWidth(int needed) {
     _settle?.cancel();
@@ -120,7 +109,7 @@ class _GameCoverImageState extends State<GameCoverImage> {
       final key = (
         cacheWidth,
         widget.coverImage,
-        widget.theme,
+        theme,
         widget.onError == null,
       );
       if (key != _imageKey) {
@@ -196,12 +185,10 @@ class _GameCoverImageState extends State<GameCoverImage> {
 
 /// Tells the nearest [CoverLoadScope] whether its cover is still loading.
 /// The listener is looked up without a dependency: covers never rebuild for it.
-class _CoverLoadReport extends StatefulWidget {
-  const _CoverLoadReport({required this.loading, required this.child});
-
-  final bool loading;
-  final Widget child;
-
+class const _CoverLoadReport({
+  required final bool loading,
+  required final Widget child,
+}) extends StatefulWidget {
   @override
   State<_CoverLoadReport> createState() => _CoverLoadReportState();
 }

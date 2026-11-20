@@ -11,12 +11,10 @@ import 'database_session_loader.dart';
 
 /// Coordinates encryption changes with the active SQLite connection and its
 /// encrypted save queue. UI callers can outlive the settings header on reopen.
-class DatabaseEncryptionController {
-  const DatabaseEncryptionController(this.container, this.manager);
-
-  final ProviderContainer container;
-  final EncryptionManager manager;
-
+class const DatabaseEncryptionController(
+  final ProviderContainer container,
+  final EncryptionManager manager,
+) {
   Future<void> enable(String password) async {
     await _transition(
       operation: () => manager.enable(password, deletePlaintextFile: false),

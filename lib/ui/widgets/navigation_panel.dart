@@ -38,51 +38,30 @@ bool isVeryNarrowAppLayout(
 }
 
 /// Navigation item data
-class NavItem {
-  const NavItem({
-    required this.label,
-    required this.icon,
-    this.selectedIcon,
-    this.hasNotification = false,
-    this.iconBuilder,
-    this.tooltipLabel,
-  });
-  final String label;
-  final IconData icon;
-  final IconData? selectedIcon;
-  final bool hasNotification;
-  final String? tooltipLabel;
+class const NavItem({
+  required final String label,
+  required final IconData icon,
+  final IconData? selectedIcon,
+  final bool hasNotification = false,
 
   /// When set, overrides all icon rendering with a custom widget builder.
   /// Takes the resolved icon [color] and [size] as arguments.
-  final Widget Function(Color color, double size)? iconBuilder;
-}
+  final Widget Function(Color color, double size)? iconBuilder,
+  final String? tooltipLabel,
+});
 
 /// Navigation panel widget
-class NavigationPanel extends ConsumerWidget {
-  const NavigationPanel({
-    super.key,
-    required this.items,
-    required this.selectedIndex,
-    required this.onItemSelected,
-    required this.theme,
-    required this.position,
-    required this.appearance,
-    required this.gradientAnimation,
-    this.forceCollapsed = false,
-    this.lockedIndices = const {},
-  });
-
-  final List<NavItem> items;
-  final int selectedIndex;
-  final ValueChanged<int> onItemSelected;
-  final AppThemeData theme;
-  final NavBarPosition position;
-  final NavBarAppearance appearance;
-  final GradientAnimation gradientAnimation;
-  final bool forceCollapsed;
-  final Set<int> lockedIndices;
-
+class const NavigationPanel({
+  super.key,
+  required final List<NavItem> items,
+  required final int selectedIndex,
+  required final ValueChanged<int> onItemSelected,
+  required final NavBarPosition position,
+  required final NavBarAppearance appearance,
+  required final GradientAnimation gradientAnimation,
+  final bool forceCollapsed = false,
+  final Set<int> lockedIndices = const {},
+}) extends ConsumerWidget {
   bool get _isHorizontal =>
       position == NavBarPosition.top || position == NavBarPosition.bottom;
 
@@ -193,7 +172,6 @@ class NavigationPanel extends ConsumerWidget {
       ],
       Expanded(
         child: _ThemeSelector(
-          theme: theme,
           position: position,
           gradientAnimation: gradientAnimation,
           showExpansionControl: !forceCollapsed,
@@ -231,7 +209,7 @@ class NavigationPanel extends ConsumerWidget {
     children: [
       for (final index in indices)
         if (index == _menuIndex)
-          NavigationMoreMenuButton(theme: theme, position: position)
+          NavigationMoreMenuButton(position: position)
         else
           _buildIndexedNavButton(
             index,
@@ -286,20 +264,14 @@ class NavigationPanel extends ConsumerWidget {
   }
 }
 
-class _ThemeSelector extends ConsumerWidget {
-  const _ThemeSelector({
-    required this.theme,
-    required this.position,
-    required this.gradientAnimation,
-    required this.showExpansionControl,
-  });
-  final AppThemeData theme;
-  final NavBarPosition position;
-  final GradientAnimation gradientAnimation;
-  final bool showExpansionControl;
-
+class const _ThemeSelector({
+  required final NavBarPosition position,
+  required final GradientAnimation gradientAnimation,
+  required final bool showExpansionControl,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     final expansionMode = ref.watch(
       appShellSettingsProvider.select((settings) => settings.navExpansionMode),
     );
@@ -330,7 +302,6 @@ class _ThemeSelector extends ConsumerWidget {
                   height: 40,
                   child: GradientBarIconButton(
                     key: const ValueKey('nav-expansion-mode'),
-                    theme: theme,
                     tooltip:
                         'Navigation button style: ${expansionMode.displayName}',
                     onPressed: () => ref
@@ -362,29 +333,18 @@ class _ThemeSelector extends ConsumerWidget {
   }
 }
 
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    super.key,
-    required this.item,
-    required this.isSelected,
-    required this.onTap,
-    required this.appearance,
-    required this.isHorizontal,
-    required this.isCollapsed,
-    required this.isLocked,
-  });
-
-  final NavItem item;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final NavBarAppearance appearance;
-  final bool isHorizontal;
-  final bool isCollapsed;
-  final bool isLocked;
-
+class const _NavButton({
+  super.key,
+  required final NavItem item,
+  required final bool isSelected,
+  required final VoidCallback onTap,
+  required final NavBarAppearance appearance,
+  required final bool isHorizontal,
+  required final bool isCollapsed,
+  required final bool isLocked,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme = context.appTheme;
     final textOnly = appearance == NavBarAppearance.textOnly;
     final showText = !isCollapsed && appearance != NavBarAppearance.iconOnly;
     final displayIcon = item.selectedIcon ?? item.icon;
@@ -400,7 +360,6 @@ class _NavButton extends StatelessWidget {
     }
 
     return AppNavigationButton(
-      theme: theme,
       isSelected: isSelected,
       isEnabled: !isLocked,
       hasNotification: item.hasNotification,

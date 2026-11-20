@@ -21,31 +21,24 @@ import 'package:material_ui/material_ui.dart';
 ///   ),
 /// )
 /// ```
-class HoverBuilder extends StatefulWidget {
-  const HoverBuilder({
-    super.key,
-    required this.builder,
-    this.onEnter,
-    this.onExit,
-    this.cursor = SystemMouseCursors.basic,
-    this.enabled = true,
-  });
+class const HoverBuilder({
+  super.key,
 
   /// Builder function that receives the current hover state.
-  final Widget Function(BuildContext context, bool isHovered) builder;
+  required final Widget Function(BuildContext context, bool isHovered) builder,
 
   /// Optional callback when mouse enters the region.
-  final VoidCallback? onEnter;
+  final VoidCallback? onEnter,
 
   /// Optional callback when mouse exits the region.
-  final VoidCallback? onExit;
+  final VoidCallback? onExit,
 
   /// The mouse cursor to use when hovering. Defaults to [SystemMouseCursors.basic].
-  final MouseCursor cursor;
+  final MouseCursor cursor = SystemMouseCursors.basic,
 
   /// Whether hover detection is enabled. When false, [builder] always receives false.
-  final bool enabled;
-
+  final bool enabled = true,
+}) extends StatefulWidget {
   @override
   State<HoverBuilder> createState() => _HoverBuilderState();
 }

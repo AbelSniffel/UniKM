@@ -5,15 +5,13 @@ import 'library_import.dart';
 
 /// Retains the backup dialog's established JSON, CSV, and plain-text layouts,
 /// including optional notes/tags and its JSON export timestamp.
-class LibraryBackupExporter {
-  LibraryBackupExporter({
-    this.includeTags = true,
-    this.includeNotes = true,
-    DateTime? exportedAt,
-  }) : exportedAt = exportedAt ?? DateTime.now();
+class LibraryBackupExporter({
+  final bool includeTags = true,
+  final bool includeNotes = true,
+  DateTime? exportedAt,
+}) {
+  this : exportedAt = exportedAt ?? DateTime.now();
 
-  final bool includeTags;
-  final bool includeNotes;
   final DateTime exportedAt;
 
   String encode(List<Game> games, List<Tag> tags, String format) {

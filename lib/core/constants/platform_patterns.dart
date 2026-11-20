@@ -3,7 +3,7 @@
 library;
 
 /// Supported gaming platforms
-enum GamePlatform {
+enum GamePlatform(final String displayName) {
   steam('Steam'),
   epicGames('Epic Games'),
   gog('GOG'),
@@ -17,10 +17,6 @@ enum GamePlatform {
   webLink('Web Link'),
   other('Other');
 
-  const GamePlatform(this.displayName);
-
-  final String displayName;
-
   static GamePlatform fromDisplayName(String name) =>
       GamePlatform.values.firstWhere(
         (p) => p.displayName.toLowerCase() == name.toLowerCase(),
@@ -29,11 +25,7 @@ enum GamePlatform {
 }
 
 /// Utility class for detecting platform from key format
-class PlatformDetector {
-  PlatformDetector._();
-
-  // Specific formats precede generic ones. Keep this suffix-matching order so
-  // batch entry consumes a whole key before trying its shorter suffixes.
+class PlatformDetector._() {
   static const _keyFormats = <(GamePlatform, String)>[
     (
       GamePlatform.epicGames,

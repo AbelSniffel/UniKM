@@ -5,6 +5,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+
 import 'package:cryptography/cryptography.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -32,11 +33,7 @@ import 'logging.dart';
 export '../../features/sync/data/sync_firewall.dart'
     show WindowsFirewallCheckResult, LinuxFirewallCheckResult;
 
-class DeviceSyncException implements Exception {
-  const DeviceSyncException(this.message);
-
-  final String message;
-
+class const DeviceSyncException(final String message) implements Exception {
   @override
   String toString() => message;
 }
@@ -61,49 +58,27 @@ class PairingEndedException extends DeviceSyncException {
   final String status;
 }
 
-class DeviceSyncCodeCheckResult {
-  const DeviceSyncCodeCheckResult({
-    required this.reachable,
-    this.peer,
-    this.localDbName,
-    this.remoteDbName,
-    this.dbNameMismatch = false,
-    this.localRevision = 0,
-    this.remoteRevision = 0,
-    this.localKnownRemoteRevision = 0,
-    this.remoteKnownLocalRevision = 0,
-    this.localKnownRemoteSyncAtMillis = 0,
-    this.remoteKnownLocalSyncAtMillis = 0,
-    this.localSyncRevisionId = '',
-    this.remoteSyncRevisionId = '',
-    this.localDbTimestampMillis = 0,
-    this.remoteDbTimestampMillis = 0,
-    this.remoteReceiverSyncInFlight = false,
-    this.localContentDigest = '',
-    this.remoteContentDigest = '',
-    this.remoteSyncProtocol = 0,
-  });
-
-  final bool reachable;
-  final TrustedSyncPeer? peer;
-  final String? localDbName;
-  final String? remoteDbName;
-  final bool dbNameMismatch;
-  final int localRevision;
-  final int remoteRevision;
-  final int localKnownRemoteRevision;
-  final int remoteKnownLocalRevision;
-  final int localKnownRemoteSyncAtMillis;
-  final int remoteKnownLocalSyncAtMillis;
-  final String localSyncRevisionId;
-  final String remoteSyncRevisionId;
-  final int localDbTimestampMillis;
-  final int remoteDbTimestampMillis;
-  final bool remoteReceiverSyncInFlight;
-  final String localContentDigest;
-  final String remoteContentDigest;
-  final int remoteSyncProtocol;
-
+class const DeviceSyncCodeCheckResult({
+  required final bool reachable,
+  final TrustedSyncPeer? peer,
+  final String? localDbName,
+  final String? remoteDbName,
+  final bool dbNameMismatch = false,
+  final int localRevision = 0,
+  final int remoteRevision = 0,
+  final int localKnownRemoteRevision = 0,
+  final int remoteKnownLocalRevision = 0,
+  final int localKnownRemoteSyncAtMillis = 0,
+  final int remoteKnownLocalSyncAtMillis = 0,
+  final String localSyncRevisionId = '',
+  final String remoteSyncRevisionId = '',
+  final int localDbTimestampMillis = 0,
+  final int remoteDbTimestampMillis = 0,
+  final bool remoteReceiverSyncInFlight = false,
+  final String localContentDigest = '',
+  final String remoteContentDigest = '',
+  final int remoteSyncProtocol = 0,
+}) {
   bool get hasContentDigests =>
       localContentDigest.isNotEmpty && remoteContentDigest.isNotEmpty;
   bool get digestMismatch =>
@@ -133,64 +108,51 @@ class DeviceSyncCodeCheckResult {
       !remoteHasChanges;
 }
 
-class _PeerPingResult {
-  const _PeerPingResult({
-    required this.reachable,
-    this.remoteTrusted = false,
-    this.remoteDbName,
-    this.remoteRevision = 0,
-    this.remoteKnownLocalRevision = 0,
-    this.remoteKnownLocalSyncAtMillis = 0,
-    this.remoteSyncRevisionId,
-    this.remoteDbTimestampMillis = 0,
-    this.remoteReceiverSyncInFlight = false,
-    this.remoteContentDigest = '',
-    this.remoteSyncProtocol = 0,
-  });
-
+class const _PeerPingResult({
+  required final bool reachable,
+  final bool remoteTrusted = false,
+  final String? remoteDbName,
+  final int remoteRevision = 0,
+  final int remoteKnownLocalRevision = 0,
+  final int remoteKnownLocalSyncAtMillis = 0,
+  final String? remoteSyncRevisionId,
+  final int remoteDbTimestampMillis = 0,
+  final bool remoteReceiverSyncInFlight = false,
+  final String remoteContentDigest = '',
+  final int remoteSyncProtocol = 0,
+}) {
   factory _PeerPingResult.fromPong(Map<String, dynamic> payload) =>
       _PeerPingResult(
         reachable: true,
         remoteTrusted: payload['trusted'] == true,
         remoteDbName: (payload['dbName'] as String?)?.trim(),
-        remoteRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
-        remoteKnownLocalRevision:
-            (payload['peerKnownRevision'] as num?)?.toInt() ?? 0,
-        remoteKnownLocalSyncAtMillis:
-            (payload['peerKnownSyncAt'] as num?)?.toInt() ?? 0,
+        remoteRevision: _intOf(payload, 'localRevision'),
+        remoteKnownLocalRevision: _intOf(payload, 'peerKnownRevision'),
+        remoteKnownLocalSyncAtMillis: _intOf(payload, 'peerKnownSyncAt'),
         remoteSyncRevisionId: (payload['syncRevisionId'] as String?)?.trim(),
-        remoteDbTimestampMillis:
-            (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0,
+        remoteDbTimestampMillis: _intOf(payload, 'dbTimestampMillis'),
         remoteReceiverSyncInFlight: payload['receiverSyncInFlight'] == true,
         remoteContentDigest: payload['contentDigest'] as String? ?? '',
-        remoteSyncProtocol: (payload['syncProtocol'] as num?)?.toInt() ?? 0,
+        remoteSyncProtocol: _intOf(payload, 'syncProtocol'),
       );
-
-  final bool reachable;
-  final bool remoteTrusted;
-  final String? remoteDbName;
-  final int remoteRevision;
-  final int remoteKnownLocalRevision;
-  final int remoteKnownLocalSyncAtMillis;
-  final String? remoteSyncRevisionId;
-  final int remoteDbTimestampMillis;
-  final bool remoteReceiverSyncInFlight;
-  final String remoteContentDigest;
-  final int remoteSyncProtocol;
 }
 
-class _PendingPongState {
-  const _PendingPongState({
-    required this.expectedPeerId,
-    required this.completer,
-  });
-
-  final String expectedPeerId;
-  final Completer<_PeerPingResult> completer;
-}
+class const _PendingPongState({
+  required final String expectedPeerId,
+  required final Completer<_PeerPingResult> completer,
+});
 
 /// UTF-8 JSON bytes of a control packet or payload.
 Uint8List _jsonBytes(Object? value) => utf8.encode(jsonEncode(value));
+
+/// A payload's whole number at [key], or 0 when it is missing.
+int _intOf(Map<String, dynamic> payload, String key) =>
+    (payload[key] as num?)?.toInt() ?? 0;
+
+/// The [T] entries of a payload's list at [key]; empty when it is missing.
+Set<T> _setOf<T>(Map<String, dynamic> payload, String key) => {
+  ...(payload[key] as List? ?? const []).whereType<T>(),
+};
 
 /// An incoming pairing, held while this device's user compares codes.
 class _IncomingPairing {
@@ -204,7 +166,7 @@ class _IncomingPairing {
 
 /// Which side of a session sends records: the initiator, the receiver, or
 /// both. Manual sync pushes or pulls; automatic sync exchanges.
-enum _SyncMode {
+enum _SyncMode() {
   exchange,
   push,
   pull;
@@ -215,13 +177,12 @@ enum _SyncMode {
 
 /// Emits [SyncProgressEvent]s for one transfer, throttled so byte counts do
 /// not flood the UI. Nothing is shown until the reporter is [visible].
-class _ProgressReporter {
-  _ProgressReporter(this._emit, {required this.title, this.visible = true});
-
-  final void Function(SyncEvent event) _emit;
+class _ProgressReporter(
+  final void Function(SyncEvent event) _emit, {
+  required var String title,
+  var bool visible = true,
+}) {
   final String id = const Uuid().v4();
-  String title;
-  bool visible;
   String _message = '';
   double _progress = 0;
   bool _ended = false;
@@ -309,22 +270,18 @@ bool isValidSyncDatabaseFileName(String fileName) {
   return true;
 }
 
-class DeviceSyncService {
-  DeviceSyncService({
-    required this.ref,
-    this.discoveryPort = defaultLanPort,
-    this.transferPort = SyncPorts.transfer,
-    this.imagesRoot,
-  }) {
+class DeviceSyncService({
+  required final Ref ref,
+  final int discoveryPort = defaultLanPort,
+  final int transferPort = SyncPorts.transfer,
+
+  /// Overrides where synced cover images are stored (tests use a temp folder).
+  final Future<Directory> Function()? imagesRoot,
+}) {
+  this {
     _codec = _codecFor(() => ref.read(databaseProvider));
   }
 
-  final Ref ref;
-  final int discoveryPort;
-  final int transferPort;
-
-  /// Overrides where synced cover images are stored (tests use a temp folder).
-  final Future<Directory> Function()? imagesRoot;
   late final SyncPayloadCodec _codec;
 
   SyncPayloadCodec _codecFor(AppDatabase? Function() getDatabase) =>
@@ -437,7 +394,7 @@ class DeviceSyncService {
       peerId: peerId,
       pairingId: pairingId,
       messageId: payload['messageId'] as String? ?? '',
-      issuedAtMillis: (payload['issuedAtMillis'] as num?)?.toInt() ?? 0,
+      issuedAtMillis: _intOf(payload, 'issuedAtMillis'),
       nowMillis: DateTime.now().millisecondsSinceEpoch,
     );
   }
@@ -719,7 +676,7 @@ class DeviceSyncService {
               : host,
           port: port,
           transferPort: advertisedTransferPort,
-          syncProtocol: (payload['protocol'] as num?)?.toInt() ?? 0,
+          syncProtocol: _intOf(payload, 'protocol'),
           deviceType: peerType,
         );
         // A failed send closes this socket; the scan just finds fewer devices.
@@ -1866,15 +1823,10 @@ class DeviceSyncService {
                 response['steamCacheDigest'] != steamDigest,
             onlyBuckets: (
               count: count,
-              buckets: {
-                ...(response['want'] as List? ?? const []).whereType<int>(),
-              },
+              buckets: _setOf<int>(response, 'want'),
               hashedRevision: local.revision,
             ),
-            peerCovers: {
-              ...(response['storedCovers'] as List? ?? const [])
-                  .whereType<String>(),
-            },
+            peerCovers: _setOf<String>(response, 'storedCovers'),
           );
           requireContext();
           sentRevision = outgoing['localRevision'] as int;
@@ -1894,8 +1846,7 @@ class DeviceSyncService {
           received = _changeSummary(response);
           _reportTransfer('[${peer.name}] Applying $received...');
           progress.update('Applying $received...', 0.8);
-          final remoteTimestamp =
-              (response['dbTimestampMillis'] as num?)?.toInt() ?? 0;
+          final remoteTimestamp = _intOf(response, 'dbTimestampMillis');
           final result = await _applyPayload(
             response,
             peer: peer,
@@ -1938,7 +1889,7 @@ class DeviceSyncService {
           }
           if (mode == _SyncMode.push) {
             // The receiver adopted the revision ID sent, so both now match.
-            final timestamp = (ack['dbTimestampMillis'] as num?)?.toInt() ?? 0;
+            final timestamp = _intOf(ack, 'dbTimestampMillis');
             await markSyncCompleted(
               peerId: peer.id,
               authoritativeTimestampMillis: timestamp > 0 ? timestamp : null,
@@ -1994,8 +1945,7 @@ class DeviceSyncService {
     if (payload['steamCache'] case final Map cache) {
       await mergeSteamCacheSnapshotFromSync(Map<String, dynamic>.from(cache));
     }
-    final remoteTimestamp =
-        (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0;
+    final remoteTimestamp = _intOf(payload, 'dbTimestampMillis');
     final previousApplied = _appliedRevision;
     try {
       return await database.transaction(() async {
@@ -2016,7 +1966,7 @@ class DeviceSyncService {
         requireContext();
         await database.savePeerSyncCheckpoint(
           peerId: peer.id,
-          lastRevision: (payload['localRevision'] as num?)?.toInt() ?? 0,
+          lastRevision: _intOf(payload, 'localRevision'),
           lastSyncAt: manual && remoteTimestamp > 0
               ? DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)
               : DateTime.now(),
@@ -2162,8 +2112,11 @@ class DeviceSyncService {
               payload: payload,
               deviceId: deviceId,
             ).catchError(
-              (Object error, StackTrace stack) =>
-                  AppLog.w('Sync control packet ignored', error: error, name: 'Sync'),
+              (Object error, StackTrace stack) => AppLog.w(
+                'Sync control packet ignored',
+                error: error,
+                name: 'Sync',
+              ),
             ),
           );
           return;
@@ -2290,7 +2243,10 @@ class DeviceSyncService {
       }
       _reportTransfer('Incoming sync: waiting for data...');
       if (hello['v'] != 2) {
-        AppLog.w('Rejected non-v2 connection on encrypted channel', name: 'Sync');
+        AppLog.w(
+          'Rejected non-v2 connection on encrypted channel',
+          name: 'Sync',
+        );
         return;
       }
       final handshake = await _performServerHandshake(socket, hello);
@@ -2454,10 +2410,7 @@ class DeviceSyncService {
               buckets: differing,
               hashedRevision: local.revision,
             ),
-            peerCovers: {
-              ...(request['storedCovers'] as List? ?? const [])
-                  .whereType<String>(),
-            },
+            peerCovers: _setOf<String>(request, 'storedCovers'),
           )
         : <String, dynamic>{'syncProtocol': _protocolVersion};
     response['senderDbName'] = dbName;
@@ -2504,8 +2457,7 @@ class DeviceSyncService {
       requireContext: requireContext,
       manual: manual,
     );
-    final senderTimestamp =
-        (payload['dbTimestampMillis'] as num?)?.toInt() ?? 0;
+    final senderTimestamp = _intOf(payload, 'dbTimestampMillis');
     final adopted = payload['syncRevisionId'] as String?;
     await markSyncCompleted(
       peerId: manual ? null : peer.id,
@@ -2939,7 +2891,7 @@ class DeviceSyncService {
       host: datagram.address.address,
       port: port,
       transferPort: (payload['transferPort'] as num?)?.toInt(),
-      syncProtocol: (payload['protocol'] as num?)?.toInt() ?? 0,
+      syncProtocol: _intOf(payload, 'protocol'),
       deviceType: peerType,
     );
     _announcedPeersSeenAt[peerId] = DateTime.now();

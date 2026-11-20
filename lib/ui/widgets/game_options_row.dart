@@ -1,41 +1,29 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core/theme/app_theme.dart';
 import 'app_action_button.dart';
 
 /// Options below the image card in both game editors.
-class GameOptionsRow extends StatelessWidget {
-  const GameOptionsRow({
-    super.key,
-    required this.isDlc,
-    required this.onDlcChanged,
-    required this.isUsed,
-    required this.onUsedChanged,
-    required this.deadline,
-  });
-
-  final bool isDlc;
-  final ValueChanged<bool> onDlcChanged;
-  final bool isUsed;
-  final ValueChanged<bool> onUsedChanged;
-  final Widget deadline;
-
+class const GameOptionsRow({
+  super.key,
+  required final bool isDlc,
+  required final ValueChanged<bool> onDlcChanged,
+  required final bool isUsed,
+  required final ValueChanged<bool> onUsedChanged,
+  required final Widget deadline,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme = context.appTheme;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         AppActionButton(
-          theme: theme,
           label: 'DLC',
           selected: isDlc,
           onTap: () => onDlcChanged(!isDlc),
         ),
         AppActionButton(
-          theme: theme,
           label: 'Used',
           selected: isUsed,
           onTap: () => onUsedChanged(!isUsed),

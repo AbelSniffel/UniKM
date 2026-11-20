@@ -9,9 +9,7 @@ import '../../models/game.dart';
 import '../../ui/widgets/notification_system.dart';
 
 /// Static helper for copying game data to clipboard.
-class GameClipboard {
-  GameClipboard._();
-
+class GameClipboard._() {
   /// Copy only the game keys, one per line.
   static void copyKeysOnly(List<Game> targets) =>
       _copy(targets, (game) => game.gameKey, 'key');

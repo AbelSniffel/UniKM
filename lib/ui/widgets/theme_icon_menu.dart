@@ -6,18 +6,12 @@ import '../../core/theme/theme_icons.dart';
 import 'popup_menu_helpers.dart';
 
 /// Compact icon selection using the theme menu's native opening/closing motion.
-class ThemeIconMenuButton extends StatelessWidget {
-  const ThemeIconMenuButton({
-    super.key,
-    required this.theme,
-    required this.selectedIconCodePoint,
-    required this.onChanged,
-  });
-
-  final AppThemeData theme;
-  final int? selectedIconCodePoint;
-  final ValueChanged<int?> onChanged;
-
+class const ThemeIconMenuButton({
+  super.key,
+  required final AppThemeData theme,
+  required final int? selectedIconCodePoint,
+  required final ValueChanged<int?> onChanged,
+}) extends StatelessWidget {
   Widget _picker(Size size, ScrollController scrollController) {
     return SizedBox.fromSize(
       key: const ValueKey('theme-icon-picker'),

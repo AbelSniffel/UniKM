@@ -11,24 +11,14 @@ import 'platform_icon.dart';
 import 'popup_menu_helpers.dart';
 
 /// Compact platform selector shared by game-key fields and batch entry.
-class PlatformMenuButton extends StatelessWidget {
-  const PlatformMenuButton({
-    super.key,
-    required this.theme,
-    required this.value,
-    required this.tooltip,
-    required this.onSelected,
-    this.detectedPlatform,
-    this.includeAutoDetect = true,
-  });
-
-  final AppThemeData theme;
-  final String value;
-  final String tooltip;
-  final ValueChanged<String>? onSelected;
-  final GamePlatform? detectedPlatform;
-  final bool includeAutoDetect;
-
+class const PlatformMenuButton({
+  super.key,
+  required final String value,
+  required final String tooltip,
+  required final ValueChanged<String>? onSelected,
+  final GamePlatform? detectedPlatform,
+  final bool includeAutoDetect = true,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final platform = value == kAutoDetectPlatformValue
@@ -52,7 +42,11 @@ class PlatformMenuButton extends StatelessWidget {
           (
             choice.displayName,
             choice.displayName,
-            PlatformIcon(platform: choice, color: theme.textPrimary, size: 18),
+            PlatformIcon(
+              platform: choice,
+              color: context.appTheme.textPrimary,
+              size: 18,
+            ),
           ),
       ],
     );
@@ -61,34 +55,24 @@ class PlatformMenuButton extends StatelessWidget {
 
 /// A navigation-style button showing the current choice's icon and a chevron,
 /// which opens a menu of [choices] (value, label, icon).
-class IconMenuButton<T> extends StatefulWidget {
-  const IconMenuButton({
-    super.key,
-    required this.value,
-    required this.tooltip,
-    required this.onSelected,
-    required this.icon,
-    required this.choices,
-    this.expanded = false,
-    this.tabStyle = false,
-  });
-
-  final T value;
-  final String tooltip;
-  final ValueChanged<T>? onSelected;
+class const IconMenuButton<T>({
+  super.key,
+  required final T value,
+  required final String tooltip,
+  required final ValueChanged<T>? onSelected,
 
   /// The current choice's icon in the given color and size.
-  final Widget Function(Color color, double size) icon;
-  final List<(T, String, Widget)> choices;
+  required final Widget Function(Color color, double size) icon,
+  required final List<(T, String, Widget)> choices,
 
   /// Fills the width offered, naming the current choice beside its icon
   /// whenever the whole name fits.
-  final bool expanded;
+  final bool expanded = false,
 
   /// A standalone tab, selected while the menu is open, in place of the
   /// navigation style; the icon still grows on hover and while open.
-  final bool tabStyle;
-
+  final bool tabStyle = false,
+}) extends StatefulWidget {
   @override
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
 }
@@ -172,9 +156,8 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
         // The button's label style, over the inherited one.
         text: TextSpan(
           text: label,
-          style: DefaultTextStyle.of(
-            context,
-          ).style.merge(const TextStyle(fontSize: 14)),
+          style: DefaultTextStyle.of(context).style
+              .merge(const TextStyle(fontSize: 14)),
         ),
         textDirection: TextDirection.ltr,
         textScaler: MediaQuery.textScalerOf(context),
@@ -230,7 +213,6 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
       );
     }
     return AppNavigationButton(
-      theme: theme,
       isSelected: controller.isOpen,
       isEnabled: enabled,
       isHorizontal: true,

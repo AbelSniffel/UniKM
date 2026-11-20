@@ -22,20 +22,14 @@ import 'game_tile_render.dart';
 
 export 'game_tile_render.dart' show GameTileDesign;
 
-class GameTile extends ConsumerStatefulWidget {
-  const GameTile({
-    super.key,
-    required this.gameId,
-    required this.design,
-    this.coordinator,
-  });
-
-  final int gameId;
-  final GameTileDesign design;
+class const GameTile({
+  super.key,
+  required final int gameId,
+  required final GameTileDesign design,
 
   /// Reveals the card as it comes into view; without one it shows at once.
-  final GameCardRevealCoordinator? coordinator;
-
+  final GameCardRevealCoordinator? coordinator,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<GameTile> createState() => _GameTileState();
 }

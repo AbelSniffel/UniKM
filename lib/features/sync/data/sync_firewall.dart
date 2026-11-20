@@ -6,53 +6,36 @@ import 'package:path/path.dart' as p;
 
 import '../domain/sync_ports.dart';
 
-class WindowsFirewallCheckResult {
-  const WindowsFirewallCheckResult({
-    required this.available,
-    this.hasPrivateAllow = false,
-    this.hasPublicAllow = false,
-  });
-
-  final bool available;
-  final bool hasPrivateAllow;
-  final bool hasPublicAllow;
-
+class const WindowsFirewallCheckResult({
+  required final bool available,
+  final bool hasPrivateAllow = false,
+  final bool hasPublicAllow = false,
+}) {
   bool get fullyAllowed => hasPrivateAllow && hasPublicAllow;
 }
 
-class LinuxFirewallCheckResult {
-  const LinuxFirewallCheckResult({
-    required this.available,
-    this.active = false,
-    this.uniKMAllowed = false,
-    this.udpPortAllowed = false,
-    this.tcpPortAllowed = false,
-    this.firewallTool = '',
-  });
-
-  final bool available;
-  final bool active;
-  final bool uniKMAllowed;
-  final bool udpPortAllowed;
-  final bool tcpPortAllowed;
-  final String firewallTool;
-
+class const LinuxFirewallCheckResult({
+  required final bool available,
+  final bool active = false,
+  final bool uniKMAllowed = false,
+  final bool udpPortAllowed = false,
+  final bool tcpPortAllowed = false,
+  final String firewallTool = '',
+}) {
   bool get fullyAllowed => uniKMAllowed && udpPortAllowed && tcpPortAllowed;
 }
 
-typedef FirewallProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      required bool runInShell,
-    });
+typedef FirewallProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments, {
+  required bool runInShell,
+});
 
 /// Owns platform firewall inspection and commands independently of pairing,
 /// discovery, and database synchronization. Existing service methods delegate
 /// here so callers retain their public API.
-class SyncFirewall {
-  SyncFirewall({FirewallProcessRunner? runProcess})
-    : _runProcess = runProcess ?? Process.run;
+class SyncFirewall({FirewallProcessRunner? runProcess}) {
+  this : _runProcess = runProcess ?? Process.run;
 
   final FirewallProcessRunner _runProcess;
 

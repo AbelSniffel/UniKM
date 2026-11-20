@@ -25,31 +25,30 @@ class EncryptionConfig {
 }
 
 /// Exception thrown when password is incorrect
-class InvalidPasswordException implements Exception {
-  final String message;
-  InvalidPasswordException([this.message = 'Invalid password']);
-
+class InvalidPasswordException([final String message = 'Invalid password'])
+    implements Exception {
   @override
   String toString() => 'InvalidPasswordException: $message';
 }
 
 /// Encryption state
-enum EncryptionState { unencrypted, encrypted, unknown }
+enum EncryptionState() {
+  unencrypted,
+  encrypted,
+  unknown,
+}
 
 /// Encryption manager for the database
-class EncryptionManager {
+class EncryptionManager(final String dbPath) {
   /// SharedPreferences key used to persist a plaintext DB path that needs
   /// to be deleted on the next app launch (belt-and-suspenders for Windows
   /// file-lock situations where the retry loop in the same session times out).
   static const String pendingPlaintextDeletionKey =
       'pending_plaintext_deletion';
 
-  final String dbPath;
   String? _keyPassword;
   List<int>? _keySalt;
   Future<SecretKey>? _key;
-
-  EncryptionManager(this.dbPath);
 
   /// Path to encrypted database file
   String get encryptedPath => '$dbPath.enc';
@@ -212,9 +211,8 @@ class EncryptionManager {
   /// Write in the destination directory, flush, then replace. If replacement
   /// fails the original and the completed temporary encrypted file survive.
   Future<void> _replaceEncryptedFile(Uint8List bytes) async {
-    final directory = await Directory(
-      File(encryptedPath).parent.path,
-    ).createTemp('.unikm-save-');
+    final directory = await Directory(File(encryptedPath).parent.path)
+        .createTemp('.unikm-save-');
     final pending = File(p.join(directory.path, 'database.enc'));
     await pending.writeAsBytes(bytes, flush: true);
     await pending.rename(encryptedPath);
@@ -232,9 +230,8 @@ class EncryptionManager {
   }
 
   Future<void> _encryptWithNewSalt(Uint8List plaintext, String password) async {
-    final salt = SecretKeyData.random(
-      length: EncryptionConfig.saltLength,
-    ).bytes;
+    final salt = SecretKeyData.random(length: EncryptionConfig.saltLength)
+        .bytes;
     final key = await _deriveKey(password, Uint8List.fromList(salt));
     await _replaceEncryptedFile(
       await _encryptDatabaseBytes(plaintext, salt, key),

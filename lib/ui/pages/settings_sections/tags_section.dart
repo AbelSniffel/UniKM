@@ -19,25 +19,17 @@ import '../../widgets/section_groupbox.dart';
 import 'settings_common.dart';
 
 /// Tags management section
-class TagsSection extends ConsumerStatefulWidget {
-  const TagsSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const TagsSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerStatefulWidget {
   static const SettingTextSpec customTagsInputSpec = SettingTextSpec(
     label: 'Enter tag name...',
   );
   static const SettingTextSpec steamTagsInfoSpec = SettingTextSpec(
     label: 'No Steam tags imported yet',
-    description:
-        'Steam tags are added automatically when you look up games via the Steam API.',
+    description: 'Steam tags are added automatically when you look up games via the Steam API.',
   );
   static const SettingTextSpec maintenanceInfoSpec = SettingTextSpec(
     label: 'Old default tags found in this database.',
@@ -75,7 +67,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
     try {
       final deleted = await deleteTagWithConfirmation(
         context: context,
-        theme: widget.theme,
+        theme: context.appTheme,
         tagId: tagId,
         tagName: tagName,
       );
@@ -91,7 +83,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
     try {
       final deleted = await deleteAllCustomTagsWithConfirmation(
         context: context,
-        theme: widget.theme,
+        theme: context.appTheme,
       );
       if (deleted != null) {
         NotificationManager.instance.success('Deleted $deleted custom tags');
@@ -113,7 +105,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
   }) async {
     final confirmed = await showConfirmDialog(
       context: context,
-      theme: widget.theme,
+      theme: context.appTheme,
       title: title,
       titleIcon: Icons.delete_forever,
       message: message,
@@ -162,8 +154,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
 
   Future<void> _clearUnusedNonUserTags() => _confirmCleanup(
     title: 'Clear Unused Tags',
-    message:
-        'Delete Steam and old default tags not used by any game? Other custom tags stay.',
+    message: 'Delete Steam and old default tags not used by any game? Other custom tags stay.',
     confirmLabel: 'Delete',
     delete: ref.read(tagsProvider.notifier).deleteUnusedNonUserTags,
     removed: (count) => 'Deleted $count unused tags',
@@ -185,7 +176,7 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final tags = ref.watch(tagsProvider);
     final customTags = tags.where((t) => !t.isSteamTag).toList();
     final steamTags = tags.where((t) => t.isSteamTag).toList();
@@ -209,7 +200,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
       visible: matches(group),
       builder: (position, isAlternate) => SectionGroupBox(
         title: '${group.title} (${groupTags.length})',
-        theme: theme,
         titleIcon: icon,
         headerCrossAxisAlignment: CrossAxisAlignment.center,
         trailing: trailing,
@@ -251,7 +241,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           builder: (position, isAlternate) => SectionGroupBox(
             title: 'Add Tag',
             showTitle: false,
-            theme: theme,
             groupPosition: position,
             alternateBackground: isAlternate,
             child: AddTagField(),
@@ -302,7 +291,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
           builder: (position, isAlternate) => SectionGroupBox(
             title: TagsSection.maintenanceSearchGroup.title,
             titleIcon: Icons.cleaning_services,
-            theme: theme,
             searchQuery: widget.searchQuery,
             groupPosition: position,
             alternateBackground: isAlternate,

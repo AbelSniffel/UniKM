@@ -6,43 +6,33 @@ import 'package:material_ui/material_ui.dart';
 /// Recessed lighting for active settings cards, with an optional raised rest
 /// state for toggle buttons. All shading stays inside the
 /// live card outline, so layout, hit testing, and child ink remain unchanged.
-class SettingsCardInset extends StatelessWidget {
-  /// One shared shadow strength for settings cards and compact toggle surfaces.
-  static const defaultDepthStrength = 0.5;
-
-  const SettingsCardInset({
-    super.key,
-    required this.active,
-    required this.borderRadius,
-    required this.surfaceColor,
-    required this.child,
-    this.raisedWhenInactive = false,
-    this.overlay,
-    this.shadeOverlay = true,
-    this.depthStrength = defaultDepthStrength,
-    this.cacheRaster = false,
-  }) : assert(depthStrength >= 0 && depthStrength <= 1);
-
-  final bool active;
-  final double borderRadius;
-  final Color surfaceColor;
-  final bool raisedWhenInactive;
-  final Widget child;
+class const SettingsCardInset({
+  super.key,
+  required final bool active,
+  required final double borderRadius,
+  required final Color surfaceColor,
+  required final Widget child,
+  final bool raisedWhenInactive = false,
 
   /// Decorative overlay, sharing the card bounds and ignoring pointer events.
-  final Widget? overlay;
+  final Widget? overlay,
 
   /// Lit indicators can sit above the depth lighting instead of being dimmed.
-  final bool shadeOverlay;
+  final bool shadeOverlay = true,
 
   /// Scales the depth lighting while preserving its shape and blur.
-  final double depthStrength;
+  final double depthStrength = defaultDepthStrength,
 
   /// Draws the settled lighting from a shared image instead of blurring it
   /// per paint. For numerous surfaces such as tag chips and settings cards:
   /// Impeller redraws every visible surface each frame, so live blurs and
   /// their layer made scrolling the settings page stutter on phones.
-  final bool cacheRaster;
+  final bool cacheRaster = false,
+}) extends StatelessWidget {
+  /// One shared shadow strength for settings cards and compact toggle surfaces.
+  static const defaultDepthStrength = 0.5;
+
+  this : assert(depthStrength >= 0 && depthStrength <= 1);
 
   /// The lighting at [depth] (1 recessed, -1 raised, 0 none), drawn from a
   /// shared image once settled when [devicePixelRatio] is given (see
@@ -113,17 +103,11 @@ class SettingsCardInset extends StatelessWidget {
   );
 }
 
-class _SettingsCardInsetPainter extends CustomPainter {
-  const _SettingsCardInsetPainter({
-    required this.radius,
-    required this.depth,
-    required this.surfaceColor,
-  });
-
-  final double radius;
-  final double depth;
-  final Color surfaceColor;
-
+class const _SettingsCardInsetPainter({
+  required final double radius,
+  required final double depth,
+  required final Color surfaceColor,
+}) extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -284,19 +268,12 @@ class _SettingsCardInsetPainter extends CustomPainter {
 /// Paints [_SettingsCardInsetPainter] from one small image per lighting, cut
 /// into nine slices so it fits any width. The lighting only varies within
 /// [_slice] of the sides, so the middle stretches without a visible seam.
-class _CachedInsetPainter extends CustomPainter {
-  const _CachedInsetPainter({
-    required this.radius,
-    required this.depth,
-    required this.surfaceColor,
-    required this.devicePixelRatio,
-  });
-
-  final double radius;
-  final double depth;
-  final Color surfaceColor;
-  final double devicePixelRatio;
-
+class const _CachedInsetPainter({
+  required final double radius,
+  required final double depth,
+  required final Color surfaceColor,
+  required final double devicePixelRatio,
+}) extends CustomPainter {
   /// Logical width of each side slice, past the corner and the blur of the
   /// side lighting.
   double get _slice => math.max(20.0, radius + 12);

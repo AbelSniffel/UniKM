@@ -10,11 +10,10 @@ import 'background_pattern.dart';
 
 /// The same gradient and background pattern at any preview-card size. Every
 /// theme shows the background pattern setting.
-class ThemePreviewBackground extends ConsumerWidget {
-  const ThemePreviewBackground({super.key, required this.theme});
-
-  final AppThemeData theme;
-
+class const ThemePreviewBackground({
+  super.key,
+  required final AppThemeData theme,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => CustomPaint(
     painter: _PreviewBackdrop(
@@ -29,13 +28,11 @@ class ThemePreviewBackground extends ConsumerWidget {
 /// pattern's glows are blurs, and Impeller draws a picture again on every
 /// frame, so a menu with a dozen previews would blur them all while it
 /// opens or slides.
-class _PreviewBackdrop extends CustomPainter {
-  const _PreviewBackdrop(this.theme, this.style, this.ratio);
-
-  final AppThemeData theme;
-  final NavPanelOverlayStyle style;
-  final double ratio;
-
+class const _PreviewBackdrop(
+  final AppThemeData theme,
+  final NavPanelOverlayStyle style,
+  final double ratio,
+) extends CustomPainter {
   /// The latest images, by what they show.
   static final _images = <Record, ui.Image>{};
 

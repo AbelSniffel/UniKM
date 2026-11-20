@@ -9,20 +9,14 @@ import 'section_groupbox.dart';
 /// A settings section: its header on top of a panel of groups, which show
 /// as plain headings. One rounded border surrounds both, on a group box's
 /// background and, while it is raised, its shadow.
-class SettingsSectionFamily extends ConsumerWidget {
-  const SettingsSectionFamily({
-    super.key,
-    required this.theme,
-    required this.header,
-    required this.child,
-  });
-
-  final AppThemeData theme;
-  final Widget header;
-  final Widget child;
-
+class const SettingsSectionFamily({
+  super.key,
+  required final Widget header,
+  required final Widget child,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     final radius = BorderRadius.circular(theme.cornerRadius);
     final tinted = ref.watch(pagePatternProvider);
     return Container(

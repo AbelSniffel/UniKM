@@ -20,7 +20,7 @@ import 'tinted_card.dart';
 ///   header widget sits directly above the strip.
 /// - [onlyAttached]: like [only] but top corners are flat — solo group with
 ///   a header directly above it.
-enum SectionGroupPosition {
+enum SectionGroupPosition() {
   only,
   first,
   middle,
@@ -31,9 +31,8 @@ enum SectionGroupPosition {
 
 /// Settings panels show their groups as plain headings over their content,
 /// without a frame, like the Tinted Tile dialogs.
-class SpacedSettingsGroups extends InheritedWidget {
-  const SpacedSettingsGroups({super.key, required super.child});
-
+class const SpacedSettingsGroups({super.key, required super.child})
+    extends InheritedWidget {
   static bool isEnabledOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<SpacedSettingsGroups>() !=
       null;
@@ -44,9 +43,8 @@ class SpacedSettingsGroups extends InheritedWidget {
 
 /// Keeps the [SectionGroupBox]es below it raised whatever the page pattern,
 /// for a dialog that no page pattern shows through.
-class RaisedGroupBoxes extends InheritedWidget {
-  const RaisedGroupBoxes({super.key, required super.child});
-
+class const RaisedGroupBoxes({super.key, required super.child})
+    extends InheritedWidget {
   static bool isEnabledOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<RaisedGroupBoxes>() != null;
 
@@ -55,56 +53,38 @@ class RaisedGroupBoxes extends InheritedWidget {
 }
 
 /// A titled group of settings or controls, its title above its content.
-class SectionGroupBox extends ConsumerWidget {
-  const SectionGroupBox({
-    super.key,
-    required this.title,
-    required this.theme,
-    required this.child,
-    this.padding = const EdgeInsets.all(12),
-    this.titleIcon,
-    this.trailing,
-    this.stackTrailingWhenCompact = false,
-    this.headerCrossAxisAlignment = CrossAxisAlignment.start,
-    this.headerBottomPadding = 12,
-    this.searchQuery = '',
-    this.groupPosition = SectionGroupPosition.only,
-    this.alternateBackground = false,
-    this.showTitle = true,
-    this.plainTitle = false,
-  });
-
-  final String title;
-  final AppThemeData theme;
-  final Widget child;
-  final EdgeInsets padding;
-  final IconData? titleIcon;
-  final Widget? trailing;
+class const SectionGroupBox({
+  super.key,
+  required final String title,
+  required final Widget child,
+  final EdgeInsets padding = const EdgeInsets.all(12),
+  final IconData? titleIcon,
+  final Widget? trailing,
 
   /// Header action groups use the same breakpoint as full-width settings cards.
-  final bool stackTrailingWhenCompact;
-  final CrossAxisAlignment headerCrossAxisAlignment;
+  final bool stackTrailingWhenCompact = false,
+  final CrossAxisAlignment headerCrossAxisAlignment = CrossAxisAlignment.start,
 
   /// Gap below a top title, before the body content.
-  final double headerBottomPadding;
-  final String searchQuery;
+  final double headerBottomPadding = 12,
+  final String searchQuery = '',
 
   /// Position of this box within a connected group strip.
-  final SectionGroupPosition groupPosition;
+  final SectionGroupPosition groupPosition = SectionGroupPosition.only,
 
   /// When true, the body takes the tinted cards' slightly stronger tint
   /// ([TintedCard.fillAlpha]) — creates the alternating-row visual effect.
-  final bool alternateBackground;
+  final bool alternateBackground = false,
 
   /// When false, the title header (or left title panel) is not rendered — only
   /// the bordered/background container is shown. Useful when you want the
   /// groupbox strip visuals (borders, alternating colours) without labels.
-  final bool showTitle;
+  final bool showTitle = true,
 
   /// Titles a framed box in the text colour, as flat headings are, instead
   /// of the accent.
-  final bool plainTitle;
-
+  final bool plainTitle = false,
+}) extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
 
@@ -122,7 +102,9 @@ class SectionGroupBox extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (SpacedSettingsGroups.isEnabledOf(context)) return _buildFlat();
+    if (SpacedSettingsGroups.isEnabledOf(context)) {
+      return _buildFlat(context.appTheme);
+    }
     final tinted =
         !RaisedGroupBoxes.isEnabledOf(context) &&
         ref.watch(pagePatternProvider);
@@ -134,11 +116,11 @@ class SectionGroupBox extends ConsumerWidget {
   }
 
   /// The heading and content alone; a search marks its words in the title.
-  Widget _buildFlat() => Column(
+  Widget _buildFlat(AppThemeData theme) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     spacing: 8,
-    children: [if (showTitle) _buildHeader(flat: true), child],
+    children: [if (showTitle) _buildHeader(theme, flat: true), child],
   );
 
   /// Flat headings centre their title on the trailing actions.
@@ -146,7 +128,7 @@ class SectionGroupBox extends ConsumerWidget {
       flat ? CrossAxisAlignment.center : headerCrossAxisAlignment;
 
   /// The icon and title; flat headings title in the text colour.
-  Widget _buildTitleRow({bool flat = false}) => Row(
+  Widget _buildTitleRow(AppThemeData theme, {bool flat = false}) => Row(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: _alignment(flat),
     children: [
@@ -154,11 +136,11 @@ class SectionGroupBox extends ConsumerWidget {
         Icon(titleIcon, size: 20, color: theme.accent),
         const SizedBox(width: kElementHSpacing),
       ],
-      Expanded(child: _buildHeaderText(flat: flat)),
+      Expanded(child: _buildHeaderText(theme, flat: flat)),
     ],
   );
 
-  Widget _buildHeaderText({bool flat = false}) {
+  Widget _buildHeaderText(AppThemeData theme, {bool flat = false}) {
     final titleStyle = TextStyle(
       color: flat || plainTitle ? theme.textPrimary : theme.accent,
       fontSize: 16,
@@ -178,6 +160,7 @@ class SectionGroupBox extends ConsumerWidget {
   }
 
   Widget _buildFrame(BuildContext context, double highlightValue, bool tinted) {
+    final theme = context.appTheme;
     final baseBorderColor = theme.border;
     final effectiveBorderColor =
         Color.lerp(
@@ -220,7 +203,7 @@ class SectionGroupBox extends ConsumerWidget {
       color: bgColor,
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
-      child: _buildTopTitle(outerRadius),
+      child: _buildTopTitle(theme, outerRadius),
     );
     // Keep controls mounted when search filtering changes connected corners.
     final bgLayer = ClipRRect(
@@ -260,8 +243,8 @@ class SectionGroupBox extends ConsumerWidget {
 
   // Both header layouts are built outside the layout callback, so a width
   // change only picks one instead of rebuilding the title and trailing.
-  Widget _buildHeader({bool flat = false}) {
-    final title = Expanded(child: _buildTitleRow(flat: flat));
+  Widget _buildHeader(AppThemeData theme, {bool flat = false}) {
+    final title = Expanded(child: _buildTitleRow(theme, flat: flat));
     Column header(List<Widget> children) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 4,
@@ -287,7 +270,7 @@ class SectionGroupBox extends ConsumerWidget {
     );
   }
 
-  Widget _buildTopTitle(BorderRadius outerRadius) {
+  Widget _buildTopTitle(AppThemeData theme, BorderRadius outerRadius) {
     // Title header rounds only its own top corners (clipped by outer layer).
     final titleHeaderRadius = BorderRadius.only(
       topLeft: outerRadius.topLeft,
@@ -302,7 +285,7 @@ class SectionGroupBox extends ConsumerWidget {
         headerBottomPadding,
       ),
       decoration: BoxDecoration(borderRadius: titleHeaderRadius),
-      child: _buildHeader(),
+      child: _buildHeader(theme),
     );
 
     // Bounded sections give their content the space remaining below the title.
@@ -342,22 +325,15 @@ class SectionGroupBox extends ConsumerWidget {
 /// Drawing the border in a [CustomPainter] (as a foreground overlay) rather
 /// than inside a [ClipRRect] prevents the anti-alias clipping artifact that
 /// makes corners appear faded.
-class _SelectiveBorderPainter extends CustomPainter {
-  const _SelectiveBorderPainter({
-    required this.color,
-    required this.cornerRadius,
-    required this.showTop,
-    required this.showBottom,
-  });
-
-  static const strokeWidth = 1.0;
-
-  final Color color;
-  final double cornerRadius;
+class const _SelectiveBorderPainter({
+  required final Color color,
+  required final double cornerRadius,
 
   /// A visible top or bottom edge always has rounded corners.
-  final bool showTop;
-  final bool showBottom;
+  required final bool showTop,
+  required final bool showBottom,
+}) extends CustomPainter {
+  static const strokeWidth = 1.0;
 
   @override
   void paint(Canvas canvas, Size size) {

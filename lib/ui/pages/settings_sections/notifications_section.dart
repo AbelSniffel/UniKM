@@ -10,18 +10,11 @@ import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
 
 /// Notifications settings section
-class NotificationsSection extends ConsumerWidget {
-  const NotificationsSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const NotificationsSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerWidget {
   static const SettingTextSpec deadlineRemindersSpec = SettingTextSpec(
     label: 'Deadlines',
     icon: Icons.notifications_active_outlined,
@@ -45,14 +38,13 @@ class NotificationsSection extends ConsumerWidget {
       attachesToAbove: attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
-          theme: theme,
           group: typesSearchGroup,
           titleIcon: Icons.notifications_active,
           searchQuery: searchQuery,
           // The section's own title names it.
           showTitle: false,
           childBuilder: () => buildSpecToggleSettingList(
-            theme: theme,
+            theme: context.appTheme,
             entries: [
               (
                 spec: deadlineRemindersSpec,

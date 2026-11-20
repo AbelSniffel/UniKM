@@ -8,32 +8,18 @@ import 'window_drop_target.dart';
 
 /// One file-selection surface for browsing and window-wide file drops.
 /// Callers retain format validation and decide what selecting a file does.
-class FileDropField extends StatefulWidget {
-  const FileDropField({
-    super.key,
-    required this.theme,
-    required this.description,
-    required this.onBrowse,
-    required this.onFileSelected,
-    required this.invalidDropMessage,
-    this.selectedName,
-    this.selectedIcon = Icons.check_circle,
-    this.onClear,
-    this.enabled = true,
-    this.active = true,
-  });
-
-  final AppThemeData theme;
-  final String description;
-  final Future<void> Function() onBrowse;
-  final Future<void> Function(String) onFileSelected;
-  final String invalidDropMessage;
-  final String? selectedName;
-  final IconData selectedIcon;
-  final VoidCallback? onClear;
-  final bool enabled;
-  final bool active;
-
+class const FileDropField({
+  super.key,
+  required final String description,
+  required final Future<void> Function() onBrowse,
+  required final Future<void> Function(String) onFileSelected,
+  required final String invalidDropMessage,
+  final String? selectedName,
+  final IconData selectedIcon = Icons.check_circle,
+  final VoidCallback? onClear,
+  final bool enabled = true,
+  final bool active = true,
+}) extends StatefulWidget {
   @override
   State<FileDropField> createState() => _FileDropFieldState();
 }
@@ -53,7 +39,7 @@ class _FileDropFieldState extends State<FileDropField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = context.appTheme;
     final selected = widget.selectedName != null;
     final drop = PlatformFileActions.supportsDragAndDrop;
     final radius = BorderRadius.circular(theme.cornerRadius);

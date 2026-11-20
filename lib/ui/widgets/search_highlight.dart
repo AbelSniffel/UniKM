@@ -52,15 +52,11 @@ TextStyle searchMarkStyle(Color accent) =>
     TextStyle(backgroundColor: accent.withValues(alpha: 0.35));
 
 /// The settings search, for the settings cards below it to mark a match.
-class SettingsSearchScope extends InheritedWidget {
-  const SettingsSearchScope({
-    super.key,
-    required this.query,
-    required super.child,
-  });
-
-  final String query;
-
+class const SettingsSearchScope({
+  super.key,
+  required final String query,
+  required super.child,
+}) extends InheritedWidget {
   /// The search, or empty outside the settings page.
   static String queryOf(BuildContext context) =>
       context
@@ -75,16 +71,11 @@ class SettingsSearchScope extends InheritedWidget {
 
 /// Fades a settings search match in, holds it while it matches, and fades
 /// it out without unmounting it.
-class SearchHighlight extends StatelessWidget {
-  const SearchHighlight({
-    super.key,
-    required this.query,
-    required this.builder,
-  });
-
-  final String query;
-  final Widget Function(BuildContext context, double value) builder;
-
+class const SearchHighlight({
+  super.key,
+  required final String query,
+  required final Widget Function(BuildContext context, double value) builder,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(end: query.trim().isEmpty ? 0 : 1),

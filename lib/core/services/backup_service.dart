@@ -25,14 +25,11 @@ import '../utils/format_utils.dart';
 /// Why a backup was taken. The reason is stored in the file name, so it
 /// survives copies. [regular] is the automatic backup; manual backups made
 /// before the reason was recorded also read as regular.
-enum BackupKind {
+enum BackupKind(final String? fileToken) {
   regular(null),
   manual('manual'),
   preSync('sync'),
   preRestore('restore');
-
-  const BackupKind(this.fileToken);
-  final String? fileToken;
 
   /// Automatic backups rotate under the user's limit; the others are listed
   /// apart from them in the Backup Manager.
@@ -48,31 +45,20 @@ typedef _BackupName = ({
 });
 
 /// Represents a backup file
-class BackupInfo {
-  const BackupInfo({
-    required this.filePath,
-    required this.fileName,
-    required this.createdAt,
-    required this.isEncrypted,
-    required this.sizeBytes,
-    this.kind = BackupKind.regular,
-    this.databaseName,
-    this.peerName,
-  });
-
-  final String filePath;
-  final String fileName;
-  final DateTime createdAt;
-  final bool isEncrypted;
-  final int sizeBytes;
-  final BackupKind kind;
+class const BackupInfo({
+  required final String filePath,
+  required final String fileName,
+  required final DateTime createdAt,
+  required final bool isEncrypted,
+  required final int sizeBytes,
+  final BackupKind kind = BackupKind.regular,
 
   /// Database file the backup was taken from, when recorded.
-  final String? databaseName;
+  final String? databaseName,
 
   /// Device a pre-sync backup was taken for, when recorded.
-  final String? peerName;
-
+  final String? peerName,
+}) {
   /// Format size as human-readable string
   String get formattedSize => formatFileSize(sizeBytes);
 
@@ -94,32 +80,20 @@ class BackupInfo {
 }
 
 /// Result of a backup operation
-class BackupResult {
-  const BackupResult({required this.success, this.backupInfo, this.error});
-
-  final bool success;
-  final BackupInfo? backupInfo;
-  final String? error;
-}
+class const BackupResult({
+  required final bool success,
+  final BackupInfo? backupInfo,
+  final String? error,
+});
 
 /// Result of a restore operation
-class RestoreResult {
-  const RestoreResult({required this.success, this.error});
-
-  final bool success;
-  final String? error;
-}
+class const RestoreResult({required final bool success, final String? error});
 
 /// Backup service for managing database backups
-class BackupService {
-  BackupService({
-    required this.ref,
-    this.maxBackupCount = kDefaultMaxBackupCount,
-  });
-
-  final Ref ref;
-  final int maxBackupCount;
-
+class BackupService({
+  required final Ref ref,
+  final int maxBackupCount = kDefaultMaxBackupCount,
+}) {
   // Current names read
   // "<database> 2026-10-24 13-10-02[ manual| restore| sync-<peer>][ (2)]".
   // The peer is base64url so any device name fits in a file name.
@@ -462,9 +436,8 @@ class BackupService {
       }
 
       final basePath = await _getBaseDatabasePath();
-      final targetDirectory = await Directory(
-        p.dirname(basePath),
-      ).create(recursive: true);
+      final targetDirectory = await Directory(p.dirname(basePath))
+          .create(recursive: true);
       // Stage beside the destination so replacement is a same-filesystem rename.
       // Prepare before pruning backups or closing the active library: either
       // action could make the selected source unavailable.

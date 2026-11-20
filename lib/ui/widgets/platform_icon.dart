@@ -40,18 +40,12 @@ double platformIconSizeFor(GamePlatform platform, {double? minHeight}) {
   return base * multiplier;
 }
 
-class PlatformIcon extends StatelessWidget {
-  const PlatformIcon({
-    super.key,
-    required this.platform,
-    required this.color,
-    this.size,
-  });
-
-  final GamePlatform platform;
-  final Color color;
-  final double? size;
-
+class const PlatformIcon({
+  super.key,
+  required final GamePlatform platform,
+  required final Color color,
+  final double? size,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FaIcon(
     platformIconFor(platform),

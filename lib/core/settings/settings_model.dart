@@ -7,19 +7,15 @@ import 'dart:io';
 import '../constants/app_constants.dart';
 
 /// Navigation bar position options
-enum NavBarPosition {
+enum NavBarPosition(final String displayName) {
   left('Left'),
   right('Right'),
   top('Top'),
-  bottom('Bottom');
-
-  const NavBarPosition(this.displayName);
-
-  final String displayName;
+  bottom('Bottom'),
 }
 
 /// Page-button placement around the navigation gradient bar.
-enum NavButtonArrangement {
+enum NavButtonArrangement() {
   start,
   split,
   end;
@@ -32,48 +28,38 @@ enum NavButtonArrangement {
 }
 
 /// How page-button labels are shown in the navigation panel.
-enum NavExpansionMode {
+enum NavExpansionMode(final String displayName) {
   automatic('Dynamic'),
   expanded('Expanded'),
   collapsed('Collapsed');
-
-  const NavExpansionMode(this.displayName);
-
-  final String displayName;
 
   NavExpansionMode get next => values[(index + 1) % values.length];
 }
 
 /// Navigation bar appearance options
-enum NavBarAppearance {
+enum NavBarAppearance(final String displayName) {
   iconAndText('Icon & Text'),
   iconOnly('Icon Only'),
-  textOnly('Text Only');
-
-  const NavBarAppearance(this.displayName);
-
-  final String displayName;
+  textOnly('Text Only'),
 }
 
 /// Background pattern styles, drawn behind panels and pages.
-enum NavPanelOverlayStyle {
+enum NavPanelOverlayStyle(
+  final String displayName, {
+
+  /// Whether the pattern angle setting turns this style.
+  final bool usesAngle = false,
+}) {
   none('None'),
   diagonalStripes('Lines', usesAngle: true),
   crosshatch('Crosshatch'),
   stars('Stars'),
   halloween('Halloween'),
-  christmas('Christmas');
-
-  const NavPanelOverlayStyle(this.displayName, {this.usesAngle = false});
-
-  final String displayName;
-
-  /// Whether the pattern angle setting turns this style.
-  final bool usesAngle;
+  christmas('Christmas'),
 }
 
 /// Gradient animation styles
-enum GradientAnimation {
+enum GradientAnimation(final String displayName, final String description) {
   solid('Solid', 'No animation, solid primary color'),
   scroll('Scroll', 'Smooth scrolling gradient'),
   pulse('Pulse', 'Gentle breathing pulse'),
@@ -88,54 +74,32 @@ enum GradientAnimation {
   helix(
     'Helix',
     'Two twisting ribbons alternate over and under around a shared axis',
-  );
-
-  const GradientAnimation(this.displayName, this.description);
-
-  final String displayName;
-  final String description;
+  ),
 }
 
 /// Shared multiplier applied to each gradient effect's own base speed.
-enum GradientAnimationSpeed {
+enum GradientAnimationSpeed(final String displayName, final double multiplier) {
   slow('Slow', 0.5),
   standard('Default', 1.0),
   fast('Fast', 1.5),
-  veryFast('Very fast', 2.0);
-
-  const GradientAnimationSpeed(this.displayName, this.multiplier);
-
-  final String displayName;
-  final double multiplier;
+  veryFast('Very fast', 2.0),
 }
 
 /// Tooltip animation styles
-enum TooltipAnimation {
+enum TooltipAnimation(final String displayName) {
   fade('Fade'),
-  slide('Slide');
-
-  const TooltipAnimation(this.displayName);
-
-  final String displayName;
+  slide('Slide'),
 }
 
 /// Game list view mode
-enum GameListViewMode {
+enum GameListViewMode(final String displayName) {
   grid('Grid'),
-  list('List');
-
-  const GameListViewMode(this.displayName);
-
-  final String displayName;
+  list('List'),
 }
 
-enum ListViewDensityMode {
+enum ListViewDensityMode(final String displayName) {
   regular('Regular'),
-  slim('Slim');
-
-  const ListViewDensityMode(this.displayName);
-
-  final String displayName;
+  slim('Slim'),
 }
 
 ListViewDensityMode resolveListViewDensityMode({required bool slimListView}) =>
@@ -146,7 +110,7 @@ Map<String, dynamic> listViewDensityModeSettings(ListViewDensityMode mode) => {
 };
 
 /// Sort mode for game list
-enum GameSortMode {
+enum GameSortMode(final String displayName) {
   deadlineFirst('Deadline First'),
   titleAZ('Title A-Z'),
   titleZA('Title Z-A'),
@@ -155,18 +119,11 @@ enum GameSortMode {
   dateNewest('Newest First'),
   dateOldest('Oldest First'),
   ratingHigh('Highest Rating'),
-  ratingLow('Lowest Rating');
-
-  const GameSortMode(this.displayName);
-
-  final String displayName;
+  ratingLow('Lowest Rating'),
 }
 
 /// All app settings with their keys
-class SettingsKeys {
-  SettingsKeys._();
-
-  // Updates
+class SettingsKeys._() {
   static const String autoUpdateCheck = 'auto_update_check';
   static const String updateRepo = 'update_repo';
   static const String includePreReleases = 'include_pre_releases';
@@ -284,10 +241,7 @@ class SettingsKeys {
 }
 
 /// Default settings values
-class DefaultSettings {
-  DefaultSettings._();
-
-  // Updates
+class DefaultSettings._() {
   static const int autoCheckIntervalMinutes = kDefaultAutoUpdateIntervalMinutes;
 
   // Theme & UI

@@ -2,6 +2,7 @@
 library;
 
 import '../../../core/theme/theme_icons.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -24,12 +25,11 @@ import '../../../core/constants/app_constants.dart';
 // ---------------------------------------------------------------------------
 
 /// Theme editor dialog - for creating and editing custom themes.
-class ThemeEditorDialog extends ConsumerStatefulWidget {
-  const ThemeEditorDialog({super.key, required this.theme, this.existingTheme});
-
-  final AppThemeData theme;
-  final AppThemeData? existingTheme;
-
+class const ThemeEditorDialog({
+  super.key,
+  required final AppThemeData theme,
+  final AppThemeData? existingTheme,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<ThemeEditorDialog> createState() => _ThemeEditorDialogState();
 }
@@ -268,7 +268,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                 ),
                 // Color tiles — click to select, drag to swap
                 _section(
-                  previewTheme,
                   'Colors',
                   _buildColorCirclesRow(previewTheme),
                   trailing: 'Tap to edit · Drag to swap',
@@ -300,19 +299,15 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   // ---------------------------------------------------------------------------
 
   /// A heading over its [child], as in the other Tinted Tile dialogs.
-  static Widget _section(
-    AppThemeData theme,
-    String title,
-    Widget child, {
-    String? trailing,
-  }) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    spacing: 8,
-    children: [
-      TintedHeading(title: title, trailing: trailing),
-      child,
-    ],
-  );
+  static Widget _section(String title, Widget child, {String? trailing}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          TintedHeading(title: title, trailing: trailing),
+          child,
+        ],
+      );
 
   static String _slotLabel(_ColorSlot slot) =>
       '${slot[0].toUpperCase()}${slot.substring(1)}';
@@ -485,9 +480,8 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     final tileBox = tileContext.findRenderObject()! as RenderBox;
     final startT = _dragT;
     final from = dragRect(startT).shift(overlayBox.globalToLocal(releasedAt));
-    final to = dragRect(
-      0,
-    ).shift(overlayBox.globalToLocal(tileBox.localToGlobal(Offset.zero)));
+    final to = dragRect(0)
+        .shift(overlayBox.globalToLocal(tileBox.localToGlobal(Offset.zero)));
 
     void finish() {
       _clearReturnEntry();
@@ -575,13 +569,12 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
                 maxLength: 6,
-                buildCounter:
-                    (
-                      _, {
-                      required currentLength,
-                      required isFocused,
-                      maxLength,
-                    }) => null,
+                buildCounter: (
+                  _, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => null,
                 onChanged: _applyHexInput,
               ),
             ),
@@ -743,25 +736,17 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
 
 /// Picks saturation (across) and brightness (up) for one [hue]. It claims a
 /// pointer as it lands, so a touch drag picks instead of scrolling the dialog.
-class _SaturationValueArea extends StatelessWidget {
-  const _SaturationValueArea({
-    required this.hue,
-    required this.saturation,
-    required this.value,
-    required this.radius,
-    required this.onChanged,
-  });
-
+class const _SaturationValueArea({
+  required final double hue,
+  required final double saturation,
+  required final double value,
+  required final double radius,
+  required final void Function(double saturation, double value) onChanged,
+}) extends StatelessWidget {
   static const double height = 132;
 
   /// Keeps the handle inside the area at its edges.
   static const double thumbRadius = 9;
-
-  final double hue;
-  final double saturation;
-  final double value;
-  final double radius;
-  final void Function(double saturation, double value) onChanged;
 
   void _pick(Offset position, double width) {
     double along(double offset, double extent) =>
@@ -806,21 +791,13 @@ class _SaturationValueArea extends StatelessWidget {
   );
 }
 
-class _SaturationValuePainter extends CustomPainter {
-  const _SaturationValuePainter({
-    required this.hue,
-    required this.saturation,
-    required this.value,
-    required this.radius,
-    required this.border,
-  });
-
-  final double hue;
-  final double saturation;
-  final double value;
-  final double radius;
-  final Color border;
-
+class const _SaturationValuePainter({
+  required final double hue,
+  required final double saturation,
+  required final double value,
+  required final double radius,
+  required final Color border,
+}) extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -885,32 +862,21 @@ class _SaturationValuePainter extends CustomPainter {
 // ---------------------------------------------------------------------------
 
 /// A color slot's swatch with its name and hex code; also the drag feedback.
-class _ColorSwatch extends StatelessWidget {
-  const _ColorSwatch({
-    required this.color,
-    required this.label,
-    required this.hex,
-    required this.radius,
-    required this.lift,
-    required this.textOpacity,
-    required this.badge,
-    required this.duration,
-  });
+class const _ColorSwatch({
+  required final Color color,
+  required final String label,
+  required final String hex,
+  required final double radius,
 
+  /// 0 at rest, 1 hovered, up to 2 while dragged; deepens the shadow.
+  required final double lift,
+  required final double textOpacity,
+  required final IconData? badge,
+  required final Duration duration,
+}) extends StatelessWidget {
   /// Gap plus ring width between a tile's edge and its swatch.
   static const double inset = 5;
   static const double tileHeight = 94;
-
-  final Color color;
-  final String label;
-  final String hex;
-  final double radius;
-
-  /// 0 at rest, 1 hovered, up to 2 while dragged; deepens the shadow.
-  final double lift;
-  final double textOpacity;
-  final IconData? badge;
-  final Duration duration;
 
   @override
   Widget build(BuildContext context) {

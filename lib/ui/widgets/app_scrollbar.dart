@@ -6,27 +6,23 @@ library;
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
-class AppScrollbar extends RawScrollbar {
-  const AppScrollbar({
-    super.key,
-    required super.child,
-    super.controller,
-    super.thumbVisibility,
-    super.trackVisibility,
-    // An arrow over the thumb and track, whatever is underneath (a text
-    // field's I-beam, a card's hand).
-    super.mouseCursor = const WidgetStatePropertyAll(SystemMouseCursors.basic),
-  });
-
+class const AppScrollbar({
+  super.key,
+  required super.child,
+  super.controller,
+  super.thumbVisibility,
+  super.trackVisibility,
+  // An arrow over the thumb and track, whatever is underneath (a text
+  // field's I-beam, a card's hand).
+  super.mouseCursor = const WidgetStatePropertyAll(SystemMouseCursors.basic),
+}) extends RawScrollbar {
   @override
   RawScrollbarState<AppScrollbar> createState() => _AppScrollbarState();
 }
 
 /// Gives every implicit desktop scrollbar (lists, grids, scroll views) the
 /// [AppScrollbar] look.
-class AppScrollBehavior extends MaterialScrollBehavior {
-  const AppScrollBehavior();
-
+class const AppScrollBehavior() extends MaterialScrollBehavior {
   @override
   Widget buildScrollbar(
     BuildContext context,

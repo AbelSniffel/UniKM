@@ -177,14 +177,14 @@ List<Widget> buildHomePlatformAndSort(
 
 /// One groupbox: the tag filter, with its clear button beside the search,
 /// and the Show only options across its foot.
-class HomeFiltersPanel extends ConsumerStatefulWidget {
-  const HomeFiltersPanel({super.key, required this.sidebar});
+class const HomeFiltersPanel({
+  super.key,
 
   /// In the sidebar the groupbox fills the height, its tag list taking what
   /// the options leave. Below the toolbar platform and sort share a row on
   /// top, and the tag list is capped in height.
-  final bool sidebar;
-
+  required final bool sidebar,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<HomeFiltersPanel> createState() => _HomeFiltersPanelState();
 }
@@ -222,7 +222,6 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         for (final option in homeFilterOptions)
           AppActionButton(
             label: option.label,
-            theme: theme,
             selected: option.isOn(filters),
             onTap: () => option.set(notifier, !option.isOn(filters)),
           ),
@@ -252,7 +251,6 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
               children: [
                 Expanded(
                   child: AppSearchField(
-                    theme: theme,
                     // A little translucent, so what is behind shows faintly.
                     backgroundColor: Color.lerp(
                       theme.surface,
@@ -292,7 +290,6 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       return SectionGroupBox(
         key: const ValueKey('home-filter-group-tags'),
         title: 'Tags',
-        theme: theme,
         // A top title, even hidden, lets the content fill a bounded height.
         showTitle: false,
         padding: EdgeInsets.zero,
@@ -377,18 +374,13 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
 ///
 /// The sidebar moves as a layer of its own, so the slide never repaints it;
 /// only the library is laid out anew as it narrows or widens.
-class HomeFilterSidebarLayout extends ConsumerStatefulWidget {
-  const HomeFilterSidebarLayout({
-    super.key,
-    required this.showSidebar,
-    required this.child,
-  });
-
-  final bool showSidebar;
+class const HomeFilterSidebarLayout({
+  super.key,
+  required final bool showSidebar,
 
   /// The library.
-  final Widget child;
-
+  required final Widget child,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<HomeFilterSidebarLayout> createState() =>
       _HomeFilterSidebarLayoutState();
@@ -465,9 +457,7 @@ class _HomeFilterSidebarLayoutState
   }
 }
 
-class _HomeFilterSidebar extends ConsumerWidget {
-  const _HomeFilterSidebar();
-
+class const _HomeFilterSidebar() extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);

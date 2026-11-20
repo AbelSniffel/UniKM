@@ -5,18 +5,12 @@ import 'selection_ribbon.dart';
 
 /// Lives in the shell below the navigation slots so the navigation paints over
 /// the ribbon while both animate with the same duration and curve.
-class SelectionRibbonHost extends StatefulWidget {
-  const SelectionRibbonHost({
-    super.key,
-    required this.child,
-    required this.visible,
-    required this.atTop,
-  });
-
-  final Widget child;
-  final bool visible;
-  final bool atTop;
-
+class const SelectionRibbonHost({
+  super.key,
+  required final Widget child,
+  required final bool visible,
+  required final bool atTop,
+}) extends StatefulWidget {
   @override
   State<SelectionRibbonHost> createState() => _SelectionRibbonHostState();
 }

@@ -19,17 +19,11 @@ import 'settings_control_cards.dart';
 
 final gradientPreviewPlayingProvider = sessionValueProvider(true);
 
-class NavigationSection extends ConsumerWidget {
-  const NavigationSection({
-    super.key,
-    required this.theme,
-    this.searchQuery = '',
-    this.attachesToAbove = false,
-  });
-  final AppThemeData theme;
-  final String searchQuery;
-  final bool attachesToAbove;
-
+class const NavigationSection({
+  super.key,
+  final String searchQuery = '',
+  final bool attachesToAbove = false,
+}) extends ConsumerWidget {
   static const SettingTextSpec navPositionSpec = SettingTextSpec(
     label: 'Panel Position',
     icon: Icons.view_sidebar_outlined,
@@ -116,7 +110,6 @@ class NavigationSection extends ConsumerWidget {
       entries: [
         buildSearchableSectionEntry(
           visible: showNavBarSection,
-          theme: theme,
           group: navigationSearchGroup,
           titleIcon: Icons.view_sidebar,
           searchQuery: searchQuery,
@@ -129,7 +122,6 @@ class NavigationSection extends ConsumerWidget {
             spacing: 8,
             children: [
               SettingsButtonGroupCard<NavBarPosition>(
-                theme: theme,
                 label: navPositionSpec.label,
                 icon: navPositionSpec.icon,
                 value: navBarPosition,
@@ -144,7 +136,6 @@ class NavigationSection extends ConsumerWidget {
                 onChanged: settingsNotifier.setter(SettingsKeys.navBarPosition),
               ),
               SettingsButtonGroupCard<NavButtonArrangement>(
-                theme: theme,
                 label: navButtonArrangementHorizontalSpec.label,
                 icon: navButtonArrangementHorizontalSpec.icon,
                 value: navButtonArrangement,
@@ -172,7 +163,6 @@ class NavigationSection extends ConsumerWidget {
         SectionGroupEntry(
           visible: showGradientSection,
           builder: (position, isAlternate) => _GradientAnimationSection(
-            theme: theme,
             searchQuery: searchQuery,
             groupPosition: position,
             isAlternate: isAlternate,
@@ -214,21 +204,14 @@ Widget _arrangementIcon(
 // ---------------------------------------------------------------------------
 
 /// Gradient animation effect selector section
-class _GradientAnimationSection extends ConsumerWidget {
-  const _GradientAnimationSection({
-    required this.theme,
-    required this.searchQuery,
-    this.groupPosition = SectionGroupPosition.only,
-    this.isAlternate = false,
-  });
-
-  final AppThemeData theme;
-  final String searchQuery;
-  final SectionGroupPosition groupPosition;
-  final bool isAlternate;
-
+class const _GradientAnimationSection({
+  required final String searchQuery,
+  final SectionGroupPosition groupPosition = SectionGroupPosition.only,
+  final bool isAlternate = false,
+}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.appTheme;
     final currentAnimation = ref.watch(
       appShellSettingsProvider.select((s) => s.gradientAnimation),
     );
@@ -239,7 +222,6 @@ class _GradientAnimationSection extends ConsumerWidget {
 
     return SectionGroupBox(
       title: NavigationSection.gradientSearchGroup.title,
-      theme: theme,
       titleIcon: Icons.gradient,
       headerCrossAxisAlignment: CrossAxisAlignment.center,
       searchQuery: searchQuery,
@@ -311,7 +293,6 @@ class _GradientAnimationSection extends ConsumerWidget {
                 GradientEffectPreview(
                   key: ValueKey(effect),
                   effect: effect,
-                  theme: theme,
                   isSelected: effect == currentAnimation,
                   isPlaying: previewAnimationsPlaying,
                   onTap: () => settingsNotifier.set(
@@ -329,12 +310,10 @@ class _GradientAnimationSection extends ConsumerWidget {
 
 /// The swap icon in the gradient's colours: its top arrow in the colour the
 /// bar leads with (and solid bars use), its bottom arrow in the other.
-class _GradientOrderIcon extends StatelessWidget {
-  const _GradientOrderIcon({required this.leading, required this.trailing});
-
-  final Color leading;
-  final Color trailing;
-
+class const _GradientOrderIcon({
+  required final Color leading,
+  required final Color trailing,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ShaderMask(
     blendMode: BlendMode.srcIn,

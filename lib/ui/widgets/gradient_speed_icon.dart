@@ -4,18 +4,12 @@ import '../../core/settings/settings_model.dart';
 
 /// Rounded Material icons for the animation speed presets, or a pause icon
 /// while the previews are [paused].
-class GradientSpeedIcon extends StatelessWidget {
-  const GradientSpeedIcon({
-    super.key,
-    required this.speed,
-    required this.color,
-    this.paused = false,
-  });
-
-  final GradientAnimationSpeed speed;
-  final Color color;
-  final bool paused;
-
+class const GradientSpeedIcon({
+  super.key,
+  required final GradientAnimationSpeed speed,
+  required final Color color,
+  final bool paused = false,
+}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 28,

@@ -4,18 +4,14 @@ import '../../../core/services/steam_service.dart';
 import '../../library/data/library_repository.dart';
 
 /// Applies everything fetched to the latest row in the originating session.
-class ApplySteamMetadata {
-  const ApplySteamMetadata({
-    required this.database,
-    required this.isCurrent,
-    required this.downloadImage,
-  });
+class const ApplySteamMetadata({
+  required final AppDatabase database,
+  required final bool Function() isCurrent,
 
-  final AppDatabase database;
-  final bool Function() isCurrent;
   /// Saves [appId]'s artwork as the cover for games titled [title].
-  final Future<String?> Function(String appId, String title) downloadImage;
-
+  required final Future<String?> Function(String appId, String title)
+  downloadImage,
+}) {
   void _checkSession() {
     if (!isCurrent()) {
       throw StateError('Database session changed or operation cancelled');

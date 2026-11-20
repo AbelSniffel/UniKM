@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/utils/game_clipboard.dart';
 import '../../models/game.dart';
 import '../widgets/dialog_helpers.dart';
@@ -18,11 +17,8 @@ Future<void> showCopyActionsDialog(BuildContext context, List<Game> targets) =>
       builder: (_) => CopyActionsDialog(targets: targets),
     );
 
-class CopyActionsDialog extends ConsumerWidget {
-  const CopyActionsDialog({super.key, required this.targets});
-
-  final List<Game> targets;
-
+class const CopyActionsDialog({super.key, required final List<Game> targets})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final redeemable = targets
@@ -91,13 +87,11 @@ typedef _CopyAction = (
 );
 
 /// A titled list of tinted action tiles, with how many keys they cover.
-class _ActionGroup extends StatelessWidget {
-  const _ActionGroup(this.title, this.count, this.actions);
-
-  final String title;
-  final int count;
-  final List<_CopyAction> actions;
-
+class const _ActionGroup(
+  final String title,
+  final int count,
+  final List<_CopyAction> actions,
+) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,7 +104,6 @@ class _ActionGroup extends StatelessWidget {
       for (final (icon, label, format, run) in actions)
         // Closes the dialog, then runs the action.
         TintedOptionTile(
-          theme: context.appTheme,
           icon: icon,
           title: label,
           subtitle: format,

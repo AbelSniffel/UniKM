@@ -5,19 +5,12 @@ import 'dart:convert';
 ///
 /// A revocation is local trust state, never library data. Keep it across app
 /// restarts and do not expire it: the removed device may be offline for months.
-class SyncRevocationRecord {
-  const SyncRevocationRecord({
-    required this.peerId,
-    required this.fingerprint,
-    this.pairingId = '',
-    required this.revokedAtMillis,
-  });
-
-  final String peerId;
-  final String fingerprint;
-  final String pairingId;
-  final int revokedAtMillis;
-
+class const SyncRevocationRecord({
+  required final String peerId,
+  required final String fingerprint,
+  final String pairingId = '',
+  required final int revokedAtMillis,
+}) {
   Map<String, Object> toJson() => {
     'peerId': peerId,
     'fingerprint': fingerprint,
@@ -54,9 +47,10 @@ class SyncRevocationRecord {
 /// Persist [record] before deleting trust metadata or attempting delivery. Only
 /// [removePeer] after a new pairing succeeds, with a new signed pairing ID; a
 /// discovery packet or changed address must never restore trust.
-class SyncRevocationLedger {
-  SyncRevocationLedger([Iterable<SyncRevocationRecord> records = const []])
-    : records = List.unmodifiable(_latestRecords(records));
+class SyncRevocationLedger([
+  Iterable<SyncRevocationRecord> records = const [],
+]) {
+  this : records = List.unmodifiable(_latestRecords(records));
 
   final List<SyncRevocationRecord> records;
 
@@ -134,12 +128,12 @@ class SyncRevocationLedger {
 /// An evicted entry may be accepted again while its timestamp is still valid;
 /// sensitive operations must also validate the current pairing generation and
 /// be idempotent. This guard does not replace trust verification.
-class SyncControlReplayGuard {
-  SyncControlReplayGuard({
-    this.capacity = 4096,
-    this.retention = const Duration(minutes: 10),
-    this.maxClockSkew = const Duration(minutes: 5),
-  }) {
+class SyncControlReplayGuard({
+  final int capacity = 4096,
+  final Duration retention = const Duration(minutes: 10),
+  final Duration maxClockSkew = const Duration(minutes: 5),
+}) {
+  this {
     if (capacity <= 0 ||
         maxClockSkew.isNegative ||
         retention.inMilliseconds < 2 * maxClockSkew.inMilliseconds) {
@@ -150,9 +144,6 @@ class SyncControlReplayGuard {
     }
   }
 
-  final int capacity;
-  final Duration retention;
-  final Duration maxClockSkew;
   final LinkedHashMap<String, int> _accepted = LinkedHashMap();
   int _lastNowMillis = 0;
 

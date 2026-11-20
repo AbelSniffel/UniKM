@@ -25,22 +25,16 @@ import 'home_filters_panel.dart';
 const double _kLongSearchHintMinWidth = 460;
 const double _kMediumSearchHintMinWidth = 400;
 
-class HomeHeader extends ConsumerStatefulWidget {
-  const HomeHeader({
-    super.key,
-    required this.searchController,
-    required this.searchFocusNode,
-    required this.isVeryNarrowLayout,
-  });
-
-  final TextEditingController searchController;
-  final FocusNode searchFocusNode;
+class const HomeHeader({
+  super.key,
+  required final TextEditingController searchController,
+  required final FocusNode searchFocusNode,
 
   /// Very narrow layouts have no title bar sync icon, so the header shows it,
   /// and keep the filters in a panel below the toolbar instead of the
   /// sidebar.
-  final bool isVeryNarrowLayout;
-
+  required final bool isVeryNarrowLayout,
+}) extends ConsumerStatefulWidget {
   @override
   ConsumerState<HomeHeader> createState() => _HomeHeaderState();
 }
@@ -239,9 +233,8 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     // panel. Otherwise one row holds them all, the search in the middle. The
     // view choice lives in the navigation panel's More menu.
     final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
-    final countLabel = _GamesCount(theme: theme);
+    const countLabel = _GamesCount();
     final search = AppSearchField(
-      theme: theme,
       controller: widget.searchController,
       focusNode: widget.searchFocusNode,
       hintText: width >= _kLongSearchHintMinWidth
@@ -305,7 +298,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     final filterCount = _activeFilterCount(filters, platformFilter);
     final hasActiveFilters = filterCount > 0;
     Widget button(bool show, IconData shownIcon) => AppNavigationButton(
-      theme: theme,
       isSelected: show || hasActiveFilters,
       isEnabled: true,
       isHorizontal: true,
@@ -383,11 +375,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
 
 /// The library size, or "12 / 263 Games" while filters narrow it, as a
 /// button that opens the library stats.
-class _GamesCount extends ConsumerWidget {
-  const _GamesCount({required this.theme});
-
-  final AppThemeData theme;
-
+class const _GamesCount() extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shown = ref.watch(
@@ -416,11 +404,8 @@ class _GamesCount extends ConsumerWidget {
   }
 }
 
-class _LibrarySyncButton extends ConsumerWidget {
-  const _LibrarySyncButton({required this.theme});
-
-  final AppThemeData theme;
-
+class const _LibrarySyncButton({required final AppThemeData theme})
+    extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // The title bar's icon, so both buttons always agree.
@@ -431,7 +416,6 @@ class _LibrarySyncButton extends ConsumerWidget {
 
     // Same button style as the view toggle.
     return AppNavigationButton(
-      theme: theme,
       isSelected: false,
       isEnabled: true,
       isHorizontal: true,
