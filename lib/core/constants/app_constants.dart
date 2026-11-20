@@ -81,8 +81,8 @@ const Duration kMediumAnimation = Duration(milliseconds: 250);
 /// Shared timing for tab selection and tab content.
 const Duration kTabTransition = Duration(milliseconds: 350);
 const Curve kTabTransitionCurve = Curves.easeInOutCubic;
-const Duration kFilterExpandAnimation = Duration(milliseconds: 250);
-const Duration kFilterCollapseAnimation = Duration(milliseconds: 220);
+const Duration kFilterExpandAnimation = Duration(milliseconds: 320);
+const Duration kFilterCollapseAnimation = Duration(milliseconds: 280);
 const Curve kFilterPanelCurve = Curves.easeInOutCubic;
 
 /// The cross-fade between main pages, as quick as the navigation panel's

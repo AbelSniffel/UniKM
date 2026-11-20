@@ -12,7 +12,7 @@ import '../../../models/game.dart';
 import '../../dialogs/custom_tag_dialogs.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/add_tag_field.dart';
-import '../../widgets/tag_list.dart';
+import '../../widgets/tag_group_box.dart';
 import '../../widgets/dialog_helpers.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/section_groupbox.dart';
@@ -194,41 +194,21 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
       List<Tag> groupTags, {
       required Widget? trailing,
       required String emptyText,
-      required double maxHeight,
       ValueChanged<int>? onTagToggled,
     }) => SectionGroupEntry(
       visible: matches(group),
-      builder: (position, isAlternate) => SectionGroupBox(
-        title: '${group.title} (${groupTags.length})',
-        titleIcon: icon,
-        headerCrossAxisAlignment: CrossAxisAlignment.center,
+      builder: (position, isAlternate) => TagGroupBox(
+        title: group.title,
+        icon: icon,
+        tags: groupTags,
+        emptyText: emptyText,
         trailing: trailing,
+        deleteOnTap: onTagToggled != null,
+        onTagToggled: onTagToggled,
+        maxHeight: 200,
         searchQuery: widget.searchQuery,
         groupPosition: position,
         alternateBackground: isAlternate,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (groupTags.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  emptyText,
-                  style: TextStyle(color: theme.textHint),
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else
-              TagList(
-                tags: groupTags,
-                theme: theme,
-                allSelected: true,
-                deleteOnTap: onTagToggled != null,
-                onTagToggled: onTagToggled,
-                maxHeight: maxHeight,
-              ),
-          ],
-        ),
       ),
     );
 
@@ -259,7 +239,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                   _deleteAllCustomTags,
                 ),
           emptyText: 'No custom tags created yet',
-          maxHeight: 200,
           onTagToggled: (tagId) {
             final tag = customTags.firstWhere((t) => t.id == tagId);
             _deleteTag(tag.id, tag.name);
@@ -279,7 +258,6 @@ class _TagsSectionState extends ConsumerState<TagsSection> {
                 ),
           emptyText:
               '${TagsSection.steamTagsInfoSpec.label}\n\n${TagsSection.steamTagsInfoSpec.description}',
-          maxHeight: 200,
         ),
         SectionGroupEntry(
           visible:

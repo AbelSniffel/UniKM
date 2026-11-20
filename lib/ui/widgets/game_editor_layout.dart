@@ -6,17 +6,18 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
+import '../pages/settings_sections/settings_common.dart';
 import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
 import 'game_cover_image.dart';
 import 'notification_system.dart';
-import 'platform_icon.dart';
-import 'tag_list.dart';
+import 'settings_section_family.dart';
+import 'tag_group_box.dart';
 
 /// How long ago [date] was, in whole days, months or years.
 String daysAgoLabel(DateTime date) {
@@ -184,7 +185,7 @@ class const GameEditorLayout({
     ],
   );
 
-  /// From the notes' frame to what it holds, as in [GameTagsBox].
+  /// From the notes' frame to what it holds, as in the tags' panel.
   static const _boxPadding = 12.0;
 
   /// Between the notes and the tags, beside or above each other, as between
@@ -219,32 +220,41 @@ class const GameEditorLayout({
         onChanged: (_) => onNotesChanged(),
       ),
     );
+    // The settings page's tag groups, without its header, add field or
+    // delete buttons, filled like the notes beside them.
     final tagSection = _section(
       'Tags',
-      GameTagsBox(
-        custom: customTags.isEmpty
-            // Centred on the icon, like a row of tags.
-            ? ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 32),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  heightFactor: 1,
-                  child: Text(
-                    'No custom tags created yet',
-                    style: TextStyle(color: theme.textHint),
-                  ),
-                ),
-              )
-            : TagList(
+      SettingsSectionFamily(
+        color: theme.inputBackground,
+        child: SettingsSectionGroups(
+          entries: [
+            SectionGroupEntry(
+              visible: true,
+              builder: (_, _) => TagGroupBox(
+                title: 'Custom Tags',
+                icon: Icons.label,
                 tags: customTags,
-                theme: theme,
+                emptyText: 'No custom tags created yet',
                 selectedTagIds: selectedTagIds,
-                maxRows: 5,
                 onTagToggled: onTagToggled,
+                maxRows: 5,
               ),
-        steamTags: steamTags,
+            ),
+            SectionGroupEntry(
+              visible: steamTags.isNotEmpty,
+              builder: (_, _) => TagGroupBox(
+                title: 'Steam Tags',
+                icon: FontAwesomeIcons.steam.data,
+                tags: steamTags,
+                emptyText: '',
+                maxRows: 5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+
     if (!wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -351,17 +361,19 @@ class const GameBanner({
   @override
   Widget build(BuildContext context) => Stack(
     children: [
-      Positioned(
-        left: 0,
-        top: 0,
-        right: 0,
-        child: ClipRRect(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(cornerRadius),
-          ),
-          child: GameBannerBackdrop(
-            coverController: coverController,
-            solidHeight: solidHeight,
+      // As tall as the banner at most, so a short one fades out by its foot
+      // instead of cutting the backdrop off.
+      Positioned.fill(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ClipRRect(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(cornerRadius),
+            ),
+            child: GameBannerBackdrop(
+              coverController: coverController,
+              solidHeight: solidHeight,
+            ),
           ),
         ),
       ),
@@ -372,8 +384,8 @@ class const GameBanner({
 
 /// A banner's backdrop: the cover's art blurred and tinted with the accent
 /// (so an empty cover still has some colour), at full strength down to
-/// [solidHeight], then fading out over [fadeLength] so it has no edge of its
-/// own.
+/// [solidHeight], then fading out over [fadeLength], or over what height is
+/// left when it is given less, so it has no edge of its own.
 class const GameBannerBackdrop({
   super.key,
 
@@ -388,27 +400,37 @@ class const GameBannerBackdrop({
 
   /// How far the backdrop fades out below [solidHeight]; past it nothing
   /// shows, so nothing is blurred or painted there.
-  static const fadeLength = 400.0;
+  /// Long enough to reach most of the way down the Game Editor, so its
+  /// body takes some of the cover's colour too.
+  static const fadeLength = 700.0;
+
+  /// Full strength down to about the foot of a wide [GameBannerHero].
+  static const wideSolidHeight = 240.0;
 
   /// The full-strength height for a [GameBannerHero] [width] wide whose
-  /// cover is [coverAspect] wide for its height. Wide, the cover sits beside
-  /// the details and only the heading needs it; narrow, the cover spans the
-  /// banner and would hide that part, so it reaches down to the cover's foot
-  /// and the art shows round the details under it.
+  /// cover is [coverAspect] wide for its height. Wide, it covers the hero,
+  /// cover and details side by side; narrow, the cover spans the banner and
+  /// would hide that part, so it reaches down to the cover's foot and the art
+  /// shows round the details under it.
   static double solidHeightFor({
     required bool wide,
     required double width,
     required double coverAspect,
   }) => wide
-      ? headerHeight
+      ? wideSolidHeight
       // The hero's padding (12 and 10 at the sides, 12 on top), heading row
       // (40) and the 4 under it.
       : 56 + (width - 22) / coverAspect;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _build(context, constraints.maxHeight),
+  );
+
+  Widget _build(BuildContext context, double maxHeight) {
     final theme = context.appTheme;
-    final height = solidHeight + fadeLength;
+    final height = math.min(solidHeight + fadeLength, maxHeight);
+    final fade = math.max(0.0, height - solidHeight);
     return SizedBox(
       height: height,
       // The enlarged, blurred art would spill past the fade otherwise.
@@ -427,8 +449,8 @@ class const GameBannerBackdrop({
               ],
               stops: [
                 0,
-                for (final y in [0, 100, 200, 300, 400])
-                  (solidHeight + y) / height,
+                for (final t in [0.0, 0.25, 0.5, 0.75, 1.0])
+                  math.min(1.0, (solidHeight + t * fade) / height),
               ],
             ).createShader(bounds),
             child: Stack(
@@ -610,75 +632,6 @@ class _GameKeyFieldState extends State<GameKeyField> {
       ),
       validator: widget.validator,
       onChanged: widget.onChanged,
-    );
-  }
-}
-
-/// Tags in a box outlined like the Game Editor's Notes, but unfilled so the
-/// banner's art shows through, curving with the tags 12 px in: [custom] tags
-/// beside a pencil, then [steamTags] beside the Steam icon, as one list.
-class const GameTagsBox({
-  super.key,
-  final Widget? custom,
-  final List<Tag> steamTags = const [],
-}) extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.appTheme;
-    final radius = BorderRadius.circular(theme.panelRadius);
-    // As wide for either icon, so both lists start in line, and level with
-    // the first row of tags.
-    Widget labelled(String label, Widget icon, Widget tags) => Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 10,
-      children: [
-        SizedBox(
-          width: 22,
-          height: 32,
-          child: Tooltip(
-            message: label,
-            child: Center(child: icon),
-          ),
-        ),
-        Expanded(child: tags),
-      ],
-    );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.border),
-        borderRadius: radius,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        // A little further apart than rows of tags, so each kind starts a
-        // group of its own.
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 8,
-          children: [
-            if (custom case final custom?)
-              labelled(
-                'Custom Tags',
-                Icon(Icons.edit, size: 18, color: theme.textSecondary),
-                custom,
-              ),
-            if (steamTags.isNotEmpty)
-              labelled(
-                'Steam Tags',
-                PlatformIcon(
-                  platform: GamePlatform.steam,
-                  color: theme.textSecondary,
-                ),
-                TagList(
-                  tags: steamTags,
-                  theme: theme,
-                  allSelected: true,
-                  maxRows: 5,
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -222,6 +222,8 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
         labelText: 'Exact date',
         border: theme.resolveInputBorder(labelInside: true),
         hintText: 'dd/MM/yyyy',
+        // Muted text rather than the fainter hint colour, so it reads.
+        hintStyle: TextStyle(color: theme.textSecondary),
         errorText: _exactDateError,
         errorMaxLines: 2,
         prefixIcon: Icon(
@@ -241,7 +243,8 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       decoration: InputDecoration(
         labelText: 'Expires in',
         border: theme.resolveInputBorder(labelInside: true),
-        hintText: 'Days',
+        hintText: 'Number',
+        hintStyle: TextStyle(color: theme.textSecondary),
         errorText: _dayAmountError,
         errorMaxLines: 2,
         suffixText: 'days',

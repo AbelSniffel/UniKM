@@ -237,7 +237,7 @@ class const _GradientAnimationSection({
               SettingsKeys.swapGradientColors,
               !swapGradientColors,
             ),
-            icon: _GradientOrderIcon(
+            icon: GradientOrderIcon(
               leading: swapGradientColors ? theme.secondary : theme.accent,
               trailing: swapGradientColors ? theme.accent : theme.secondary,
             ),
@@ -310,19 +310,54 @@ class const _GradientAnimationSection({
 
 /// The swap icon in the gradient's colours: its top arrow in the colour the
 /// bar leads with (and solid bars use), its bottom arrow in the other.
-class const _GradientOrderIcon({
+class const GradientOrderIcon({
   required final Color leading,
   required final Color trailing,
 }) extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => ShaderMask(
-    blendMode: BlendMode.srcIn,
-    shaderCallback: (bounds) => LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [leading, leading, trailing, trailing],
-      stops: const [0, 0.5, 0.5, 1],
-    ).createShader(bounds),
-    child: const Icon(Icons.swap_horiz, size: 26),
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size.square(26),
+    painter: _SwapArrowsPainter(leading: leading, trailing: trailing),
   );
+}
+
+/// The swap icon's two arrows, each wholly in its own colour: the top one
+/// in [leading], the bottom one in [trailing]. The arrows overlap in height,
+/// so colouring the icon's halves would tint each with the other's colour.
+class _SwapArrowsPainter extends CustomPainter {
+  _SwapArrowsPainter({required this.leading, required this.trailing});
+
+  final Color leading;
+  final Color trailing;
+
+  // Icons.swap_horiz's arrows on its 24 px grid.
+  static final _top = Path()
+    ..moveTo(21, 9)
+    ..lineTo(17.01, 5)
+    ..lineTo(17.01, 8)
+    ..lineTo(10, 8)
+    ..lineTo(10, 10)
+    ..lineTo(17.01, 10)
+    ..lineTo(17.01, 13)
+    ..close();
+  static final _bottom = Path()
+    ..moveTo(6.99, 11)
+    ..lineTo(3, 15)
+    ..lineTo(6.99, 19)
+    ..lineTo(6.99, 16)
+    ..lineTo(14, 16)
+    ..lineTo(14, 14)
+    ..lineTo(6.99, 14)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24, size.height / 24);
+    canvas.drawPath(_top, Paint()..color = leading);
+    canvas.drawPath(_bottom, Paint()..color = trailing);
+  }
+
+  @override
+  bool shouldRepaint(_SwapArrowsPainter old) =>
+      old.leading != leading || old.trailing != trailing;
 }
