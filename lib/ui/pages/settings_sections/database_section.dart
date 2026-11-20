@@ -35,7 +35,6 @@ import '../../widgets/notification_system.dart';
 import '../../widgets/popup_menu_helpers.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tinted_tiles.dart';
-import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../../core/constants/app_constants.dart';
 import 'settings_common.dart';
@@ -166,15 +165,11 @@ Future<void> _createDatabase(BuildContext context, WidgetRef ref) async {
 }
 
 /// Icon actions shared by the Database header and selected subpage.
-class const DatabaseHeaderActions({super.key, final bool expanded = false})
-    extends ConsumerWidget {
+class const DatabaseHeaderActions({super.key}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final switching = ref.watch(databaseSwitchingProvider);
-    // Settings header actions share the selection bar's button group.
-    return NavButtonGroup(
-      isHorizontal: true,
-      expanded: expanded,
+    return SettingsHeaderActionRow(
       children: [
         for (final (icon, tooltip, onTap) in [
           (Icons.download, 'Import DB', () => showImportDialog(context)),

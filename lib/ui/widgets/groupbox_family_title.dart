@@ -1,24 +1,18 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
 import 'dialog_helpers.dart';
 
-/// Header actions move below the title at this content width or narrower.
-/// The short title and compact actions fit inline slightly below the card
-/// compact width, so the header stays on one row a little longer.
-const double kFamilyTitleStackWidth = kSettingsCompactLayoutBreakpoint - 10;
-
 /// A settings panel's header, on top of its groups with a line between
 /// them: an accent tint, titled like a dialog, the icon straight beside the
-/// title.
+/// title and any [trailing] actions at the end of the same row.
 class const GroupBoxFamilyTitle({
   super.key,
   required final AppThemeData theme,
   required final String title,
   required final IconData icon,
-  final Widget Function(bool expanded)? trailingBuilder,
+  final Widget? trailing,
 }) extends StatelessWidget {
   /// The title sits 6 px in from the groups below, as a dialog's title does
   /// from its content.
@@ -36,41 +30,23 @@ class const GroupBoxFamilyTitle({
         bottom: BorderSide(color: theme.border.withValues(alpha: 0.05)),
       ),
     ),
-    child: _buildTitle(),
-  );
-
-  // Both layouts are built once per build, outside the layout callback, so a
-  // width change only picks one instead of rebuilding the header actions.
-  Widget _buildTitle() {
-    // As tall as the header actions, so every header is the same height.
-    final text = Expanded(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 36),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: DialogHeader(icon: icon, title: title),
-        ),
-      ),
-    );
-    final trailingBuilder = this.trailingBuilder;
-    if (trailingBuilder == null) return Row(children: [text]);
-    final inline = Row(
-      children: [text, const SizedBox(width: 12), trailingBuilder(false)],
-    );
-    final stacked = Column(
+    child: Row(
       children: [
-        Row(children: [text]),
-        const SizedBox(height: 4),
-        SizedBox(width: double.infinity, child: trailingBuilder(true)),
+        // As tall as the header actions, so every header is the same height.
+        Expanded(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 36),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: DialogHeader(icon: icon, title: title),
+            ),
+          ),
+        ),
+        if (trailing case final trailing?) ...[
+          const SizedBox(width: 12),
+          trailing,
+        ],
       ],
-    );
-    // Measured like the groups below, which sit 12 px inside the panel.
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          constraints.maxWidth + _padding.horizontal - 24 <=
-              kFamilyTitleStackWidth
-          ? stacked
-          : inline,
-    );
-  }
+    ),
+  );
 }

@@ -2,41 +2,37 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
-/// A settings header's action, for its horizontal button group.
+/// A settings header's action: a plain icon button sitting straight on the
+/// header row, as tall as the title so every header keeps one height.
 class const SettingsHeaderAction({
   super.key,
   required final IconData icon,
   required final String tooltip,
   required final VoidCallback? onTap,
-
-  /// A count on the icon, such as how many versions are skipped.
-  final int? badgeCount,
 }) extends StatelessWidget {
   @override
-  // A fixed height keeps the button 32 px in headers that offer more.
-  Widget build(BuildContext context) => SizedBox(
-    height: 32,
-    child: AppNavigationButton(
-      isSelected: false,
-      isEnabled: onTap != null,
-      isHorizontal: true,
-      onTap: onTap,
-      iconData: icon,
-      iconBuilder: badgeCount == null
-          ? null
-          : (context, color, size) => Badge.count(
-              count: badgeCount!,
-              backgroundColor: context.appTheme.accent,
-              textColor: context.appTheme.accent.computeLuminance() > 0.3
-                  ? Colors.black
-                  : Colors.white,
-              child: Icon(icon, color: color, size: size),
-            ),
-      tooltipMessage: tooltip,
-      // 4 px smaller than the selection bar's 36 px buttons.
-      iconSize: 20,
-      padding: const EdgeInsets.all(6),
-      minWidth: 32,
+  Widget build(BuildContext context) => IconButton(
+    icon: Icon(icon),
+    tooltip: tooltip,
+    onPressed: onTap,
+    style: IconButton.styleFrom(
+      // The accent, like the title's icon.
+      foregroundColor: context.appTheme.accent,
+      minimumSize: const Size.square(36),
+      iconSize: 22,
+      padding: EdgeInsets.zero,
+      // Not shrunk by the app's compact density, so it fills the title row.
+      visualDensity: VisualDensity.standard,
     ),
   );
+}
+
+/// A header's actions in a row, 2 px apart.
+class const SettingsHeaderActionRow({
+  super.key,
+  required final List<Widget> children,
+}) extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) =>
+      Row(mainAxisSize: MainAxisSize.min, spacing: 2, children: children);
 }

@@ -23,7 +23,6 @@ import '../../widgets/background_pattern.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
-import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_header_actions.dart';
 import '../../widgets/theme_preview_card.dart';
 import '../../widgets/theme_picker_actions.dart';
@@ -330,29 +329,25 @@ Future<void> _exportTheme(
 }
 
 /// Import/export actions shared by the Appearance and search-result headers.
-class const ThemeHeaderActions({super.key, final bool expanded = false})
-    extends ConsumerWidget {
+class const ThemeHeaderActions({super.key}) extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final buttons = <Widget>[
-      SettingsHeaderAction(
-        icon: Icons.download,
-        tooltip: 'Import Theme',
-        onTap: () => _importThemes(context, ref),
-      ),
-      SettingsHeaderAction(
-        icon: Icons.upload,
-        tooltip: 'Export Theme',
-        onTap: theme.id.isEmpty
-            ? null
-            : () => _exportTheme(context, ref, theme),
-      ),
-    ];
-    return NavButtonGroup(
-      isHorizontal: true,
-      expanded: expanded,
-      children: buttons,
+    return SettingsHeaderActionRow(
+      children: [
+        SettingsHeaderAction(
+          icon: Icons.download,
+          tooltip: 'Import Theme',
+          onTap: () => _importThemes(context, ref),
+        ),
+        SettingsHeaderAction(
+          icon: Icons.upload,
+          tooltip: 'Export Theme',
+          onTap: theme.id.isEmpty
+              ? null
+              : () => _exportTheme(context, ref, theme),
+        ),
+      ],
     );
   }
 }

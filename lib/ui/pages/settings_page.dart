@@ -371,13 +371,9 @@ class const _SettingsPageBody({
               theme: theme,
               title: section.headerTitle,
               icon: section.icon,
-              trailingBuilder: switch (section.id) {
-                'appearance' => (bool expanded) => ThemeHeaderActions(
-                  expanded: expanded,
-                ),
-                'database' => (bool expanded) => DatabaseHeaderActions(
-                  expanded: expanded,
-                ),
+              trailing: switch (section.id) {
+                'appearance' => const ThemeHeaderActions(),
+                'database' => const DatabaseHeaderActions(),
                 _ => null,
               },
             ),
