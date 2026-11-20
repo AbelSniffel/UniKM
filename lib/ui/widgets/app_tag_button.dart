@@ -21,6 +21,10 @@ import 'settings_card_inset.dart';
 /// outline, label color fade and ink (surface, hover, focus and press
 /// highlights and the theme's splash), and [Focus] and [Actions] for the
 /// keyboard. Read-only chips ([onTap] null) show as on and take no input.
+///
+/// A toggle shows its state by its label's color and the inset alone; only
+/// a custom tag that a click deletes ([deleteOnTap]) shows a mark, a check
+/// that turns into a cross while hovered.
 class const AppTagButton({
   super.key,
   required final Tag tag,
@@ -28,7 +32,8 @@ class const AppTagButton({
   final bool isSelected = false,
   final VoidCallback? onTap,
 
-  /// A custom tag's mark turns into a cross while hovered.
+  /// A click deletes the tag, so a custom tag shows a check that turns into
+  /// a cross while hovered.
   final bool deleteOnTap = false,
 }) extends StatefulWidget {
   @override
@@ -94,8 +99,6 @@ class _AppTagButtonState extends State<AppTagButton>
   final _surfaceAlpha = _Ease<double>(0, Curves.easeOutCubic);
   final _depth = _Ease<double>(0, Curves.easeOutCubic);
   final _inset = _Ease<double>(0, Curves.easeOutCubic);
-  // The mark's size; the label slides over to make room for it.
-  final _shown = _Ease<double>(0, Curves.easeInOutCubic);
   final _mark = _Ease<Offset>(Offset.zero, Curves.easeInOutCubic);
 
   bool get _readOnly => widget.onTap == null;
@@ -103,7 +106,9 @@ class _AppTagButtonState extends State<AppTagButton>
   bool get _idle => !_selected && _states.isEmpty;
   Color get _accent =>
       widget.tag.isSteamTag ? widget.theme.accent : widget.theme.secondary;
-  bool get _deleteOnHover =>
+
+  /// Shows the mark: a custom tag that a click deletes.
+  bool get _marked =>
       widget.deleteOnTap && !widget.tag.isSteamTag && !_readOnly;
 
   @override
@@ -161,7 +166,7 @@ class _AppTagButtonState extends State<AppTagButton>
     _activation?.cancel();
     _tap.dispose();
     _focus.dispose();
-    for (final ease in [_surfaceAlpha, _depth, _inset, _shown, _mark]) {
+    for (final ease in [_surfaceAlpha, _depth, _inset, _mark]) {
       ease.dispose();
     }
     super.dispose();
@@ -338,15 +343,9 @@ class _AppTagButtonState extends State<AppTagButton>
       this,
       _tick,
     );
-    if (_readOnly) return;
+    if (!_marked) return;
     final hovered = _states.contains(WidgetState.hovered);
-    _shown.to(idle ? 0 : 1, status, this, _tick);
-    _mark.to(
-      Offset(_selected ? 1 : 0, _deleteOnHover && hovered ? 1 : 0),
-      status,
-      this,
-      _tick,
-    );
+    _mark.to(Offset(_selected ? 1 : 0, hovered ? 1 : 0), status, this, _tick);
   }
 
   @override
@@ -446,7 +445,7 @@ class const _TagChipBox({required final _AppTagButtonState state})
       ..look = (
         theme: state.widget.theme,
         accent: state._accent,
-        readOnly: state._readOnly,
+        marked: state._marked,
         ratio: MediaQuery.devicePixelRatioOf(context),
       );
   }
@@ -462,14 +461,9 @@ typedef _TextSettings = ({
 });
 
 /// What painting reads from the chip besides its eases: the theme, the tag's
-/// color, read-only (no mark, so a narrower chip) and the pixel ratio of the
+/// color, whether it shows a mark (a wider chip) and the pixel ratio of the
 /// cached inset.
-typedef _Look = ({
-  AppThemeData theme,
-  Color accent,
-  bool readOnly,
-  double ratio,
-});
+typedef _Look = ({AppThemeData theme, Color accent, bool marked, double ratio});
 
 class _RenderTagChip(final _AppTagButtonState state)
     extends RenderBox
@@ -479,7 +473,7 @@ class _RenderTagChip(final _AppTagButtonState state)
   _Look? _look;
   set look(_Look value) {
     if (value == _look) return;
-    value.readOnly != _look?.readOnly ? markNeedsLayout() : markNeedsPaint();
+    value.marked != _look?.marked ? markNeedsLayout() : markNeedsPaint();
     _look = value;
   }
 
@@ -512,7 +506,7 @@ class _RenderTagChip(final _AppTagButtonState state)
         : markNeedsPaint();
   }
 
-  bool get _showsStatus => !_look!.readOnly;
+  bool get _showsStatus => _look!.marked;
 
   @override
   bool get isRepaintBoundary => true;
@@ -584,14 +578,8 @@ class _RenderTagChip(final _AppTagButtonState state)
       painter(ButtonDepthPainter(depth, true, state._shape, _text!.direction));
     }
 
-    final shown = _showsStatus ? state._shown.value : 1.0;
-    const hiddenShift = _statusRoom / 2;
     final textOffset =
-        offset +
-        Offset(
-          _padding + (1 - shown) * hiddenShift,
-          _rowTop + (_rowHeight - _painter.height) / 2,
-        );
+        offset + Offset(_padding, _rowTop + (_rowHeight - _painter.height) / 2);
     if (_clipText) {
       canvas
         ..save()
@@ -600,7 +588,7 @@ class _RenderTagChip(final _AppTagButtonState state)
     _painter.paint(canvas, textOffset);
     if (_clipText) canvas.restore();
 
-    if (_showsStatus && shown != 0) {
+    if (_showsStatus) {
       final mark = state._mark.value;
       final box =
           offset +
@@ -611,9 +599,6 @@ class _RenderTagChip(final _AppTagButtonState state)
           const Size.square(_status);
       canvas
         ..save()
-        ..translate(box.center.dx, box.center.dy)
-        ..scale(shown)
-        ..translate(-box.center.dx, -box.center.dy)
         ..translate(box.left, box.top);
       ToggleIndicatorPainter(
         progress: mark.dx,

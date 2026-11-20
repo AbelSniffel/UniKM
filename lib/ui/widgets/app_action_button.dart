@@ -25,8 +25,6 @@ class const AppActionButton({
   /// Selected text, indicator, and highlighted border color.
   final Color? accentColor,
 
-  /// Morph the fixed suffix into a delete mark while hovering an action tag.
-  final bool deleteOnHover = false,
   final bool showStatus = true,
   final bool readOnly = false,
 
@@ -38,52 +36,22 @@ class const AppActionButton({
   static const statusSize = 14.0;
   static const statusSpacing = 4.0;
 
-  /// Puts a toggle's status mark after its [label], for a `foregroundBuilder`.
-  /// While the toggle is off and idle the mark is hidden and the label sits
-  /// centred over the empty slot. Being on, hovered, pressed or focused moves
-  /// the label back to its place and grows the mark in. The label moves by
-  /// paint only, so the button keeps its size and never re-lays out.
-  /// [alwaysShown] keeps the mark showing and the label in its place.
+  /// Puts a toggle's status mark after its [label], for a
+  /// `foregroundBuilder`: a dot while off, a check while on, always shown so
+  /// the label never moves.
   static Widget withStatus(
-    BuildContext context,
-    Set<WidgetState> states,
     Widget label, {
     required bool selected,
     Color? accentColor,
-    bool deleteOnHover = false,
     double gap = statusSpacing,
-    bool alwaysShown = false,
-  }) {
-    final hovered = states.contains(WidgetState.hovered);
-    final shown =
-        alwaysShown ||
-        selected ||
-        hovered ||
-        states.contains(WidgetState.pressed) ||
-        states.contains(WidgetState.focused);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(end: shown ? 0 : (gap + statusSize) / 2),
-            duration: _statusDuration(context),
-            curve: Curves.easeInOutCubic,
-            child: label,
-            builder: (_, dx, child) =>
-                Transform.translate(offset: Offset(dx, 0), child: child),
-          ),
-        ),
-        SizedBox(width: gap),
-        AppButtonSelectionIndicator(
-          selected: selected,
-          deleteHovered: deleteOnHover && hovered,
-          visible: shown,
-          accentColor: accentColor,
-        ),
-      ],
-    );
-  }
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    spacing: gap,
+    children: [
+      Flexible(child: label),
+      AppButtonSelectionIndicator(selected: selected, accentColor: accentColor),
+    ],
+  );
 
   static ButtonStyle styleFor(
     AppThemeData theme, {
@@ -239,12 +207,9 @@ class const AppActionButton({
                   foregroundBuilder: selected == null || !showStatus
                       ? null
                       : (context, states, label) => withStatus(
-                          context,
-                          states,
                           label!,
                           selected: selected!,
                           accentColor: accentColor,
-                          deleteOnHover: deleteOnHover,
                         ),
                 ),
         child: Row(
@@ -277,39 +242,30 @@ class const AppActionButton({
   }
 }
 
-/// A fixed-size status slot, shared by ordinary and compound toggle buttons.
+/// A fixed-size status mark, shared by ordinary and compound toggle
+/// buttons: a dot while off that grows into a check when [selected].
 class const AppButtonSelectionIndicator({
   super.key,
   required final bool selected,
   final Color? accentColor,
-  final bool deleteHovered = false,
-
-  /// Whether the mark is shown; hiding it shrinks it away to nothing.
-  final bool visible = true,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: AppActionButton.statusSize,
-    child: AnimatedScale(
-      scale: visible ? 1 : 0,
-      duration: _statusDuration(context),
-      curve: Curves.easeInOutCubic,
-      child: ExcludeSemantics(
-        child: TweenAnimationBuilder<Offset>(
-          tween: Tween(end: Offset(selected ? 1 : 0, deleteHovered ? 1 : 0)),
-          duration: _statusDuration(context),
-          curve: Curves.easeInOutCubic,
-          builder: (context, progress, child) => RepaintBoundary(
-            child: CustomPaint(
-              painter: ToggleIndicatorPainter(
-                progress: progress.dx,
-                deleteProgress: progress.dy,
-                color: Color.lerp(
-                  context.appTheme.textHint,
-                  accentColor ?? context.appTheme.accent,
-                  math.max(progress.dx, progress.dy),
-                )!,
-              ),
+    child: ExcludeSemantics(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selected ? 1 : 0),
+        duration: _statusDuration(context),
+        curve: Curves.easeInOutCubic,
+        builder: (context, progress, child) => RepaintBoundary(
+          child: CustomPaint(
+            painter: ToggleIndicatorPainter(
+              progress: progress,
+              color: Color.lerp(
+                context.appTheme.textHint,
+                accentColor ?? context.appTheme.accent,
+                progress,
+              )!,
             ),
           ),
         ),
@@ -318,33 +274,42 @@ class const AppButtonSelectionIndicator({
   );
 }
 
+/// A toggle's mark: off, a small dot; on ([progress] 1), a check; and over
+/// a tag that deletes, a cross ([deleteProgress] 1).
 class const ToggleIndicatorPainter({
   required final Color color,
   required final double progress,
-  required final double deleteProgress,
+  final double deleteProgress = 0,
 }) extends CustomPainter {
+  /// The off dot's radius, as a share of the mark's width.
+  static const _dotRadius = 0.14;
+
   @override
   void paint(Canvas canvas, Size size) {
     Offset scale(Offset point) =>
         Offset(point.dx * size.width, point.dy * size.height);
-    Offset morph(Offset line, Offset check, Offset cross) => scale(
-      Offset.lerp(Offset.lerp(line, check, progress)!, cross, deleteProgress)!,
+    // The check and cross grow out of the dot at the centre.
+    const centre = Offset(0.5, 0.5);
+    Offset morph(Offset check, Offset cross) => scale(
+      Offset.lerp(
+        Offset.lerp(centre, check, progress)!,
+        cross,
+        deleteProgress,
+      )!,
     );
-    final start = morph(
-      const Offset(0.22, 0.50),
-      const Offset(0.18, 0.50),
-      const Offset(0.20, 0.20),
-    );
-    final middle = morph(
-      const Offset(0.50, 0.50),
-      const Offset(0.41, 0.73),
-      const Offset(0.50, 0.50),
-    );
-    final end = morph(
-      const Offset(0.78, 0.50),
-      const Offset(0.84, 0.27),
-      const Offset(0.80, 0.80),
-    );
+    final start = morph(const Offset(0.18, 0.50), const Offset(0.20, 0.20));
+    final middle = morph(const Offset(0.41, 0.73), centre);
+    final end = morph(const Offset(0.84, 0.27), const Offset(0.80, 0.80));
+    // The dot shrinks away as the check or cross grows.
+    final dotShare = (1 - progress) * (1 - deleteProgress);
+    if (dotShare > 0) {
+      canvas.drawCircle(
+        scale(centre),
+        _dotRadius * size.width * dotShare,
+        Paint()..color = color,
+      );
+      if (dotShare == 1) return;
+    }
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -360,8 +325,7 @@ class const ToggleIndicatorPainter({
     );
     if (deleteProgress > 0) {
       // The cross's second stroke grows out from the centre.
-      Offset grow(Offset to) =>
-          scale(Offset.lerp(const Offset(0.5, 0.5), to, deleteProgress)!);
+      Offset grow(Offset to) => scale(Offset.lerp(centre, to, deleteProgress)!);
       canvas.drawLine(
         grow(const Offset(0.2, 0.8)),
         grow(const Offset(0.8, 0.2)),

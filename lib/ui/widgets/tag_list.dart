@@ -82,7 +82,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
   bool _filledRoom = false;
   final _buttons = <int, AppTagButton>{};
   final _textSizes = <String, Size>{};
-  // Text style, scaler, direction, locale and status-hidden flag that
+  // Text style, scaler, direction, locale and whether tags show a mark, that
   // [_textSizes] was measured with.
   Object? _measureMetrics;
   List<Tag> _rowTags = const [];
@@ -292,8 +292,9 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     final locale = Localizations.maybeLocaleOf(context);
-    final statusHidden = widget.onTagToggled == null;
-    final metrics = (style, scaler, direction, locale, statusHidden);
+    // Only custom tags that a click deletes show a mark, and take its room.
+    final marks = widget.deleteOnTap && widget.onTagToggled != null;
+    final metrics = (style, scaler, direction, locale, marks);
     final metricsChanged = metrics != _measureMetrics;
     if (metricsChanged) {
       _measureMetrics = metrics;
@@ -322,13 +323,14 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
           painter.layout();
           return painter.size;
         });
+        final marked = marks && !tag.isSteamTag;
         final tagWidth = math.min(
           width,
           textSize.width +
               AppActionButton.toggleHorizontalPadding * 2 +
-              (statusHidden
-                  ? 0
-                  : AppActionButton.statusSize + AppActionButton.statusSpacing),
+              (marked
+                  ? AppActionButton.statusSize + AppActionButton.statusSpacing
+                  : 0),
         );
         if (row.isNotEmpty && occupied + _spacing + tagWidth > width) {
           rows.add(row);
@@ -341,10 +343,7 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
         row.add(tag);
         rowHeight = math.max(
           rowHeight,
-          math.max(
-                statusHidden ? 0 : AppActionButton.statusSize,
-                textSize.height,
-              ) +
+          math.max(marked ? AppActionButton.statusSize : 0, textSize.height) +
               14,
         );
       }

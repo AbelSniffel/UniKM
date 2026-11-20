@@ -311,6 +311,7 @@ class const _GradientAnimationSection({
 /// The swap icon in the gradient's colours: its top arrow in the colour the
 /// bar leads with (and solid bars use), its bottom arrow in the other.
 class const GradientOrderIcon({
+  super.key,
   required final Color leading,
   required final Color trailing,
 }) extends StatelessWidget {

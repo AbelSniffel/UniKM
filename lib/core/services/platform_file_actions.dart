@@ -9,9 +9,22 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// What [PlatformFileActions.completeExport] does with a written export.
+enum ExportHandoff {
+  /// Written where the user chose; nothing more to do.
+  none,
+
+  /// Staged in the app's files and offered to the share sheet.
+  share,
+
+  /// Staged in the app's files, then saved where the user picks in the
+  /// system's save dialog, which can write anywhere the user can.
+  saveAs,
+}
+
 class const PlatformSaveTarget({
   required final File file,
-  required final bool shouldShareAfterWrite,
+  final ExportHandoff handoff = ExportHandoff.none,
 });
 
 class const PlatformFileActions._() {
@@ -34,30 +47,12 @@ class const PlatformFileActions._() {
 
       if (outputPath == null || outputPath.isEmpty) return null;
 
-      return PlatformSaveTarget(
-        file: File(outputPath),
-        shouldShareAfterWrite: false,
-      );
+      return PlatformSaveTarget(file: File(outputPath));
     }
 
-    if (Platform.isAndroid) {
-      final selectedDirectory = await FilePicker.getDirectoryPath(
-        dialogTitle: dialogTitle,
-      );
-
-      if (selectedDirectory == null || selectedDirectory.isEmpty) return null;
-
-      final outputPath = await createUniquePathInDirectory(
-        directoryPath: selectedDirectory,
-        fileName: fileName,
-      );
-
-      return PlatformSaveTarget(
-        file: File(outputPath),
-        shouldShareAfterWrite: false,
-      );
-    }
-
+    // A folder picked on Android is a path the app often cannot write to, so
+    // the export is staged in the app's files and saved through the system's
+    // save dialog once written.
     final outputPath = await createManagedFilePath(
       fileName: fileName,
       subdirectory: mobileSubdirectory,
@@ -65,7 +60,7 @@ class const PlatformFileActions._() {
 
     return PlatformSaveTarget(
       file: File(outputPath),
-      shouldShareAfterWrite: true,
+      handoff: Platform.isAndroid ? ExportHandoff.saveAs : ExportHandoff.share,
     );
   }
 
@@ -142,24 +137,40 @@ class const PlatformFileActions._() {
     );
   }
 
-  /// Share staged exports when required; clean up only after a declined share.
+  /// Hands a staged export on, as [PlatformSaveTarget.handoff] says. A
+  /// shared one is kept unless the share is declined; a saved one leaves
+  /// only the copy the user saved. False when the user backs out.
   static Future<bool> completeExport(
     PlatformSaveTarget target, {
     required String subject,
   }) async {
-    if (!target.shouldShareAfterWrite) return true;
+    switch (target.handoff) {
+      case ExportHandoff.none:
+        return true;
+      case ExportHandoff.share:
+        if (await shareFile(target.file, subject: subject)) return true;
+        await _discard(target.file);
+        return false;
+      case ExportHandoff.saveAs:
+        try {
+          final saved = await FilePicker.saveFile(
+            fileName: p.basename(target.file.path),
+            bytes: await target.file.readAsBytes(),
+            dialogTitle: subject,
+          );
+          return saved != null;
+        } finally {
+          await _discard(target.file);
+        }
+    }
+  }
 
-    final shared = await shareFile(target.file, subject: subject);
-
-    if (shared) return true;
-
+  static Future<void> _discard(File file) async {
     try {
-      if (await target.file.exists()) await target.file.delete();
+      if (await file.exists()) await file.delete();
     } catch (_) {
       // Best effort cleanup only.
     }
-
-    return false;
   }
 
   static Future<bool> shareFile(
