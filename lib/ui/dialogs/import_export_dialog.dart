@@ -709,8 +709,6 @@ class _ImportDialogState extends ConsumerState<ImportDialog> {
       final password = await DatabaseUnlockDialog.show(
         context,
         title: 'Unlock $appName Backup',
-        message:
-            'This $appName backup is encrypted. Enter the password to import it.',
       );
       if (password == null) return null;
 

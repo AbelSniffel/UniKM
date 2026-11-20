@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/database/sqlite_file.dart';
-import '../../core/theme/app_theme.dart';
 import '../widgets/dialog_helpers.dart';
 import '../widgets/notification_system.dart';
 import '../widgets/password_field.dart';
@@ -29,8 +28,6 @@ class const _StartupDatabaseSelection(final String path);
 class const DatabaseUnlockDialog({
   super.key,
   final String title = 'Unlock Database',
-  final String message =
-      'This database is encrypted. Enter the password to continue.',
   final String? currentDatabasePath,
   final bool allowChangeDatabase = false,
 
@@ -41,8 +38,6 @@ class const DatabaseUnlockDialog({
   static Future<String?> show(
     BuildContext context, {
     String title = 'Unlock Database',
-    String message =
-        'This database is encrypted. Enter the password to continue.',
     bool barrierDismissible = false,
     Future<String?> Function()? onBiometricUnlock,
   }) => showAppDialog<String?>(
@@ -50,7 +45,6 @@ class const DatabaseUnlockDialog({
     barrierDismissible: barrierDismissible,
     builder: (_) => DatabaseUnlockDialog(
       title: title,
-      message: message,
       onBiometricUnlock: onBiometricUnlock,
     ),
   );
@@ -155,25 +149,15 @@ class _DatabaseUnlockDialogState extends State<DatabaseUnlockDialog> {
             ),
           ]
         : null,
+    // The title and the field say enough without a note.
     content: Form(
       key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            widget.message,
-            style: TextStyle(color: context.appTheme.textSecondary),
-          ),
-          const SizedBox(height: kDialogSpacing),
-          PasswordField(
-            controller: _passwordController,
-            // The biometric prompt opens first; typing stays one tap away.
-            autofocus: widget.onBiometricUnlock == null,
-            onFieldSubmitted: (_) => _submit(),
-            validator: requiredPassword(message: 'Enter your password'),
-          ),
-        ],
+      child: PasswordField(
+        controller: _passwordController,
+        // The biometric prompt opens first; typing stays one tap away.
+        autofocus: widget.onBiometricUnlock == null,
+        onFieldSubmitted: (_) => _submit(),
+        validator: requiredPassword(message: 'Enter your password'),
       ),
     ),
     actions: [

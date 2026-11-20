@@ -493,8 +493,12 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHero(theme, result),
-          for (final section in _buildSections(theme, result)) ...[
-            divider,
+          for (final (index, section) in _buildSections(
+            theme,
+            result,
+          ).indexed) ...[
+            // The banner's foot sets the first section off without a line.
+            index == 0 ? const SizedBox(height: 16) : divider,
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: section,
@@ -658,8 +662,8 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
     );
   }
 
-  /// The match's tags, then its figures as in the Game Editor, each under a
-  /// divider; none until there is a match.
+  /// The match's tags, then its figures as in the Game Editor, with a
+  /// divider between them; none until there is a match.
   List<Widget> _buildSections(AppThemeData theme, SteamSearchResult? result) {
     if (result == null) return const [];
     final cachedAt = widget.cachedAt;
@@ -670,23 +674,13 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 10,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Steam Tags',
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${result.tags.length}',
-                  style: TextStyle(color: theme.textHint),
-                ),
-              ],
+            Text(
+              'Steam Tags',
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             TagList(
               tags: [

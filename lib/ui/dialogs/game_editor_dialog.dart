@@ -529,7 +529,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     final tags = ref.watch(tagsProvider);
     return GameEditorLayout(
       theme: theme,
-      cornerRadius: theme.cornerRadius,
+      cornerRadius: theme.panelRadius,
       heading: 'Game Editor',
       cover: CoverImageCard(
         isDlc: _isDlc,

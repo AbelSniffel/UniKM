@@ -501,7 +501,6 @@ Future<bool> showRestoreConfirmDialog(
     password = await DatabaseUnlockDialog.show(
       context,
       title: 'Unlock Backup',
-      message: 'This backup is encrypted. Enter its password to restore it.',
       barrierDismissible: true,
     );
 

@@ -32,6 +32,10 @@ class const SettingsCardInset({
   /// One shared shadow strength for settings cards and compact toggle surfaces.
   static const defaultDepthStrength = 0.5;
 
+  /// The opacity of the settings cards' fill: their [surfaceColor] laid over
+  /// whatever they sit on.
+  static const cardFillAlpha = 0.55;
+
   this : assert(depthStrength >= 0 && depthStrength <= 1);
 
   /// The lighting at [depth] (1 recessed, -1 raised, 0 none), drawn from a

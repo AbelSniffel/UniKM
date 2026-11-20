@@ -17,7 +17,8 @@ class const SettingsSectionFamily({
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = context.appTheme;
-    final radius = BorderRadius.circular(theme.cornerRadius);
+    // Curves with its cards, 12 px in.
+    final radius = BorderRadius.circular(theme.panelRadius);
     final tinted = ref.watch(pagePatternProvider);
     return Container(
       clipBehavior: Clip.antiAlias,

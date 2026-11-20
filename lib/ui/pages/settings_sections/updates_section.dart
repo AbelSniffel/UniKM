@@ -137,7 +137,11 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           group: UpdatesSection.searchGroups[0],
           titleIcon: Icons.download_rounded,
           searchQuery: widget.searchQuery,
-          childBuilder: () => SettingsControlWrap(
+          // One per row, as the next check's time makes the first card
+          // taller, as far apart as wrapped cards.
+          childBuilder: () => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
             children: [
               SettingsToggleCard(
                 label: UpdatesSection.autoCheckSpec.label,

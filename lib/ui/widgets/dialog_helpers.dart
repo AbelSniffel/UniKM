@@ -318,7 +318,7 @@ class const DialogActionBar({
 /// - `spacing` → `12.0`
 /// - `maxWidth` → `600.0`
 /// - `maxHeight` → 85 % of screen height
-/// - `shape` → [RoundedRectangleBorder] using [AppThemeData.cornerRadius]
+/// - `shape` → [RoundedRectangleBorder] using [AppThemeData.panelRadius]
 ///
 /// Override [backgroundColor] when a dialog intentionally uses the page
 /// background colour instead of the elevated surface colour.
@@ -447,8 +447,9 @@ class const ThemedAlertDialog({
       if (actionRow != null) padded(top: false, actionRow),
     ];
 
+    // Curves with its tiles and buttons, 12 px in.
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
+      borderRadius: BorderRadius.circular(theme.panelRadius),
     );
 
     Widget dialogBox = ConstrainedBox(
@@ -469,7 +470,7 @@ class const ThemedAlertDialog({
     if (backdrop case final backdrop?) {
       // Cut to the dialog's shape, so it ends with the dialog.
       dialogBox = ClipRRect(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        borderRadius: BorderRadius.circular(theme.panelRadius),
         child: Stack(
           children: [
             Positioned(left: 0, top: 0, right: 0, child: backdrop),
@@ -503,6 +504,9 @@ class const ThemedAlertDialog({
       surfaceTintColor: below != null ? Colors.transparent : null,
       elevation: below != null ? 0 : null,
       shape: below != null ? null : shape,
+      // Content reaching the edges, such as a banner's art, ends with the
+      // dialog's corners even once it scrolls.
+      clipBehavior: bleedContent ? Clip.antiAlias : null,
       insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       child: below == null
           ? dialogBox

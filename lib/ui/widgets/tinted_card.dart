@@ -51,11 +51,15 @@ class const TintedCard({
   /// Overrides the tint, such as a choice tile easing between its tints.
   final Color? fill,
 
-  /// Overrides the outline.
-  final BorderSide? side,
+  /// An outline, such as an action tile's like the settings cards'.
+  final BorderSide side = BorderSide.none,
   final VoidCallback? onTap,
   final ValueChanged<bool>? onHover,
   final ValueChanged<bool>? onHighlightChanged,
+
+  /// Tints the card in the accent while it is held; the ripple shows either
+  /// way.
+  final bool pressTint = true,
 
   /// An opaque colour under the tint, for a card floating over other content.
   final Color? backdrop,
@@ -101,7 +105,8 @@ class const TintedCard({
     height: size,
     decoration: BoxDecoration(
       color: color.withValues(alpha: tileAlpha),
-      borderRadius: BorderRadius.circular(theme.cornerRadius),
+      // Curves with the card's corner, its 10 px padding out.
+      borderRadius: BorderRadius.circular(theme.insetRadius(10)),
     ),
     child: Center(child: child),
   );
@@ -214,13 +219,14 @@ class const TintedCard({
         onTap: onTap,
         onHover: onHover,
         onHighlightChanged: onHighlightChanged,
+        highlightColor: pressTint ? null : Colors.transparent,
         child: content,
       );
     }
     final radius = BorderRadius.circular(theme.cornerRadius);
     final card = Material(
       color: backdrop == null ? tint : Color.alphaBlend(tint, backdrop!),
-      shape: RoundedRectangleBorder(borderRadius: radius),
+      shape: RoundedRectangleBorder(borderRadius: radius, side: side),
       clipBehavior: Clip.antiAlias,
       child: content,
     );

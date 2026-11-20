@@ -164,14 +164,21 @@ class _OutgoingPairDialogState extends State<_OutgoingPairDialog> {
             ),
             const SizedBox(height: 12),
             PairCodeDisplay(code: widget.code),
-            const SizedBox(height: 8),
-            Text(
-              waiting
-                  ? 'Waiting for ${widget.peerName} to confirm...'
-                  : 'If the codes differ, cancel: another device may be '
-                        'intercepting the connection.',
-              style: TextStyle(color: theme.textSecondary, fontSize: 12),
-            ),
+            // A warning until confirmed, so the check is not skipped.
+            if (waiting) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Waiting for ${widget.peerName} to confirm...',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              ),
+            ] else ...[
+              const SizedBox(height: kDialogSpacing),
+              const DialogBanner.warning(
+                message:
+                    'If the codes differ, cancel: another device may be '
+                    'intercepting the connection.',
+              ),
+            ],
           ],
         ),
         actions: [

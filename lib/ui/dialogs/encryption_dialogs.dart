@@ -12,8 +12,8 @@ import '../widgets/password_field.dart';
 
 /// Dialog to enable encryption with password setup.
 ///
-/// The [title], [message], and [confirmLabel] parameters allow reuse for
-/// related flows such as creating a password for a new encrypted database.
+/// The [title] and [confirmLabel] parameters allow reuse for related flows
+/// such as creating a password for a new encrypted database.
 class const EnableEncryptionDialog({
   super.key,
   required final AppThemeData theme,
@@ -21,9 +21,6 @@ class const EnableEncryptionDialog({
 
   /// Title shown in the dialog header.
   final String title = 'Enable Encryption',
-
-  /// Instructional message below the header.
-  final String? message,
 
   /// Label for the confirm button.
   final String confirmLabel = 'Enable',
@@ -59,7 +56,6 @@ class const EnableEncryptionDialog({
     EnableEncryptionDialog(
       theme: theme,
       title: 'Create Password',
-      message: 'Set a password for your new encrypted database.',
       confirmLabel: 'Create',
     ),
   );
@@ -119,13 +115,6 @@ class _EnableEncryptionDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (widget.message != null) ...[
-                Text(
-                  widget.message!,
-                  style: TextStyle(color: widget.theme.textSecondary),
-                ),
-                const SizedBox(height: kDialogSpacing),
-              ],
               PasswordField(
                 controller: _passwordController,
                 validator: requiredPasswordWithLength(),
@@ -338,9 +327,7 @@ class _BiometricPairDialogState extends State<BiometricPairDialog>
       loadingLabel: 'Confirming...',
       fields: (submit, passwordError) => [
         Text(
-          'Unlock this database with $label instead of its password. Enter '
-          'the password once, then confirm with $label. Other databases are '
-          'paired separately.',
+          'Enter the password once to unlock this database with $label.',
           style: _hintStyle(context.appTheme),
         ),
         PasswordField(
@@ -395,10 +382,6 @@ class _DisableEncryptionDialogState extends State<DisableEncryptionDialog>
         'Your database will be stored in plain text without password '
         'protection.',
     fields: (submit, passwordError) => [
-      Text(
-        'Confirm your password to remove encryption.',
-        style: _hintStyle(context.appTheme),
-      ),
       PasswordField(
         controller: _password,
         labelText: 'Enter Password',

@@ -5,8 +5,8 @@ import 'tinted_card.dart';
 import 'tinted_tiles.dart';
 
 /// Shared database and backup row: a [TintedOptionTile] with an encryption
-/// icon and optional actions, raised while it takes taps. Missing files are
-/// tinted orange; the [highlighted] row is tinted more strongly and pressed in.
+/// icon and optional actions, raised while it takes taps. Missing files get
+/// an orange warning icon; the [highlighted] row is pressed in.
 class const DatabaseFileRow({
   super.key,
   required final String title,

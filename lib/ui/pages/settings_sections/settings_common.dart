@@ -245,56 +245,6 @@ class const SettingsSearchGroup({
 bool matchesSettingsSearchGroup(String query, SettingsSearchGroup group) =>
     group.indexTexts.any((text) => settingsSearchMatches(query, text));
 
-/// Setting row that takes a canonical [SettingTextSpec].
-class const SpecSettingRow({
-  super.key,
-  required final SettingTextSpec spec,
-  required final Widget child,
-}) extends StatelessWidget {
-  /// The settings search when it matches the label, else empty.
-  String _matchedQuery(BuildContext context) {
-    final query = SettingsSearchScope.queryOf(context);
-    return settingsSearchMatches(query, spec.label) ? query : '';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.appTheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                Text.rich(
-                  searchHighlightSpan(
-                    spec.label,
-                    _matchedQuery(context),
-                    TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    searchMarkStyle(theme.accent),
-                  ),
-                ),
-                if (spec.description case final description?)
-                  Text(
-                    description,
-                    style: TextStyle(color: theme.textSecondary, fontSize: 12),
-                  ),
-              ],
-            ),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
 typedef SpecToggleSettingEntry = ({
   SettingTextSpec spec,
   bool value,

@@ -50,13 +50,13 @@ class const TintedHeading({
   }
 }
 
-/// A tinted tile with an optional icon in its own square, a title, an
+/// A tile with an optional icon in its own tinted square, a title, an
 /// optional subtitle and an optional [trailing] widget.
-/// With [selected] it is one choice of several: the chosen tile is tinted more
-/// strongly, pressed in and checked, easing in and out with the press depth.
-/// A tile with [onTap] is raised and bordered like the settings cards,
-/// outlined in its colour on hover and pressed in while held or chosen; one
-/// without stays flat.
+/// With [selected] it is one choice of several, tinted: the chosen tile is
+/// tinted more strongly, pressed in and checked, easing in and out with the
+/// press depth. Without, it is an action: with [onTap], raised with the
+/// settings toggle cards' fill and outline and pressed in while held;
+/// without, a flat [TintedCard] with its usual tint.
 class const TintedOptionTile({
   super.key,
   required final String title,
@@ -69,12 +69,12 @@ class const TintedOptionTile({
   /// Null for an action rather than a choice.
   final bool? selected,
 
-  /// Tints and presses in an action like a chosen tile, even while it takes
-  /// no taps, keeping its [trailing], such as the current database.
+  /// Presses in an action like a chosen tile, even while it takes no taps,
+  /// keeping its [trailing], such as the current database.
   final bool highlighted = false,
   final VoidCallback? onTap,
 
-  /// The tint; the accent by default.
+  /// The icon square's colour, and a choice's tint; the accent by default.
   final Color? color,
   final Widget? trailing,
 }) extends StatefulWidget {
@@ -83,15 +83,16 @@ class const TintedOptionTile({
 }
 
 class _TintedOptionTileState extends State<TintedOptionTile> {
-  bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
     final color = widget.color ?? theme.accent;
+    final choice = widget.selected != null;
     final chosen = widget.selected ?? widget.highlighted;
     final tappable = widget.onTap != null;
+    final raised = tappable || widget.highlighted;
     final trailing = widget.selected == null
         ? widget.trailing
         : AnimatedSwitcher(
@@ -116,12 +117,21 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
       duration: _selectionDuration(context),
       curve: Curves.easeOutCubic,
       builder: (context, t, _) {
-        final fill = color.withValues(
-          alpha:
-              TintedCard.choiceFillAlpha +
-              (TintedCard.highlightedFillAlpha - TintedCard.choiceFillAlpha) *
-                  t,
-        );
+        // A raised action rests on the settings cards' fill, untinted; a
+        // flat one keeps the card's own tint, like the cards it sits among.
+        final fill = choice
+            ? color.withValues(
+                alpha:
+                    TintedCard.choiceFillAlpha +
+                    (TintedCard.highlightedFillAlpha -
+                            TintedCard.choiceFillAlpha) *
+                        t,
+              )
+            : raised
+            ? theme.background.withValues(
+                alpha: SettingsCardInset.cardFillAlpha,
+              )
+            : null;
         final tile = TintedCard(
           color: color,
           icon: widget.icon,
@@ -130,15 +140,13 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
           details: widget.details,
           trailing: trailing,
           fill: fill,
-          side: !tappable
+          // Outlined like the settings cards; choices have no outline.
+          side: choice || !raised
               ? BorderSide.none
-              : _hovered
-              ? BorderSide(color: color, width: 1.5)
               : BorderSide(color: theme.border),
           onTap: widget.onTap,
-          onHover: tappable
-              ? (value) => setState(() => _hovered = value)
-              : null,
+          // Held tiles press in and ripple rather than tint.
+          pressTint: false,
           onHighlightChanged: tappable
               ? (value) => setState(() => _pressed = value)
               : null,
@@ -146,12 +154,15 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
         return Semantics(
           checked: widget.selected,
           inMutuallyExclusiveGroup: widget.selected != null,
-          child: tappable || widget.highlighted
+          child: raised
               ? SettingsCardInset(
                   active: chosen || _pressed,
                   raisedWhenInactive: true,
                   borderRadius: theme.cornerRadius,
-                  surfaceColor: Color.alphaBlend(fill, theme.surface),
+                  // An action's depth is lit like the settings cards'.
+                  surfaceColor: choice
+                      ? Color.alphaBlend(fill!, theme.surface)
+                      : theme.background,
                   // Like the toggle cards, a chosen tile's shading sits
                   // under its content.
                   shadeOverlay: true,

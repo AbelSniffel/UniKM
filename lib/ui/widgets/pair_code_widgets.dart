@@ -4,124 +4,42 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 
-// ---------------------------------------------------------------------------
-// PairCodeDisplay
-// ---------------------------------------------------------------------------
+/// A pairing code to compare by eye: large digits in two groups of three on
+/// a faint box, rounded like the cards that sit 12 px inside a dialog.
+class const PairCodeDisplay({super.key, required final String code})
+    extends StatelessWidget {
+  static const double _letterSpacing = 6;
 
-/// Read-only display of a 6-digit pairing code.
-///
-/// Numbers are arranged as two groups of three separated by a dash, each
-/// digit sitting above a themed underline.
-class const PairCodeDisplay({
-  super.key,
+  /// "123456" reads as "123-456"; other lengths are shown as they are.
+  String get grouped =>
+      code.length == 6 ? '${code.substring(0, 3)}-${code.substring(3)}' : code;
 
-  /// The 6-digit code string to display. May be shorter during animation.
-  required final String code,
-}) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
-    final padded = code.padRight(6);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
-        color: theme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.border),
+        // Untinted, so the warning beside it is the one that stands out.
+        color: theme.textPrimary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
       ),
-      child: Center(
-        child: _PairCodeRow(
-          chars: List.generate(6, (i) => padded[i] == ' ' ? null : padded[i]),
+      // Letter spacing also follows the last digit, so the same space before
+      // the first keeps the code centred.
+      child: Padding(
+        padding: const EdgeInsets.only(left: _letterSpacing),
+        child: Text(
+          grouped,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 30,
+            fontWeight: FontWeight.w700,
+            letterSpacing: _letterSpacing,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Shared internals
-// ---------------------------------------------------------------------------
-
-/// A row of six code cells split into two groups by an em-dash separator.
-class const _PairCodeRow({
-  /// Exactly 6 entries; null means the slot is empty.
-  required final List<String?> chars,
-}) extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    Widget cell(int i) => _PairCodeCell(char: chars[i]);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (var i = 0; i < 6; i++) ...[
-          if (i == 3) ...[
-            const SizedBox(width: 10),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 6),
-              child: Text(
-                '-',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 10),
-          ] else if (i > 0)
-            const SizedBox(width: 5),
-          cell(i),
-        ],
-      ],
-    );
-  }
-}
-
-/// One digit cell: digit text above an underline bar.
-/// No background — only the underline carries the theme colour.
-class const _PairCodeCell({required final String? char})
-    extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.appTheme;
-    return SizedBox(
-      width: 32,
-      height: 48,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Digit with fade+scale transition when value changes.
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 120),
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
-                child: child,
-              ),
-            ),
-            child: Text(
-              char ?? '',
-              key: ValueKey(char),
-              style: TextStyle(
-                color: theme.textPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 2,
-            right: 2,
-            bottom: 4,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                color: theme.border,
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

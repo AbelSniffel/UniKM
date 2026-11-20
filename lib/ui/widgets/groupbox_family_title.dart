@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/surface_depth.dart';
+import 'dialog_helpers.dart';
 
 /// Header actions move below the title at this content width or narrower.
 /// The short title and compact actions fit inline slightly below the card
@@ -10,8 +11,8 @@ import '../../core/theme/surface_depth.dart';
 const double kFamilyTitleStackWidth = kSettingsCompactLayoutBreakpoint - 10;
 
 /// A settings panel's header, on top of its groups with a line between
-/// them: an accent tint with the icon in its own square and the title
-/// beside it.
+/// them: an accent tint, titled like a dialog, the icon straight beside the
+/// title.
 class const GroupBoxFamilyTitle({
   super.key,
   required final AppThemeData theme,
@@ -19,9 +20,13 @@ class const GroupBoxFamilyTitle({
   required final IconData icon,
   final Widget Function(bool expanded)? trailingBuilder,
 }) extends StatelessWidget {
+  /// The title sits 6 px in from the groups below, as a dialog's title does
+  /// from its content.
+  static const _padding = EdgeInsets.fromLTRB(18, 8, 8, 8);
+
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(8),
+    padding: _padding,
     decoration: BoxDecoration(
       color: SurfaceDepth.top(
         Color.alphaBlend(theme.accent.withValues(alpha: 0.25), theme.surface),
@@ -37,53 +42,35 @@ class const GroupBoxFamilyTitle({
   // Both layouts are built once per build, outside the layout callback, so a
   // width change only picks one instead of rebuilding the header actions.
   Widget _buildTitle() {
-    final icon = Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-      ),
-      child: Icon(this.icon, size: 20, color: theme.accent),
-    );
+    // As tall as the header actions, so every header is the same height.
     final text = Expanded(
-      child: Text(
-        title,
-        maxLines: 1,
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: theme.textPrimary,
-          fontWeight: FontWeight.w700,
-          fontSize: 17,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 36),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: DialogHeader(icon: icon, title: title),
         ),
       ),
     );
-    const gap = SizedBox(width: 12);
-    final titleRow = Row(children: [icon, gap, text]);
     final trailingBuilder = this.trailingBuilder;
-    if (trailingBuilder == null) return titleRow;
+    if (trailingBuilder == null) return Row(children: [text]);
     final inline = Row(
-      children: [
-        icon,
-        gap,
-        text,
-        const SizedBox(width: 12),
-        trailingBuilder(false),
-      ],
+      children: [text, const SizedBox(width: 12), trailingBuilder(false)],
     );
     final stacked = Column(
       children: [
-        titleRow,
+        Row(children: [text]),
         const SizedBox(height: 4),
         SizedBox(width: double.infinity, child: trailingBuilder(true)),
       ],
     );
-    // Measured like the groups below, which the panel's padding makes 8px
-    // narrower than this header's content.
+    // Measured like the groups below, which sit 12 px inside the panel.
     return LayoutBuilder(
       builder: (context, constraints) =>
-          constraints.maxWidth - 8 <= kFamilyTitleStackWidth ? stacked : inline,
+          constraints.maxWidth + _padding.horizontal - 24 <=
+              kFamilyTitleStackWidth
+          ? stacked
+          : inline,
     );
   }
 }

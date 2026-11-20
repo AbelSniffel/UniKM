@@ -75,13 +75,19 @@ class _IncomingPairDialogState extends ConsumerState<IncomingPairDialog> {
             ),
             const SizedBox(height: 12),
             PairCodeDisplay(code: widget.request.code),
-            const SizedBox(height: 8),
-            Text(
-              _accepted
-                  ? 'Waiting for ${peer.name} to confirm...'
-                  : 'Pair only if ${peer.name} shows the same code.',
-              style: TextStyle(color: theme.textSecondary, fontSize: 12),
-            ),
+            // A warning until accepted, so the check is not skipped.
+            if (_accepted) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Waiting for ${peer.name} to confirm...',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              ),
+            ] else ...[
+              const SizedBox(height: kDialogSpacing),
+              DialogBanner.warning(
+                message: 'Pair only if ${peer.name} shows the same code.',
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 6),
               Text(

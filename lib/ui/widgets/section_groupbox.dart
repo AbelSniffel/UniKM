@@ -191,7 +191,8 @@ class const SectionGroupBox({
 
     // Visible top / bottom edges are rounded; attached boxes keep flat top
     // corners unless the position is truly "first"/"only".
-    final cr = theme.cornerRadius;
+    // Curves with its cards, 12 px in.
+    final cr = theme.panelRadius;
     final outerRadius = BorderRadius.vertical(
       top: showTop ? Radius.circular(cr) : Radius.zero,
       bottom: showBottom ? Radius.circular(cr) : Radius.zero,

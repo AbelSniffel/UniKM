@@ -48,6 +48,21 @@ class const AppThemeData({
     progressIndicatorStrokeWidth,
   );
 
+  /// The radius for a corner [gap] inside one of [outer], the theme's corner
+  /// radius by default, so the two curves share a centre (see
+  /// [ConcentricRadius]). Where the gap would square it, it keeps a little
+  /// rounding: 4 px, or half the outer radius if that is less.
+  double insetRadius(double gap, {double? outer}) {
+    final radius = outer ?? cornerRadius;
+    return math.max(radius - gap, math.min(4, radius / 2));
+  }
+
+  /// The radius of a group box, settings panel or dialog: its cards' and
+  /// tiles' [cornerRadius] plus the 12 px between them and its edge, so the
+  /// curves share a centre. A small radius grows to at most three times
+  /// itself, so a square theme stays square.
+  double get panelRadius => cornerRadius + math.min(12, cornerRadius * 2);
+
   /// Compact info-style actions, with 3px of padding around their icons.
   /// Leave width flexible so text actions can also share this style.
   ButtonStyle get compactIconButtonStyle => IconButton.styleFrom(
@@ -552,7 +567,7 @@ class const AppThemeData({
         // Darker than Flutter's default (54%), so a dialog stands out.
         barrierColor: Colors.black.withValues(alpha: 0.8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cornerRadius * 2),
+          borderRadius: BorderRadius.circular(panelRadius),
         ),
       ),
 
@@ -671,8 +686,8 @@ class const AppThemeData({
 
   /// The border of multiline boxes such as the paste box and Notes: a whole
   /// outline that lights up on hover, and turns thicker with a stronger
-  /// inward glow on focus.
-  WidgetStateInputBorder resolveFramedInputBorder() =>
+  /// inward glow on focus. Its corners take [radius], or the theme's.
+  WidgetStateInputBorder resolveFramedInputBorder({double? radius}) =>
       WidgetStateInputBorder.resolveWith((states) {
         final (color, width, glowColor) = states.contains(WidgetState.focused)
             ? (inputFocusedBorder, 2.5, inputFocusGlow)
@@ -680,7 +695,7 @@ class const AppThemeData({
             ? (inputHoverBorder, 1.5, inputHoverGlow)
             : (border, 1.0, Colors.transparent);
         return FramedInputBorder(
-          borderRadius: BorderRadius.circular(cornerRadius),
+          borderRadius: BorderRadius.circular(radius ?? cornerRadius),
           borderSide: BorderSide(color: color, width: width),
           glowColor: glowColor,
         );

@@ -735,6 +735,10 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
   bool _refreshingFiles = false;
   bool _choosingFile = false;
 
+  /// Set once the first read has taken long enough to need a spinner.
+  bool _slowLoad = false;
+  Timer? _slowLoadTimer;
+
   @override
   void initState() {
     super.initState();
@@ -756,6 +760,9 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
         return;
       }
       _refreshDatabaseFiles();
+    });
+    _slowLoadTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _isLoading) setState(() => _slowLoad = true);
     });
     _init();
   }
@@ -811,6 +818,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
   @override
   void dispose() {
     _fileRefreshTimer?.cancel();
+    _slowLoadTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
@@ -951,12 +959,21 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
               },
               invalidDropMessage: 'Drop one .db or .enc database file.',
             ),
-            const SizedBox(height: 16),
-            TintedHeading(title: 'Current'),
-            const SizedBox(height: 8),
+            // Nothing until the files are read, so rows never show before
+            // their details (or the current database among the recent
+            // ones); a slow read shows a spinner.
             if (_isLoading)
-              const Center(child: AppCircularProgressIndicator(size: 20))
-            else
+              Expanded(
+                child: _slowLoad
+                    ? const Center(
+                        child: AppCircularProgressIndicator(size: 20),
+                      )
+                    : const SizedBox.shrink(),
+              )
+            else ...[
+              const SizedBox(height: 16),
+              TintedHeading(title: 'Current'),
+              const SizedBox(height: 8),
               DatabaseFileRow(
                 title: p.basename(_activeFilePath),
                 subtitle: _activeFilePath,
@@ -975,73 +992,77 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                   ),
                 ],
               ),
-            const SizedBox(height: 16),
-            TintedHeading(title: 'Recent', trailing: '${recents.length}'),
-            const SizedBox(height: 8),
-            Expanded(
-              child: recents.isEmpty
-                  ? Text(
-                      'No other recent databases.',
-                      style: TextStyle(color: theme.textSecondary),
-                    )
-                  : AppScrollbar(
-                      controller: _scrollController,
-                      child: ListView.builder(
+              const SizedBox(height: 16),
+              TintedHeading(title: 'Recent', trailing: '${recents.length}'),
+              const SizedBox(height: 8),
+              Expanded(
+                child: recents.isEmpty
+                    ? Text(
+                        'No other recent databases.',
+                        style: TextStyle(color: theme.textSecondary),
+                      )
+                    : AppScrollbar(
                         controller: _scrollController,
-                        primary: false,
-                        itemCount: recents.length,
-                        itemBuilder: (context, index) {
-                          final basePath = recents[index];
-                          final file = _databaseFiles[basePath];
-                          final resolvedPath = file?.path ?? basePath;
-                          final sizeBytes = file?.sizeBytes;
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          primary: false,
+                          itemCount: recents.length,
+                          itemBuilder: (context, index) {
+                            final basePath = recents[index];
+                            final file = _databaseFiles[basePath];
+                            final resolvedPath = file?.path ?? basePath;
+                            final sizeBytes = file?.sizeBytes;
 
-                          return GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onSecondaryTapDown: (details) => showAppContextMenu(
-                              context: context,
-                              theme: theme,
-                              position: details.globalPosition,
-                              menuChildren: [
-                                appMenuItem(
-                                  theme,
-                                  onPressed: () =>
-                                      _removeRecentDatabasePath(basePath),
-                                  child: const Text('Remove from recents'),
-                                ),
-                              ],
-                            ),
-                            child: DatabaseFileRow(
-                              key: ValueKey(basePath),
-                              title: p.basename(resolvedPath),
-                              subtitle: sizeBytes == null
-                                  ? resolvedPath
-                                  : '${_formatBytes(sizeBytes)} • $resolvedPath',
-                              isEncrypted: file?.isEncrypted ?? false,
-                              available: file?.exists ?? false,
-                              onTap: file?.exists == true
-                                  ? () async {
-                                      Navigator.pop(context);
-                                      await _switchTo(resolvedPath);
-                                    }
-                                  : null,
-                              actions: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete,
-                                    color: theme.secondary,
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onSecondaryTapDown: (details) =>
+                                  showAppContextMenu(
+                                    context: context,
+                                    theme: theme,
+                                    position: details.globalPosition,
+                                    menuChildren: [
+                                      appMenuItem(
+                                        theme,
+                                        onPressed: () =>
+                                            _removeRecentDatabasePath(basePath),
+                                        child: const Text(
+                                          'Remove from recents',
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  tooltip: 'Remove from recents',
-                                  onPressed: () =>
-                                      _removeRecentDatabasePath(basePath),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                              child: DatabaseFileRow(
+                                key: ValueKey(basePath),
+                                title: p.basename(resolvedPath),
+                                subtitle: sizeBytes == null
+                                    ? resolvedPath
+                                    : '${_formatBytes(sizeBytes)} • $resolvedPath',
+                                isEncrypted: file?.isEncrypted ?? false,
+                                available: file?.exists ?? false,
+                                onTap: file?.exists == true
+                                    ? () async {
+                                        Navigator.pop(context);
+                                        await _switchTo(resolvedPath);
+                                      }
+                                    : null,
+                                actions: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: theme.secondary,
+                                    ),
+                                    tooltip: 'Remove from recents',
+                                    onPressed: () =>
+                                        _removeRecentDatabasePath(basePath),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-            ),
+              ),
+            ],
           ],
         ),
         actions: constraints.maxHeight < 480

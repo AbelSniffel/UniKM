@@ -8,12 +8,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
 import 'game_cover_image.dart';
 import 'notification_system.dart';
+import 'platform_icon.dart';
 import 'tag_list.dart';
 
 /// How long ago [date] was, in whole days, months or years.
@@ -182,6 +184,13 @@ class const GameEditorLayout({
     ],
   );
 
+  /// From the notes' frame to what it holds, as in [GameTagsBox].
+  static const _boxPadding = 12.0;
+
+  /// Between the notes and the tags, beside or above each other, as between
+  /// the deadline picker's two fields.
+  static const _notesTagsGap = 12.0;
+
   /// The notes beside the tags; narrow, the notes come first.
   Widget _buildBody(BuildContext context, bool wide) {
     // Beside the tags, the notes fill the height down to the tags' bottom;
@@ -199,52 +208,47 @@ class const GameEditorLayout({
         decoration: InputDecoration(
           hintText: 'Add notes about this game...',
           hintStyle: TextStyle(color: theme.textHint),
-          // Framed like the Multiple Games paste box.
+          // Framed like the Multiple Games paste box, but rounded like the
+          // tags' box beside it.
           filled: true,
           fillColor: theme.inputBackground,
           constraints: const BoxConstraints(),
-          contentPadding: const EdgeInsets.all(12),
-          border: theme.resolveFramedInputBorder(),
+          contentPadding: const EdgeInsets.all(_boxPadding),
+          border: theme.resolveFramedInputBorder(radius: theme.panelRadius),
         ),
         onChanged: (_) => onNotesChanged(),
       ),
     );
-    final tagSection = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 24,
-      children: [
-        _section(
-          'Tags',
-          customTags.isEmpty
-              ? Text(
-                  'No custom tags created yet',
-                  style: TextStyle(color: theme.textHint),
-                )
-              : TagList(
-                  tags: customTags,
-                  theme: theme,
-                  selectedTagIds: selectedTagIds,
-                  maxRows: 5,
-                  onTagToggled: onTagToggled,
+    final tagSection = _section(
+      'Tags',
+      GameTagsBox(
+        custom: customTags.isEmpty
+            // Centred on the icon, like a row of tags.
+            ? ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 32),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  heightFactor: 1,
+                  child: Text(
+                    'No custom tags created yet',
+                    style: TextStyle(color: theme.textHint),
+                  ),
                 ),
-        ),
-        if (steamTags.isNotEmpty)
-          _section(
-            'Steam Tags',
-            TagList(
-              tags: steamTags,
-              theme: theme,
-              allSelected: true,
-              maxRows: 5,
-            ),
-          ),
-      ],
+              )
+            : TagList(
+                tags: customTags,
+                theme: theme,
+                selectedTagIds: selectedTagIds,
+                maxRows: 5,
+                onTagToggled: onTagToggled,
+              ),
+        steamTags: steamTags,
+      ),
     );
     if (!wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 28,
+        spacing: _notesTagsGap,
         children: [notesSection(expand: false), tagSection],
       );
     }
@@ -253,8 +257,10 @@ class const GameEditorLayout({
     final minHeight = MediaQuery.textScalerOf(context).scale(180);
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 40.0;
-        final leftWidth = (constraints.maxWidth - gap) * 3 / 5;
+        const gap = _notesTagsGap;
+        // An even split: notes are usually short and have the height to grow
+        // into, so the tags get as much room.
+        final leftWidth = (constraints.maxWidth - gap) / 2;
         return Stack(
           children: [
             Padding(
@@ -299,7 +305,9 @@ class const GameBannerHero({
   Widget build(BuildContext context) {
     final actionRow = BannerHeadingRow(heading: heading, actions: actions);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 0),
+      // As far from the top as the buttons are from the bottom, so the
+      // cover's corner curves with the dialog's.
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 0),
       child: wide
           ? Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,9 +401,9 @@ class const GameBannerBackdrop({
     required double coverAspect,
   }) => wide
       ? headerHeight
-      // The hero's padding (12 and 10 at the sides, 10 on top), heading row
+      // The hero's padding (12 and 10 at the sides, 12 on top), heading row
       // (40) and the 4 under it.
-      : 54 + (width - 22) / coverAspect;
+      : 56 + (width - 22) / coverAspect;
 
   @override
   Widget build(BuildContext context) {
@@ -602,6 +610,75 @@ class _GameKeyFieldState extends State<GameKeyField> {
       ),
       validator: widget.validator,
       onChanged: widget.onChanged,
+    );
+  }
+}
+
+/// Tags in a box outlined like the Game Editor's Notes, but unfilled so the
+/// banner's art shows through, curving with the tags 12 px in: [custom] tags
+/// beside a pencil, then [steamTags] beside the Steam icon, as one list.
+class const GameTagsBox({
+  super.key,
+  final Widget? custom,
+  final List<Tag> steamTags = const [],
+}) extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    final radius = BorderRadius.circular(theme.panelRadius);
+    // As wide for either icon, so both lists start in line, and level with
+    // the first row of tags.
+    Widget labelled(String label, Widget icon, Widget tags) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 10,
+      children: [
+        SizedBox(
+          width: 22,
+          height: 32,
+          child: Tooltip(
+            message: label,
+            child: Center(child: icon),
+          ),
+        ),
+        Expanded(child: tags),
+      ],
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.border),
+        borderRadius: radius,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        // A little further apart than rows of tags, so each kind starts a
+        // group of its own.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            if (custom case final custom?)
+              labelled(
+                'Custom Tags',
+                Icon(Icons.edit, size: 18, color: theme.textSecondary),
+                custom,
+              ),
+            if (steamTags.isNotEmpty)
+              labelled(
+                'Steam Tags',
+                PlatformIcon(
+                  platform: GamePlatform.steam,
+                  color: theme.textSecondary,
+                ),
+                TagList(
+                  tags: steamTags,
+                  theme: theme,
+                  allSelected: true,
+                  maxRows: 5,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -48,6 +48,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
   /// Where the title row was grabbed, from the panel's corner.
   Offset? _grab;
   int _tab = 0;
+  static const _tabCount = 3;
 
   static const _fetchPreviewStates = [
     ('Portal 2', 0.18),
@@ -201,7 +202,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
           selected: value,
         );
 
-    final content = switch (_tab) {
+    List<Widget> contentFor(int tab) => switch (tab) {
       0 => [
         section('Send test', [
           action('In-app preview', Icons.notifications_outlined, () {
@@ -390,6 +391,15 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         ]),
       ],
     };
+    Widget tabPage(int tab, List<Widget> children) => SingleChildScrollView(
+      key: ValueKey('dev-tools-tab-$tab'),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 10,
+        children: children,
+      ),
+    );
 
     return Positioned.fill(
       child: RepaintBoundary(
@@ -439,18 +449,27 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
                         ),
                       ),
                     ),
+                    // An IndexedStack is as tall as its tallest child; with
+                    // no index it shows none, so the other tabs only keep
+                    // the panel at the tallest tab's height.
                     Flexible(
-                      child: AppTabTransition(
-                        index: _tab,
-                        child: SingleChildScrollView(
-                          key: ValueKey('dev-tools-tab-$_tab'),
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            spacing: 10,
-                            children: content,
+                      child: Stack(
+                        children: [
+                          ExcludeFocus(
+                            child: IndexedStack(
+                              index: null,
+                              children: [
+                                for (var tab = 0; tab < _tabCount; tab++)
+                                  if (tab != _tab)
+                                    tabPage(tab, contentFor(tab)),
+                              ],
+                            ),
                           ),
-                        ),
+                          AppTabTransition(
+                            index: _tab,
+                            child: tabPage(_tab, contentFor(_tab)),
+                          ),
+                        ],
                       ),
                     ),
                   ],
