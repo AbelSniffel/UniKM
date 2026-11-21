@@ -97,7 +97,3 @@ From SteamKM1:
 From SteamKM2:
 - Open the Settings Page (⚙) → Click on Backup / Export Database button → Select Standard Backup → Press Export
 - Open UniKM and use Menu (☰) button on the title bar → Import Database → Select Source file or Drag the file to the source file box
-
-### Shared UI controls
-
-Use Flutter's standard `Divider` and `PopupMenuDivider` for separators, inheriting the app theme's default styling. Set `height` when tighter or wider spacing is needed.
