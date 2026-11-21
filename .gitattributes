@@ -1,0 +1,5 @@
+# Text files use LF line endings, whatever system they are edited on.
+* text=auto eol=lf
+
+# The Inno Setup script is left exactly as it is (CRLF, for Windows).
+*.iss -text

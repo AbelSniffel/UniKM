@@ -4,15 +4,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/button_depth.dart';
+import 'settings_card_indicator.dart';
 import 'settings_card_inset.dart';
 import 'button_theme_sync.dart';
 
 /// The outlined action style shared by Dev Tools and game option toggles.
-Duration _statusDuration(BuildContext context) =>
-    MediaQuery.disableAnimationsOf(context)
-    ? Duration.zero
-    : const Duration(milliseconds: 120);
-
 class const AppActionButton({
   super.key,
   required final String label,
@@ -33,23 +29,23 @@ class const AppActionButton({
   final double depthStrength = SettingsCardInset.defaultDepthStrength,
 }) extends StatelessWidget {
   static const toggleHorizontalPadding = 10.0;
+
+  /// A tag's check or cross, and its gap from the label.
   static const statusSize = 14.0;
   static const statusSpacing = 4.0;
 
-  /// Puts a toggle's status mark after its [label], for a
-  /// `foregroundBuilder`: a dot while off, a check while on, always shown so
-  /// the label never moves.
+  /// Puts a toggle's light before its [label], for a `foregroundBuilder`:
+  /// the light is always there, so the label never moves.
   static Widget withStatus(
     Widget label, {
     required bool selected,
     Color? accentColor,
-    double gap = statusSpacing,
   }) => Row(
     mainAxisSize: MainAxisSize.min,
-    spacing: gap,
+    spacing: 7,
     children: [
-      Flexible(child: label),
       AppButtonSelectionIndicator(selected: selected, accentColor: accentColor),
+      Flexible(child: label),
     ],
   );
 
@@ -208,7 +204,11 @@ class const AppActionButton({
                       ? null
                       : (context, states, label) => withStatus(
                           label!,
-                          selected: selected!,
+                          // Unlit while disabled, like a settings card's bar.
+                          selected:
+                              selected! &&
+                              (readOnly ||
+                                  !states.contains(WidgetState.disabled)),
                           accentColor: accentColor,
                         ),
                 ),
@@ -242,36 +242,53 @@ class const AppActionButton({
   }
 }
 
-/// A fixed-size status mark, shared by ordinary and compound toggle
-/// buttons: a dot while off that grows into a check when [selected].
+/// A toggle's light, like a status LED: a muted dot while off, a bigger one
+/// glowing in the accent when [selected]. Its slot fits the lit dot, so the
+/// label never moves.
 class const AppButtonSelectionIndicator({
   super.key,
   required final bool selected,
   final Color? accentColor,
 }) extends StatelessWidget {
+  static const size = 9.0;
+
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: AppActionButton.statusSize,
-    child: ExcludeSemantics(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: selected ? 1 : 0),
-        duration: _statusDuration(context),
-        curve: Curves.easeInOutCubic,
-        builder: (context, progress, child) => RepaintBoundary(
-          child: CustomPaint(
-            painter: ToggleIndicatorPainter(
-              progress: progress,
-              color: Color.lerp(
-                context.appTheme.textHint,
-                accentColor ?? context.appTheme.accent,
-                progress,
-              )!,
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    final accent = accentColor ?? theme.accent;
+    // Tweens only how lit it is, so a theme change recolours it at once.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: selected ? 1 : 0),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 120),
+      curve: Curves.easeOutCubic,
+      builder: (context, lit, _) => Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        child: Container(
+          width: size - 1 + lit,
+          height: size - 1 + lit,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color.lerp(
+              SettingsCardMiniDot.idleColor(theme),
+              accent,
+              lit,
             ),
+            boxShadow: [
+              if (lit > 0)
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.8 * lit),
+                  blurRadius: 4,
+                ),
+            ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A toggle's mark: off, a small dot; on ([progress] 1), a check; and over

@@ -61,11 +61,7 @@ class const DeadlineChip({
                   ),
                   splashFactory: LiveSizeInkRipple.splashFactory,
                   foregroundBuilder: (context, states, label) =>
-                      AppActionButton.withStatus(
-                        label!,
-                        selected: hasDeadline,
-                        gap: 6,
-                      ),
+                      AppActionButton.withStatus(label!, selected: hasDeadline),
                 ),
             child: Row(
               mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,

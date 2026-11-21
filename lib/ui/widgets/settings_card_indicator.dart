@@ -30,6 +30,10 @@ class const SettingsCardMiniDot({
   static const double _dot = 18;
   static const double _bar = 12;
 
+  /// An unlit indicator's colour, which the slim toggles' bars share.
+  static Color idleColor(AppThemeData theme) =>
+      Color.lerp(theme.background, theme.textSecondary, 0.25)!;
+
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -57,9 +61,7 @@ class const SettingsCardMiniDot({
                     : outlineColor!.withValues(alpha: 0),
                 width: 2,
               ),
-        color: lit
-            ? theme.accent
-            : Color.lerp(theme.background, theme.textSecondary, 0.25),
+        color: lit ? theme.accent : idleColor(theme),
         boxShadow: lit && glow
             ? [
                 BoxShadow(

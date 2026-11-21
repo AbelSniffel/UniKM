@@ -227,7 +227,7 @@ final _biometricStateProvider =
 class const _EncryptionControls({
   /// Places the header [action] (change password, when encrypted) and the
   /// toggle [cards].
-  required final Widget Function(Widget? action, Widget cards) builder,
+  required final Widget Function(Widget? action, List<Widget> cards) builder,
 }) extends ConsumerStatefulWidget {
   @override
   ConsumerState<_EncryptionControls> createState() =>
@@ -322,29 +322,23 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
                   : null,
             )
           : null,
-      // Each on its own full row, like the Navigation Bar cards: side by
-      // side, the biometric label and hint wrap on narrow windows.
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
-        children: [
-          SettingsToggleCard(
-            label: DatabaseSection.encryptionSpec.label,
-            icon: DatabaseSection.encryptionSpec.icon,
-            value: encrypted,
-            onChanged: enabled ? _setEncrypted : null,
-          ),
-          SettingsToggleCard(
-            label: '${BiometricUnlock.label} unlock',
-            icon: DatabaseSection.biometricSpec.icon,
-            description: biometricHint,
-            value: biometric?.paired ?? false,
-            onChanged: enabled && biometric?.available == true
-                ? _setBiometric
-                : null,
-          ),
-        ],
-      ),
+      [
+        SettingsToggleCard(
+          label: DatabaseSection.encryptionSpec.label,
+          icon: DatabaseSection.encryptionSpec.icon,
+          value: encrypted,
+          onChanged: enabled ? _setEncrypted : null,
+        ),
+        SettingsToggleCard(
+          label: '${BiometricUnlock.label} unlock',
+          icon: DatabaseSection.biometricSpec.icon,
+          description: biometricHint,
+          value: biometric?.paired ?? false,
+          onChanged: enabled && biometric?.available == true
+              ? _setBiometric
+              : null,
+        ),
+      ],
     );
   }
 }
@@ -403,19 +397,8 @@ class const DatabaseSection({
   static const SettingsSearchGroup dataManagementSearchGroup =
       SettingsSearchGroup(
         title: 'Data Management',
-        settings: [
-          activeDatabaseSpec,
-          backupManagerSpec,
-          encryptionSpec,
-          biometricSpec,
-        ],
+        settings: [activeDatabaseSpec, backupManagerSpec],
         extraTexts: [
-          'Enable Encryption',
-          'Disable Encryption',
-          'Change Password',
-          'Face ID',
-          'Touch ID',
-          'Biometric',
           'Import DB',
           'Export DB',
           'Change DB',
@@ -434,12 +417,20 @@ class const DatabaseSection({
       SettingsSearchGroup(
         title: 'Key Security',
         settings: [
+          encryptionSpec,
+          biometricSpec,
           maskKeysSpec,
           autoHideKeysSpec,
           autoLockSpec,
           hideInRecentsSpec,
         ],
         extraTexts: [
+          'Enable Encryption',
+          'Disable Encryption',
+          'Change Password',
+          'Face ID',
+          'Touch ID',
+          'Biometric',
           'Key Visibility',
           'Mask keys by default',
           'Auto-hide keys',
@@ -556,49 +547,45 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         // Data Management (Backup/Restore)
         SectionGroupEntry(
           visible: shows(DatabaseSection.dataManagementSearchGroup),
-          builder: (position, isAlternate) => _EncryptionControls(
-            builder: (passwordAction, cards) => SectionGroupBox(
-              title: DatabaseSection.dataManagementSearchGroup.title,
-              titleIcon: Icons.backup,
-              searchQuery: widget.searchQuery,
-              groupPosition: position,
-              alternateBackground: isAlternate,
-              headerCrossAxisAlignment: CrossAxisAlignment.center,
-              trailing: passwordAction,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: kElementVSpacing,
-                children: [
-                  // The active file's name; a tap opens the Change Database
-                  // dialog, which also shows the full path.
-                  TintedOptionTile(
-                    icon: DatabaseSection.activeDatabaseSpec.icon,
-                    title: DatabaseSection.activeDatabaseSpec.label,
-                    subtitle: _isLoading
+          builder: (position, isAlternate) => SectionGroupBox(
+            title: DatabaseSection.dataManagementSearchGroup.title,
+            titleIcon: Icons.backup,
+            searchQuery: widget.searchQuery,
+            groupPosition: position,
+            alternateBackground: isAlternate,
+            headerCrossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: kElementVSpacing,
+              children: [
+                // The active file's name; a tap opens the Change Database
+                // dialog, which also shows the full path.
+                TintedOptionTile(
+                  icon: DatabaseSection.activeDatabaseSpec.icon,
+                  title: DatabaseSection.activeDatabaseSpec.label,
+                  subtitle: _isLoading
+                      ? null
+                      : 'Current: ${p.basename(_activeDbPath)}',
+                  onTap: _isLoading || databaseSwitching
+                      ? null
+                      : () => showChangeDatabaseDialog(context),
+                ),
+                // The countdown to the next auto backup stays current.
+                _EveryMinute(
+                  enabled: nextBackupTime != null,
+                  builder: (context) => TintedOptionTile(
+                    icon: DatabaseSection.backupManagerSpec.icon,
+                    title: DatabaseSection.backupManagerSpec.label,
+                    subtitle: switch (nextBackupTime) {
+                      final next? => _formatNextBackupTime(next),
+                      null => 'Auto backup is off',
+                    },
+                    onTap: databaseSwitching
                         ? null
-                        : 'Current: ${p.basename(_activeDbPath)}',
-                    onTap: _isLoading || databaseSwitching
-                        ? null
-                        : () => showChangeDatabaseDialog(context),
+                        : () => showBackupDialog(context),
                   ),
-                  // The countdown to the next auto backup stays current.
-                  _EveryMinute(
-                    enabled: nextBackupTime != null,
-                    builder: (context) => TintedOptionTile(
-                      icon: DatabaseSection.backupManagerSpec.icon,
-                      title: DatabaseSection.backupManagerSpec.label,
-                      subtitle: switch (nextBackupTime) {
-                        final next? => _formatNextBackupTime(next),
-                        null => 'Auto backup is off',
-                      },
-                      onTap: databaseSwitching
-                          ? null
-                          : () => showBackupDialog(context),
-                    ),
-                  ),
-                  cards,
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -652,57 +639,64 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
         // Key Security
         SectionGroupEntry(
           visible: shows(DatabaseSection.keyVisibilitySearchGroup),
-          builder: (position, isAlternate) => SectionGroupBox(
-            title: DatabaseSection.keyVisibilitySearchGroup.title,
-            titleIcon: Icons.security,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
-            trailing: switch (DatabaseSection.keyVisibilitySearchGroup.info) {
-              final info? => SettingsInfoButton(message: info),
-              null => null,
-            },
-            searchQuery: widget.searchQuery,
-            groupPosition: position,
-            alternateBackground: isAlternate,
-            child: SettingsControlWrap(
-              children: [
-                for (final (spec, value, key) in [
-                  (
-                    DatabaseSection.maskKeysSpec,
-                    security.maskKeys,
-                    SettingsKeys.maskKeys,
+          builder: (position, isAlternate) => _EncryptionControls(
+            builder: (passwordAction, encryptionCards) => SectionGroupBox(
+              title: DatabaseSection.keyVisibilitySearchGroup.title,
+              titleIcon: Icons.security,
+              headerCrossAxisAlignment: CrossAxisAlignment.center,
+              trailing: SettingsHeaderActionRow(
+                children: [
+                  ?passwordAction,
+                  SettingsInfoButton(
+                    message: DatabaseSection.keyVisibilitySearchGroup.info!,
                   ),
-                  (
-                    DatabaseSection.autoHideKeysSpec,
-                    security.autoHideKeys,
-                    SettingsKeys.autoHideKeys,
-                  ),
-                  if (PlatformFileActions.isMobilePlatform)
+                ],
+              ),
+              searchQuery: widget.searchQuery,
+              groupPosition: position,
+              alternateBackground: isAlternate,
+              child: SettingsControlWrap(
+                children: [
+                  ...encryptionCards,
+                  for (final (spec, value, key) in [
                     (
-                      DatabaseSection.hideInRecentsSpec,
-                      security.hideInRecents,
-                      SettingsKeys.hideInRecents,
+                      DatabaseSection.maskKeysSpec,
+                      security.maskKeys,
+                      SettingsKeys.maskKeys,
                     ),
-                ])
-                  SettingsToggleCard(
-                    label: spec.label,
-                    icon: spec.icon,
-                    value: value,
-                    onChanged: settingsNotifier.setter(key),
+                    (
+                      DatabaseSection.autoHideKeysSpec,
+                      security.autoHideKeys,
+                      SettingsKeys.autoHideKeys,
+                    ),
+                    if (PlatformFileActions.isMobilePlatform)
+                      (
+                        DatabaseSection.hideInRecentsSpec,
+                        security.hideInRecents,
+                        SettingsKeys.hideInRecents,
+                      ),
+                  ])
+                    SettingsToggleCard(
+                      label: spec.label,
+                      icon: spec.icon,
+                      value: value,
+                      onChanged: settingsNotifier.setter(key),
+                    ),
+                  SettingsChoiceCard<int>(
+                    label: DatabaseSection.autoLockSpec.label,
+                    icon: DatabaseSection.autoLockSpec.icon,
+                    value: security.autoLockMinutes,
+                    choices: const [
+                      SettingsChoice(5, '5 minutes'),
+                      SettingsChoice(15, '15 minutes'),
+                      SettingsChoice(0, 'No limit'),
+                    ],
+                    onChanged: settingsNotifier.setter(
+                      SettingsKeys.autoLockMinutes,
+                    ),
                   ),
-                SettingsChoiceCard<int>(
-                  label: DatabaseSection.autoLockSpec.label,
-                  icon: DatabaseSection.autoLockSpec.icon,
-                  value: security.autoLockMinutes,
-                  choices: const [
-                    SettingsChoice(5, '5 minutes'),
-                    SettingsChoice(15, '15 minutes'),
-                    SettingsChoice(0, 'No limit'),
-                  ],
-                  onChanged: settingsNotifier.setter(
-                    SettingsKeys.autoLockMinutes,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
