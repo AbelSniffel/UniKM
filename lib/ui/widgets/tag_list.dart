@@ -294,6 +294,8 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
     final locale = Localizations.maybeLocaleOf(context);
     // Only custom tags that a click deletes show a mark, and take its room.
     final marks = widget.deleteOnTap && widget.onTagToggled != null;
+    // Toggles show a light before their label, as AppTagButton paints it.
+    final lights = !widget.deleteOnTap && widget.onTagToggled != null;
     final metrics = (style, scaler, direction, locale, marks);
     final metricsChanged = metrics != _measureMetrics;
     if (metricsChanged) {
@@ -330,7 +332,8 @@ class _TagListState extends State<TagList> with SingleTickerProviderStateMixin {
               AppActionButton.toggleHorizontalPadding * 2 +
               (marked
                   ? AppActionButton.statusSize + AppActionButton.statusSpacing
-                  : 0),
+                  : 0) +
+              (lights ? AppActionButton.lightRoom : 0),
         );
         if (row.isNotEmpty && occupied + _spacing + tagWidth > width) {
           rows.add(row);

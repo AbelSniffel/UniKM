@@ -588,7 +588,9 @@ class _SteamLookupDialogState extends ConsumerState<SteamLookupDialog> {
                     // An empty field's fill and outline, so the banner
                     // shows through.
                     decoration: BoxDecoration(
-                      color: theme.inputBackground,
+                      color:
+                          InputDecorationTheme.of(context).fillColor ??
+                          theme.inputBackground,
                       border: Border.all(color: theme.border),
                       borderRadius: BorderRadius.circular(theme.cornerRadius),
                     ),
@@ -779,7 +781,12 @@ class _LoadingCoverState extends State<_LoadingCover>
       return Stack(
         fit: StackFit.expand,
         children: [
-          if (!downloaded) ColoredBox(color: context.appTheme.inputBackground),
+          if (!downloaded)
+            ColoredBox(
+              color:
+                  InputDecorationTheme.of(context).fillColor ??
+                  context.appTheme.inputBackground,
+            ),
           if (downloaded)
             CoverLoadScope(
               listener: this,

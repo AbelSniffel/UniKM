@@ -49,11 +49,13 @@ class const DeadlineChip({
           builder: (context, snapTheme) => OutlinedButton(
             key: const ValueKey('deadline-control'),
             onPressed: () => onEnabledChanged(!hasDeadline),
-            style: AppActionButton.styleFor(theme, selected: hasDeadline)
+            style: AppActionButton.styleFor(context, selected: hasDeadline)
                 .copyWith(
                   animationDuration: snapTheme ? Duration.zero : null,
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.fromLTRB(10, 4, 10, 4),
+                  // On, the date's box sits as far from the right edge as
+                  // from the top and bottom.
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.fromLTRB(10, 4, hasDeadline ? 4 : 10, 4),
                   ),
                   splashFactory: LiveSizeInkRipple.splashFactory,
                   foregroundBuilder: (context, states, label) =>

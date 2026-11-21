@@ -212,9 +212,8 @@ abstract final class GameSelectionActions {
       return;
     }
 
-    final ok = await read(
-      gamesProvider.notifier,
-    ).setGamesUsed(targets.map((g) => g.id).toList(), nextValue);
+    final ok = await read(gamesProvider.notifier)
+        .setGamesUsed(targets.map((g) => g.id).toList(), nextValue);
 
     if (!ok) {
       final error = read(gamesProvider.select((s) => s.error));

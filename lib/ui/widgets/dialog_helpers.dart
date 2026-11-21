@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
+import 'app_action_button.dart' show GlassButtonScope;
 import 'app_progress_indicator.dart';
 
 export 'app_dialog.dart';
@@ -161,7 +162,7 @@ class const DialogHeader({
             title,
             style: TextStyle(
               color: titleColor ?? theme.textPrimary,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
             ),
             overflow: TextOverflow.ellipsis,
@@ -474,7 +475,7 @@ class const ThemedAlertDialog({
         child: Stack(
           children: [
             Positioned(left: 0, top: 0, right: 0, child: backdrop),
-            dialogBox,
+            GlassButtonScope(child: dialogBox),
           ],
         ),
       );

@@ -470,9 +470,9 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
             padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
             child: Form(
               key: _formKey,
+              // Plain, without the editor's cover art and gradient behind it.
               child: GameEditorLayout(
                 theme: theme,
-                cornerRadius: theme.cornerRadius,
                 cover: CoverImageCard(
                   key: _coverCardKey,
                   isDlc: _isDlc,
@@ -483,7 +483,6 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                   onChanged: _saveDraft,
                   showPath: false,
                 ),
-                coverController: _fields.coverImage,
                 heading: 'Add Game',
                 actions: [
                   if (steam) ...[
@@ -860,85 +859,79 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-            // Under the same banner as Single Game: a heading, the options
-            // as a strip of pills, then the paste box.
-            child: GameBanner(
-              cornerRadius: theme.cornerRadius,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 10, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // The heading and its buttons, then the paste box.
-                    BannerHeadingRow(
-                      heading: 'Paste Games',
-                      actions: [
-                        if (_parsedGames.isNotEmpty && _hasSteamGames)
-                          IconButton(
-                            tooltip: 'Fetch Steam data',
-                            onPressed: _isFetchingSteam
-                                ? null
-                                : _fetchSteamBatch,
-                            color: theme.accent,
-                            icon: _isFetchingSteam
-                                ? const AppCircularProgressIndicator(size: 18)
-                                : const Icon(Icons.cloud_download_outlined),
-                          ),
-                        PlatformMenuButton(
-                          value: _platform,
-                          tooltip: _platform == kAutoDetectPlatformValue
-                              ? 'Platform Override: Disabled'
-                              : 'Platform Override: $_platform',
-                          onSelected: (value) {
-                            setState(() => _platform = value);
-                            _parseInput();
-                          },
+            // As Single Game: a heading, the paste box, then its options.
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 10, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // The heading and its buttons, then the paste box.
+                  BannerHeadingRow(
+                    heading: 'Paste Games',
+                    actions: [
+                      if (_parsedGames.isNotEmpty && _hasSteamGames)
+                        IconButton(
+                          tooltip: 'Fetch Steam data',
+                          onPressed: _isFetchingSteam ? null : _fetchSteamBatch,
+                          color: theme.accent,
+                          icon: _isFetchingSteam
+                              ? const AppCircularProgressIndicator(size: 18)
+                              : const Icon(Icons.cloud_download_outlined),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    BatchGamesEditor(
-                      controller: _textController,
-                      hintText: widget.hintText,
-                      platformOverride: _platform == kAutoDetectPlatformValue
-                          ? null
-                          : GamePlatform.fromDisplayName(_platform),
-                      onChanged: (_) => _parseInput(),
-                    ),
-                    const SizedBox(height: 12),
-                    // Applied to every game pasted; compact, like Single
-                    // Game's.
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: DeadlineChip(
-                        hasDeadline: _hasDeadline,
-                        date: _deadlineDate,
-                        firstDate: DateTime.now(),
-                        onEnabledChanged: (value) =>
-                            _update(() => _hasDeadline = value),
-                        onDateChanged: (value) =>
-                            _update(() => _deadlineDate = value),
+                      PlatformMenuButton(
+                        value: _platform,
+                        tooltip: _platform == kAutoDetectPlatformValue
+                            ? 'Platform Override: Disabled'
+                            : 'Platform Override: $_platform',
+                        onSelected: (value) {
+                          setState(() => _platform = value);
+                          _parseInput();
+                        },
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  BatchGamesEditor(
+                    controller: _textController,
+                    hintText: widget.hintText,
+                    platformOverride: _platform == kAutoDetectPlatformValue
+                        ? null
+                        : GamePlatform.fromDisplayName(_platform),
+                    onChanged: (_) => _parseInput(),
+                  ),
+                  const SizedBox(height: 12),
+                  // Applied to every game pasted; compact, like Single
+                  // Game's.
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: DeadlineChip(
+                      hasDeadline: _hasDeadline,
+                      date: _deadlineDate,
+                      firstDate: DateTime.now(),
+                      onEnabledChanged: (value) =>
+                          _update(() => _hasDeadline = value),
+                      onDateChanged: (value) =>
+                          _update(() => _deadlineDate = value),
                     ),
-                    if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Tooltip(
-                          message: _steamErrors.values.whereType<String>().join(
-                            '\n',
-                          ),
-                          child: Text(
-                            'Steam data: ${loaded.length} loaded'
-                            '${_steamErrors.isEmpty ? "" : ", ${_steamErrors.length} failed"}',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                            ),
+                  ),
+                  if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Tooltip(
+                        message: _steamErrors.values.whereType<String>().join(
+                          '\n',
+                        ),
+                        child: Text(
+                          'Steam data: ${loaded.length} loaded'
+                          '${_steamErrors.isEmpty ? "" : ", ${_steamErrors.length} failed"}',
+                          style: TextStyle(
+                            color: theme.textSecondary,
+                            fontSize: 12,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),

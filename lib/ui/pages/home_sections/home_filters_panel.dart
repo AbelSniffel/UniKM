@@ -298,6 +298,8 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         // A top title, even hidden, lets the content fill a bounded height.
         showTitle: false,
         padding: EdgeInsets.zero,
+        // In the sidebar, square and touching all four of its sides.
+        flush: widget.sidebar,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -471,10 +473,7 @@ class const _HomeFilterSidebar() extends ConsumerWidget {
           child: Material(
             type: MaterialType.transparency,
             textStyle: DefaultTextStyle.of(context).style,
-            child: const Padding(
-              padding: EdgeInsets.fromLTRB(12, 12, 14, 14),
-              child: HomeFiltersPanel(sidebar: true),
-            ),
+            child: const HomeFiltersPanel(sidebar: true),
           ),
         ),
       ),

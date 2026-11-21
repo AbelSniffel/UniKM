@@ -13,6 +13,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../pages/settings_sections/settings_common.dart';
+import 'app_action_button.dart' show GlassButtonScope;
 import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
 import 'game_cover_image.dart';
@@ -42,9 +43,10 @@ class const GameEditorLayout({
   super.key,
   required final AppThemeData theme,
 
-  /// The cover card, and the path its art is drawn from behind the banner.
+  /// The cover card, and the path its art is drawn from behind the banner;
+  /// without one there is no art behind it, nor its gradient.
   required final Widget cover,
-  required final TextEditingController coverController,
+  final TextEditingController? coverController,
 
   /// Buttons for the top right of the banner.
   required final List<Widget> actions,
@@ -88,44 +90,49 @@ class const GameEditorLayout({
         endIndent: 16,
         color: theme.border,
       );
+      final body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHero(
+            wide,
+            // The cover keeps its 2:1 shape and ends about level with the
+            // pills, growing with the text size, but takes at most half the
+            // width so the fields keep room beside it.
+            math.min(
+              constraints.maxWidth / 2,
+              math.max(
+                CoverImageCard.preferredWidth,
+                MediaQuery.textScalerOf(context).scale(_heroInfoHeight) * 2,
+              ),
+            ),
+          ),
+          divider,
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, stats.isEmpty ? 20 : 0),
+            // Built under the banner, so the notes and tags see its frost.
+            child: Builder(builder: (context) => _buildBody(context, wide)),
+          ),
+          if (stats.isNotEmpty) ...[
+            divider,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+              child: Wrap(spacing: 36, runSpacing: 16, children: stats),
+            ),
+          ],
+        ],
+      );
+      // Without a cover path, as on Add Game, no art runs behind it.
+      final cover = coverController;
+      if (cover == null) return body;
       return GameBanner(
-        coverController: coverController,
+        coverController: cover,
         cornerRadius: cornerRadius,
         solidHeight: GameBannerBackdrop.solidHeightFor(
           wide: wide,
           width: constraints.maxWidth,
           coverAspect: 2,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHero(
-              wide,
-              // The cover keeps its 2:1 shape and ends about level with the
-              // pills, growing with the text size, but takes at most half the
-              // width so the fields keep room beside it.
-              math.min(
-                constraints.maxWidth / 2,
-                math.max(
-                  CoverImageCard.preferredWidth,
-                  MediaQuery.textScalerOf(context).scale(_heroInfoHeight) * 2,
-                ),
-              ),
-            ),
-            divider,
-            Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, stats.isEmpty ? 20 : 0),
-              child: _buildBody(context, wide),
-            ),
-            if (stats.isNotEmpty) ...[
-              divider,
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                child: Wrap(spacing: 36, runSpacing: 16, children: stats),
-              ),
-            ],
-          ],
-        ),
+        child: body,
       );
     },
   );
@@ -226,7 +233,6 @@ class const GameEditorLayout({
         // Framed like the Multiple Games paste box, but rounded like the
         // tags' box beside it.
         filled: true,
-        fillColor: theme.inputBackground,
         constraints: const BoxConstraints(),
         contentPadding: const EdgeInsets.all(_boxPadding),
         border: theme.resolveFramedInputBorder(radius: theme.panelRadius),
@@ -237,7 +243,8 @@ class const GameEditorLayout({
     // delete buttons, filled like the notes beside them. Their group titles
     // name them, as the notes' label does, so neither has a heading.
     final tagSection = SettingsSectionFamily(
-      color: theme.inputBackground,
+      color:
+          InputDecorationTheme.of(context).fillColor ?? theme.inputBackground,
       child: SettingsSectionGroups(
         entries: [
           SectionGroupEntry(
@@ -388,7 +395,7 @@ class const GameBanner({
           ),
         ),
       ),
-      child,
+      GlassButtonScope(child: child),
     ],
   );
 }
@@ -443,8 +450,19 @@ class const GameBannerBackdrop({
     builder: (context, constraints) => _build(context, constraints.maxHeight),
   );
 
+  static final _blur = ImageFilter.blur(sigmaX: 40, sigmaY: 40);
+
+  /// Light themes wash the art out more, so it stays a pastel behind dark
+  /// text, and saturate it first, so the wash keeps its colour instead of
+  /// turning grey.
+  static final _lightBlur = ImageFilter.compose(
+    outer: ColorFilter.matrix(_saturate(1.6)),
+    inner: _blur,
+  );
+
   Widget _build(BuildContext context, double maxHeight) {
     final theme = context.appTheme;
+    final dark = theme.isDark;
     final full = solidHeight + fadeLength;
     final height = math.min(full, maxHeight);
     // Full strength down to [solidHeight], then an eased fade to nothing,
@@ -510,10 +528,7 @@ class const GameBannerBackdrop({
                       builder: (context, value, _) => value.text.trim().isEmpty
                           ? const SizedBox.shrink()
                           : ImageFiltered(
-                              imageFilter: ImageFilter.blur(
-                                sigmaX: 40,
-                                sigmaY: 40,
-                              ),
+                              imageFilter: dark ? _blur : _lightBlur,
                               child: Transform.scale(
                                 scale: 1.4,
                                 child: GameCoverImage(
@@ -523,14 +538,20 @@ class const GameBannerBackdrop({
                             ),
                     ),
                   // Dims the art so text stays readable over it.
-                  ColoredBox(color: theme.background.withValues(alpha: 0.55)),
+                  ColoredBox(
+                    color: theme.background.withValues(
+                      alpha: dark ? 0.55 : 0.62,
+                    ),
+                  ),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          theme.accent.withValues(alpha: 0.28),
+                          // Faint on light themes, where the accent is
+                          // the heading's and the lit pills' text colour.
+                          theme.accent.withValues(alpha: dark ? 0.28 : 0.10),
                           theme.accent.withValues(alpha: 0.0),
                         ],
                       ),
@@ -544,6 +565,18 @@ class const GameBannerBackdrop({
       ),
     );
   }
+}
+
+/// A colour matrix scaling saturation by [amount] (1 leaves it).
+List<double> _saturate(double amount) {
+  const r = 0.2126, g = 0.7152, b = 0.0722;
+  final i = 1 - amount;
+  return [
+    r * i + amount, g * i, b * i, 0, 0, //
+    r * i, g * i + amount, b * i, 0, 0, //
+    r * i, g * i, b * i + amount, 0, 0, //
+    0, 0, 0, 1, 0,
+  ];
 }
 
 /// A banner's heading in the accent color, with its buttons at the end. Kept

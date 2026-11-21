@@ -5,7 +5,6 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../widgets/nav_button_group.dart';
 import '../widgets/navigation_panel.dart' show isVeryNarrowAppLayout;
 import '../widgets/background_pattern.dart';
 import '../widgets/platform_menu_button.dart';
@@ -139,16 +138,8 @@ final List<(String, String, IconData)> _settingsRailSections = [
   ),
 ];
 
-/// Space around the section button group inside the rail.
-const double _settingsRailOuterPadding = 8;
-
-/// A section button's width: the rail shows icons only.
-const double _settingsRailButtonExtent = 40;
-
-/// The rail's width: a button plus its group and outer padding.
-const double _settingsRailWidth =
-    _settingsRailButtonExtent +
-    (_settingsRailOuterPadding + NavButtonGroup.padding) * 2;
+/// The section rail's width: an icon's pill and its margins.
+const double _settingsRailWidth = 60;
 
 /// Settings page
 class const SettingsPage({super.key}) extends ConsumerStatefulWidget {
@@ -243,7 +234,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
-/// The section list beside the page: icon-only buttons, named in tooltips.
+/// The section list beside the page: icons, named in tooltips, the chosen
+/// one in an accent pill. All sits apart above the sections.
 class const _SettingsSectionRail({
   required final String selectedSection,
   required final bool isSearching,
@@ -252,19 +244,20 @@ class const _SettingsSectionRail({
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
+    Widget item((String, String, IconData) section) => _SettingsRailItem(
+      key: ValueKey<String>('settings-rail-${section.$1}'),
+      label: section.$2,
+      icon: section.$3,
+      selected: !isSearching && selectedSection == section.$1,
+      // A search shows every section, so none can be picked meanwhile.
+      onTap: isSearching ? null : () => onSectionSelected(section.$1),
+    );
     return RepaintBoundary(
       child: Container(
         width: _settingsRailWidth,
         decoration: BoxDecoration(
           color: theme.navBackground,
           border: Border(right: BorderSide(color: theme.border)),
-          boxShadow: [
-            BoxShadow(
-              color: theme.border.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         // The navigation panel's background and pattern, lined up with it,
         // with the pattern just a little stronger than behind pages.
@@ -272,24 +265,93 @@ class const _SettingsSectionRail({
           strength: PanelPatternSurface.sidePanelStrength,
           child: ListView(
             key: const ValueKey('settings-section-navigation'),
-            padding: const EdgeInsets.all(_settingsRailOuterPadding),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             children: [
-              NavButtonGroup(
-                isHorizontal: false,
-                children: [
-                  for (final (id, label, icon) in _settingsRailSections)
-                    AppNavigationButton(
-                      key: ValueKey<String>('settings-rail-$id'),
-                      isSelected: !isSearching && selectedSection == id,
-                      isEnabled: !isSearching,
-                      isHorizontal: false,
-                      onTap: () => onSectionSelected(id),
-                      iconData: icon,
-                      tooltipMessage: label,
-                    ),
-                ],
+              item(_settingsRailSections.first),
+              Divider(
+                height: 12,
+                indent: 12,
+                endIndent: 12,
+                color: theme.border,
               ),
+              for (final section in _settingsRailSections.skip(1))
+                item(section),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class const _SettingsRailItem({
+  super.key,
+  required final String label,
+  required final IconData icon,
+  required final bool selected,
+  required final VoidCallback? onTap,
+}) extends StatefulWidget {
+  @override
+  State<_SettingsRailItem> createState() => _SettingsRailItemState();
+}
+
+class _SettingsRailItemState extends State<_SettingsRailItem> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    final radius = BorderRadius.circular(theme.cornerRadius);
+    final enabled = widget.onTap != null;
+    final animate = !MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      enabled: enabled,
+      label: widget.label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: widget.label,
+        child: Opacity(
+          opacity: !enabled && !widget.selected ? 0.5 : 1,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: AnimatedContainer(
+              duration: animate
+                  ? const Duration(milliseconds: 160)
+                  : Duration.zero,
+              curve: Curves.easeOutCubic,
+              height: 40,
+              decoration: BoxDecoration(
+                color: widget.selected
+                    ? theme.accent.withValues(alpha: 0.22)
+                    : Colors.transparent,
+                borderRadius: radius,
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: widget.onTap,
+                  onHover: (hovered) => setState(() => _hovered = hovered),
+                  borderRadius: radius,
+                  // Grows a fifth while hovered or chosen, as the navigation
+                  // panel's icons do.
+                  child: AnimatedScale(
+                    scale: enabled && (widget.selected || _hovered) ? 1.2 : 1,
+                    duration: animate
+                        ? const Duration(milliseconds: 100)
+                        : Duration.zero,
+                    child: Icon(
+                      widget.icon,
+                      size: 22,
+                      color: widget.selected
+                          ? theme.accent
+                          : theme.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -314,21 +376,32 @@ class const _SettingsPageBody({
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
 
+    final search = AppSearchField(
+      controller: searchController,
+      hintText: 'Search settings...',
+      onChanged: onSearchChanged,
+    );
     final (_, sectionLabel, sectionIcon) = _settingsRailSections.firstWhere(
       (section) => section.$1 == selectedSection,
       orElse: () => _settingsRailSections.first,
     );
-    final sectionPicker = IconMenuButton<String>(
-      key: const ValueKey<String>('settings-section-picker'),
-      segment: true,
-      value: selectedSection,
-      tooltip: 'Section: $sectionLabel',
-      onSelected: onSectionSelected,
-      icon: (color, size) => Icon(sectionIcon, color: color, size: size),
-      choices: [
-        for (final (id, label, icon) in _settingsRailSections)
-          (id, label, Icon(icon, size: 20)),
-      ],
+    // As the sidebar's chosen section: its icon in an accent pill.
+    final sectionPicker = DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+      ),
+      child: IconMenuButton<String>(
+        key: const ValueKey<String>('settings-section-picker'),
+        value: selectedSection,
+        tooltip: 'Section: $sectionLabel',
+        onSelected: onSectionSelected,
+        icon: (color, size) => Icon(sectionIcon, color: color, size: size),
+        choices: [
+          for (final (id, label, icon) in _settingsRailSections)
+            (id, label, Icon(icon, size: 20)),
+        ],
+      ),
     );
     final searchField = Container(
       key: const ValueKey<String>('settings-search-container'),
@@ -337,13 +410,15 @@ class const _SettingsPageBody({
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: theme.border)),
       ),
-      // Labelled like the other fields; narrow windows pick the section from
-      // the start of its box, split off like the game key's platform.
-      child: AppSearchField(
-        controller: searchController,
-        labelText: 'Search settings',
-        onChanged: onSearchChanged,
-        leading: showSectionPicker ? sectionPicker : null,
+      // The picker stretches to the search bar's height.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showSectionPicker) ...[sectionPicker, const SizedBox(width: 8)],
+            Expanded(child: search),
+          ],
+        ),
       ),
     );
 

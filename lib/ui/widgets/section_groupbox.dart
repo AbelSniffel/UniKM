@@ -84,6 +84,10 @@ class const SectionGroupBox({
   /// Titles a framed box in the text colour, as flat headings are, instead
   /// of the accent.
   final bool plainTitle = false,
+
+  /// Square, without its own border or shadow, so it fills its parent edge
+  /// to edge, as in the library's filter sidebar.
+  final bool flush = false,
 }) extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
@@ -206,6 +210,7 @@ class const SectionGroupBox({
       animationDuration: Duration.zero,
       child: _buildTopTitle(theme, outerRadius),
     );
+    if (flush) return surface;
     // Keep controls mounted when search filtering changes connected corners.
     final bgLayer = ClipRRect(
       borderRadius: outerRadius,

@@ -172,7 +172,7 @@ class _GameCoverImageState extends State<GameCoverImage> {
   // The faint fill of an empty field, so a banner's colour shows through
   // rather than a grey block.
   Widget _buildPlaceholder() => ColoredBox(
-    color: theme.inputBackground,
+    color: InputDecorationTheme.of(context).fillColor ?? theme.inputBackground,
     child: Center(
       child: Icon(
         Icons.videogame_asset_outlined,

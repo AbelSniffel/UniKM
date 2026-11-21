@@ -22,9 +22,10 @@ import 'settings_card_inset.dart';
 /// highlights and the theme's splash), and [Focus] and [Actions] for the
 /// keyboard. Read-only chips ([onTap] null) show as on and take no input.
 ///
-/// A toggle shows its state by its label's color and the inset alone; only
-/// a custom tag that a click deletes ([deleteOnTap]) shows a mark, a check
-/// that turns into a cross while hovered.
+/// A toggle shows its state, as the option toggles do, by a light before
+/// its label, the label's color and the inset; a custom tag that a click
+/// deletes ([deleteOnTap]) shows a mark after it instead, a check that turns
+/// into a cross while hovered.
 class const AppTagButton({
   super.key,
   required final Tag tag,
@@ -111,6 +112,18 @@ class _AppTagButtonState extends State<AppTagButton>
   bool get _marked =>
       widget.deleteOnTap && !widget.tag.isSteamTag && !_readOnly;
 
+  /// Shows the light: a toggle.
+  bool get _lit => !widget.deleteOnTap && !_readOnly;
+
+  /// A toggle's border is the tag's colour only while on, as the option
+  /// toggles'; other chips show it while focused.
+  bool get _accentBorder => _lit
+      ? AppActionButton.accentBorder(
+          selected: widget.isSelected,
+          states: _states,
+        )
+      : _states.contains(WidgetState.focused);
+
   @override
   void initState() {
     super.initState();
@@ -188,7 +201,11 @@ class _AppTagButtonState extends State<AppTagButton>
   }
 
   BoxDecoration get _surfaceDecoration => BoxDecoration(
-    color: widget.theme.background.withValues(alpha: _surfaceAlpha.value),
+    color: GlassButtonScope.fill(
+      widget.theme,
+      _surfaceAlpha.value,
+      GlassButtonScope.of(context),
+    ),
     borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
   );
 
@@ -205,14 +222,11 @@ class _AppTagButtonState extends State<AppTagButton>
     borderRadius: BorderRadius.circular(widget.theme.cornerRadius),
   );
 
-  Color _overlay(WidgetState state) {
-    final theme = Theme.of(context);
-    return switch (state) {
-      WidgetState.pressed => theme.splashColor,
-      WidgetState.hovered => theme.hoverColor,
-      _ => theme.focusColor,
-    };
-  }
+  /// As a toggle's: a neutral tint, so nothing recolours as a click
+  /// switches it.
+  Color _overlay(WidgetState state) => widget.theme.textPrimary.withValues(
+    alpha: state == WidgetState.hovered ? 0.08 : 0.1,
+  );
 
   void _setState(WidgetState state, bool on) {
     if (_states.contains(state) == on) return;
@@ -368,7 +382,6 @@ class _AppTagButtonState extends State<AppTagButton>
       splash.customBorder = shape;
     }
     _splash?.color = _overlay(WidgetState.pressed);
-    final focused = _states.contains(WidgetState.focused);
     final foreground = _selected ? _accent : theme.textPrimary;
     return RepaintBoundary(
       child: Semantics(
@@ -397,10 +410,9 @@ class _AppTagButtonState extends State<AppTagButton>
               shape: shape.copyWith(
                 side: _idle
                     ? BorderSide.none
-                    : BorderSide(
-                        color: focused ? _accent : theme.border,
-                        width: focused ? 1.5 : 1,
-                      ),
+                    : _accentBorder
+                    ? BorderSide(color: _accent, width: 1.5)
+                    : BorderSide(color: theme.border),
               ),
               child: _TagChipBox(state: this),
             ),
@@ -446,6 +458,9 @@ class const _TagChipBox({required final _AppTagButtonState state})
         theme: state.widget.theme,
         accent: state._accent,
         marked: state._marked,
+        light: state._lit,
+        glass: GlassButtonScope.of(context),
+        outlined: state._accentBorder,
         ratio: MediaQuery.devicePixelRatioOf(context),
       );
   }
@@ -461,9 +476,18 @@ typedef _TextSettings = ({
 });
 
 /// What painting reads from the chip besides its eases: the theme, the tag's
-/// color, whether it shows a mark (a wider chip) and the pixel ratio of the
-/// cached inset.
-typedef _Look = ({AppThemeData theme, Color accent, bool marked, double ratio});
+/// color, whether it shows a mark or a light (a wider chip), whether it is
+/// on a banner, whether it shows the accent outline, and the pixel ratio of
+/// the cached inset.
+typedef _Look = ({
+  AppThemeData theme,
+  Color accent,
+  bool marked,
+  bool light,
+  bool glass,
+  bool outlined,
+  double ratio,
+});
 
 class _RenderTagChip(final _AppTagButtonState state)
     extends RenderBox
@@ -473,7 +497,9 @@ class _RenderTagChip(final _AppTagButtonState state)
   _Look? _look;
   set look(_Look value) {
     if (value == _look) return;
-    value.marked != _look?.marked ? markNeedsLayout() : markNeedsPaint();
+    value.marked != _look?.marked || value.light != _look?.light
+        ? markNeedsLayout()
+        : markNeedsPaint();
     _look = value;
   }
 
@@ -507,6 +533,7 @@ class _RenderTagChip(final _AppTagButtonState state)
   }
 
   bool get _showsStatus => _look!.marked;
+  double get _lightRoom => _look!.light ? AppActionButton.lightRoom : 0;
 
   @override
   bool get isRepaintBoundary => true;
@@ -520,7 +547,7 @@ class _RenderTagChip(final _AppTagButtonState state)
   void performLayout() {
     // As the button's Padding, Align and Row(s) lay out its label: the mark
     // keeps its room, the label takes what is left and ellipsizes.
-    final status = _showsStatus ? _statusRoom : 0.0;
+    final status = (_showsStatus ? _statusRoom : 0.0) + _lightRoom;
     _painter.layout(
       maxWidth: math.max(0.0, constraints.maxWidth - _padding * 2 - status),
     );
@@ -578,8 +605,24 @@ class _RenderTagChip(final _AppTagButtonState state)
       painter(ButtonDepthPainter(depth, true, state._shape, _text!.direction));
     }
 
-    final textOffset =
-        offset + Offset(_padding, _rowTop + (_rowHeight - _painter.height) / 2);
+    final rowMiddle = offset.dy + _rowTop + _rowHeight / 2;
+    if (_look!.light) {
+      // As AppButtonSelectionIndicator, lit with the inset.
+      const light = Size.square(AppButtonSelectionIndicator.size);
+      AppButtonSelectionIndicator.look(
+        GlassButtonScope.offLight(theme, _look!.glass),
+        _look!.accent,
+        state._inset.value,
+      ).createBoxPainter().paint(
+        canvas,
+        Offset(offset.dx + _padding, rowMiddle - light.height / 2),
+        const ImageConfiguration(size: light),
+      );
+    }
+    final textOffset = Offset(
+      offset.dx + _padding + _lightRoom,
+      rowMiddle - _painter.height / 2,
+    );
     if (_clipText) {
       canvas
         ..save()
@@ -593,7 +636,10 @@ class _RenderTagChip(final _AppTagButtonState state)
       final box =
           offset +
               Offset(
-                _padding + _painter.width + AppActionButton.statusSpacing,
+                _padding +
+                    _lightRoom +
+                    _painter.width +
+                    AppActionButton.statusSpacing,
                 _rowTop + (_rowHeight - _status) / 2,
               ) &
           const Size.square(_status);
@@ -620,6 +666,14 @@ class _RenderTagChip(final _AppTagButtonState state)
         devicePixelRatio: _look!.ratio,
       ),
     );
+    // The accent outline again, over the inset, which would otherwise
+    // shade it.
+    if (_look!.outlined) {
+      AppActionButton.accentOutline(
+        theme,
+        _look!.accent,
+      ).paint(canvas, offset & size);
+    }
   }
 
   @override

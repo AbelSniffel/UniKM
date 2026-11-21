@@ -279,7 +279,8 @@ class _CoverImageCardState extends State<CoverImageCard> {
   Widget _buildEmptyPrompt(AppThemeData theme, bool hovered) {
     final color = hovered || _dragging ? theme.accent : theme.textSecondary;
     return ColoredBox(
-      color: theme.inputBackground,
+      color:
+          InputDecorationTheme.of(context).fillColor ?? theme.inputBackground,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: 4,

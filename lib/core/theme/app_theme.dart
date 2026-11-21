@@ -1350,7 +1350,8 @@ class const AppLinearProgressBar({super.key, required final double? value})
 const kDarkTheme = AppThemeData(
   id: 'builtin-dark',
   name: 'Dark',
-  baseBackground: Color(0xFF000000),
+  // A near-black, softer than pure black.
+  baseBackground: Color(0xFF121212),
   baseSecondary: Color(0xFF965EED),
   baseAccent: Color(0xFFFF8964),
   iconData: Icons.dark_mode,
@@ -1360,7 +1361,8 @@ const kDarkTheme = AppThemeData(
 const kLightTheme = AppThemeData(
   id: 'builtin-light',
   name: 'Light',
-  baseBackground: Color(0xFFF5F5F5),
+  // A light grey, softer than white.
+  baseBackground: Color(0xFFEBEBEB),
   baseSecondary: Color(0xFF6797FF),
   baseAccent: Color(0xFF8B5CF6),
   iconData: Icons.light_mode,

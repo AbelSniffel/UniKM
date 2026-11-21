@@ -206,6 +206,7 @@ class const NavigationPanel({
     required NavExpansionMode expansionMode,
   }) => NavButtonGroup(
     isHorizontal: isHorizontal,
+    accented: true,
     children: [
       for (final index in indices)
         if (index == _menuIndex)
