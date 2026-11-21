@@ -18,10 +18,6 @@ class const DeadlineChip({
   required final ValueChanged<bool> onEnabledChanged,
   required final ValueChanged<DateTime> onDateChanged,
   final DateTime? firstDate,
-
-  /// Fills the width offered, the date stretching across it, in place of
-  /// staying compact.
-  final bool expand = false,
 }) extends StatelessWidget {
   Future<void> _chooseDate(BuildContext context) async {
     final selected = await showDeadlinePickerDialog(
@@ -45,7 +41,7 @@ class const DeadlineChip({
     // Match the inset curve to the outer radius and its 4 px inset.
     final insetRadius = math.max(0.0, theme.cornerRadius - 4);
     return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: expand ? double.infinity : 260),
+      constraints: const BoxConstraints(maxWidth: 260),
       child: Semantics(
         toggled: hasDeadline,
         child: ButtonThemeSync(
@@ -64,12 +60,9 @@ class const DeadlineChip({
                       AppActionButton.withStatus(label!, selected: hasDeadline),
                 ),
             child: Row(
-              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Expanded, the label keeps its width and the date takes
-                // all the rest.
                 Flexible(
-                  flex: expand ? 0 : 1,
                   child: Tooltip(
                     message: hasDeadline
                         ? 'Disable deadline'
@@ -85,46 +78,39 @@ class const DeadlineChip({
                 SizedBox(width: hasDeadline ? 6 : 0),
                 Flexible(
                   flex: hasDeadline ? 2 : 0,
-                  fit: expand && hasDeadline ? FlexFit.tight : FlexFit.loose,
                   child: Align(
                     widthFactor: hasDeadline ? 1 : 0,
                     heightFactor: 1,
-                    // Expanded, the date stretches across the rest.
-                    child: SizedBox(
-                      width: expand && hasDeadline ? double.infinity : null,
-                      child: Visibility(
-                        visible: hasDeadline,
-                        maintainState: true,
-                        maintainSize: true,
-                        maintainAnimation: true,
-                        child: Tooltip(
-                          message: date != null
-                              ? 'Change deadline: $label'
-                              : 'Choose deadline date',
-                          child: Material(
-                            color: insetColor,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(insetRadius),
-                            ),
-                            child: InkWell(
-                              key: const ValueKey('deadline-date'),
-                              onTap: () => _chooseDate(context),
-                              borderRadius: BorderRadius.circular(insetRadius),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 24,
+                    child: Visibility(
+                      visible: hasDeadline,
+                      maintainState: true,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      child: Tooltip(
+                        message: date != null
+                            ? 'Change deadline: $label'
+                            : 'Choose deadline date',
+                        child: Material(
+                          color: insetColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(insetRadius),
+                          ),
+                          child: InkWell(
+                            key: const ValueKey('deadline-date'),
+                            onTap: () => _chooseDate(context),
+                            borderRadius: BorderRadius.circular(insetRadius),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 24),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 4,
-                                  ),
-                                  child: Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: theme.textPrimary),
-                                  ),
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: theme.textPrimary),
                                 ),
                               ),
                             ),

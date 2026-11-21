@@ -16,6 +16,7 @@ import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
 import 'game_cover_image.dart';
 import 'notification_system.dart';
+import 'platform_menu_button.dart' show FieldSegment;
 import 'settings_section_family.dart';
 import 'tag_group_box.dart';
 
@@ -53,7 +54,6 @@ class const GameEditorLayout({
   required final ValueChanged<String> onTitleChanged,
   final FormFieldValidator<String>? titleValidator,
   required final Widget keyField,
-  required final Widget platform,
   required final Widget options,
   required final TextEditingController notesController,
   required final VoidCallback onNotesChanged,
@@ -73,8 +73,9 @@ class const GameEditorLayout({
   static const wideBreakpoint = 760.0;
 
   /// The column's natural height beside the cover at the default text size:
-  /// the button row, the title line, the key field and the pills.
-  static const _heroInfoHeight = 184.0;
+  /// the button row, the title and key fields, with their labels inside,
+  /// and the pills.
+  static const _heroInfoHeight = 216.0;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -97,7 +98,19 @@ class const GameEditorLayout({
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildHero(context, wide),
+            _buildHero(
+              wide,
+              // The cover keeps its 2:1 shape and ends about level with the
+              // pills, growing with the text size, but takes at most half the
+              // width so the fields keep room beside it.
+              math.min(
+                constraints.maxWidth / 2,
+                math.max(
+                  CoverImageCard.preferredWidth,
+                  MediaQuery.textScalerOf(context).scale(_heroInfoHeight) * 2,
+                ),
+              ),
+            ),
             divider,
             Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, stats.isEmpty ? 20 : 0),
@@ -116,16 +129,11 @@ class const GameEditorLayout({
     },
   );
 
-  Widget _buildHero(BuildContext context, bool wide) => GameBannerHero(
+  Widget _buildHero(bool wide, double coverWidth) => GameBannerHero(
     heading: heading,
     actions: actions,
     wide: wide,
-    // The cover keeps its 2:1 shape and ends about level with the pills,
-    // growing with the text size.
-    coverWidth: math.max(
-      CoverImageCard.preferredWidth,
-      MediaQuery.textScalerOf(context).scale(_heroInfoHeight) * 2,
-    ),
+    coverWidth: coverWidth,
     spacing: 28,
     cover: cover,
     info: Column(
@@ -141,7 +149,10 @@ class const GameEditorLayout({
             fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
-          decoration: const InputDecoration(hintText: 'Title', isDense: true),
+          decoration: InputDecoration(
+            labelText: 'Title',
+            border: theme.resolveInputBorder(labelInside: true),
+          ),
           validator: titleValidator,
           onChanged: onTitleChanged,
           onFieldSubmitted: (value) {
@@ -152,37 +163,11 @@ class const GameEditorLayout({
           },
         ),
         const SizedBox(height: 10),
-        Row(
-          spacing: 8,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: keyField),
-            platform,
-          ],
-        ),
+        keyField,
         const SizedBox(height: 14),
         Align(alignment: Alignment.centerLeft, child: options),
       ],
     ),
-  );
-
-  /// A titled part of the body. An [expand]ed one fills the height it is
-  /// given.
-  Widget _section(String title, Widget child, {bool expand = false}) => Column(
-    mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    spacing: 10,
-    children: [
-      Text(
-        title,
-        style: TextStyle(
-          color: theme.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      if (expand) Expanded(child: child) else child,
-    ],
   );
 
   /// From the notes' frame to what it holds, as in the tags' panel.
@@ -194,64 +179,62 @@ class const GameEditorLayout({
 
   /// The notes beside the tags; narrow, the notes come first.
   Widget _buildBody(BuildContext context, bool wide) {
-    // Beside the tags, the notes fill the height down to the tags' bottom;
-    // stacked, they start at five lines and grow as they are typed.
-    Widget notesSection({required bool expand}) => _section(
-      'Notes',
-      expand: expand,
-      TextField(
-        controller: notesController,
-        minLines: expand ? null : 5,
-        maxLines: null,
-        expands: expand,
-        textAlignVertical: TextAlignVertical.top,
-        style: TextStyle(color: theme.textPrimary, height: 1.4),
-        decoration: InputDecoration(
-          hintText: 'Add notes about this game...',
-          hintStyle: TextStyle(color: theme.textHint),
-          // Framed like the Multiple Games paste box, but rounded like the
-          // tags' box beside it.
-          filled: true,
-          fillColor: theme.inputBackground,
-          constraints: const BoxConstraints(),
-          contentPadding: const EdgeInsets.all(_boxPadding),
-          border: theme.resolveFramedInputBorder(radius: theme.panelRadius),
-        ),
-        onChanged: (_) => onNotesChanged(),
+    // Labelled inside the box, like the title and key. Beside the tags, the
+    // notes fill the height down to the tags' bottom; stacked, they start at
+    // five lines and grow as they are typed.
+    Widget notesSection({required bool expand}) => TextField(
+      controller: notesController,
+      minLines: expand ? null : 5,
+      maxLines: null,
+      expands: expand,
+      textAlignVertical: TextAlignVertical.top,
+      style: TextStyle(color: theme.textPrimary, height: 1.4),
+      decoration: InputDecoration(
+        labelText: 'Notes',
+        // At the top of the box while empty, where the notes start.
+        alignLabelWithHint: true,
+        hintText: 'Add notes about this game...',
+        hintStyle: TextStyle(color: theme.textHint),
+        // Framed like the Multiple Games paste box, but rounded like the
+        // tags' box beside it.
+        filled: true,
+        fillColor: theme.inputBackground,
+        constraints: const BoxConstraints(),
+        contentPadding: const EdgeInsets.all(_boxPadding),
+        border: theme.resolveFramedInputBorder(radius: theme.panelRadius),
       ),
+      onChanged: (_) => onNotesChanged(),
     );
     // The settings page's tag groups, without its header, add field or
-    // delete buttons, filled like the notes beside them.
-    final tagSection = _section(
-      'Tags',
-      SettingsSectionFamily(
-        color: theme.inputBackground,
-        child: SettingsSectionGroups(
-          entries: [
-            SectionGroupEntry(
-              visible: true,
-              builder: (_, _) => TagGroupBox(
-                title: 'Custom Tags',
-                icon: Icons.label,
-                tags: customTags,
-                emptyText: 'No custom tags created yet',
-                selectedTagIds: selectedTagIds,
-                onTagToggled: onTagToggled,
-                maxRows: 5,
-              ),
+    // delete buttons, filled like the notes beside them. Their group titles
+    // name them, as the notes' label does, so neither has a heading.
+    final tagSection = SettingsSectionFamily(
+      color: theme.inputBackground,
+      child: SettingsSectionGroups(
+        entries: [
+          SectionGroupEntry(
+            visible: true,
+            builder: (_, _) => TagGroupBox(
+              title: 'Custom Tags',
+              icon: Icons.label,
+              tags: customTags,
+              emptyText: 'No custom tags created yet',
+              selectedTagIds: selectedTagIds,
+              onTagToggled: onTagToggled,
+              maxRows: 5,
             ),
-            SectionGroupEntry(
-              visible: steamTags.isNotEmpty,
-              builder: (_, _) => TagGroupBox(
-                title: 'Steam Tags',
-                icon: FontAwesomeIcons.steam.data,
-                tags: steamTags,
-                emptyText: '',
-                maxRows: 5,
-              ),
+          ),
+          SectionGroupEntry(
+            visible: steamTags.isNotEmpty,
+            builder: (_, _) => TagGroupBox(
+              title: 'Steam Tags',
+              icon: FontAwesomeIcons.steam.data,
+              tags: steamTags,
+              emptyText: '',
+              maxRows: 5,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
 
@@ -384,8 +367,10 @@ class const GameBanner({
 
 /// A banner's backdrop: the cover's art blurred and tinted with the accent
 /// (so an empty cover still has some colour), at full strength down to
-/// [solidHeight], then fading out over [fadeLength], or over what height is
-/// left when it is given less, so it has no edge of its own.
+/// [solidHeight], then fading out over [fadeLength]. Given less height, it is
+/// cut there rather than squeezed, so it stays the same however tall the
+/// banner is, and fades out over the last [footFade] instead, so it has no
+/// edge of its own.
 class const GameBannerBackdrop({
   super.key,
 
@@ -406,6 +391,9 @@ class const GameBannerBackdrop({
 
   /// Full strength down to about the foot of a wide [GameBannerHero].
   static const wideSolidHeight = 240.0;
+
+  /// How far above a short banner's foot the backdrop fades out.
+  static const footFade = 48.0;
 
   /// The full-strength height for a [GameBannerHero] [width] wide whose
   /// cover is [coverAspect] wide for its height. Wide, it covers the hero,
@@ -429,8 +417,39 @@ class const GameBannerBackdrop({
 
   Widget _build(BuildContext context, double maxHeight) {
     final theme = context.appTheme;
-    final height = math.min(solidHeight + fadeLength, maxHeight);
-    final fade = math.max(0.0, height - solidHeight);
+    final full = solidHeight + fadeLength;
+    final height = math.min(full, maxHeight);
+    // Full strength down to [solidHeight], then an eased fade to nothing,
+    // as (px down, strength).
+    final fade = [
+      (0.0, 1.0),
+      for (final (t, alpha) in [
+        (0.0, 1.0),
+        (0.25, 0.75),
+        (0.5, 0.4),
+        (0.75, 0.15),
+        (1.0, 0.0),
+      ])
+        (solidHeight + t * fadeLength, alpha),
+    ];
+    double strengthAt(double y) {
+      for (final (i, (y1, a1)) in fade.indexed.skip(1)) {
+        final (y0, a0) = fade[i - 1];
+        if (y > y1) continue;
+        return y1 == y0 ? a1 : a0 + (a1 - a0) * (y - y0) / (y1 - y0);
+      }
+      return 0;
+    }
+
+    // Cut short, it fades out over the banner's last [footFade] instead.
+    final footTop = math.max(0.0, height - footFade);
+    final stops = height < full
+        ? [
+            ...fade.where((stop) => stop.$1 < footTop),
+            (footTop, strengthAt(footTop)),
+            (height, 0.0),
+          ]
+        : fade;
     return SizedBox(
       height: height,
       // The enlarged, blurred art would spill past the fade otherwise.
@@ -438,57 +457,59 @@ class const GameBannerBackdrop({
         child: RepaintBoundary(
           child: ShaderMask(
             blendMode: BlendMode.dstIn,
-            // Full strength down to [solidHeight], then an eased fade to
-            // nothing.
             shaderCallback: (bounds) => LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                for (final alpha in [1.0, 1.0, 0.75, 0.4, 0.15, 0.0])
+                for (final (_, alpha) in stops)
                   Colors.white.withValues(alpha: alpha),
               ],
-              stops: [
-                0,
-                for (final t in [0.0, 0.25, 0.5, 0.75, 1.0])
-                  math.min(1.0, (solidHeight + t * fade) / height),
-              ],
+              stops: [for (final (y, _) in stops) y / height],
             ).createShader(bounds),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (coverController case final cover?)
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: cover,
-                    builder: (context, value, _) => value.text.trim().isEmpty
-                        ? const SizedBox.shrink()
-                        : ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: 40,
-                              sigmaY: 40,
-                            ),
-                            child: Transform.scale(
-                              scale: 1.4,
-                              child: GameCoverImage(
-                                coverImage: value.text.trim(),
+            // Laid out at full length, so a banner growing or shrinking, as
+            // when the stats strip comes and goes, shows more or less of the
+            // same backdrop instead of stretching it.
+            child: OverflowBox(
+              alignment: Alignment.topCenter,
+              minHeight: full,
+              maxHeight: full,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (coverController case final cover?)
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: cover,
+                      builder: (context, value, _) => value.text.trim().isEmpty
+                          ? const SizedBox.shrink()
+                          : ImageFiltered(
+                              imageFilter: ImageFilter.blur(
+                                sigmaX: 40,
+                                sigmaY: 40,
+                              ),
+                              child: Transform.scale(
+                                scale: 1.4,
+                                child: GameCoverImage(
+                                  coverImage: value.text.trim(),
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                // Dims the art so text stays readable over it.
-                ColoredBox(color: theme.background.withValues(alpha: 0.55)),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        theme.accent.withValues(alpha: 0.28),
-                        theme.accent.withValues(alpha: 0.0),
-                      ],
+                    ),
+                  // Dims the art so text stays readable over it.
+                  ColoredBox(color: theme.background.withValues(alpha: 0.55)),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          theme.accent.withValues(alpha: 0.28),
+                          theme.accent.withValues(alpha: 0.0),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -524,8 +545,9 @@ class const BannerHeadingRow({
   }
 }
 
-/// The game key's field, its placeholder "Key", or with [playfulHints] a
-/// playful line that changes each time the field is emptied.
+/// The game key's field, labelled "Key" inside its box. With
+/// [playfulHints], a playful placeholder shows once it has focus, changing
+/// each time the field is emptied.
 class const GameKeyField({
   super.key,
   required final TextEditingController controller,
@@ -539,7 +561,11 @@ class const GameKeyField({
   /// Shows a copy button when set.
   final VoidCallback? onCopy,
 
-  /// Rotates through [hints] in place of the plain "Key" placeholder.
+  /// A [PlatformMenuButton] made a segment, at the right end of the box,
+  /// split from the key by a line as the home page's sorters are.
+  final Widget? platform,
+
+  /// Rotates through [hints] as the empty field's placeholder.
   final bool playfulHints = false,
 }) extends StatefulWidget {
   static const hints = [
@@ -605,9 +631,14 @@ class _GameKeyFieldState extends State<GameKeyField> {
         letterSpacing: 1.5,
       ),
       decoration: InputDecoration(
-        hintText: widget.playfulHints ? _hint : 'Key',
+        labelText: 'Key',
+        hintText: widget.playfulHints ? _hint : null,
         hintStyle: TextStyle(color: theme.textHint, letterSpacing: 0),
-        suffixIcon: widget.onVisibilityChanged == null && widget.onCopy == null
+        border: theme.resolveInputBorder(labelInside: true),
+        suffixIcon:
+            widget.onVisibilityChanged == null &&
+                widget.onCopy == null &&
+                widget.platform == null
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,
@@ -627,6 +658,8 @@ class _GameKeyFieldState extends State<GameKeyField> {
                       tooltip: 'Copy key',
                       onPressed: widget.onCopy,
                     ),
+                  if (widget.platform case final platform?)
+                    FieldSegment(child: platform),
                 ],
               ),
       ),

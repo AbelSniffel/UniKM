@@ -242,15 +242,14 @@ class const AppActionButton({
   }
 }
 
-/// A toggle's light, like a status LED: a muted dot while off, a bigger one
-/// glowing in the accent when [selected]. Its slot fits the lit dot, so the
-/// label never moves.
+/// A toggle's light, like a status LED: a muted dot while off, glowing in the
+/// accent when [selected].
 class const AppButtonSelectionIndicator({
   super.key,
   required final bool selected,
   final Color? accentColor,
 }) extends StatelessWidget {
-  static const size = 9.0;
+  static const size = 10.0;
 
   @override
   Widget build(BuildContext context) {
@@ -266,25 +265,16 @@ class const AppButtonSelectionIndicator({
       builder: (context, lit, _) => Container(
         width: size,
         height: size,
-        alignment: Alignment.center,
-        child: Container(
-          width: size - 1 + lit,
-          height: size - 1 + lit,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Color.lerp(
-              SettingsCardMiniDot.idleColor(theme),
-              accent,
-              lit,
-            ),
-            boxShadow: [
-              if (lit > 0)
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.8 * lit),
-                  blurRadius: 4,
-                ),
-            ],
-          ),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color.lerp(SettingsCardMiniDot.idleColor(theme), accent, lit),
+          boxShadow: [
+            if (lit > 0)
+              BoxShadow(
+                color: accent.withValues(alpha: 0.8 * lit),
+                blurRadius: 4,
+              ),
+          ],
         ),
       ),
     );

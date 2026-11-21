@@ -9,6 +9,7 @@ library;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'platform_menu_button.dart' show FieldSegment;
 
 /// A themed search [TextField] with prefix search icon, optional clear button,
 /// and rounded border using [AppThemeData] colours.
@@ -28,6 +29,10 @@ class const AppSearchField({
   final FocusNode? focusNode,
   final String hintText = 'Search...',
 
+  /// Names the field inside its box, as labelled fields do, in place of
+  /// [hintText].
+  final String? labelText,
+
   /// Called after the field is cleared. If null, only the controller
   /// is cleared and [onChanged] is called with `''`.
   final VoidCallback? onCleared,
@@ -44,6 +49,10 @@ class const AppSearchField({
 
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon,
+
+  /// A menu button's segment at the start of the box, before the search
+  /// icon, as a [FieldSegment].
+  final Widget? leading,
 }) extends StatefulWidget {
   @override
   State<AppSearchField> createState() => _AppSearchFieldState();
@@ -105,11 +114,22 @@ class _AppSearchFieldState extends State<AppSearchField> {
       style: TextStyle(color: theme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         isDense: true,
-        hintText: widget.hintText,
+        labelText: widget.labelText,
+        hintText: widget.labelText == null ? widget.hintText : null,
         hintStyle: TextStyle(color: theme.textHint),
-        prefixIcon: Icon(
-          widget.prefixIcon ?? Icons.search,
-          color: theme.textHint,
+        prefixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.leading case final leading?)
+              FieldSegment(atStart: true, child: leading),
+            SizedBox(
+              width: _iconBox.minWidth,
+              child: Icon(
+                widget.prefixIcon ?? Icons.search,
+                color: theme.textHint,
+              ),
+            ),
+          ],
         ),
         prefixIconConstraints: _iconBox,
         suffixIconConstraints: _iconBox,
@@ -134,10 +154,13 @@ class _AppSearchFieldState extends State<AppSearchField> {
             : null,
         filled: true,
         fillColor: widget.backgroundColor,
-        border: theme.resolveInputBorder(),
+        border: theme.resolveInputBorder(labelInside: widget.labelText != null),
+        // A label takes the theme's padding, with room for it to float.
         contentPadding:
             widget.contentPadding ??
-            const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            (widget.labelText == null
+                ? const EdgeInsets.symmetric(vertical: 8, horizontal: 12)
+                : null),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
@@ -148,7 +149,50 @@ class const BatchGamesEditor({
 
   /// Null detects each key; a selected platform overrides every row.
   final GamePlatform? platformOverride,
+
+  /// Shown while the box is empty, such as an [exampleHint].
+  final String hintText = '',
+
+  /// A [PlatformMenuButton] made a segment, at the top right of the box in a
+  /// column of its own, split from the paste by a line as the game key's
+  /// box is.
+  final Widget? platform,
 }) extends StatefulWidget {
+  /// The games an [exampleHint] picks from.
+  static const exampleTitles = [
+    'Hollow Knight',
+    'Celeste',
+    'Portal 2',
+    'Stardew Valley',
+    'Hades',
+    'Terraria',
+    'Outer Wilds',
+    'Subnautica',
+    'Dead Cells',
+    'Cuphead',
+    'Factorio',
+    'Slay the Spire',
+  ];
+
+  /// A made-up paste showing each kind of line: a game and its key, one with
+  /// a deadline after its key, one with a "|" between title and key (also
+  /// accepted), and a key on its own. Each call picks new games, keys and
+  /// date.
+  static String exampleHint([math.Random? random]) {
+    final r = random ?? math.Random();
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    String group() => String.fromCharCodes([
+      for (var i = 0; i < 5; i++) letters.codeUnitAt(r.nextInt(letters.length)),
+    ]);
+    String key() => [group(), group(), group()].join('-');
+    final titles = [...exampleTitles]..shuffle(r);
+    final deadline = DateTime.now().add(Duration(days: 30 + r.nextInt(335)));
+    return '${titles[0]} ${key()}\n'
+        '${titles[1]} ${key()} ${DateFormat('d MMM yyyy').format(deadline)}\n'
+        '${titles[2]} | ${key()}\n'
+        '${key()}';
+  }
+
   @override
   State<BatchGamesEditor> createState() => _BatchGamesEditorState();
 }
@@ -374,7 +418,7 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                hintText: 'Game Title | XXXXX-XXXXX-XXXXX\nAnother Game | YYYYY-YYYYY-YYYYY\nOr just paste keys on their own',
+                hintText: widget.hintText,
                 hintStyle: TextStyle(color: theme.textHint, height: 2.7),
               ),
               onChanged: widget.onChanged,
@@ -399,47 +443,83 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
           ),
           border: theme.resolveFramedInputBorder(),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) => ListenableBuilder(
-            listenable: widget.controller,
-            child: field,
-            builder: (context, child) {
-              final painter = TextPainter(
-                text: widget.controller.buildTextSpan(
-                  context: context,
-                  style: style,
-                  withComposing: false,
-                ),
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
-              )..layout();
-              final width = math.max(
-                constraints.maxWidth,
-                painter.width +
-                    _platformGutter +
-                    2 * (_pillHorizontalPadding + 4) +
-                    4,
-              );
-              painter.dispose();
-              _scheduleRevealCaret();
-              // Each newline stays one game row, even when its title/key is long.
-              return SizedBox(
-                key: _viewportKey,
-                width: constraints.maxWidth,
-                child: AppScrollbar(
-                  controller: _horizontalScroll,
-                  child: SingleChildScrollView(
-                    key: const ValueKey('batch-games-horizontal-scroll'),
-                    controller: _horizontalScroll,
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(width: width, child: child),
+        child: _withPlatform(
+          theme,
+          LayoutBuilder(
+            builder: (context, constraints) => ListenableBuilder(
+              listenable: widget.controller,
+              child: field,
+              builder: (context, child) {
+                final painter = TextPainter(
+                  text: widget.controller.buildTextSpan(
+                    context: context,
+                    style: style,
+                    withComposing: false,
                   ),
-                ),
-              );
-            },
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                )..layout();
+                final width = math.max(
+                  constraints.maxWidth,
+                  painter.width +
+                      _platformGutter +
+                      2 * (_pillHorizontalPadding + 4) +
+                      4,
+                );
+                painter.dispose();
+                _scheduleRevealCaret();
+                // Each newline stays one game row, even when its title/key is long.
+                return SizedBox(
+                  key: _viewportKey,
+                  width: constraints.maxWidth,
+                  child: AppScrollbar(
+                    controller: _horizontalScroll,
+                    child: SingleChildScrollView(
+                      key: const ValueKey('batch-games-horizontal-scroll'),
+                      controller: _horizontalScroll,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(width: width, child: child),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The platform's column: a segment's padding, icon, gap and chevron.
+  static const _platformWidth = 10 + 20 + 2 + 20 + 10.0;
+
+  Widget _withPlatform(AppThemeData theme, Widget paste) {
+    final platform = widget.platform;
+    if (platform == null) return paste;
+    // The paste sets the height; the platform spans all of it beside the
+    // line, so the whole column opens its menu.
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: _platformWidth + 4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(right: BorderSide(color: theme.border)),
+            ),
+            child: paste,
+          ),
+        ),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: _platformWidth,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(theme.cornerRadius),
+            child: platform,
+          ),
+        ),
+      ],
     );
   }
 

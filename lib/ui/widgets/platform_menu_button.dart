@@ -5,8 +5,6 @@ import '../../providers/ui_state_providers.dart' show kAutoDetectPlatformValue;
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/surface_depth.dart';
-import 'app_tab_bar.dart' show AppTabSurface;
 import 'platform_icon.dart';
 import 'popup_menu_helpers.dart';
 
@@ -18,6 +16,12 @@ class const PlatformMenuButton({
   required final ValueChanged<String>? onSelected,
   final GamePlatform? detectedPlatform,
   final bool includeAutoDetect = true,
+
+  /// Drawn as an [IconMenuButton.segment] of a split box.
+  final bool segment = false,
+
+  /// See [IconMenuButton.segmentAtTop].
+  final bool segmentAtTop = false,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -27,6 +31,8 @@ class const PlatformMenuButton({
     return IconMenuButton<String>(
       value: value,
       tooltip: tooltip,
+      segment: segment,
+      segmentAtTop: segmentAtTop,
       onSelected: onSelected,
       icon: (color, size) => platform == null
           ? Icon(Icons.auto_fix_high, color: color, size: size)
@@ -69,17 +75,21 @@ class const IconMenuButton<T>({
   /// whenever the whole name fits.
   final bool expanded = false,
 
-  /// A standalone tab, selected while the menu is open, in place of the
-  /// navigation style; the icon still grows on hover and while open.
-  final bool tabStyle = false,
+  /// One part of a split box, such as a [MenuButtonGroup] or the game key
+  /// field, in place of the navigation style: the icon, the name when it
+  /// fits, and the chevron, centred when the name is left out. Tinted with
+  /// the accent while the menu is open.
+  final bool segment = false,
+
+  /// Keeps a tall segment's icon and chevron at its top, as tall as a
+  /// button, instead of centred.
+  final bool segmentAtTop = false,
 }) extends StatefulWidget {
   @override
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
 }
 
 class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
-  var _hovered = false;
-
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -150,6 +160,10 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
         .where((choice) => choice.$1 == widget.value)
         .firstOrNull
         ?.$2;
+    // Padding, icon, gaps and chevron around the name.
+    final chrome = widget.segment
+        ? 10 + 20 + 6 + 6 + 20 + 10
+        : 10 + kIconSize + 6 + 20 + 6;
     var named = false;
     if (constraints != null && label != null) {
       final painter = TextPainter(
@@ -163,50 +177,45 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
         textScaler: MediaQuery.textScalerOf(context),
         maxLines: 1,
       )..layout();
-      // Padding, icon, gap and chevron around the name.
-      named =
-          painter.width + 10 + kIconSize + 6 + 20 + 6 <= constraints.maxWidth;
+      named = painter.width + chrome <= constraints.maxWidth;
       painter.dispose();
     }
-    if (widget.tabStyle) {
-      final radius = BorderRadius.circular(theme.cornerRadius * 1.25);
-      final grow = enabled && (_hovered || controller.isOpen);
+    if (widget.segment) {
+      // The name, when shown, takes the spare width, so the icon sits at the
+      // start and the chevron at the end; without it the two are centred.
+      final row = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: named ? 6 : 2,
+        children: [
+          widget.icon(enabled ? theme.accent : theme.textSecondary, 20),
+          if (named)
+            Expanded(
+              child: Text(
+                label!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, color: theme.textPrimary),
+              ),
+            ),
+          Icon(Icons.keyboard_arrow_down, color: theme.textSecondary, size: 20),
+        ],
+      );
       return Tooltip(
         message: widget.tooltip,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
-          ),
-          child: AppTabSurface(
-            selected: controller.isOpen,
-            borderRadius: radius,
+        child: Material(
+          color: controller.isOpen
+              ? theme.accent.withValues(alpha: 0.12)
+              : Colors.transparent,
+          child: InkWell(
             onTap: enabled ? toggleMenu : null,
-            onHover: (hovered) => setState(() => _hovered = hovered),
-            padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-            builder: (context, color) => Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TweenAnimationBuilder(
-                  tween: Tween(end: grow ? 1.2 : 1.0),
-                  duration: const Duration(milliseconds: 100),
-                  builder: (context, scale, child) =>
-                      Transform.scale(scale: scale, child: child),
-                  child: widget.icon(color, kIconSize),
-                ),
-                SizedBox(width: named ? 6 : 1),
-                if (named)
-                  Flexible(
-                    child: Text(
-                      label!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 14, color: color),
-                    ),
-                  ),
-                Icon(Icons.keyboard_arrow_down, color: color, size: 20),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: widget.segmentAtTop
+                  ? Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(height: 42, child: row),
+                    )
+                  : row,
             ),
           ),
         ),
@@ -233,6 +242,78 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
           if (!named) ...[const SizedBox(width: 1), chevron(color)],
         ],
       ),
+    );
+  }
+}
+
+/// Menu buttons made [IconMenuButton.segment]s, side by side in one box
+/// framed like a search field, with a thin line between each. [expanded]
+/// shares the width it is given out between them.
+class const MenuButtonGroup({
+  super.key,
+  required final List<Widget> children,
+  final bool expanded = false,
+}) extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    final radius = BorderRadius.circular(theme.cornerRadius);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.inputBackground,
+        borderRadius: radius,
+        border: Border.all(color: theme.border),
+      ),
+      // The segments' ink stays inside the frame.
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Row(
+          mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (index, child) in children.indexed) ...[
+              if (index > 0)
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  indent: 8,
+                  endIndent: 8,
+                  color: theme.border,
+                ),
+              if (expanded) Expanded(child: child) else child,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// An [IconMenuButton.segment] inside a text field's box, split from the
+/// text by a line as [MenuButtonGroup]'s segments are: at the end of the box,
+/// or at its start.
+class const FieldSegment({
+  super.key,
+  required final Widget child,
+  final bool atStart = false,
+}) extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.appTheme;
+    final divider = SizedBox(
+      height: 44,
+      child: VerticalDivider(width: 1, thickness: 1, color: theme.border),
+    );
+    final segment = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(theme.cornerRadius),
+        child: SizedBox(height: 42, child: child),
+      ),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: atStart ? [segment, divider] : [divider, segment],
     );
   }
 }

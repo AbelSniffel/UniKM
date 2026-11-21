@@ -895,6 +895,11 @@ class const FramedInputBorder({
 }) extends OutlineInputBorder {
   static const _glowDepth = 18.0;
 
+  /// The outline leaves no gap for a label, so a label floats inside the
+  /// box, as with [BottomGlowInputBorder.labelInside].
+  @override
+  bool get isOutline => false;
+
   @override
   bool operator ==(Object other) =>
       other is FramedInputBorder &&

@@ -10,7 +10,7 @@ import '../../../core/settings/settings_model.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../widgets/password_field.dart';
 import 'settings_common.dart';
 import 'settings_control_cards.dart';
 
@@ -53,7 +53,7 @@ class const UpdatesSection({
     SettingsSearchGroup(
       title: 'GitHub Repository & API',
       settings: [repositorySpec, githubTokenSpec],
-      extraTexts: ['A personal access token increases GitHub API rate limits.'],
+      info: 'A personal access token increases GitHub API rate limits.',
     ),
   ];
 
@@ -64,7 +64,6 @@ class const UpdatesSection({
 class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
   final _repoController = TextEditingController();
   final _tokenController = TextEditingController();
-  final _tokenInfoKey = GlobalKey<TooltipState>();
   Timer? _countdownTicker;
   DateTime _now = DateTime.now();
 
@@ -125,18 +124,14 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
     final updates = ref.watch(updatesSettingsProvider);
     final nextUpdateCheck = ref.watch(nextAutoUpdateTimeProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final labelStyle = TextStyle(
-      color: theme.textSecondary,
-      fontSize: 13,
-      fontWeight: FontWeight.w500,
-    );
     return SettingsSectionGroups(
       attachesToAbove: widget.attachesToAbove,
       entries: [
         buildSearchableSectionEntry(
           group: UpdatesSection.searchGroups[0],
-          titleIcon: Icons.download_rounded,
           searchQuery: widget.searchQuery,
+          // The panel's header already says Updates.
+          showTitle: false,
           // One per row, as the next check's time makes the first card
           // taller, as far apart as wrapped cards.
           childBuilder: () => Column(
@@ -170,41 +165,24 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
           group: UpdatesSection.searchGroups[1],
           titleIcon: Icons.code,
           searchQuery: widget.searchQuery,
+          // Labelled inside the box, like the password dialogs' fields.
           childBuilder: () => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 12,
             children: [
-              Text(UpdatesSection.repositorySpec.label, style: labelStyle),
-              const SizedBox(height: kElementVSpacing),
-              ThemedTextField(
+              TextField(
                 controller: _repoController,
-                hintText: UpdatesSection.repositorySpec.description,
+                decoration: InputDecoration(
+                  labelText: UpdatesSection.repositorySpec.label,
+                  hintText: UpdatesSection.repositorySpec.description,
+                  hintStyle: TextStyle(color: theme.textHint),
+                  border: theme.resolveInputBorder(labelInside: true),
+                ),
                 onChanged: settingsNotifier.setter(SettingsKeys.updateRepo),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      UpdatesSection.githubTokenSpec.label,
-                      style: labelStyle,
-                    ),
-                  ),
-                  Tooltip(
-                    key: _tokenInfoKey,
-                    message: 'A personal access token increases GitHub API rate limits.',
-                    child: IconButton(
-                      icon: const Icon(Icons.info_outline, size: 26),
-                      color: theme.accent,
-                      onPressed: () =>
-                          _tokenInfoKey.currentState?.ensureTooltipVisible(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: kElementVSpacing),
-              ThemedTextField(
+              PasswordField(
                 controller: _tokenController,
-                obscureText: true,
+                labelText: UpdatesSection.githubTokenSpec.label,
                 hintText: UpdatesSection.githubTokenSpec.description,
                 onChanged: settingsNotifier.setter(SettingsKeys.githubApiToken),
               ),

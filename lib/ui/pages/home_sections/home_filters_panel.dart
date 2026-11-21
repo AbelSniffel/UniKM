@@ -140,8 +140,7 @@ List<Widget> buildHomePlatformAndSort(
       key: const ValueKey('home-platform-button'),
       expanded: expanded,
       tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
-      // Tabs in the filters panel; the default style on the toolbar.
-      tabStyle: expanded,
+      segment: true,
       icon: (color, size) => selectedPlatform == null
           ? Icon(Icons.videogame_asset_outlined, color: color, size: size)
           : platformIcon(selectedPlatform, color, size),
@@ -162,7 +161,7 @@ List<Widget> buildHomePlatformAndSort(
       key: const ValueKey('home-sort-button'),
       expanded: expanded,
       tooltip: 'Sort: ${sortMode.displayName}',
-      tabStyle: expanded,
+      segment: true,
       icon: (color, size) =>
           Icon(_sortIconFor(sortMode), color: color, size: size),
       value: sortMode,
@@ -228,11 +227,17 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       ],
     );
 
-    // The tag search and list, then Show only across the box's foot on its
-    // darker alternate shade. When [fill]ing, the list takes the height left
-    // and scrolls past it, so the options stay in view; otherwise it scrolls
-    // past a fixed cap.
-    Widget filterBox({required bool fill}) {
+    // A strip across the box on its darker alternate shade.
+    Widget band(Widget child) => ColoredBox(
+      color: theme.background.withValues(alpha: 0.6),
+      child: Padding(padding: const EdgeInsets.all(12), child: child),
+    );
+
+    // The tag search and list, then Show only across the box's foot, and any
+    // [sorters] across its top. When [fill]ing, the list takes the height
+    // left and scrolls past it, so the options stay in view; otherwise it
+    // scrolls past a fixed cap.
+    Widget filterBox({required bool fill, Widget? sorters}) {
       final list = TagList(
         tags: matchingTags,
         selectedTagIds: selectedTagIds,
@@ -296,11 +301,9 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (sorters != null) band(sorters),
             if (fill) Expanded(child: tags) else tags,
-            ColoredBox(
-              color: theme.background.withValues(alpha: 0.6),
-              child: Padding(padding: const EdgeInsets.all(12), child: options),
-            ),
+            band(options),
           ],
         ),
       );
@@ -339,28 +342,24 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       child: Padding(
         key: const ValueKey('home-filter-panel-height'),
         padding: const EdgeInsets.fromLTRB(6, 2, 6, 6),
-        child: Column(
+        child: KeyedSubtree(
           key: const ValueKey('home-filter-panel'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 8,
-          children: [
-            Row(
-              key: const ValueKey('home-filter-sorters'),
-              spacing: kElementHSpacing,
-              children: [
-                for (final button in buildHomePlatformAndSort(
+          child: filterBox(
+            fill: false,
+            sorters: SizedBox(
+              height: kElementHeight,
+              child: MenuButtonGroup(
+                key: const ValueKey('home-filter-sorters'),
+                expanded: true,
+                children: buildHomePlatformAndSort(
                   ref,
                   theme,
                   platformFilter,
                   expanded: true,
-                ))
-                  Expanded(
-                    child: SizedBox(height: kElementHeight, child: button),
-                  ),
-              ],
+                ),
+              ),
             ),
-            filterBox(fill: false),
-          ],
+          ),
         ),
       ),
     );

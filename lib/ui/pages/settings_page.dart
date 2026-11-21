@@ -314,17 +314,13 @@ class const _SettingsPageBody({
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
 
-    final search = AppSearchField(
-      controller: searchController,
-      hintText: 'Search settings...',
-      onChanged: onSearchChanged,
-    );
     final (_, sectionLabel, sectionIcon) = _settingsRailSections.firstWhere(
       (section) => section.$1 == selectedSection,
       orElse: () => _settingsRailSections.first,
     );
     final sectionPicker = IconMenuButton<String>(
       key: const ValueKey<String>('settings-section-picker'),
+      segment: true,
       value: selectedSection,
       tooltip: 'Section: $sectionLabel',
       onSelected: onSectionSelected,
@@ -341,15 +337,13 @@ class const _SettingsPageBody({
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: theme.border)),
       ),
-      // The picker stretches to the search bar's height.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showSectionPicker) ...[sectionPicker, const SizedBox(width: 8)],
-            Expanded(child: search),
-          ],
-        ),
+      // Labelled like the other fields; narrow windows pick the section from
+      // the start of its box, split off like the game key's platform.
+      child: AppSearchField(
+        controller: searchController,
+        labelText: 'Search settings',
+        onChanged: onSearchChanged,
+        leading: showSectionPicker ? sectionPicker : null,
       ),
     );
 

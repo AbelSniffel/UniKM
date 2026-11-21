@@ -115,6 +115,9 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  /// The Multiple Games paste box's example, new each time the tab opens.
+  String _batchHint = BatchGamesEditor.exampleHint();
+
   @override
   void initState() {
     super.initState();
@@ -129,6 +132,10 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
 
   void _handleTabChanged() {
     if (_tabController.indexIsChanging) return;
+    // Picked as Multiple Games is left, out of sight, for its next opening.
+    if (_tabController.index != 1) {
+      setState(() => _batchHint = BatchGamesEditor.exampleHint());
+    }
 
     final selectedTab = ref.read(addGamesSelectedTabProvider);
     if (selectedTab != _tabController.index) {
@@ -160,7 +167,10 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
         Expanded(
           child: AppTabView(
             controller: _tabController,
-            children: [_SingleEntryTab(), _BatchAddTab()],
+            children: [
+              _SingleEntryTab(),
+              _BatchAddTab(hintText: _batchHint),
+            ],
           ),
         ),
       ],
@@ -507,12 +517,13 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
                       ? 'Key is required'
                       : null,
                   onChanged: _handleKeyChanged,
-                ),
-                platform: PlatformMenuButton(
-                  value: _platform,
-                  detectedPlatform: _resolvedGamePlatform,
-                  tooltip: '$_gameKeyPlatformTooltip. Choose platform',
-                  onSelected: (value) => _update(() => _platform = value),
+                  platform: PlatformMenuButton(
+                    segment: true,
+                    value: _platform,
+                    detectedPlatform: _resolvedGamePlatform,
+                    tooltip: '$_gameKeyPlatformTooltip. Choose platform',
+                    onSelected: (value) => _update(() => _platform = value),
+                  ),
                 ),
                 options: GameOptionsRow(
                   isDlc: _isDlc,
@@ -593,7 +604,8 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
 }
 
 /// Batch add tab
-class const _BatchAddTab() extends ConsumerStatefulWidget {
+class const _BatchAddTab({required final String hintText})
+    extends ConsumerStatefulWidget {
   @override
   ConsumerState<_BatchAddTab> createState() => _BatchAddTabState();
 }
@@ -857,8 +869,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // The heading and its buttons, then the description
-                    // across the full width.
+                    // The heading and its buttons, then the paste box.
                     BannerHeadingRow(
                       heading: 'Paste Games',
                       actions: [
@@ -873,43 +884,43 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                                 ? const AppCircularProgressIndicator(size: 18)
                                 : const Icon(Icons.cloud_download_outlined),
                           ),
-                        PlatformMenuButton(
-                          value: _platform,
-                          tooltip: _platform == kAutoDetectPlatformValue
-                              ? 'Platform Override: Disabled'
-                              : 'Platform Override: $_platform',
-                          onSelected: (value) {
-                            setState(() => _platform = value);
-                            _parseInput();
-                          },
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'One game per line. A date after a key sets its '
-                      'deadline.',
-                      style: TextStyle(color: theme.textHint),
-                    ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     BatchGamesEditor(
                       controller: _textController,
+                      hintText: widget.hintText,
                       platformOverride: _platform == kAutoDetectPlatformValue
                           ? null
                           : GamePlatform.fromDisplayName(_platform),
                       onChanged: (_) => _parseInput(),
+                      platform: PlatformMenuButton(
+                        segment: true,
+                        segmentAtTop: true,
+                        value: _platform,
+                        tooltip: _platform == kAutoDetectPlatformValue
+                            ? 'Platform Override: Disabled'
+                            : 'Platform Override: $_platform',
+                        onSelected: (value) {
+                          setState(() => _platform = value);
+                          _parseInput();
+                        },
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    // Applied to every game pasted, across the full width.
-                    DeadlineChip(
-                      hasDeadline: _hasDeadline,
-                      date: _deadlineDate,
-                      firstDate: DateTime.now(),
-                      expand: true,
-                      onEnabledChanged: (value) =>
-                          _update(() => _hasDeadline = value),
-                      onDateChanged: (value) =>
-                          _update(() => _deadlineDate = value),
+                    // Applied to every game pasted; compact, like Single
+                    // Game's.
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: DeadlineChip(
+                        hasDeadline: _hasDeadline,
+                        date: _deadlineDate,
+                        firstDate: DateTime.now(),
+                        onEnabledChanged: (value) =>
+                            _update(() => _hasDeadline = value),
+                        onDateChanged: (value) =>
+                            _update(() => _deadlineDate = value),
+                      ),
                     ),
                     if (_steamResults.isNotEmpty || _steamErrors.isNotEmpty)
                       Padding(

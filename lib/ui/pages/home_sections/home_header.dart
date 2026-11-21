@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/device_sync_dialog.dart';
 import '../../dialogs/library_stats_dialog.dart';
+import '../../widgets/platform_menu_button.dart' show MenuButtonGroup;
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/device_sync_icon.dart';
@@ -246,7 +247,10 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       onCleared: () => _notifier.setSearchQuery(''),
     );
     final actions = _buttonRow(key: const ValueKey('home-toolbar-actions'), [
-      if (!narrow) ...buildHomePlatformAndSort(ref, theme, platformFilter),
+      if (!narrow)
+        MenuButtonGroup(
+          children: buildHomePlatformAndSort(ref, theme, platformFilter),
+        ),
       _buildFiltersToggleButton(theme, filters, platformFilter),
     ]);
     if (!narrow) {

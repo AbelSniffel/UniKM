@@ -90,6 +90,10 @@ SectionGroupEntry buildSearchableSectionEntry({
                     _ => position,
                   },
             alternateBackground: isAlternate,
+            // An info button centres on the title, as other title buttons do.
+            headerCrossAxisAlignment: group.info == null
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
             trailing: group.info == null
                 ? null
                 : SettingsInfoButton(message: group.info!),
@@ -198,31 +202,6 @@ class const SettingsSectionGroups({
     _ when index == total - 1 => SectionGroupPosition.last,
     _ => SectionGroupPosition.middle,
   };
-}
-
-/// A text field styled to match the settings UI.  Many sections previously
-/// duplicated identical [InputDecoration] code.
-class const ThemedTextField({
-  super.key,
-  final TextEditingController? controller,
-  final String? hintText,
-  final bool obscureText = false,
-  final ValueChanged<String>? onChanged,
-}) extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.appTheme;
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      style: TextStyle(color: theme.textPrimary),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: TextStyle(color: theme.textHint),
-      ),
-      onChanged: onChanged,
-    );
-  }
 }
 
 /// Search descriptor for a settings group.

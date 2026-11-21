@@ -29,7 +29,11 @@ class const PasswordField({
   final FormFieldValidator<String>? validator,
   final bool autofocus = false,
   final ValueChanged<String>? onFieldSubmitted,
+  final ValueChanged<String>? onChanged,
   final TextInputAction? textInputAction,
+
+  /// Shown in the empty field once it has focus and the label has floated.
+  final String? hintText,
 
   /// An error from outside the field, such as a rejected password, shown
   /// while [validator] finds none.
@@ -49,8 +53,11 @@ class _PasswordFieldState extends State<PasswordField> {
     autofocus: widget.autofocus,
     textInputAction: widget.textInputAction,
     onFieldSubmitted: widget.onFieldSubmitted,
+    onChanged: widget.onChanged,
     decoration: InputDecoration(
       labelText: widget.labelText,
+      hintText: widget.hintText,
+      hintStyle: TextStyle(color: context.appTheme.textHint),
       errorText: widget.errorText,
       border: context.appTheme.resolveInputBorder(labelInside: true),
       suffixIcon: IconButton(

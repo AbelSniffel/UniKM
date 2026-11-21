@@ -573,12 +573,13 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         onVisibilityChanged: (value) => setState(() => _isKeyVisible = value),
         onCopy: _copyKey,
         playfulHints: true,
-      ),
-      platform: PlatformMenuButton(
-        value: _platform,
-        tooltip: 'Selected platform: $_platform. Choose platform',
-        includeAutoDetect: false,
-        onSelected: _changePlatform,
+        platform: PlatformMenuButton(
+          segment: true,
+          value: _platform,
+          tooltip: 'Selected platform: $_platform. Choose platform',
+          includeAutoDetect: false,
+          onSelected: _changePlatform,
+        ),
       ),
       options: GameOptionsRow(
         isDlc: _isDlc,
