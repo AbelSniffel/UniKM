@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../pages/settings_sections/settings_common.dart';
@@ -177,6 +178,15 @@ class const GameEditorLayout({
   /// the deadline picker's two fields.
   static const _notesTagsGap = 12.0;
 
+  /// A floated label is drawn at three quarters of its size, so the notes'
+  /// label is built a third larger to match the tags' group title.
+  static const _labelScale = 1 / 0.75;
+
+  /// The label's height as built: the title's 16 px text at line height
+  /// 1.35. The space kept above the notes is 4 px plus three quarters of
+  /// this, so the text starts 4 px under the drawn label.
+  static const _notesLabelSize = 16 * 1.35 * _labelScale;
+
   /// The notes beside the tags; narrow, the notes come first.
   Widget _buildBody(BuildContext context, bool wide) {
     // Labelled inside the box, like the title and key. Beside the tags, the
@@ -190,9 +200,27 @@ class const GameEditorLayout({
       textAlignVertical: TextAlignVertical.top,
       style: TextStyle(color: theme.textPrimary, height: 1.4),
       decoration: InputDecoration(
-        labelText: 'Notes',
-        // At the top of the box while empty, where the notes start.
-        alignLabelWithHint: true,
+        // Titled like the tags' groups beside it: their icon size, accent
+        // and semi-bold text, always at the top of the box and level with
+        // their title.
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.notes, size: 20 * _labelScale, color: theme.accent),
+            const SizedBox(width: kElementHSpacing * _labelScale),
+            Text(
+              'Notes',
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 16 * _labelScale,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        labelStyle: const TextStyle(fontSize: _notesLabelSize),
         hintText: 'Add notes about this game...',
         hintStyle: TextStyle(color: theme.textHint),
         // Framed like the Multiple Games paste box, but rounded like the

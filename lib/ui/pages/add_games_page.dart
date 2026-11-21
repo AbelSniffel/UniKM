@@ -884,6 +884,16 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                                 ? const AppCircularProgressIndicator(size: 18)
                                 : const Icon(Icons.cloud_download_outlined),
                           ),
+                        PlatformMenuButton(
+                          value: _platform,
+                          tooltip: _platform == kAutoDetectPlatformValue
+                              ? 'Platform Override: Disabled'
+                              : 'Platform Override: $_platform',
+                          onSelected: (value) {
+                            setState(() => _platform = value);
+                            _parseInput();
+                          },
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -894,18 +904,6 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
                           ? null
                           : GamePlatform.fromDisplayName(_platform),
                       onChanged: (_) => _parseInput(),
-                      platform: PlatformMenuButton(
-                        segment: true,
-                        segmentAtTop: true,
-                        value: _platform,
-                        tooltip: _platform == kAutoDetectPlatformValue
-                            ? 'Platform Override: Disabled'
-                            : 'Platform Override: $_platform',
-                        onSelected: (value) {
-                          setState(() => _platform = value);
-                          _parseInput();
-                        },
-                      ),
                     ),
                     const SizedBox(height: 12),
                     // Applied to every game pasted; compact, like Single

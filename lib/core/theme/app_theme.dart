@@ -467,6 +467,13 @@ class const AppThemeData({
       dividerColor: divider,
       highlightColor: popupMenuItemSelected,
 
+      // Text fields' caret and its drag handles in the accent, not the
+      // scheme's primary (the secondary colour).
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionHandleColor: accent,
+      ),
+
       // AppBar
       appBarTheme: AppBarTheme(
         backgroundColor: baseBackground,

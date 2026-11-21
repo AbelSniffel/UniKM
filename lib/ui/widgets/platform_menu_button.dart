@@ -19,9 +19,6 @@ class const PlatformMenuButton({
 
   /// Drawn as an [IconMenuButton.segment] of a split box.
   final bool segment = false,
-
-  /// See [IconMenuButton.segmentAtTop].
-  final bool segmentAtTop = false,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -32,7 +29,6 @@ class const PlatformMenuButton({
       value: value,
       tooltip: tooltip,
       segment: segment,
-      segmentAtTop: segmentAtTop,
       onSelected: onSelected,
       icon: (color, size) => platform == null
           ? Icon(Icons.auto_fix_high, color: color, size: size)
@@ -80,10 +76,6 @@ class const IconMenuButton<T>({
   /// fits, and the chevron, centred when the name is left out. Tinted with
   /// the accent while the menu is open.
   final bool segment = false,
-
-  /// Keeps a tall segment's icon and chevron at its top, as tall as a
-  /// button, instead of centred.
-  final bool segmentAtTop = false,
 }) extends StatefulWidget {
   @override
   State<IconMenuButton<T>> createState() => _IconMenuButtonState<T>();
@@ -210,12 +202,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
             onTap: enabled ? toggleMenu : null,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: widget.segmentAtTop
-                  ? Align(
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(height: 42, child: row),
-                    )
-                  : row,
+              child: row,
             ),
           ),
         ),

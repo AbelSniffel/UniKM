@@ -152,11 +152,6 @@ class const BatchGamesEditor({
 
   /// Shown while the box is empty, such as an [exampleHint].
   final String hintText = '',
-
-  /// A [PlatformMenuButton] made a segment, at the top right of the box in a
-  /// column of its own, split from the paste by a line as the game key's
-  /// box is.
-  final Widget? platform,
 }) extends StatefulWidget {
   /// The games an [exampleHint] picks from.
   static const exampleTitles = [
@@ -443,83 +438,47 @@ class _BatchGamesEditorState extends State<BatchGamesEditor>
           ),
           border: theme.resolveFramedInputBorder(),
         ),
-        child: _withPlatform(
-          theme,
-          LayoutBuilder(
-            builder: (context, constraints) => ListenableBuilder(
-              listenable: widget.controller,
-              child: field,
-              builder: (context, child) {
-                final painter = TextPainter(
-                  text: widget.controller.buildTextSpan(
-                    context: context,
-                    style: style,
-                    withComposing: false,
-                  ),
-                  textDirection: Directionality.of(context),
-                  textScaler: MediaQuery.textScalerOf(context),
-                )..layout();
-                final width = math.max(
-                  constraints.maxWidth,
-                  painter.width +
-                      _platformGutter +
-                      2 * (_pillHorizontalPadding + 4) +
-                      4,
-                );
-                painter.dispose();
-                _scheduleRevealCaret();
-                // Each newline stays one game row, even when its title/key is long.
-                return SizedBox(
-                  key: _viewportKey,
-                  width: constraints.maxWidth,
-                  child: AppScrollbar(
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListenableBuilder(
+            listenable: widget.controller,
+            child: field,
+            builder: (context, child) {
+              final painter = TextPainter(
+                text: widget.controller.buildTextSpan(
+                  context: context,
+                  style: style,
+                  withComposing: false,
+                ),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout();
+              final width = math.max(
+                constraints.maxWidth,
+                painter.width +
+                    _platformGutter +
+                    2 * (_pillHorizontalPadding + 4) +
+                    4,
+              );
+              painter.dispose();
+              _scheduleRevealCaret();
+              // Each newline stays one game row, even when its title/key is long.
+              return SizedBox(
+                key: _viewportKey,
+                width: constraints.maxWidth,
+                child: AppScrollbar(
+                  controller: _horizontalScroll,
+                  child: SingleChildScrollView(
+                    key: const ValueKey('batch-games-horizontal-scroll'),
                     controller: _horizontalScroll,
-                    child: SingleChildScrollView(
-                      key: const ValueKey('batch-games-horizontal-scroll'),
-                      controller: _horizontalScroll,
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(width: width, child: child),
-                    ),
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(width: width, child: child),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
-    );
-  }
-
-  /// The platform's column: a segment's padding, icon, gap and chevron.
-  static const _platformWidth = 10 + 20 + 2 + 20 + 10.0;
-
-  Widget _withPlatform(AppThemeData theme, Widget paste) {
-    final platform = widget.platform;
-    if (platform == null) return paste;
-    // The paste sets the height; the platform spans all of it beside the
-    // line, so the whole column opens its menu.
-    return Stack(
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(right: _platformWidth + 4),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(right: BorderSide(color: theme.border)),
-            ),
-            child: paste,
-          ),
-        ),
-        Positioned(
-          top: 0,
-          bottom: 0,
-          right: 0,
-          width: _platformWidth,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(theme.cornerRadius),
-            child: platform,
-          ),
-        ),
-      ],
     );
   }
 
