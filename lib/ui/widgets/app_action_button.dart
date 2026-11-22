@@ -90,18 +90,17 @@ class const AppActionButton({
         : BorderSide(color: color, width: 1.5),
   );
 
-  /// Whether a button shows the accent border: while hovered, pressed or
-  /// focused, and for a toggle only while it is on.
+  /// Whether a button shows the accent border: an action while hovered,
+  /// pressed or focused; a toggle only while it is on and focused, so
+  /// pointing at or clicking it never outlines it.
   static bool accentBorder({
     required bool? selected,
     required Set<WidgetState> states,
-  }) {
-    final active =
-        states.contains(WidgetState.hovered) ||
-        states.contains(WidgetState.pressed) ||
-        states.contains(WidgetState.focused);
-    return selected == null ? active : selected && active;
-  }
+  }) => selected == null
+      ? states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.pressed) ||
+            states.contains(WidgetState.focused)
+      : selected && states.contains(WidgetState.focused);
 
   /// A tag's check or cross, and its gap from the label.
   static const statusSize = 14.0;

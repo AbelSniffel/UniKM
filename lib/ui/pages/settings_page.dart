@@ -267,8 +267,8 @@ class const _SettingsSectionRail({
               item(_settingsRailSections.first),
               Divider(
                 height: 12,
-                indent: 12,
-                endIndent: 12,
+                indent: 4,
+                endIndent: 4,
                 color: theme.border,
               ),
               for (final section in _settingsRailSections.skip(1))

@@ -137,20 +137,20 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
           type: MaterialType.transparency,
           // Keep the inherited text style, as the raised bar did.
           textStyle: DefaultTextStyle.of(context).style,
+          // The filter panel below the toolbar runs edge to edge, so only
+          // the toolbar keeps the sides' inset.
           child: Padding(
-            // 6px of the side and bottom insets sit inside the toolbar and the
-            // scrolling panel, so groupbox shadows are never clipped.
-            padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+            padding: const EdgeInsets.only(top: 10),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: math.max(0, maxHeight - 14),
+                maxHeight: math.max(0, maxHeight - 10),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                     child: LayoutBuilder(
                       builder: (context, constraints) => _buildToolbar(
                         theme,

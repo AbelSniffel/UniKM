@@ -34,15 +34,14 @@ class const AppSearchField({
   /// is cleared and [onChanged] is called with `''`.
   final VoidCallback? onCleared,
 
-  /// Overrides the default background color used for the filled input.
-  /// If null, falls back to [theme.inputBackground].
-  final Color? backgroundColor,
-
   /// Called when the user submits the field from the keyboard.
   final ValueChanged<String>? onSubmitted,
 
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon,
+
+  /// Icon buttons at the field's end, after the clear button.
+  final List<Widget> actions = const [],
 }) extends StatefulWidget {
   @override
   State<AppSearchField> createState() => _AppSearchFieldState();
@@ -114,25 +113,26 @@ class _AppSearchFieldState extends State<AppSearchField> {
         ),
         prefixIconConstraints: _iconBox,
         suffixIconConstraints: _iconBox,
-        suffixIcon: _showClear
+        suffixIcon: _showClear || widget.actions.isNotEmpty
             ? FieldEndButtons(
                 height: kElementHeight,
                 children: [
-                  IconButton(
-                    tooltip: 'Clear search',
-                    padding: EdgeInsets.zero,
-                    icon: Icon(Icons.clear, color: theme.textHint),
-                    onPressed: () {
-                      controller.clear();
-                      widget.onChanged('');
-                      widget.onCleared?.call();
-                    },
-                  ),
+                  if (_showClear)
+                    IconButton(
+                      tooltip: 'Clear search',
+                      padding: EdgeInsets.zero,
+                      icon: Icon(Icons.clear, color: theme.textHint),
+                      onPressed: () {
+                        controller.clear();
+                        widget.onChanged('');
+                        widget.onCleared?.call();
+                      },
+                    ),
+                  ...widget.actions,
                 ],
               )
             : null,
         filled: true,
-        fillColor: widget.backgroundColor,
         border: theme.resolveInputBorder(),
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       ),

@@ -1,6 +1,7 @@
 /// Home library filters: platform and sort, the tag filter and the Show only
-/// toggles. Very narrow layouts show them in a panel below the toolbar; wider
-/// ones in a sidebar beside the library, where the tag list fills the height.
+/// toggles, laid out alike in a sidebar beside the library, where the tag
+/// list fills the height, or on very narrow layouts in a panel below the
+/// toolbar.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -18,12 +19,16 @@ import '../../widgets/app_search_field.dart';
 import '../../widgets/background_pattern.dart';
 import '../../widgets/platform_icon.dart';
 import '../../widgets/platform_menu_button.dart';
-import '../../widgets/section_groupbox.dart';
 import '../../widgets/tag_list.dart';
 
 /// The filter sidebar's width beside the library: room for platform and sort
 /// to name even their longest choices, such as "Humble Bundle".
 const double kHomeFilterSidebarWidth = 380;
+
+/// The opacity of the surface colour veiling the panel behind the strips
+/// above and below the tags (platform and sort, and Show only), so they stand
+/// a little apart from the tags on the panel's own surface.
+const double kHomeFilterBandAlpha = 0.75;
 
 /// In the panel below the toolbar the tag list scrolls past this height.
 const double _kTagListMaxHeight = 112;
@@ -226,18 +231,19 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       ],
     );
 
-    // A strip across the box on its darker alternate shade; in the sidebar,
-    // on the sidebar's own surface, which the header and navigation panel
-    // share, so they wrap around the tags.
-    Widget band(Widget child) {
-      final padded = Padding(padding: const EdgeInsets.all(12), child: child);
-      return widget.sidebar
-          ? padded
-          : ColoredBox(
-              color: theme.background.withValues(alpha: 0.6),
-              child: padded,
-            );
-    }
+    // In from the sides: the sidebar's 12 px, or below the toolbar its own
+    // 14 px, so everything lines up with the search bar.
+    final inset = EdgeInsets.symmetric(
+      horizontal: widget.sidebar ? 12 : 14,
+      vertical: 12,
+    );
+
+    // A strip across the top or foot, veiling the panel's surface, which
+    // the tags between the strips keep.
+    Widget band(Widget child) => Material(
+      color: theme.surface.withValues(alpha: kHomeFilterBandAlpha),
+      child: Padding(padding: inset, child: child),
+    );
 
     // Platform and sort share the box's width, each naming its choice when
     // the name fits.
@@ -252,10 +258,10 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       ),
     );
 
-    // Platform and sort across the box's top, the tag search and list, then
-    // Show only across its foot. When [fill]ing, the list takes the height
-    // left and scrolls past it, so the options stay in view; otherwise it
-    // scrolls past a fixed cap.
+    // Platform and sort across the top, the tag search and list, then Show
+    // only across the foot. When [fill]ing, the list takes the height left
+    // and scrolls past it, so the options stay in view; otherwise it scrolls
+    // past a fixed cap.
     Widget filterBox({required bool fill}) {
       final list = TagList(
         tags: matchingTags,
@@ -265,75 +271,42 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         maxHeight: fill ? double.infinity : _kTagListMaxHeight,
       );
       final tags = Padding(
-        padding: const EdgeInsets.all(12),
+        padding: inset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 6,
           children: [
-            Row(
-              spacing: kElementHSpacing,
-              children: [
-                Expanded(
-                  child: AppSearchField(
-                    // A little translucent, so what is behind shows faintly.
-                    backgroundColor: Color.lerp(
-                      theme.surface,
-                      theme.background,
-                      0.6,
-                    )?.withValues(alpha: 0.9),
-                    hintText: 'Search tags...',
-                    controller: _tagSearchController,
-                    onChanged: (value) =>
-                        setState(() => _tagSearchQuery = value),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Clear tags',
-                  child: ElevatedButton(
+            AppSearchField(
+              hintText: 'Search tags...',
+              controller: _tagSearchController,
+              onChanged: (value) => setState(() => _tagSearchQuery = value),
+              // Clears the chosen tags, shown only while there are some.
+              actions: [
+                if (selectedTagIds.isNotEmpty)
+                  IconButton(
                     key: const ValueKey('home-filter-clear-tags'),
-                    onPressed: selectedTagIds.isEmpty
-                        ? null
-                        : () => notifier.setTagFilters([]),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      minimumSize: const Size(40, 40),
-                    ),
-                    child: const Icon(Icons.label_off_outlined, size: 20),
+                    tooltip: 'Clear tags',
+                    padding: EdgeInsets.zero,
+                    icon: Icon(Icons.label_off_outlined, color: theme.accent),
+                    onPressed: () => notifier.setTagFilters([]),
                   ),
-                ),
               ],
             ),
             if (fill) Flexible(child: list) else list,
           ],
         ),
       );
-      Widget box(Widget child) => SectionGroupBox(
+      final box = KeyedSubtree(
         key: const ValueKey('home-filter-group-tags'),
-        title: 'Tags',
-        // A top title, even hidden, lets the content fill a bounded height.
-        showTitle: false,
-        padding: EdgeInsets.zero,
-        // In the sidebar, square and touching its sides.
-        flush: widget.sidebar,
-        child: child,
+        child: tags,
       );
-      // In the sidebar only the tags take the groupbox fill, between the
-      // bands; below the toolbar the box holds all three.
-      if (widget.sidebar) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            band(sorters),
-            if (fill) Expanded(child: box(tags)) else box(tags),
-            band(options),
-          ],
-        );
-      }
-      return box(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [band(sorters), tags, band(options)],
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          band(sorters),
+          if (fill) Expanded(child: box) else box,
+          band(options),
+        ],
       );
     }
 
@@ -359,14 +332,17 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       );
     }
 
-    // The padding sits inside the clipping height animation, leaving room
-    // for the groupbox shadows at the sides and bottom.
+    // Below the toolbar, laid out as in the sidebar, edge to edge, with a
+    // line parting it from the toolbar as the header's border parts the
+    // sidebar from the header.
     return AnimatedHeight(
       duration: kFilterExpandAnimation,
       curve: kFilterPanelCurve,
-      child: Padding(
+      child: DecoratedBox(
         key: const ValueKey('home-filter-panel-height'),
-        padding: const EdgeInsets.fromLTRB(6, 2, 6, 6),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: theme.border)),
+        ),
         child: KeyedSubtree(
           key: const ValueKey('home-filter-panel'),
           child: filterBox(fill: false),

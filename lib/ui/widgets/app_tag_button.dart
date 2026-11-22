@@ -115,8 +115,8 @@ class _AppTagButtonState extends State<AppTagButton>
   /// Shows the light: a toggle.
   bool get _lit => !widget.deleteOnTap && !_readOnly;
 
-  /// A toggle's border is the tag's colour only while on, as the option
-  /// toggles'; other chips show it while focused.
+  /// A toggle's border is the tag's colour only while on and focused, as
+  /// the option toggles', never on hover; other chips show it while focused.
   bool get _accentBorder => _lit
       ? AppActionButton.accentBorder(
           selected: widget.isSelected,
