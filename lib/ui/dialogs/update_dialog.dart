@@ -352,17 +352,34 @@ class const _ReleaseNotes({
 }
 
 class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
+  /// The download button's width at the end of the version picker.
+  static const double _downloadWidth = 52;
+
   late String? _selectedTag = widget.updateRelease?.tagName;
 
   /// The selected release, while it is checked again.
   String? _checkingTag;
 
-  List<GitHubRelease> get _releases => [
+  List<GitHubRelease> get _allReleases => [
     ...widget.releases,
     if (widget.updateRelease case final update?
         when !widget.releases.any((r) => r.tagName == update.tagName))
       update,
   ];
+
+  /// The releases to pick from: pre-releases only while the Pre-releases
+  /// setting is on, though the installed version always stays.
+  List<GitHubRelease> get _releases {
+    final notifier = ref.read(updateProvider.notifier);
+    final prereleases = ref.read(updatesSettingsProvider).includePrerelease;
+    return [
+      for (final release in _allReleases)
+        if (prereleases ||
+            !release.isPrerelease ||
+            notifier.compareVersions(release.version, kAppVersion) == 0)
+          release,
+    ];
+  }
 
   /// Checks [tag]'s release again, so the download button matches it.
   Future<void> _recheck(String tag) async {
@@ -389,6 +406,8 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
   Widget build(BuildContext context) {
     final theme = context.appTheme;
     final notifier = ref.read(updateProvider.notifier);
+    // Rebuilds the list as the Pre-releases setting changes.
+    ref.watch(updatesSettingsProvider.select((s) => s.includePrerelease));
     final releases = _releases
       ..sort((a, b) => notifier.compareVersions(b.version, a.version));
     if (releases.isEmpty) {
@@ -399,7 +418,10 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
           borderRadius: BorderRadius.circular(theme.cornerRadius),
         ),
         child: Text(
-          'Release notes will appear after checking for updates.',
+          _allReleases.isEmpty
+              ? 'Release notes will appear after checking for updates.'
+              : 'There are only pre-releases so far. Turn on Pre-releases '
+                    'in Settings to see them.',
           style: TextStyle(color: theme.textSecondary),
         ),
       );
@@ -442,18 +464,37 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
       mainAxisSize: MainAxisSize.min,
       spacing: 10,
       children: [
-        Row(
-          spacing: 5,
+        // The download button joins the end of the picker, as tall as it,
+        // the two square where they meet.
+        Stack(
           children: [
-            Expanded(
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: _downloadWidth),
               child: SettingsChoiceCard<String>(
+                borderRadius: BorderRadiusDirectional.horizontal(
+                  start: Radius.circular(theme.cornerRadius),
+                ),
                 key: const ValueKey('changelog-version-selector'),
-                label: 'Selected Version',
+                label: 'Changelog',
                 menuMaxHeight: kDropdownMenuMaxHeight * 2,
                 value: release.tagName,
                 choices: [
                   for (final item in releases)
-                    SettingsChoice(item.tagName, 'v${item.version}'),
+                    SettingsChoice(
+                      item.tagName,
+                      'v${item.version}',
+                      // Marked as in the notes' header below.
+                      chip: item.isPrerelease
+                          ? Text(
+                              '·  Pre-release',
+                              style: TextStyle(
+                                color: theme.secondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : null,
+                    ),
                 ],
                 onChanged: (tag) {
                   if (tag == release.tagName) return;
@@ -462,18 +503,34 @@ class _ReleaseNotesState extends ConsumerState<_ReleaseNotes> {
                 },
               ),
             ),
-            IconButton(
-              tooltip: tooltip,
-              style: theme.compactIconButtonStyle,
-              // On the button rather than the icon, so it dims when there
-              // is nothing to download.
-              color: theme.accent,
-              onPressed: canDownload
-                  ? () => notifier.switchToVersion(release)
-                  : null,
-              icon: isDownloading || isChecking
-                  ? const AppCircularProgressIndicator(size: 20)
-                  : Icon(icon),
+            PositionedDirectional(
+              top: 0,
+              bottom: 0,
+              end: 0,
+              width: _downloadWidth,
+              child: Tooltip(
+                message: tooltip,
+                // The app's elevated button, square where it meets the
+                // picker.
+                child: ElevatedButton(
+                  key: const ValueKey('changelog-download-button'),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadiusDirectional.horizontal(
+                        end: Radius.circular(theme.cornerRadius),
+                      ),
+                    ),
+                  ),
+                  onPressed: canDownload
+                      ? () => notifier.switchToVersion(release)
+                      : null,
+                  child: isDownloading || isChecking
+                      ? const AppCircularProgressIndicator(size: 20)
+                      : Icon(icon, size: 24),
+                ),
+              ),
             ),
           ],
         ),

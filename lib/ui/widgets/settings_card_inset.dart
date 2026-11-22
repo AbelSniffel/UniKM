@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 class const SettingsCardInset({
   super.key,
   required final bool active,
-  required final double borderRadius,
+  required final BorderRadius borderRadius,
   required final Color surfaceColor,
   required final Widget child,
   final bool raisedWhenInactive = false,
@@ -43,7 +43,7 @@ class const SettingsCardInset({
   /// [cacheRaster]); animating depths paint directly.
   static CustomPainter? painterFor({
     required double depth,
-    required double radius,
+    required BorderRadius radius,
     required Color surfaceColor,
     double depthStrength = defaultDepthStrength,
     double? devicePixelRatio,
@@ -108,7 +108,7 @@ class const SettingsCardInset({
 }
 
 class const _SettingsCardInsetPainter({
-  required final double radius,
+  required final BorderRadius radius,
   required final double depth,
   required final Color surfaceColor,
 }) extends CustomPainter {
@@ -116,10 +116,7 @@ class const _SettingsCardInsetPainter({
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final rect = Offset.zero & size;
-    final outline = RRect.fromRectAndRadius(
-      rect,
-      Radius.circular(radius),
-    ).scaleRadii();
+    final outline = radius.toRRect(rect).scaleRadii();
     canvas.save();
     canvas.clipRRect(outline);
 
@@ -273,17 +270,27 @@ class const _SettingsCardInsetPainter({
 /// into nine slices so it fits any width. The lighting only varies within
 /// [_slice] of the sides, so the middle stretches without a visible seam.
 class const _CachedInsetPainter({
-  required final double radius,
+  required final BorderRadius radius,
   required final double depth,
   required final Color surfaceColor,
   required final double devicePixelRatio,
 }) extends CustomPainter {
   /// Logical width of each side slice, past the corner and the blur of the
   /// side lighting.
-  double get _slice => math.max(20.0, radius + 12);
+  double get _slice => math.max(
+    20.0,
+    [
+          radius.topLeft,
+          radius.topRight,
+          radius.bottomLeft,
+          radius.bottomRight,
+        ].map((corner) => math.max(corner.x, corner.y)).reduce(math.max) +
+        12,
+  );
   static const _stretch = 8.0;
   static const _maxImages = 64;
-  static final _images = <(double, double, double, int, double), ui.Image>{};
+  static final _images =
+      <(double, BorderRadius, double, int, double), ui.Image>{};
 
   ui.Image _image(double height) {
     final key = (

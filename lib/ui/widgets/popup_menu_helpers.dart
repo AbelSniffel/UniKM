@@ -147,7 +147,10 @@ Widget appMenuItem(
       leadingIcon: leading == null
           ? null
           : IconTheme.merge(
-              data: IconThemeData(color: color ?? theme.textPrimary),
+              // The selected item's icon is accent coloured like its label.
+              data: IconThemeData(
+                color: color ?? (selected ? theme.accent : theme.textPrimary),
+              ),
               child: leading,
             ),
       trailingIcon:

@@ -51,6 +51,10 @@ class const SettingsChoice<T>(
   /// What a [SettingsButtonGroupCard] button shows; the label becomes its
   /// tooltip.
   final Widget? icon,
+
+  /// Shown after the label in a [SettingsChoiceCard]'s menu, such as a
+  /// note marking the choice.
+  final Widget? chip,
 });
 
 /// A toggle setting as a whole-card button, its state shown by a corner dot
@@ -104,6 +108,10 @@ class const SettingsChoiceCard<T>({
 
   /// The menu scrolls past this height, for long lists of choices.
   final double menuMaxHeight = kDropdownMenuMaxHeight,
+
+  /// The card's corners, for a card joined to a control beside it; the
+  /// theme's corner radius all round by default.
+  final BorderRadiusGeometry? borderRadius,
 }) extends StatefulWidget {
   @override
   State<SettingsChoiceCard<T>> createState() => _SettingsChoiceCardState<T>();
@@ -156,7 +164,16 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
             theme,
             selected: choice.value == widget.value,
             onPressed: () => widget.onChanged?.call(choice.value),
-            child: Text(choice.label),
+            child: choice.chip == null
+                ? Text(choice.label)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [
+                      Flexible(child: Text(choice.label)),
+                      choice.chip!,
+                    ],
+                  ),
           ),
       ],
       builder: (context, controller, _) => Semantics(
@@ -170,6 +187,7 @@ class _SettingsChoiceCardState<T> extends State<SettingsChoiceCard<T>> {
           icon: widget.icon,
           active: selected != null,
           enabled: widget.onChanged != null,
+          borderRadius: widget.borderRadius,
           onTap: widget.onChanged == null ? null : _toggleMenu,
           trailing: selectedChoice,
         ),
@@ -275,6 +293,9 @@ class const _SettingsControlCard({
   /// Shrinks a trailing control that scales down into the room beside the
   /// label's one line, down to a third of the row.
   final bool fitTrailingBesideLabel = false,
+
+  /// The theme's corner radius all round by default.
+  final BorderRadiusGeometry? borderRadius,
 }) extends StatefulWidget {
   @override
   State<_SettingsControlCard> createState() => _SettingsControlCardState();
@@ -286,7 +307,9 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
-    final radius = BorderRadius.circular(theme.cornerRadius);
+    final radius =
+        widget.borderRadius?.resolve(Directionality.of(context)) ??
+        BorderRadius.circular(theme.cornerRadius);
     final isToggle = widget.toggle;
     // Keyboard focus lights the outline of a card that takes taps; hovering
     // and pressing leave it.
@@ -428,7 +451,7 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
         active: widget.active && widget.enabled,
         raisedWhenInactive: isToggle && widget.enabled,
         surfaceColor: theme.background,
-        borderRadius: theme.cornerRadius,
+        borderRadius: radius,
         overlay: isToggle
             ? Align(
                 alignment: Alignment.centerRight,

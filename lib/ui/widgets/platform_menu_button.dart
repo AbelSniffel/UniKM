@@ -22,51 +22,43 @@ class const PlatformMenuButton({
   final bool segment = false,
 }) extends StatelessWidget {
   @override
-  Widget build(BuildContext context) {
-    final platform = value == kAutoDetectPlatformValue
-        ? detectedPlatform
-        : GamePlatform.fromDisplayName(value);
-    return IconMenuButton<String>(
-      value: value,
-      tooltip: tooltip,
-      segment: segment,
-      onSelected: onSelected,
-      icon: (color, size) => platform == null
+  Widget build(BuildContext context) => IconMenuButton<String>(
+    value: value,
+    tooltip: tooltip,
+    segment: segment,
+    onSelected: onSelected,
+    // Auto-detect's button shows the platform it found; its menu item, the
+    // wand.
+    icon: (value, color, size) {
+      final platform = value != kAutoDetectPlatformValue
+          ? GamePlatform.fromDisplayName(value)
+          : color == null
+          ? null
+          : detectedPlatform;
+      return platform == null
           ? Icon(Icons.auto_fix_high, color: color, size: size)
-          : PlatformIcon(platform: platform, color: color, size: size),
-      choices: [
-        if (includeAutoDetect)
-          (
-            kAutoDetectPlatformValue,
-            'Auto-detect',
-            const Icon(Icons.auto_fix_high, size: 18),
-          ),
-        for (final choice in GamePlatform.values)
-          (
-            choice.displayName,
-            choice.displayName,
-            PlatformIcon(
-              platform: choice,
-              color: context.appTheme.textPrimary,
-              size: 18,
-            ),
-          ),
-      ],
-    );
-  }
+          : PlatformIcon(platform: platform, color: color, size: size);
+    },
+    choices: [
+      if (includeAutoDetect) (kAutoDetectPlatformValue, 'Auto-detect'),
+      for (final choice in GamePlatform.values)
+        (choice.displayName, choice.displayName),
+    ],
+  );
 }
 
 /// A navigation-style button showing the current choice's icon and a chevron,
-/// which opens a menu of [choices] (value, label, icon).
+/// which opens a menu of [choices] (value, label).
 class const IconMenuButton<T>({
   super.key,
   required final T value,
   required final String tooltip,
   required final ValueChanged<T>? onSelected,
 
-  /// The current choice's icon in the given color and size.
-  required final Widget Function(Color color, double size) icon,
-  required final List<(T, String, Widget)> choices,
+  /// A choice's icon, for the button and its menu item. The menu passes no
+  /// color, so the icon takes the item's: the accent while selected.
+  required final Widget Function(T value, Color? color, double size) icon,
+  required final List<(T, String)> choices,
 
   /// Fills the width offered, naming the current choice beside its icon
   /// whenever the whole name fits.
@@ -93,18 +85,13 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
       width: 230,
       maxHeight: kDropdownMenuMaxHeight,
       menuChildren: [
-        for (final (value, label, icon) in widget.choices)
+        for (final (value, label) in widget.choices)
           appMenuItem(
             theme,
             selected: value == widget.value,
             onPressed: enabled ? () => widget.onSelected!(value) : null,
-            child: Row(
-              children: [
-                icon,
-                const SizedBox(width: 10),
-                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-              ],
-            ),
+            leading: widget.icon(value, null, 18),
+            child: Text(label),
           ),
       ],
       // Down arrow opens the menu, as in other select controls.
@@ -180,7 +167,11 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: named ? 6 : 2,
         children: [
-          widget.icon(enabled ? theme.accent : theme.textSecondary, 20),
+          widget.icon(
+            widget.value,
+            enabled ? theme.accent : theme.textSecondary,
+            20,
+          ),
           if (named)
             Expanded(
               child: Text(
@@ -226,7 +217,7 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
       iconBuilder: (context, color, size) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          widget.icon(enabled ? theme.accent : color, size),
+          widget.icon(widget.value, enabled ? theme.accent : color, size),
           if (!named) ...[const SizedBox(width: 1), chevron(color)],
         ],
       ),
@@ -257,13 +248,8 @@ class const MenuButtonGroup({super.key, required final List<Widget> children})
           children: [
             for (final (index, child) in children.indexed) ...[
               if (index > 0)
-                VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  indent: 8,
-                  endIndent: 8,
-                  color: theme.border,
-                ),
+                // From edge to edge, joining the frame top and bottom.
+                VerticalDivider(width: 1, thickness: 1, color: theme.border),
               Expanded(child: child),
             ],
           ],
@@ -282,17 +268,18 @@ class const FieldSegment({super.key, required final Widget child})
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
-    final height = FieldEndButtons.labelledHeight(context);
-    final divider = SizedBox(
-      height: 44,
-      child: VerticalDivider(width: 1, thickness: 1, color: theme.border),
-    );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        divider,
-        SizedBox(height: height, child: child),
-      ],
+    // The line runs the box's full height, joining its top and bottom
+    // border.
+    return SizedBox(
+      height: FieldEndButtons.labelledHeight(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          VerticalDivider(width: 1, thickness: 1, color: theme.border),
+          child,
+        ],
+      ),
     );
   }
 }

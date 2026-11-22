@@ -661,7 +661,7 @@ class _RenderTagChip(final _AppTagButtonState state)
     painter(
       SettingsCardInset.painterFor(
         depth: state._inset.value,
-        radius: theme.cornerRadius,
+        radius: BorderRadius.circular(theme.cornerRadius),
         surfaceColor: theme.background,
         devicePixelRatio: _look!.ratio,
       ),

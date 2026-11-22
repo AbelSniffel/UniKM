@@ -219,7 +219,7 @@ class const AppActionButton({
                     active:
                         selected &&
                         (readOnly || !states.contains(WidgetState.disabled)),
-                    borderRadius: theme.cornerRadius,
+                    borderRadius: BorderRadius.circular(theme.cornerRadius),
                     surfaceColor: theme.background,
                     depthStrength: depthStrength,
                     cacheRaster: true,

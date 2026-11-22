@@ -158,7 +158,7 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
               ? SettingsCardInset(
                   active: chosen || _pressed,
                   raisedWhenInactive: true,
-                  borderRadius: theme.cornerRadius,
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
                   // An action's depth is lit like the settings cards'.
                   surfaceColor: choice
                       ? Color.alphaBlend(fill!, theme.surface)

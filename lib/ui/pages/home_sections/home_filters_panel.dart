@@ -29,7 +29,7 @@ const double kHomeFilterSidebarWidth = 380;
 /// The opacity of the surface colour veiling the panel behind the strips
 /// above and below the tags (platform and sort, and Show only), so they stand
 /// a little apart from the tags on the panel's own surface.
-const double kHomeFilterBandAlpha = 0.75;
+const double kHomeFilterBandAlpha = 0.60;
 
 /// In the panel below the toolbar the tag list scrolls past this height.
 const double _kTagListMaxHeight = 112;
@@ -135,29 +135,23 @@ List<Widget> _buildHomePlatformAndSort(
         !libraryPlatforms.contains(selectedPlatform))
       selectedPlatform,
   ];
-  Widget platformIcon(String name, Color color, double size) => PlatformIcon(
-    platform: GamePlatform.fromDisplayName(name),
-    color: color,
-    size: size,
-  );
   return [
     IconMenuButton<String>(
       key: const ValueKey('home-platform-button'),
       expanded: true,
       tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
       segment: true,
-      icon: (color, size) => selectedPlatform == null
+      icon: (platform, color, size) => platform.isEmpty
           ? Icon(Icons.videogame_asset_outlined, color: color, size: size)
-          : platformIcon(selectedPlatform, color, size),
+          : PlatformIcon(
+              platform: GamePlatform.fromDisplayName(platform),
+              color: color,
+              size: size,
+            ),
       value: platformFilter ?? '',
       choices: [
-        (
-          '',
-          'All Platforms',
-          const Icon(Icons.videogame_asset_outlined, size: 18),
-        ),
-        for (final platform in platforms)
-          (platform, platform, platformIcon(platform, theme.textPrimary, 18)),
+        ('', 'All Platforms'),
+        for (final platform in platforms) (platform, platform),
       ],
       onSelected: (value) =>
           notifier.setPlatformFilter(value.isEmpty ? null : value),
@@ -167,12 +161,11 @@ List<Widget> _buildHomePlatformAndSort(
       expanded: true,
       tooltip: 'Sort: ${sortMode.displayName}',
       segment: true,
-      icon: (color, size) =>
-          Icon(_sortIconFor(sortMode), color: color, size: size),
+      icon: (mode, color, size) =>
+          Icon(_sortIconFor(mode), color: color, size: size),
       value: sortMode,
       choices: [
-        for (final mode in GameSortMode.values)
-          (mode, mode.displayName, Icon(_sortIconFor(mode), size: 18)),
+        for (final mode in GameSortMode.values) (mode, mode.displayName),
       ],
       onSelected: notifier.setSortMode,
     ),
@@ -240,11 +233,20 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
     );
 
     // A strip across the top or foot, veiling the panel's surface, which
-    // the tags between the strips keep.
-    Widget band(Widget child) => Material(
-      color: theme.surface.withValues(alpha: kHomeFilterBandAlpha),
-      child: Padding(padding: inset, child: child),
-    );
+    // the tags between the strips keep, with a line on its side facing them.
+    Widget band(Widget child, {required bool top}) {
+      final line = BorderSide(color: theme.border);
+      return DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: top ? Border(bottom: line) : Border(top: line),
+        ),
+        child: Material(
+          color: theme.surface.withValues(alpha: kHomeFilterBandAlpha),
+          child: Padding(padding: inset, child: child),
+        ),
+      );
+    }
 
     // Platform and sort share the box's width, each naming its choice when
     // the name fits.
@@ -317,9 +319,9 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          band(sorters),
+          band(sorters, top: true),
           if (fill) Expanded(child: box) else box,
-          band(options),
+          band(options, top: false),
         ],
       );
     }

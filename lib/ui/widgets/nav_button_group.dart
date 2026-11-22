@@ -49,7 +49,7 @@ class const NavButtonGroup({
             ? null
             : SettingsCardInset.painterFor(
                 depth: 1,
-                radius: radius,
+                radius: BorderRadius.circular(radius),
                 surfaceColor: theme.background,
                 devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
               ),

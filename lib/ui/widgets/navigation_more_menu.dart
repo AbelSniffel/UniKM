@@ -40,6 +40,10 @@ class const NavigationMoreMenuButton({
 class _NavigationMoreMenuButtonState
     extends ConsumerState<NavigationMoreMenuButton>
     with MenuToggle {
+  /// The selected view's checkmark room, kept on the other views too, so the
+  /// menu keeps its width as the view changes.
+  static const _checkSpace = SizedBox(width: 18);
+
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -62,6 +66,7 @@ class _NavigationMoreMenuButtonState
         appMenuItem(
           theme,
           selected: grid,
+          trailing: grid ? null : _checkSpace,
           leading: const Icon(Icons.apps, size: 18),
           onPressed: () => ref
               .read(viewModeProvider.notifier)
@@ -76,6 +81,7 @@ class _NavigationMoreMenuButtonState
           appMenuItem(
             theme,
             selected: !grid && density == mode,
+            trailing: !grid && density == mode ? null : _checkSpace,
             leading: Icon(
               mode == ListViewDensityMode.slim
                   ? Icons.view_headline

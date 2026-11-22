@@ -379,10 +379,11 @@ class const _SettingsPageBody({
       hintText: 'Search settings...',
       onChanged: onSearchChanged,
     );
-    final (_, sectionLabel, sectionIcon) = _settingsRailSections.firstWhere(
-      (section) => section.$1 == selectedSection,
-      orElse: () => _settingsRailSections.first,
-    );
+    (String, String, IconData) section(String id) =>
+        _settingsRailSections.firstWhere(
+          (section) => section.$1 == id,
+          orElse: () => _settingsRailSections.first,
+        );
     // As the sidebar's chosen section: its icon in an accent pill.
     final sectionPicker = DecoratedBox(
       decoration: BoxDecoration(
@@ -392,12 +393,12 @@ class const _SettingsPageBody({
       child: IconMenuButton<String>(
         key: const ValueKey<String>('settings-section-picker'),
         value: selectedSection,
-        tooltip: 'Section: $sectionLabel',
+        tooltip: 'Section: ${section(selectedSection).$2}',
         onSelected: onSectionSelected,
-        icon: (color, size) => Icon(sectionIcon, color: color, size: size),
+        icon: (id, color, size) =>
+            Icon(section(id).$3, color: color, size: size),
         choices: [
-          for (final (id, label, icon) in _settingsRailSections)
-            (id, label, Icon(icon, size: 20)),
+          for (final (id, label, _) in _settingsRailSections) (id, label),
         ],
       ),
     );

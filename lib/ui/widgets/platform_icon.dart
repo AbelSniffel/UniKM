@@ -43,7 +43,9 @@ double platformIconSizeFor(GamePlatform platform, {double? minHeight}) {
 class const PlatformIcon({
   super.key,
   required final GamePlatform platform,
-  required final Color color,
+
+  /// The surrounding icon theme's colour by default.
+  final Color? color,
   final double? size,
 }) extends StatelessWidget {
   @override
