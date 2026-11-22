@@ -1,7 +1,6 @@
-/// Home library filters: the Show only toggles and the tag filter. Very
-/// narrow layouts show them in a panel below the toolbar, with platform and
-/// sort on top; wider ones in a sidebar beside the library, where the tag
-/// list fills the height.
+/// Home library filters: platform and sort, the tag filter and the Show only
+/// toggles. Very narrow layouts show them in a panel below the toolbar; wider
+/// ones in a sidebar beside the library, where the tag list fills the height.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -22,17 +21,18 @@ import '../../widgets/platform_menu_button.dart';
 import '../../widgets/section_groupbox.dart';
 import '../../widgets/tag_list.dart';
 
-/// The filter sidebar's width beside the library.
-const double kHomeFilterSidebarWidth = 330;
+/// The filter sidebar's width beside the library: room for platform and sort
+/// to name even their longest choices, such as "Humble Bundle".
+const double kHomeFilterSidebarWidth = 380;
 
 /// In the panel below the toolbar the tag list scrolls past this height.
 const double _kTagListMaxHeight = 112;
 
 /// Below this height, scaled with the text, the sidebar scrolls with the tag
 /// list capped as below the toolbar, rather than the tags filling it. It
-/// leaves the list at least that cap beside the search and the Show only band
-/// (two rows of toggles in the sidebar).
-const double _kSidebarFillMinHeight = 280;
+/// leaves the list at least that cap beside the platform and sort band, the
+/// search and the Show only band (two rows of toggles in the sidebar).
+const double _kSidebarFillMinHeight = 340;
 
 /// A "show only" option: its label, state and setter.
 typedef HomeFilterOption = ({
@@ -108,14 +108,13 @@ IconData _sortIconFor(GameSortMode mode) => switch (mode) {
   GameSortMode.ratingLow => Icons.trending_down,
 };
 
-/// The platform and sort menu buttons: on the toolbar, or [expanded] and
-/// named atop the filter panel on very narrow layouts.
-List<Widget> buildHomePlatformAndSort(
+/// The platform and sort menu buttons atop the filters, sharing the width
+/// and naming their choices where the names fit.
+List<Widget> _buildHomePlatformAndSort(
   WidgetRef ref,
   AppThemeData theme,
-  String? platformFilter, {
-  bool expanded = false,
-}) {
+  String? platformFilter,
+) {
   final notifier = ref.read(gamesProvider.notifier);
   final sortMode = ref.watch(gamesProvider.select((s) => s.sortMode));
   final selectedPlatform = platformFilter?.isNotEmpty == true
@@ -138,7 +137,7 @@ List<Widget> buildHomePlatformAndSort(
   return [
     IconMenuButton<String>(
       key: const ValueKey('home-platform-button'),
-      expanded: expanded,
+      expanded: true,
       tooltip: 'Platform: ${selectedPlatform ?? 'All Platforms'}',
       segment: true,
       icon: (color, size) => selectedPlatform == null
@@ -159,7 +158,7 @@ List<Widget> buildHomePlatformAndSort(
     ),
     IconMenuButton<GameSortMode>(
       key: const ValueKey('home-sort-button'),
-      expanded: expanded,
+      expanded: true,
       tooltip: 'Sort: ${sortMode.displayName}',
       segment: true,
       icon: (color, size) =>
@@ -174,14 +173,14 @@ List<Widget> buildHomePlatformAndSort(
   ];
 }
 
-/// One groupbox: the tag filter, with its clear button beside the search,
-/// and the Show only options across its foot.
+/// One groupbox: platform and sort across its top, the tag filter, with its
+/// clear button beside the search, and the Show only options across its
+/// foot.
 class const HomeFiltersPanel({
   super.key,
 
   /// In the sidebar the groupbox fills the height, its tag list taking what
-  /// the options leave. Below the toolbar platform and sort share a row on
-  /// top, and the tag list is capped in height.
+  /// the options leave. Below the toolbar the tag list is capped in height.
   required final bool sidebar,
 }) extends ConsumerStatefulWidget {
   @override
@@ -227,17 +226,37 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       ],
     );
 
-    // A strip across the box on its darker alternate shade.
-    Widget band(Widget child) => ColoredBox(
-      color: theme.background.withValues(alpha: 0.6),
-      child: Padding(padding: const EdgeInsets.all(12), child: child),
+    // A strip across the box on its darker alternate shade; in the sidebar,
+    // on the sidebar's own surface, which the header and navigation panel
+    // share, so they wrap around the tags.
+    Widget band(Widget child) {
+      final padded = Padding(padding: const EdgeInsets.all(12), child: child);
+      return widget.sidebar
+          ? padded
+          : ColoredBox(
+              color: theme.background.withValues(alpha: 0.6),
+              child: padded,
+            );
+    }
+
+    // Platform and sort share the box's width, each naming its choice when
+    // the name fits.
+    final platformFilter = ref.watch(
+      gamesProvider.select((s) => s.filter.platformFilter),
+    );
+    final sorters = SizedBox(
+      height: kElementHeight,
+      child: MenuButtonGroup(
+        key: const ValueKey('home-filter-sorters'),
+        children: _buildHomePlatformAndSort(ref, theme, platformFilter),
+      ),
     );
 
-    // The tag search and list, then Show only across the box's foot, and any
-    // [sorters] across its top. When [fill]ing, the list takes the height
+    // Platform and sort across the box's top, the tag search and list, then
+    // Show only across its foot. When [fill]ing, the list takes the height
     // left and scrolls past it, so the options stay in view; otherwise it
     // scrolls past a fixed cap.
-    Widget filterBox({required bool fill, Widget? sorters}) {
+    Widget filterBox({required bool fill}) {
       final list = TagList(
         tags: matchingTags,
         selectedTagIds: selectedTagIds,
@@ -266,10 +285,6 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
                     controller: _tagSearchController,
                     onChanged: (value) =>
                         setState(() => _tagSearchQuery = value),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
                   ),
                 ),
                 Tooltip(
@@ -292,21 +307,32 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
           ],
         ),
       );
-      return SectionGroupBox(
+      Widget box(Widget child) => SectionGroupBox(
         key: const ValueKey('home-filter-group-tags'),
         title: 'Tags',
         // A top title, even hidden, lets the content fill a bounded height.
         showTitle: false,
         padding: EdgeInsets.zero,
-        // In the sidebar, square and touching all four of its sides.
+        // In the sidebar, square and touching its sides.
         flush: widget.sidebar,
-        child: Column(
+        child: child,
+      );
+      // In the sidebar only the tags take the groupbox fill, between the
+      // bands; below the toolbar the box holds all three.
+      if (widget.sidebar) {
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (sorters != null) band(sorters),
-            if (fill) Expanded(child: tags) else tags,
+            band(sorters),
+            if (fill) Expanded(child: box(tags)) else box(tags),
             band(options),
           ],
+        );
+      }
+      return box(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [band(sorters), tags, band(options)],
         ),
       );
     }
@@ -333,9 +359,6 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       );
     }
 
-    final platformFilter = ref.watch(
-      gamesProvider.select((s) => s.filter.platformFilter),
-    );
     // The padding sits inside the clipping height animation, leaving room
     // for the groupbox shadows at the sides and bottom.
     return AnimatedHeight(
@@ -346,22 +369,7 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         padding: const EdgeInsets.fromLTRB(6, 2, 6, 6),
         child: KeyedSubtree(
           key: const ValueKey('home-filter-panel'),
-          child: filterBox(
-            fill: false,
-            sorters: SizedBox(
-              height: kElementHeight,
-              child: MenuButtonGroup(
-                key: const ValueKey('home-filter-sorters'),
-                expanded: true,
-                children: buildHomePlatformAndSort(
-                  ref,
-                  theme,
-                  platformFilter,
-                  expanded: true,
-                ),
-              ),
-            ),
-          ),
+          child: filterBox(fill: false),
         ),
       ),
     );
@@ -464,12 +472,16 @@ class const _HomeFilterSidebar() extends ConsumerWidget {
     final theme = ref.watch(themeProvider);
     return RepaintBoundary(
       key: const ValueKey('home-filter-sidebar'),
+      // The line facing the library, drawn over the sidebar's surface,
+      // which would otherwise cover it.
       child: DecoratedBox(
+        position: DecorationPosition.foreground,
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: theme.border)),
         ),
+        // The navigation panel's surface, as the header and settings
+        // section list have.
         child: PanelPatternSurface(
-          strength: PanelPatternSurface.sidePanelStrength,
           child: Material(
             type: MaterialType.transparency,
             textStyle: DefaultTextStyle.of(context).style,

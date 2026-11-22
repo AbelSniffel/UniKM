@@ -1,6 +1,6 @@
-/// Home page header: the game count, search, icon-only platform and sort
-/// menus and the filters button. The button opens the filter sidebar beside
-/// the library, or on very narrow layouts an expandable panel below the
+/// Home page header: the game count, search and the filters button. The
+/// button opens the filter sidebar beside the library, where platform and
+/// sort sit, or on very narrow layouts an expandable panel below the
 /// toolbar.
 library;
 
@@ -14,7 +14,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/device_sync_dialog.dart';
 import '../../dialogs/library_stats_dialog.dart';
-import '../../widgets/platform_menu_button.dart' show MenuButtonGroup;
 import '../../widgets/app_scrollbar.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/device_sync_icon.dart';
@@ -87,12 +86,11 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
   void _toggleFilters() =>
       ref.read(homeFiltersOpenProvider.notifier).set(!_filtersOpen);
 
-  /// Filters set in the filter panel. The platform counts only while its
-  /// button sits in the panel; on the toolbar it shows for itself.
+  /// Filters set in the filter panel or sidebar, platform included.
   int _activeFilterCount(LibraryFilter state, String? platformFilter) =>
       state.tagFilters.length +
       homeFilterOptions.where((option) => option.isOn(state)).length +
-      (widget.isVeryNarrowLayout && platformFilter?.isNotEmpty == true ? 1 : 0);
+      (platformFilter?.isNotEmpty == true ? 1 : 0);
 
   void _clearAllFilters() {
     widget.searchController.clear();
@@ -127,22 +125,13 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     // panel scrolls below the toolbar, which stays put, so the library always
     // keeps room on short or large-text screens.
     final maxHeight = MediaQuery.sizeOf(context).height * 0.55;
-    // Styled like the settings section list: the navigation panel's color
-    // and pattern, a little stronger than the page's, with a bottom border
-    // and a soft shadow over the library.
+    // The navigation panel's color and pattern, as the settings section list
+    // and the filter sidebar have, with a bottom border over the library.
     return Container(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: theme.border)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.border.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: PanelPatternSurface(
-        strength: PanelPatternSurface.sidePanelStrength,
         child: Material(
           key: const ValueKey('home-header-surface'),
           type: MaterialType.transparency,
@@ -230,9 +219,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
     const gap = SizedBox(width: kElementHSpacing);
     final narrow = widget.isVeryNarrowLayout;
     // On very narrow layouts the count shares a row with sync and filters,
-    // above a full-width search, and platform and sort move into the filter
-    // panel. Otherwise one row holds them all, the search in the middle. The
-    // view choice lives in the navigation panel's More menu.
+    // above a full-width search. Otherwise one row holds them all, the search
+    // in the middle. Platform and sort live with the filters, and the view
+    // choice in the navigation panel's More menu.
     final sync = showSync ? _LibrarySyncButton(theme: theme) : null;
     const countLabel = _GamesCount();
     final search = AppSearchField(
@@ -247,10 +236,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       onCleared: () => _notifier.setSearchQuery(''),
     );
     final actions = _buttonRow(key: const ValueKey('home-toolbar-actions'), [
-      if (!narrow)
-        MenuButtonGroup(
-          children: buildHomePlatformAndSort(ref, theme, platformFilter),
-        ),
       _buildFiltersToggleButton(theme, filters, platformFilter),
     ]);
     if (!narrow) {
@@ -323,7 +308,9 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
             ref.watch(homeFiltersOpenProvider),
             veryNarrow: widget.isVeryNarrowLayout,
           ),
-          widget.isVeryNarrowLayout ? Icons.expand_less : Icons.tune,
+          // While open, a chevron towards the filters: up to the panel
+          // below the toolbar, or right to the sidebar.
+          widget.isVeryNarrowLayout ? Icons.expand_less : Icons.chevron_right,
         ),
       ),
     );

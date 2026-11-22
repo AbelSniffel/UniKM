@@ -5,6 +5,7 @@ import '../../providers/ui_state_providers.dart' show kAutoDetectPlatformValue;
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/platform_patterns.dart';
 import '../../core/theme/app_theme.dart';
+import 'field_end_buttons.dart';
 import 'platform_icon.dart';
 import 'popup_menu_helpers.dart';
 
@@ -234,13 +235,10 @@ class _IconMenuButtonState<T> extends State<IconMenuButton<T>> with MenuToggle {
 }
 
 /// Menu buttons made [IconMenuButton.segment]s, side by side in one box
-/// framed like a search field, with a thin line between each. [expanded]
-/// shares the width it is given out between them.
-class const MenuButtonGroup({
-  super.key,
-  required final List<Widget> children,
-  final bool expanded = false,
-}) extends StatelessWidget {
+/// framed like a search field, with a thin line between each, sharing the
+/// width it is given.
+class const MenuButtonGroup({super.key, required final List<Widget> children})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -255,7 +253,6 @@ class const MenuButtonGroup({
       child: ClipRRect(
         borderRadius: radius,
         child: Row(
-          mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final (index, child) in children.indexed) ...[
@@ -267,7 +264,7 @@ class const MenuButtonGroup({
                   endIndent: 8,
                   color: theme.border,
                 ),
-              if (expanded) Expanded(child: child) else child,
+              Expanded(child: child),
             ],
           ],
         ),
@@ -276,31 +273,26 @@ class const MenuButtonGroup({
   }
 }
 
-/// An [IconMenuButton.segment] inside a text field's box, split from the
-/// text by a line as [MenuButtonGroup]'s segments are: at the end of the box,
-/// or at its start.
-class const FieldSegment({
-  super.key,
-  required final Widget child,
-  final bool atStart = false,
-}) extends StatelessWidget {
+/// An [IconMenuButton.segment] at the end of a text field's box, in its
+/// [FieldEndButtons], split from the text by a line as [MenuButtonGroup]'s
+/// segments are. It fills the box's height, and [FieldEndButtons] rounds its
+/// end like the box.
+class const FieldSegment({super.key, required final Widget child})
+    extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
+    final height = FieldEndButtons.labelledHeight(context);
     final divider = SizedBox(
       height: 44,
       child: VerticalDivider(width: 1, thickness: 1, color: theme.border),
     );
-    final segment = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(theme.cornerRadius),
-        child: SizedBox(height: 42, child: child),
-      ),
-    );
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: atStart ? [segment, divider] : [divider, segment],
+      children: [
+        divider,
+        SizedBox(height: height, child: child),
+      ],
     );
   }
 }

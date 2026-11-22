@@ -256,13 +256,10 @@ class const _SettingsSectionRail({
       child: Container(
         width: _settingsRailWidth,
         decoration: BoxDecoration(
-          color: theme.navBackground,
           border: Border(right: BorderSide(color: theme.border)),
         ),
-        // The navigation panel's background and pattern, lined up with it,
-        // with the pattern just a little stronger than behind pages.
+        // The navigation panel's background and pattern, lined up with it.
         child: PanelPatternSurface(
-          strength: PanelPatternSurface.sidePanelStrength,
           child: ListView(
             key: const ValueKey('settings-section-navigation'),
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -403,21 +400,30 @@ class const _SettingsPageBody({
         ],
       ),
     );
-    final searchField = Container(
-      key: const ValueKey<String>('settings-search-container'),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-      // Separates the fixed search bar from the scrolling sections.
+    // On the navigation panel's surface, as the section list beside it, and
+    // with a line separating it from the scrolling sections.
+    final searchField = DecoratedBox(
+      position: DecorationPosition.foreground,
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: theme.border)),
       ),
-      // The picker stretches to the search bar's height.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showSectionPicker) ...[sectionPicker, const SizedBox(width: 8)],
-            Expanded(child: search),
-          ],
+      child: PanelPatternSurface(
+        child: Padding(
+          key: const ValueKey<String>('settings-search-container'),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          // The picker stretches to the search bar's height.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (showSectionPicker) ...[
+                  sectionPicker,
+                  const SizedBox(width: 8),
+                ],
+                Expanded(child: search),
+              ],
+            ),
+          ),
         ),
       ),
     );

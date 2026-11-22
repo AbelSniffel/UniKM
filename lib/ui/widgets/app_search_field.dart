@@ -8,7 +8,9 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import 'field_end_buttons.dart';
 
 /// A themed search [TextField] with prefix search icon, optional clear button,
 /// and rounded border using [AppThemeData] colours.
@@ -31,9 +33,6 @@ class const AppSearchField({
   /// Called after the field is cleared. If null, only the controller
   /// is cleared and [onChanged] is called with `''`.
   final VoidCallback? onCleared,
-
-  /// Override the content padding. Defaults to theme-appropriate value.
-  final EdgeInsetsGeometry? contentPadding,
 
   /// Overrides the default background color used for the filled input.
   /// If null, falls back to [theme.inputBackground].
@@ -105,6 +104,8 @@ class _AppSearchFieldState extends State<AppSearchField> {
       style: TextStyle(color: theme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         isDense: true,
+        // One height on every platform, with or without the clear button.
+        constraints: const BoxConstraints.tightFor(height: kElementHeight),
         hintText: widget.hintText,
         hintStyle: TextStyle(color: theme.textHint),
         prefixIcon: Icon(
@@ -114,14 +115,12 @@ class _AppSearchFieldState extends State<AppSearchField> {
         prefixIconConstraints: _iconBox,
         suffixIconConstraints: _iconBox,
         suffixIcon: _showClear
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
+            ? FieldEndButtons(
+                height: kElementHeight,
                 children: [
                   IconButton(
                     tooltip: 'Clear search',
                     padding: EdgeInsets.zero,
-                    constraints: _iconBox,
-                    visualDensity: VisualDensity.compact,
                     icon: Icon(Icons.clear, color: theme.textHint),
                     onPressed: () {
                       controller.clear();
@@ -135,9 +134,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
         filled: true,
         fillColor: widget.backgroundColor,
         border: theme.resolveInputBorder(),
-        contentPadding:
-            widget.contentPadding ??
-            const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       ),
     );
   }

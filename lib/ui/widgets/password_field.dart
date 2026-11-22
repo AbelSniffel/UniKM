@@ -9,6 +9,7 @@ library;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'field_end_buttons.dart';
 
 /// A [TextFormField] with an obscure-text visibility toggle suffix icon.
 ///
@@ -60,9 +61,14 @@ class _PasswordFieldState extends State<PasswordField> {
       hintStyle: TextStyle(color: context.appTheme.textHint),
       errorText: widget.errorText,
       border: context.appTheme.resolveInputBorder(labelInside: true),
-      suffixIcon: IconButton(
-        icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-        onPressed: () => setState(() => _obscure = !_obscure),
+      suffixIconConstraints: const BoxConstraints(),
+      suffixIcon: FieldEndButtons(
+        children: [
+          IconButton(
+            icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+            onPressed: () => setState(() => _obscure = !_obscure),
+          ),
+        ],
       ),
     ),
     validator: widget.validator,

@@ -12,6 +12,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';
 import 'dialog_helpers.dart';
+import 'field_end_buttons.dart';
 import 'game_cover_image.dart';
 import 'game_card_badges.dart';
 import 'hover_builder.dart';
@@ -449,10 +450,15 @@ class _CoverPathDialogState extends State<CoverPathDialog> {
               border: theme.resolveInputBorder(labelInside: true),
               hintText: 'https://… or /path/to/cover.png',
               errorText: _error,
-              suffixIcon: IconButton(
-                tooltip: 'Choose JPG or PNG file',
-                onPressed: _picking ? null : _browse,
-                icon: const Icon(Icons.folder_open),
+              suffixIconConstraints: const BoxConstraints(),
+              suffixIcon: FieldEndButtons(
+                children: [
+                  IconButton(
+                    tooltip: 'Choose JPG or PNG file',
+                    onPressed: _picking ? null : _browse,
+                    icon: const Icon(Icons.folder_open),
+                  ),
+                ],
               ),
             ),
             onSubmitted: (_) => _apply(),

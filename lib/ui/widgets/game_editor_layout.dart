@@ -16,6 +16,7 @@ import '../pages/settings_sections/settings_common.dart';
 import 'app_action_button.dart' show GlassButtonScope;
 import 'cover_image_card.dart';
 import 'dialog_helpers.dart';
+import 'field_end_buttons.dart';
 import 'game_cover_image.dart';
 import 'notification_system.dart';
 import 'platform_menu_button.dart' show FieldSegment;
@@ -170,7 +171,7 @@ class const GameEditorLayout({
             onTitleChanged(trimmed);
           },
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         keyField,
         const SizedBox(height: 14),
         Align(alignment: Alignment.centerLeft, child: options),
@@ -345,7 +346,7 @@ class const GameBannerHero({
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [actionRow, const SizedBox(height: 4), info],
+                    children: [actionRow, const SizedBox(height: 6), info],
                   ),
                 ),
               ],
@@ -701,8 +702,7 @@ class _GameKeyFieldState extends State<GameKeyField> {
                 widget.onCopy == null &&
                 widget.platform == null
             ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
+            : FieldEndButtons(
                 children: [
                   if (widget.onVisibilityChanged case final onChanged?)
                     IconButton(

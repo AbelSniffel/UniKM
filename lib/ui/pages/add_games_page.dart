@@ -988,7 +988,6 @@ class const _ActionRibbon({super.key, required final Widget child})
         ],
       ),
       child: PanelPatternSurface(
-        strength: PanelPatternSurface.sidePanelStrength,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
           child: child,

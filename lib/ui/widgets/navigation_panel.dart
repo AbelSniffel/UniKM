@@ -77,17 +77,20 @@ class const NavigationPanel({
         ? ref.watch(navButtonArrangementHProvider)
         : ref.watch(navButtonArrangementVProvider);
 
+    // A line on the edge facing the pages, drawn over the panel's surface,
+    // which would otherwise cover it.
+    final edge = BorderSide(color: effectiveTheme.border);
     return DecoratedBox(
+      position: DecorationPosition.foreground,
       decoration: BoxDecoration(
-        color: effectiveTheme.navBackground,
-        boxShadow: [
-          BoxShadow(
-            color: effectiveTheme.border.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: switch (position) {
+          NavBarPosition.top => Border(bottom: edge),
+          NavBarPosition.bottom => Border(top: edge),
+          NavBarPosition.left => Border(right: edge),
+          NavBarPosition.right => Border(left: edge),
+        },
       ),
+      // No shadow, so it meets the panels beside it without a glow.
       child: ClipRect(
         child: RepaintBoundary(
           child: PanelPatternSurface(

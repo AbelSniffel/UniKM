@@ -86,11 +86,15 @@ class const SectionGroupBox({
   final bool plainTitle = false,
 
   /// Square, without its own border or shadow, so it fills its parent edge
-  /// to edge, as in the library's filter sidebar.
+  /// to edge, as in the library's filter sidebar, and see-through
+  /// ([flushAlpha]) over the parent's surface.
   final bool flush = false,
 }) extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
+
+  /// A [flush] box's surface opacity over the panel it fills.
+  static const double flushAlpha = 0.75;
 
   /// The raised surface, see-through while the pattern shows on pages
   /// ([tinted]). [alternate] takes the darker surface.
@@ -176,11 +180,11 @@ class const SectionGroupBox({
     final highlightBg = theme.accent.withValues(alpha: 0.10 * highlightValue);
     final pos = groupPosition;
 
-    final baseColor = background(
-      theme,
-      tinted: tinted,
-      alternate: alternateBackground,
-    );
+    // A flush box veils the panel it fills, so it stays close to the
+    // panel's surface, a little lighter.
+    final baseColor = flush
+        ? theme.surface.withValues(alpha: flushAlpha)
+        : background(theme, tinted: tinted, alternate: alternateBackground);
     final bgColor = Color.alphaBlend(highlightBg, baseColor);
 
     // Which sides carry a visible border.

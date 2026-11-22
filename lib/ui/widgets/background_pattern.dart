@@ -33,18 +33,16 @@ class const PanelPatternWindow({super.key, required final Widget child})
 class const PanelPatternSurface({
   super.key,
   final bool page = false,
-
-  /// How strongly a panel shows the pattern, relative to the navigation
-  /// panel; it applies whether or not pages show the pattern too.
-  final double strength = 1,
   required final Widget child,
 }) extends ConsumerWidget {
-  /// How much fainter the pattern is behind pages than on panels.
-  static const double pageStrength = 0.3;
+  /// How strongly every panel (the navigation panel, the library header and
+  /// filter sidebar, the settings search bar and section list, and the Add
+  /// Games action bars) shows the pattern, as a share of the pattern
+  /// strength setting. Under it is the theme's navBackground, opaque.
+  static const double panelStrength = 0.5;
 
-  /// How strongly side panels, such as the settings section list and the
-  /// Add Games action bars, show the pattern: just above pages.
-  static const double sidePanelStrength = pageStrength + 0.1;
+  /// How much fainter the pattern is behind pages than on panels.
+  static const double pageStrength = 0.4;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,7 +58,7 @@ class const PanelPatternSurface({
         angle: ref.watch(patternAngleProvider),
         wave: ref.watch(patternWaveProvider),
         strength: !page
-            ? patternStrength * strength
+            ? patternStrength * panelStrength
             : showOnPage
             ? patternStrength * pageStrength
             : 0,
