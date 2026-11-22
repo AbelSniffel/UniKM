@@ -969,7 +969,7 @@ class _BatchAddTabState extends ConsumerState<_BatchAddTab> {
 
 /// A pinned action bar styled like the settings section list: the
 /// navigation panel's color and pattern, a little stronger than the page's,
-/// with a top border and a soft shadow.
+/// with a top border.
 class const _ActionRibbon({super.key, required final Widget child})
     extends StatelessWidget {
   @override
@@ -979,13 +979,6 @@ class const _ActionRibbon({super.key, required final Widget child})
       width: double.infinity,
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: theme.border)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.border.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, -4),
-          ),
-        ],
       ),
       child: PanelPatternSurface(
         child: Padding(

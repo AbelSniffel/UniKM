@@ -1,12 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/surface_depth.dart';
-import 'dialog_helpers.dart';
+import 'search_highlight.dart';
 
-/// A settings panel's header, on top of its groups with a line between
-/// them: an accent tint, titled like a dialog, the icon straight beside the
-/// title and any [trailing] actions at the end of the same row.
+/// A settings panel's header, on top of its groups: no fill of its own, so
+/// the groups below hold the eye. A larger title than the groups' headings,
+/// in the accent like its icon, any [trailing] actions lined up with their
+/// icons and actions, and a line under it across the groups' width.
 class const GroupBoxFamilyTitle({
   super.key,
   required final AppThemeData theme,
@@ -14,39 +14,57 @@ class const GroupBoxFamilyTitle({
   required final IconData icon,
   final Widget? trailing,
 }) extends StatelessWidget {
-  /// The title sits 6 px in from the groups below, as a dialog's title does
-  /// from its content.
-  static const _padding = EdgeInsets.fromLTRB(18, 8, 8, 8);
+  /// The panel's padding around its groups, so the title, its actions and
+  /// the line under it share their edges.
+  static const double _inset = 12;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: _padding,
-    decoration: BoxDecoration(
-      color: SurfaceDepth.top(
-        Color.alphaBlend(theme.accent.withValues(alpha: 0.25), theme.surface),
-        highlight: 0.05,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: _inset),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: theme.border)),
       ),
-      border: Border(
-        bottom: BorderSide(color: theme.border.withValues(alpha: 0.05)),
-      ),
-    ),
-    child: Row(
-      children: [
-        // As tall as the header actions, so every header is the same height.
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 36),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: DialogHeader(icon: icon, title: title),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            // As tall as the header actions, so every header is the same
+            // height.
+            Expanded(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 36),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 22, color: theme.accent),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      // A settings search marks its words in the title.
+                      child: Text.rich(
+                        searchHighlightSpan(
+                          title,
+                          SettingsSearchScope.queryOf(context),
+                          TextStyle(
+                            color: theme.accent,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          searchMarkStyle(theme.accent),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
+            if (trailing case final trailing?) ...[
+              const SizedBox(width: 12),
+              trailing,
+            ],
+          ],
         ),
-        if (trailing case final trailing?) ...[
-          const SizedBox(width: 12),
-          trailing,
-        ],
-      ],
+      ),
     ),
   );
 }

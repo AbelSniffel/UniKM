@@ -38,8 +38,14 @@ class const _SettingsSectionDefinition({
   required final _SettingsSectionBuilder builder,
   final _SectionExtraMatch? extraMatch,
 }) {
+  /// Whether the search names this section itself, which then shows all of
+  /// its groups.
+  bool titleMatches(String query) =>
+      query.trim().isNotEmpty && settingsSearchMatches(query, headerTitle);
+
   bool shouldShow(WidgetRef ref, String query) =>
       query.isEmpty ||
+      titleMatches(query) ||
       searchGroups.any((group) => matchesSettingsSearchGroup(query, group)) ||
       (extraMatch?.call(ref, (text) => settingsSearchMatches(query, text)) ??
           false);
@@ -68,7 +74,7 @@ final List<_SettingsSectionDefinition> _settingsSections = [
   _SettingsSectionDefinition(
     id: 'cards',
     railLabel: 'Game Card',
-    headerTitle: 'Game Card Visual',
+    headerTitle: 'Game Card Chips',
     icon: Icons.style,
     searchGroups: CardDisplaySection.searchGroups,
     builder: CardDisplaySection.new,
@@ -265,12 +271,7 @@ class const _SettingsSectionRail({
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             children: [
               item(_settingsRailSections.first),
-              Divider(
-                height: 12,
-                indent: 4,
-                endIndent: 4,
-                color: theme.border,
-              ),
+              Divider(height: 12, indent: 4, endIndent: 4, color: theme.border),
               for (final section in _settingsRailSections.skip(1))
                 item(section),
             ],
@@ -452,7 +453,9 @@ class const _SettingsPageBody({
                 _ => null,
               },
             ),
-            child: section.builder(searchQuery: searchQuery),
+            child: section.builder(
+              searchQuery: section.titleMatches(searchQuery) ? '' : searchQuery,
+            ),
           ),
         ),
     ];

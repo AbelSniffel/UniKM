@@ -48,7 +48,6 @@ class const CardDisplaySection({
       showRatingsSpec,
     ],
     extraTexts: ['Information Chips', 'card', 'display', 'review'],
-    info: 'Chips shown on game cards.',
   );
 
   static const SettingsSearchGroup displayRulesSearchGroup =
@@ -75,6 +74,8 @@ class const CardDisplaySection({
           group: chipsSearchGroup,
           titleIcon: Icons.style_outlined,
           searchQuery: searchQuery,
+          // The section's own title names it.
+          showTitle: false,
           childBuilder: () => buildSpecToggleSettingList(
             theme: theme,
             entries: [

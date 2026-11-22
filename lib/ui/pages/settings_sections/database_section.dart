@@ -553,7 +553,8 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             searchQuery: widget.searchQuery,
             groupPosition: position,
             alternateBackground: isAlternate,
-            headerCrossAxisAlignment: CrossAxisAlignment.center,
+            // The section's own title names it.
+            showTitle: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: kElementVSpacing,

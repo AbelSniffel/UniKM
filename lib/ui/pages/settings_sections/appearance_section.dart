@@ -151,6 +151,8 @@ class const AppearanceSection({
           titleIcon: Icons.color_lens,
           searchQuery: searchQuery,
           extraMatch: themeNameMatches,
+          // The section's own title names it.
+          showTitle: false,
           childBuilder: () => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
