@@ -388,7 +388,6 @@ class const _RibbonBar({
     required VoidCallback? onTap,
     bool selected = false,
     bool busy = false,
-    bool destructive = false,
   }) => AppNavigationButton(
     key: key,
     isSelected: selected,
@@ -396,37 +395,64 @@ class const _RibbonBar({
     isHorizontal: true,
     onTap: onTap,
     tooltipMessage: tooltip,
-    // Destructive buttons highlight in the theme's secondary color, like
-    // their group.
-    tint: destructive ? theme.secondary : null,
     padding: const EdgeInsets.all(6),
     minWidth: _button,
     // A busy button is disabled, but its spinner keeps the accent.
     iconBuilder: (context, color, size) => busy
         ? AppCircularProgressIndicator.icon(size: size)
-        : Icon(
-            icon,
-            size: size,
-            color: destructive && onTap != null ? theme.error : color,
+        : Icon(icon, size: size, color: color),
+  );
+
+  Widget _actionButton(_RibbonAction action) => action.destructive
+      ? _elevatedButton(action)
+      : _navButton(
+          key: ValueKey('selection-action-${action.id}'),
+          icon: action.icon,
+          tooltip: action.tooltip ?? action.label,
+          onTap: action.onPressed,
+          selected: action.selected,
+          busy: action.busy,
+        );
+
+  /// A destructive action stands alone as the app's elevated button, sized
+  /// as a whole group and coloured with the theme's secondary colour.
+  Widget _elevatedButton(_RibbonAction action) {
+    const size = Size.square(_button + NavButtonGroup.padding * 2);
+    return Tooltip(
+      message: action.tooltip ?? action.label,
+      child: ElevatedButton(
+        key: ValueKey('selection-action-${action.id}'),
+        onPressed: action.onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: theme.secondary,
+          foregroundColor: theme.onSecondaryText,
+          disabledBackgroundColor: theme.secondary.withValues(alpha: 0.3),
+          disabledForegroundColor: theme.onSecondaryText.withValues(alpha: 0.5),
+          fixedSize: size,
+          minimumSize: size,
+          padding: EdgeInsets.zero,
+          // Exactly its size, without the theme's density or tap padding.
+          visualDensity: VisualDensity.standard,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
           ),
-  );
+        ),
+        child: action.busy
+            ? AppCircularProgressIndicator.icon(size: 24)
+            : Icon(action.icon, size: 24),
+      ),
+    );
+  }
 
-  Widget _actionButton(_RibbonAction action) => _navButton(
-    key: ValueKey('selection-action-${action.id}'),
-    icon: action.icon,
-    tooltip: action.tooltip ?? action.label,
-    onTap: action.onPressed,
-    selected: action.selected,
-    busy: action.busy,
-    destructive: action.destructive,
-  );
-
-  Widget _group(String id, List<Widget> children) => NavButtonGroup(
-    key: ValueKey('selection-group-$id'),
-    isHorizontal: true,
-    color: id == _RibbonActionGroup.destructive.name ? theme.secondary : null,
-    children: children,
-  );
+  Widget _group(String id, List<Widget> children) {
+    final key = ValueKey('selection-group-$id');
+    // Delete is an elevated button of its own, apart from the groups.
+    if (id == _RibbonActionGroup.destructive.name) {
+      return KeyedSubtree(key: key, child: children.single);
+    }
+    return NavButtonGroup(key: key, isHorizontal: true, children: children);
+  }
 
   double _textWidth(BuildContext context, String text, TextStyle style) {
     final painter = TextPainter(

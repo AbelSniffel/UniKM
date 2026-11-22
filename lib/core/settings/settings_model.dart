@@ -214,7 +214,6 @@ class SettingsKeys._() {
   // Security
   static const String encryptionEnabled = 'encryption_enabled';
   static const String maskKeys = 'mask_keys';
-  static const String autoHideKeys = 'auto_hide_keys';
   static const String autoLockMinutes = 'auto_lock_minutes';
   static const String hideInRecents = 'hide_in_recents';
 
@@ -333,7 +332,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.updateNotifications: true,
   SettingsKeys.encryptionEnabled: false,
   SettingsKeys.maskKeys: true,
-  SettingsKeys.autoHideKeys: true,
   SettingsKeys.autoLockMinutes: 0,
   SettingsKeys.hideInRecents: false,
   SettingsKeys.developerMode: false,
@@ -468,11 +466,12 @@ UpdatesSettings updatesSettingsFromMap(Map<String, dynamic> settings) => (
 );
 
 typedef SecuritySettings = ({
+  /// Hides keys until revealed, and a revealed key again once copied.
   bool maskKeys,
-  bool autoHideKeys,
 
   /// Minutes without input before an encrypted database locks; 0 never.
   int autoLockMinutes,
+  /// Incognito: no recent-apps preview and, on Android, no screenshots.
   bool hideInRecents,
   bool encryptionEnabled,
   List<String> recentDatabasePaths,
@@ -480,7 +479,6 @@ typedef SecuritySettings = ({
 
 SecuritySettings securitySettingsFromMap(Map<String, dynamic> settings) => (
   maskKeys: readSetting(settings, SettingsKeys.maskKeys),
-  autoHideKeys: readSetting(settings, SettingsKeys.autoHideKeys),
   autoLockMinutes: readSetting(settings, SettingsKeys.autoLockMinutes),
   hideInRecents: readSetting(settings, SettingsKeys.hideInRecents),
   encryptionEnabled: readSetting(settings, SettingsKeys.encryptionEnabled),

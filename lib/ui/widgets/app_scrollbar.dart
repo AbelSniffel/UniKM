@@ -15,6 +15,10 @@ class const AppScrollbar({
   // An arrow over the thumb and track, whatever is underneath (a text
   // field's I-beam, a card's hand).
   super.mouseCursor = const WidgetStatePropertyAll(SystemMouseCursors.basic),
+  // The track spans its scroll view. Raw scrollbars keep clear of the
+  // screen's system insets, which on a phone cut the status bar's height off
+  // the track of a list in a panel far below it.
+  super.padding = EdgeInsets.zero,
 }) extends RawScrollbar {
   @override
   RawScrollbarState<AppScrollbar> createState() => _AppScrollbarState();

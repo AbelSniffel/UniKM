@@ -362,19 +362,15 @@ class const DatabaseSection({
     icon: Icons.fingerprint,
   );
   static const SettingTextSpec maskKeysSpec = SettingTextSpec(
-    label: 'Mask keys',
+    label: 'Hide keys',
     icon: Icons.visibility_off_outlined,
-  );
-  static const SettingTextSpec autoHideKeysSpec = SettingTextSpec(
-    label: 'Hide after copy',
-    icon: Icons.timer_outlined,
   );
   static const SettingTextSpec autoLockSpec = SettingTextSpec(
     label: 'Auto-lock',
     icon: Icons.lock_clock_outlined,
   );
   static const SettingTextSpec hideInRecentsSpec = SettingTextSpec(
-    label: 'Hide in recents',
+    label: 'Incognito',
     icon: Icons.privacy_tip_outlined,
   );
   static const SettingTextSpec backupManagerSpec = SettingTextSpec(
@@ -415,12 +411,11 @@ class const DatabaseSection({
 
   static const SettingsSearchGroup keyVisibilitySearchGroup =
       SettingsSearchGroup(
-        title: 'Key Security',
+        title: 'Security',
         settings: [
           encryptionSpec,
           biometricSpec,
           maskKeysSpec,
-          autoHideKeysSpec,
           autoLockSpec,
           hideInRecentsSpec,
         ],
@@ -432,16 +427,26 @@ class const DatabaseSection({
           'Touch ID',
           'Biometric',
           'Key Visibility',
+          'Mask keys',
           'Mask keys by default',
+          'Key Security',
           'Auto-hide keys',
+          'Hide after copy',
+          'Hide in recents',
           'Hide in recent apps',
+          'Recent apps',
           'Clipboard',
           'Lock',
           'Screenshots',
         ],
         info:
-            'Copied keys clear from the clipboard after a minute. Auto-lock '
-            'only affects encrypted databases.',
+            'Hide keys keeps keys hidden until you reveal them, and hides a '
+            'revealed key again once you copy it. Copied keys clear from the '
+            'clipboard after a minute.\n\n'
+            'Incognito (phones only) hides the app\'s preview in recent apps. '
+            'On Android it also blocks screenshots and screen recording while '
+            'it is on.\n\n'
+            'Auto-lock only affects encrypted databases.',
       );
 
   static const SettingsSearchGroup databaseSyncSearchGroup =
@@ -637,7 +642,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
             ),
           ),
         ),
-        // Key Security
+        // Security
         SectionGroupEntry(
           visible: shows(DatabaseSection.keyVisibilitySearchGroup),
           builder: (position, isAlternate) => _EncryptionControls(
@@ -664,11 +669,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                       DatabaseSection.maskKeysSpec,
                       security.maskKeys,
                       SettingsKeys.maskKeys,
-                    ),
-                    (
-                      DatabaseSection.autoHideKeysSpec,
-                      security.autoHideKeys,
-                      SettingsKeys.autoHideKeys,
                     ),
                     if (PlatformFileActions.isMobilePlatform)
                       (

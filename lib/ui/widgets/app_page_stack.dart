@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../core/constants/app_constants.dart';
 import 'app_progress_indicator.dart';
 
 /// Prepares pages once per database session. Hidden pages retain fields
-/// and scroll positions, but cannot paint, receive focus, or run tickers.
+/// and scroll positions, but cannot paint, receive focus, or run tickers
+/// once faded out.
 /// Riverpod also pauses hidden consumers through TickerMode.
 class const AppPageStack({
   super.key,
@@ -26,6 +30,10 @@ class _AppPageStackState extends State<AppPageStack>
     with SingleTickerProviderStateMixin {
   final _visited = <int>{};
   int? _outgoing;
+
+  /// The page just left, which animates on for a transition's length.
+  int? _leaving;
+  Timer? _leavingTimer;
   bool _preloading = false;
   bool _preloadScheduled = false;
   late final _controller = AnimationController(
@@ -75,6 +83,16 @@ class _AppPageStackState extends State<AppPageStack>
       if (_preloading) _schedulePreload();
     }
     if (widget.index != oldWidget.index) {
+      // Close the left page's tooltips while it still animates: once its
+      // tickers stop, a closing tooltip would freeze on screen.
+      _leaving = oldWidget.index;
+      _leavingTimer?.cancel();
+      _leavingTimer = Timer(kPageTransition, () {
+        if (mounted) setState(() => _leaving = null);
+      });
+      SchedulerBinding.instance.addPostFrameCallback(
+        (_) => Tooltip.dismissAllToolTips(),
+      );
       _outgoing = oldWidget.index < widget.children.length
           ? oldWidget.index
           : null;
@@ -104,6 +122,7 @@ class _AppPageStackState extends State<AppPageStack>
 
   @override
   void dispose() {
+    _leavingTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -123,7 +142,10 @@ class _AppPageStackState extends State<AppPageStack>
             key: ValueKey(index),
             offstage: index != widget.index && index != _outgoing,
             child: TickerMode(
-              enabled: !_preloading && index == widget.index,
+              // The left page keeps animating for a transition's length,
+              // even without a fade, so its tooltips can close.
+              enabled:
+                  !_preloading && (index == widget.index || index == _leaving),
               child: ExcludeSemantics(
                 excluding: _preloading || index != widget.index,
                 child: ExcludeFocus(

@@ -271,6 +271,10 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
 
   void _copyKey() {
     KeyPrivacy.copy(_currentGame.gameKey);
+    // Masking keys also hides a revealed key once it is copied.
+    if (_isKeyVisible && ref.read(securitySettingsProvider).maskKeys) {
+      setState(() => _isKeyVisible = false);
+    }
     NotificationManager.instance.success('Key copied to clipboard');
   }
 
