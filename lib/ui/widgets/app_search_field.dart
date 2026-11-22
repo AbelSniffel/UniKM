@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import 'field_end_buttons.dart';
+import 'horizontal_fold.dart';
 
 /// A themed search [TextField] with prefix search icon, optional clear button,
 /// and rounded border using [AppThemeData] colours.
@@ -40,7 +41,8 @@ class const AppSearchField({
   /// Optional leading icon override. Defaults to the standard search icon.
   final IconData? prefixIcon,
 
-  /// Icon buttons at the field's end, after the clear button.
+  /// Icon buttons at the field's end, after the clear button; wrap one that
+  /// comes and goes in a [HorizontalFold].
   final List<Widget> actions = const [],
 }) extends StatefulWidget {
   @override
@@ -112,13 +114,17 @@ class _AppSearchFieldState extends State<AppSearchField> {
           color: theme.textHint,
         ),
         prefixIconConstraints: _iconBox,
-        suffixIconConstraints: _iconBox,
-        suffixIcon: _showClear || widget.actions.isNotEmpty
-            ? FieldEndButtons(
-                height: kElementHeight,
-                children: [
-                  if (_showClear)
-                    IconButton(
+        // The end buttons size themselves, so one folding away takes no room.
+        suffixIconConstraints: const BoxConstraints(minHeight: 36),
+        // The clear button folds in and out with the text; actions fold
+        // themselves.
+        suffixIcon: FieldEndButtons(
+          height: kElementHeight,
+          children: [
+            HorizontalFold(
+              child: !_showClear
+                  ? null
+                  : IconButton(
                       tooltip: 'Clear search',
                       padding: EdgeInsets.zero,
                       icon: Icon(Icons.clear, color: theme.textHint),
@@ -128,10 +134,10 @@ class _AppSearchFieldState extends State<AppSearchField> {
                         widget.onCleared?.call();
                       },
                     ),
-                  ...widget.actions,
-                ],
-              )
-            : null,
+            ),
+            ...widget.actions,
+          ],
+        ),
         filled: true,
         border: theme.resolveInputBorder(),
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),

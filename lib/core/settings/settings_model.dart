@@ -49,9 +49,12 @@ enum NavPanelOverlayStyle(
 
   /// Whether the pattern angle setting turns this style.
   final bool usesAngle = false,
+
+  /// Whether the line shape setting sways this style.
+  final bool usesWave = false,
 }) {
   none('None'),
-  diagonalStripes('Lines', usesAngle: true),
+  diagonalStripes('Lines', usesAngle: true, usesWave: true),
   crosshatch('Crosshatch'),
   stars('Stars'),
   halloween('Halloween'),
@@ -471,6 +474,7 @@ typedef SecuritySettings = ({
 
   /// Minutes without input before an encrypted database locks; 0 never.
   int autoLockMinutes,
+
   /// Incognito: no recent-apps preview and, on Android, no screenshots.
   bool hideInRecents,
   bool encryptionEnabled,

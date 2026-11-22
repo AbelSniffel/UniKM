@@ -14,6 +14,7 @@ import '../../../models/game.dart';
 import '../../../providers/app_providers.dart';
 import '../../widgets/app_progress_indicator.dart';
 import '../../widgets/game_selection_actions.dart';
+import '../../widgets/horizontal_fold.dart';
 import '../../widgets/nav_button_group.dart';
 import '../../widgets/background_pattern.dart';
 import '../../widgets/popup_menu_helpers.dart';
@@ -559,10 +560,16 @@ class const _RibbonBar({
             if (group == steam) continue;
             add(buttons(group));
             if (group.first.group == _RibbonActionGroup.selection) {
+              // Its gap to the group before it folds with it.
               row.add(
-                _FoldingGroup(
+                HorizontalFold(
                   key: const ValueKey('selection-steam-slot'),
-                  child: steam == null ? null : buttons(steam),
+                  child: steam == null
+                      ? null
+                      : Padding(
+                          padding: const EdgeInsets.only(left: _gap),
+                          child: buttons(steam),
+                        ),
                 ),
               );
             }
@@ -604,51 +611,4 @@ class const _RibbonBar({
       ),
     ),
   );
-}
-
-/// A button group that folds sideways in as [child] arrives and out once it
-/// is gone, keeping the last group on screen while it folds away. Its gap to
-/// the group before it folds with it.
-class const _FoldingGroup({super.key, required final Widget? child})
-    extends StatefulWidget {
-  @override
-  State<_FoldingGroup> createState() => _FoldingGroupState();
-}
-
-class _FoldingGroupState extends State<_FoldingGroup> {
-  Widget? _shown;
-
-  @override
-  Widget build(BuildContext context) {
-    _shown = widget.child ?? _shown;
-    final shown = _shown;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: widget.child == null ? 0 : 1),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : kFastAnimation,
-      curve: Curves.easeOutCubic,
-      onEnd: () {
-        if (widget.child == null) setState(() => _shown = null);
-      },
-      builder: (context, width, _) => shown == null || width == 0
-          ? const SizedBox.shrink()
-          : IgnorePointer(
-              ignoring: widget.child == null,
-              child: ClipRect(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: width,
-                  child: Opacity(
-                    opacity: width,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: _RibbonBar._gap),
-                      child: shown,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
 }

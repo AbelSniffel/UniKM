@@ -15,6 +15,7 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/animated_height.dart';
 import '../../widgets/app_action_button.dart';
 import '../../widgets/app_scrollbar.dart';
+import '../../widgets/horizontal_fold.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/background_pattern.dart';
 import '../../widgets/platform_icon.dart';
@@ -280,16 +281,29 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
               hintText: 'Search tags...',
               controller: _tagSearchController,
               onChanged: (value) => setState(() => _tagSearchQuery = value),
-              // Clears the chosen tags, shown only while there are some.
+              // Clears the chosen tags, unfolding while there are some.
               actions: [
-                if (selectedTagIds.isNotEmpty)
-                  IconButton(
-                    key: const ValueKey('home-filter-clear-tags'),
-                    tooltip: 'Clear tags',
-                    padding: EdgeInsets.zero,
-                    icon: Icon(Icons.label_off_outlined, color: theme.accent),
-                    onPressed: () => notifier.setTagFilters([]),
-                  ),
+                HorizontalFold(
+                  child: selectedTagIds.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const ValueKey('home-filter-clear-tags'),
+                          tooltip: 'Clear tags',
+                          padding: EdgeInsets.zero,
+                          // A light secondary tint makes it stand out, and
+                          // lets the search's border and glow show through.
+                          style: IconButton.styleFrom(
+                            backgroundColor: theme.secondary.withValues(
+                              alpha: 0.18,
+                            ),
+                          ),
+                          icon: Icon(
+                            Icons.label_off_outlined,
+                            color: theme.secondary,
+                          ),
+                          onPressed: () => notifier.setTagFilters([]),
+                        ),
+                ),
               ],
             ),
             if (fill) Flexible(child: list) else list,

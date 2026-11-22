@@ -20,6 +20,7 @@ import '../../../providers/app_providers.dart';
 import '../../widgets/custom_theme_actions.dart';
 import '../../widgets/preview_card.dart';
 import '../../widgets/background_pattern.dart';
+import '../../widgets/horizontal_fold.dart';
 import '../../widgets/notification_system.dart';
 import '../../widgets/search_highlight.dart';
 import '../../widgets/section_groupbox.dart';
@@ -405,6 +406,8 @@ class _BackgroundPatternSectionState
       groupPosition: widget.groupPosition,
       alternateBackground: widget.isAlternate,
       // The icon buttons' own padding spaces them, so narrow headers fit.
+      // Strength always shows; angle and line shape unfold only while the
+      // chosen pattern uses them.
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -428,66 +431,82 @@ class _BackgroundPatternSectionState
               ),
             ),
           ),
-          SliderPopoverButton(
-            title: AppearanceSection.patternAngleSpec.label,
-            value: '$angle°',
-            // Points across the stripes.
-            icon: Transform.rotate(
-              angle: angle * math.pi / 180,
-              child: Icon(
-                Icons.arrow_forward_rounded,
-                color: theme.accent,
-                size: 26,
-              ),
-            ),
-            onOpenChanged: _highlightWhileOpen(
-              NavPanelOverlayStyle.values.where((style) => style.usesAngle),
-            ),
-            action: TextButton(
-              onPressed: angle == DefaultSettings.patternAngle
-                  ? null
-                  : () => settingsNotifier.set(
-                      SettingsKeys.patternAngle,
-                      DefaultSettings.patternAngle,
+          // Unfolds while the chosen pattern uses it, folds away otherwise.
+          HorizontalFold(
+            key: const ValueKey('pattern-angle-button'),
+            child: !saved.usesAngle
+                ? null
+                : SliderPopoverButton(
+                    title: AppearanceSection.patternAngleSpec.label,
+                    value: '$angle°',
+                    // Points across the stripes.
+                    icon: Transform.rotate(
+                      angle: angle * math.pi / 180,
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        color: theme.accent,
+                        size: 26,
+                      ),
                     ),
-              child: const Text('Default'),
-            ),
-            // In 15° steps.
-            slider: Slider(
-              value: angle.toDouble(),
-              max: kMaxPatternAngle.toDouble(),
-              divisions: kMaxPatternAngle ~/ 15,
-              label: '$angle°',
-              onChanged: (value) => settingsNotifier.set(
-                SettingsKeys.patternAngle,
-                value.round(),
-              ),
-            ),
+                    onOpenChanged: _highlightWhileOpen(
+                      NavPanelOverlayStyle.values.where(
+                        (style) => style.usesAngle,
+                      ),
+                    ),
+                    action: TextButton(
+                      onPressed: angle == DefaultSettings.patternAngle
+                          ? null
+                          : () => settingsNotifier.set(
+                              SettingsKeys.patternAngle,
+                              DefaultSettings.patternAngle,
+                            ),
+                      child: const Text('Default'),
+                    ),
+                    // In 15° steps.
+                    slider: Slider(
+                      value: angle.toDouble(),
+                      max: kMaxPatternAngle.toDouble(),
+                      divisions: kMaxPatternAngle ~/ 15,
+                      label: '$angle°',
+                      onChanged: (value) => settingsNotifier.set(
+                        SettingsKeys.patternAngle,
+                        value.round(),
+                      ),
+                    ),
+                  ),
           ),
-          SliderPopoverButton(
-            title: AppearanceSection.lineShapeSpec.label,
-            value: shape,
-            icon: Icon(
-              wave == 0
-                  ? Icons.horizontal_rule_rounded
-                  : wave < 0.75
-                  ? Icons.waves_rounded
-                  : Icons.show_chart_rounded,
-              color: theme.accent,
-              size: 26,
-            ),
-            onOpenChanged: _highlightWhileOpen(const [
-              NavPanelOverlayStyle.diagonalStripes,
-            ]),
-            slider: Slider(
-              value: wave,
-              divisions: 4,
-              label: shape,
-              onChanged: (value) => settingsNotifier.set(
-                SettingsKeys.patternWave,
-                (value * 4).round() / 4,
-              ),
-            ),
+          // Unfolds while the chosen pattern uses it, folds away otherwise.
+          HorizontalFold(
+            key: const ValueKey('pattern-shape-button'),
+            child: !saved.usesWave
+                ? null
+                : SliderPopoverButton(
+                    title: AppearanceSection.lineShapeSpec.label,
+                    value: shape,
+                    icon: Icon(
+                      wave == 0
+                          ? Icons.horizontal_rule_rounded
+                          : wave < 0.75
+                          ? Icons.waves_rounded
+                          : Icons.show_chart_rounded,
+                      color: theme.accent,
+                      size: 26,
+                    ),
+                    onOpenChanged: _highlightWhileOpen(
+                      NavPanelOverlayStyle.values.where(
+                        (style) => style.usesWave,
+                      ),
+                    ),
+                    slider: Slider(
+                      value: wave,
+                      divisions: 4,
+                      label: shape,
+                      onChanged: (value) => settingsNotifier.set(
+                        SettingsKeys.patternWave,
+                        (value * 4).round() / 4,
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
