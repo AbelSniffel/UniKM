@@ -3,7 +3,6 @@ library;
 
 import '../../../core/theme/theme_icons.dart';
 
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -51,7 +50,7 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
   int? _selectedIconCodePoint;
   bool _isEditing = false;
   bool _saved = false;
-  Timer? _previewThrottle;
+  bool _previewScheduled = false;
   final _circleHovered = <String, bool>{};
 
   // The drag in progress: where its tile was grabbed, the tile's size and
@@ -108,7 +107,6 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
     _hexController.dispose();
     _hexFocusNode.dispose();
     _clearReturnEntry();
-    _previewThrottle?.cancel();
     super.dispose();
   }
 
@@ -189,13 +187,17 @@ class _ThemeEditorDialogState extends ConsumerState<ThemeEditorDialog> {
         : null,
   );
 
-  /// Previews at most every 60ms while a slider is dragged: a preview
-  /// rebuilds the whole app's theme, so doing it on every slider event lags.
-  void _throttledPreview() =>
-      _previewThrottle ??= Timer(const Duration(milliseconds: 60), () {
-        _previewThrottle = null;
-        _updatePreview();
-      });
+  /// Previews at most once a frame while a slider is dragged, as the next
+  /// frame begins: a preview rebuilds the whole app's theme, and pointer
+  /// events can come several times a frame.
+  void _throttledPreview() {
+    if (_previewScheduled) return;
+    _previewScheduled = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _previewScheduled = false;
+      _updatePreview();
+    });
+  }
 
   void _updatePreview() {
     if (!mounted) return;

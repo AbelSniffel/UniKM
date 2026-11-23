@@ -868,9 +868,10 @@ class _HelixMesh(
   int turnOffset = 0,
 }) {
   this {
-    _source = turnOffset == 0
-        ? (lightweight ? _previewGeometry : _geometry)
-        : _HelixGeometry(lightweight ? 18 : 32, turnOffset: turnOffset);
+    _source = _geometries[(lightweight, turnOffset)] ??= _HelixGeometry(
+      lightweight ? 18 : 32,
+      turnOffset: turnOffset,
+    );
     _colors = Int32List(_source.shades.length);
     for (var i = 0; i < _colors.length; i++) {
       final (first, highlight, shadow, edge) = _source.shades[i];
@@ -888,8 +889,11 @@ class _HelixMesh(
   }
 
   static const turns = 6;
-  static final _geometry = _HelixGeometry(32);
-  static final _previewGeometry = _HelixGeometry(18);
+
+  /// Each tile's geometry, by lightness and turn offset. It never depends on
+  /// the colors, so a theme change (every step of a live preview) only
+  /// recolors it.
+  static final _geometries = <(bool, int), _HelixGeometry>{};
   late final _HelixGeometry _source;
   late final Int32List _colors;
   ui.Vertices? _vertices;

@@ -2,6 +2,7 @@
 /// window, so every panel (and page) showing it lines up with the others.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -52,6 +53,7 @@ class const PanelPatternSurface({
     return _PanelPatternSurface(
       color: page ? theme.background : theme.navBackground,
       pixelRatio: MediaQuery.devicePixelRatioOf(context),
+      recolorLater: ref.read(themeProvider.notifier).isPreviewMode,
       pattern: BackgroundPatternPainter(
         theme: theme,
         style: ref.watch(backgroundPatternProvider),
@@ -72,17 +74,19 @@ class const _PanelPatternSurface({
   required final Color color,
   required final BackgroundPatternPainter pattern,
   required final double pixelRatio,
+  required final bool recolorLater,
   super.child,
 }) extends SingleChildRenderObjectWidget {
   @override
   _RenderPanelPatternSurface createRenderObject(BuildContext context) =>
-      _RenderPanelPatternSurface(color, pattern, pixelRatio);
+      _RenderPanelPatternSurface(color, pattern, pixelRatio, recolorLater);
 
   @override
   void updateRenderObject(
     BuildContext context,
     _RenderPanelPatternSurface renderObject,
   ) => renderObject
+    ..recolorLater = recolorLater
     ..color = color
     ..pattern = pattern
     ..pixelRatio = pixelRatio;
@@ -93,15 +97,35 @@ class const _PanelPatternSurface({
 /// repaints it, and hover repaints inside the panel reuse the recording.
 /// The recording draws [_PatternTiles], so a surface that grows, as in a
 /// window resize, only draws the tiles it newly reaches.
+///
+/// While [recolorLater] (a live theme preview), a change of the pattern's
+/// colors alone keeps the recording until the colors have rested for
+/// [_recolorDelay]: redrawing every tile on each step of a color drag halved
+/// the frame rate on a weak GPU.
 class _RenderPanelPatternSurface(
   var Color _color,
   var BackgroundPatternPainter _pattern,
   var double _pixelRatio,
+  var bool _recolorLater,
 ) extends RenderProxyBox {
   /// Extra pattern recorded around the surface, so small moves reuse it.
   static const double _margin = 64;
   static final _surfaces = <_RenderPanelPatternSurface>{};
   static bool _watchingFrames = false;
+
+  /// Surfaces showing pattern colors a preview has since changed.
+  static final _stale = <_RenderPanelPatternSurface>{};
+  static Timer? _recolorTimer;
+  static const _recolorDelay = Duration(milliseconds: 150);
+
+  static void _recolorStale() {
+    _recolorTimer = null;
+    for (final surface in [..._stale]) {
+      surface
+        .._clearRecording()
+        ..markNeedsPaint();
+    }
+  }
 
   /// Links nothing, for a surface outside any [PanelPatternWindow].
   static final _alone = LayerLink();
@@ -116,18 +140,34 @@ class _RenderPanelPatternSurface(
   /// The [PanelPatternWindow] this surface sits in, found when it attaches.
   RenderLeaderLayer? _window;
 
+  set recolorLater(bool value) {
+    if (value == _recolorLater) return;
+    _recolorLater = value;
+    if (!value && _stale.contains(this)) {
+      _clearRecording();
+      markNeedsPaint();
+    }
+  }
+
+  // Painted under the recording, whose tiles hold only the pattern.
   set color(Color value) {
     if (value == _color) return;
     _color = value;
-    // The tiles hold the color under the pattern.
-    _clearRecording();
     markNeedsPaint();
   }
 
   set pattern(BackgroundPatternPainter value) {
     if (!value.shouldRepaint(_pattern)) return;
     final wasVisible = _pattern.isVisible;
+    final recolor =
+        _recolorLater && _recording != null && value.sameShapes(_pattern);
     _pattern = value;
+    if (recolor) {
+      _stale.add(this);
+      _recolorTimer?.cancel();
+      _recolorTimer = Timer(_recolorDelay, _recolorStale);
+      return;
+    }
     _clearRecording();
     if (wasVisible != value.isVisible) markNeedsCompositingBitsUpdate();
     markNeedsPaint();
@@ -165,6 +205,10 @@ class _RenderPanelPatternSurface(
   }
 
   void _clearRecording() {
+    if (_stale.remove(this) && _stale.isEmpty) {
+      _recolorTimer?.cancel();
+      _recolorTimer = null;
+    }
     _PatternTiles.release(_tiles);
     _tiles = const [];
     _recording?.dispose();
@@ -208,6 +252,8 @@ class _RenderPanelPatternSurface(
   void detach() {
     _surfaces.remove(this);
     _window = null;
+    // Redrawn in its current colors if it attaches again.
+    if (_stale.contains(this)) _clearRecording();
     super.detach();
   }
 
@@ -231,7 +277,6 @@ class _RenderPanelPatternSurface(
         final tiles = _PatternTiles.paint(
           Canvas(recorder),
           _pattern,
-          _color,
           _windowSize,
           recorded,
           _pixelRatio,
@@ -264,10 +309,10 @@ class _RenderPanelPatternSurface(
   }
 }
 
-/// Squares of a panel's color and pattern, drawn once into images that every
-/// surface showing them shares. A square is a whole number of physical
-/// pixels, placed on physical pixels, and holds the color under the pattern,
-/// so the pattern blends with the panel as it would drawn straight onto it.
+/// Squares of a pattern, drawn once into images that every surface showing
+/// them shares. A square is a whole number of physical pixels, placed on
+/// physical pixels, and holds only the pattern: a surface paints its color
+/// under it, so a color change keeps the tiles.
 abstract final class _PatternTiles {
   /// A tile's side, in physical pixels.
   static const _side = 512;
@@ -282,12 +327,11 @@ abstract final class _PatternTiles {
   static final _unheld = <Record>{};
   static final _paint = Paint()..filterQuality = FilterQuality.none;
 
-  /// Draws [color] and [pattern] over [area] of a [window]-sized pattern
-  /// and returns the tiles it holds, for [release].
+  /// Draws [pattern] over [area] of a [window]-sized pattern and returns
+  /// the tiles it holds, for [release].
   static List<Record> paint(
     Canvas canvas,
     BackgroundPatternPainter pattern,
-    Color color,
     Size window,
     Rect area,
     double pixelRatio,
@@ -304,7 +348,6 @@ abstract final class _PatternTiles {
         // Only tiles reaching something placed in the window follow its size.
         final key = (
           pattern._key,
-          color,
           pixelRatio,
           x,
           y,
@@ -314,7 +357,7 @@ abstract final class _PatternTiles {
         _unheld.remove(key);
         held.add(key);
         canvas.drawImage(
-          _images[key] ??= _draw(pattern, color, window, tile, pixelRatio),
+          _images[key] ??= _draw(pattern, window, tile, pixelRatio),
           tile.topLeft * pixelRatio,
           _paint,
         );
@@ -326,14 +369,12 @@ abstract final class _PatternTiles {
 
   static ui.Image _draw(
     BackgroundPatternPainter pattern,
-    Color color,
     Size window,
     Rect tile,
     double pixelRatio,
   ) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder)
-      ..drawColor(color, BlendMode.src)
       ..scale(pixelRatio)
       ..translate(-tile.left, -tile.top);
     pattern.paintArea(canvas, window, tile);
@@ -539,6 +580,8 @@ class const BackgroundPatternPainter({
         )
           y,
     ];
+    // Every stripe sways alike, so each sample's sway is worked out once.
+    final sways = [for (final y in ys) sway!(y)];
     for (
       var index = (bounds.left / period).floor();
       index <= (bounds.right / period).ceil();
@@ -555,8 +598,9 @@ class const BackgroundPatternPainter({
       }
       canvas.drawPath(
         Path()..addPolygon([
-          for (final y in ys) Offset(left + sway(y), y),
-          for (final y in ys.reversed) Offset(left + stripeW + sway(y), y),
+          for (final (i, y) in ys.indexed) Offset(left + sways[i], y),
+          for (var i = ys.length - 1; i >= 0; i--)
+            Offset(left + stripeW + sways[i], ys[i]),
         ], true),
         paint,
       );
@@ -1038,6 +1082,11 @@ class const BackgroundPatternPainter({
     theme.isDark,
     style,
   );
+
+  /// Whether this draws the same shapes as [other], only in other colors.
+  bool sameShapes(BackgroundPatternPainter other) =>
+      (preview, strength, angle, wave, style) ==
+      (other.preview, other.strength, other.angle, other.wave, other.style);
 
   @override
   bool shouldRepaint(covariant BackgroundPatternPainter oldDelegate) =>
