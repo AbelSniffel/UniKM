@@ -431,7 +431,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog>
     title: 'Change Database Password',
     action: () => widget.onChangePassword(_current.text, _new.text),
     successMessage: () => _new.text == _current.text
-        ? 'Isn\'t this the same password? Eh?? What are you doing? Smh'
+        ? 'Isn\'t this the same password? Very interesting...'
         : 'Password changed successfully',
     errorText: (error) => 'Failed to change password: $error',
     confirmIcon: Icons.key,

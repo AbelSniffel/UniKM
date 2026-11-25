@@ -1,6 +1,7 @@
 /// Optional fingerprint unlock for encrypted databases on phones.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +9,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -35,6 +37,10 @@ typedef BiometricPairing = ({
 ///
 /// Which files are paired is also kept in plain preferences, so checking
 /// whether to offer the prompt never shows it.
+///
+/// Android keeps the stored passwords and their key out of app backups
+/// (`android/app/src/main/res/xml`): restored onto another key, they could
+/// never be read again.
 class BiometricUnlock(
   final SharedPreferences _prefs, {
   final FlutterSecureStorage _storage = const FlutterSecureStorage(),
@@ -64,18 +70,33 @@ class BiometricUnlock(
 
   static const _namespace = 'unikm_biometric_unlock';
 
-  static AndroidOptions _android(String title, String subtitle) =>
-      AndroidOptions.biometric(
-        enforceBiometrics: true,
-        requireBiometricsPerOperation: true,
-        biometricType: AndroidBiometricType.strongBiometricOnly,
-        // A cancelled prompt must never wipe the other pairings.
-        resetOnError: false,
-        storageNamespace: _namespace,
-        biometricPromptTitle: title,
-        biometricPromptSubtitle: subtitle,
-        biometricPromptNegativeButton: 'Use password',
-      );
+  /// The plugin keeps the options of its first call in each run, so every
+  /// call passes these same ones: an empty title from one call would break
+  /// every later prompt.
+  static const _android = AndroidOptions.biometric(
+    enforceBiometrics: true,
+    requireBiometricsPerOperation: true,
+    biometricType: AndroidBiometricType.strongBiometricOnly,
+    // A stored key that no longer opens (restored onto a new phone key, or
+    // invalidated by a newly enrolled fingerprint) is reset and the scan
+    // asked again once, where migrating it asked twice and then failed on
+    // every later try. Only a key failure resets the store; a cancelled
+    // prompt never does, so it never wipes the other pairings.
+    resetOnError: true,
+    migrateOnAlgorithmChange: false,
+    storageNamespace: _namespace,
+    biometricPromptTitle: 'Fingerprint unlock',
+    biometricPromptSubtitle: 'Confirm your fingerprint for this database',
+    biometricPromptNegativeButton: 'Use password',
+  );
+
+  /// How long after the app returns from the system prompt its answer may
+  /// take before the prompt counts as dismissed.
+  static const promptAnswerGrace = Duration(seconds: 2);
+
+  /// The longest a prompt is waited for when the app never sees it open, as
+  /// on a phone that does not report the prompt covering the app.
+  static const promptTimeout = Duration(minutes: 1);
 
   static const _apple = IOSOptions(
     accountName: _namespace,
@@ -113,14 +134,13 @@ class BiometricUnlock(
   /// system prompt asks for now. Throws when the check fails or is cancelled.
   Future<void> pair(String databasePath, String password) async {
     final key = await _keyFor(databasePath);
-    await _storage.write(
-      key: key,
-      value: password,
-      aOptions: _android(
-        'Pair database',
-        'Confirm your fingerprint to unlock this database with it',
+    await _whilePrompting(
+      _storage.write(
+        key: key,
+        value: password,
+        aOptions: _android,
+        iOptions: _apple,
       ),
-      iOptions: _apple,
     );
     final paired = {...?_prefs.getStringList(pairedDatabasesKey), key};
     await _prefs.setStringList(pairedDatabasesKey, paired.toList());
@@ -133,21 +153,59 @@ class BiometricUnlock(
   Future<String?> readPassword(String databasePath) async {
     final key = await _keyFor(databasePath);
     try {
-      final password = await _storage.read(
-        key: key,
-        aOptions: _android(
-          'Unlock database',
-          'Use your fingerprint instead of the password',
-        ),
-        iOptions: _apple,
+      final password = await _whilePrompting(
+        _storage.read(key: key, aOptions: _android, iOptions: _apple),
       );
       if (password == null) await forget(databasePath);
       return password;
+    } on BiometricPromptDismissed {
+      return null;
     } on PlatformException catch (error) {
       if (!_isPromptError(error)) await forget(databasePath);
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Waits for [call], which shows the system prompt, and throws
+  /// [BiometricPromptDismissed] once the prompt has closed without an
+  /// answer. On Android the plugin never answers the prompt's negative
+  /// button ("Use password"), which would leave [call] waiting for good.
+  ///
+  /// The prompt takes the app out of [AppLifecycleState.resumed]; back in
+  /// it, a real answer arrives within [promptAnswerGrace]. A second prompt
+  /// (a reset key asks again) leaves the app again and keeps waiting.
+  static Future<T> _whilePrompting<T>(Future<T> call) async {
+    final dismissed = Completer<T>();
+    void dismiss() {
+      if (!dismissed.isCompleted) {
+        dismissed.completeError(const BiometricPromptDismissed());
+      }
+    }
+
+    var prompted = false;
+    Timer? grace;
+    final timeout = Timer(promptTimeout, dismiss);
+    final lifecycle = AppLifecycleListener(
+      onStateChange: (state) {
+        grace?.cancel();
+        if (state != AppLifecycleState.resumed) {
+          // A prompt left open is the user's to answer or dismiss.
+          prompted = true;
+          timeout.cancel();
+        } else if (prompted) {
+          grace = Timer(promptAnswerGrace, dismiss);
+        }
+      },
+    );
+    try {
+      // A late answer or error from an abandoned call is dropped.
+      return await Future.any([call, dismissed.future]);
+    } finally {
+      lifecycle.dispose();
+      grace?.cancel();
+      timeout.cancel();
     }
   }
 
@@ -172,11 +230,7 @@ class BiometricUnlock(
     }
     if (!_supported) return;
     try {
-      await _storage.delete(
-        key: key,
-        aOptions: _android('', ''),
-        iOptions: _apple,
-      );
+      await _storage.delete(key: key, aOptions: _android, iOptions: _apple);
     } catch (_) {
       // The keystore entry may already be gone with an invalidated key.
     }
@@ -189,4 +243,11 @@ class BiometricUnlock(
     final digest = await Sha256().hash(utf8.encode(path));
     return 'db_${digest.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
   }
+}
+
+/// The system biometric prompt closed without an answer, as with its
+/// "Use password" button.
+class const BiometricPromptDismissed() implements Exception {
+  @override
+  String toString() => 'The fingerprint prompt was dismissed';
 }
