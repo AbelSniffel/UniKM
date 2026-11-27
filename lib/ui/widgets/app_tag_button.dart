@@ -365,10 +365,9 @@ class _AppTagButtonState extends State<AppTagButton>
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final still = MediaQuery.disableAnimationsOf(context);
     _retarget(
-      still ? Duration.zero : const Duration(milliseconds: 110),
-      still ? Duration.zero : const Duration(milliseconds: 120),
+      context.motion(const Duration(milliseconds: 110)),
+      context.motion(const Duration(milliseconds: 120)),
     );
     _tickSurface();
     // As InkWell keeps its ink in step with the theme and the shape.

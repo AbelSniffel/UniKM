@@ -9,7 +9,6 @@ import '../../core/theme/app_theme.dart';
 import 'app_scrollbar.dart';
 import '../../providers/app_providers.dart';
 import '../pages/settings_sections/settings_theme_editor.dart';
-import 'app_dialog.dart';
 import 'app_tab_bar.dart';
 import 'custom_theme_actions.dart';
 import 'navigation_more_menu.dart';
@@ -42,14 +41,8 @@ class _NavigationThemeMenuButtonState
   }
 
   void _openEditor({AppThemeData? existing}) {
-    // Capture the theme before closing the picker. Responsive navigation can
-    // replace this button while the editor's route is still open.
-    final theme = ref.read(themeProvider);
     _controller.close();
-    showAppDialog<void>(
-      context: context,
-      builder: (_) => ThemeEditorDialog(theme: theme, existingTheme: existing),
-    );
+    ThemeEditorDialog.show(context, ref, existing: existing);
   }
 
   void _deleteTheme(AppThemeData theme) {
@@ -173,7 +166,6 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
     final current = ref.watch(themeProvider);
     final builtInIds = ref.watch(builtInThemeIdsProvider);
     final selectedTab = ref.watch(navigationThemeMenuTabProvider);
@@ -281,7 +273,7 @@ class _ThemePickerState extends ConsumerState<_ThemePicker> {
                                           'No custom themes yet.\nCreate one from your current colors.',
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
-                                            color: theme.textSecondary,
+                                            color: current.textSecondary,
                                             fontSize: 13,
                                           ),
                                         ),

@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
 
@@ -44,7 +43,6 @@ class const NotificationsSection({
           // The section's own title names it.
           showTitle: false,
           childBuilder: () => buildSpecToggleSettingList(
-            theme: context.appTheme,
             entries: [
               (
                 spec: deadlineRemindersSpec,

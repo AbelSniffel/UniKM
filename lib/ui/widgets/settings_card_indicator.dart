@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'button_theme_sync.dart';
 
 /// A small corner dot that lights up when on; inset so it clears the card
 /// corner. As a [bar], it runs down the card's right edge instead. Either
@@ -41,38 +42,42 @@ class const SettingsCardMiniDot({
     final lit = value && enabled;
     return Padding(
       padding: EdgeInsets.fromLTRB(_gap, _inset, _inset, bar ? _inset : _gap),
-      child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
-        // A bar fills the card's height.
-        width: bar ? _bar : _dot,
-        height: bar ? null : _dot,
-        decoration: BoxDecoration(
-          shape: bar ? BoxShape.rectangle : BoxShape.circle,
-          // A bar's corners curve with the card's, its inset out.
-          borderRadius: bar
-              ? BorderRadius.circular(theme.insetRadius(_inset))
-              : null,
-          // Transparent while off, so the ring fades in with the dot.
-          border: outlineColor == null
-              ? null
-              : Border.all(
-                  color: lit
-                      ? theme.secondary.withValues(alpha: 0.6)
-                      : outlineColor!.withValues(alpha: 0),
-                  width: 2,
-                ),
-          color: lit ? theme.accent : idleColor(theme),
-          boxShadow: lit && glow
-              ? [
-                  BoxShadow(
-                    color: theme.accent.withValues(alpha: 0.9),
-                    blurRadius: 4,
+      // Lighting up eases in; a new theme applies at once.
+      child: ButtonThemeSync(
+        theme: theme,
+        builder: (context, snapTheme) => AnimatedContainer(
+          duration: snapTheme
+              ? Duration.zero
+              : context.motion(const Duration(milliseconds: 140)),
+          curve: Curves.easeOutCubic,
+          // A bar fills the card's height.
+          width: bar ? _bar : _dot,
+          height: bar ? null : _dot,
+          decoration: BoxDecoration(
+            shape: bar ? BoxShape.rectangle : BoxShape.circle,
+            // A bar's corners curve with the card's, its inset out.
+            borderRadius: bar
+                ? BorderRadius.circular(theme.insetRadius(_inset))
+                : null,
+            // Transparent while off, so the ring fades in with the dot.
+            border: outlineColor == null
+                ? null
+                : Border.all(
+                    color: lit
+                        ? theme.secondary.withValues(alpha: 0.6)
+                        : outlineColor!.withValues(alpha: 0),
+                    width: 2,
                   ),
-                ]
-              : null,
+            color: lit ? theme.accent : idleColor(theme),
+            boxShadow: lit && glow
+                ? [
+                    BoxShadow(
+                      color: theme.accent.withValues(alpha: 0.9),
+                      blurRadius: 4,
+                    ),
+                  ]
+                : null,
+          ),
         ),
       ),
     );

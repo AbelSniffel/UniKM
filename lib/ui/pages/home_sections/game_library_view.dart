@@ -17,6 +17,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/import_export_dialog.dart';
 import '../../widgets/app_progress_indicator.dart';
+import '../../widgets/app_scrollbar.dart';
 import '../../widgets/game_tile.dart';
 import '../../widgets/selection_overlay.dart' as app_selection_overlay;
 import 'game_card_reveal.dart';
@@ -138,6 +139,7 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
         gamesProvider.select(
           (s) =>
               s.filter.searchQuery.isNotEmpty ||
+              s.filter.platformFilter != null ||
               s.filter.tagFilters.isNotEmpty ||
               s.filter.showDeadlineOnly ||
               s.filter.showDlcOnly ||
@@ -267,10 +269,8 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
                 if (hasFilters) ...[
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      ref.read(gamesProvider.notifier).setSearchQuery('');
-                      ref.read(gamesProvider.notifier).clearAllFilters();
-                    },
+                    onPressed: () =>
+                        ref.read(gamesProvider.notifier).clearAllFilters(),
                     child: const Text('Clear Filters'),
                   ),
                 ] else ...[
@@ -315,6 +315,21 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
     final listSpacing = slimList ? kSlimListCardSpacing : kListCardSpacing;
     final listItemExtent =
         (slimList ? kSlimListCardHeight : kListCardHeight) + listSpacing;
+    // On desktop the scrollbar keeps to a gutter of its own beside the
+    // cards instead of the scroll view's own over their padding.
+    final behavior = ScrollConfiguration.of(context);
+    final gutter = switch (behavior.getPlatform(context)) {
+      TargetPlatform.linux ||
+      TargetPlatform.macOS ||
+      TargetPlatform.windows => true,
+      _ => false,
+    };
+    Widget scrolling(Widget view) => gutter
+        ? ScrollConfiguration(
+            behavior: behavior.copyWith(scrollbars: false),
+            child: view,
+          )
+        : view;
     // NOTE: selectedGameIds is intentionally NOT watched here.
     // The shell owns the selection ribbon, so selection changes do not
     // rebuild the grid/list.
@@ -323,50 +338,50 @@ class _GameLibraryViewState extends ConsumerState<GameLibraryView>
       viewMode: viewMode,
       scrollController: scrollController,
       listItemExtent: listItemExtent,
-      child: viewMode == GameListViewMode.grid
-          ? GridView.builder(
-              scrollCacheExtent: ScrollCacheExtent.pixels(_gridCacheExtent),
-              key: const PageStorageKey('game-library-scroll'),
-              controller: scrollController,
-              padding: const EdgeInsets.all(12),
-              addAutomaticKeepAlives: false,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
-                mainAxisExtent: kGridCardHeight + kGridCardSpacing,
-                crossAxisSpacing: kGridCardSpacing,
-                mainAxisSpacing: kGridCardSpacing,
+      child: scrolling(
+        viewMode == GameListViewMode.grid
+            ? GridView.builder(
+                scrollCacheExtent: ScrollCacheExtent.pixels(_gridCacheExtent),
+                key: const PageStorageKey('game-library-scroll'),
+                controller: scrollController,
+                padding: const EdgeInsets.all(12),
+                addAutomaticKeepAlives: false,
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: kGridCardWidth + kGridCardSpacing,
+                  mainAxisExtent: kGridCardHeight + kGridCardSpacing,
+                  crossAxisSpacing: kGridCardSpacing,
+                  mainAxisSpacing: kGridCardSpacing,
+                ),
+                itemCount: gameIds.length,
+                findChildIndexCallback: _findIndex,
+                itemBuilder: (context, index) => _card(gameIds[index], design),
+              )
+            : ListView.builder(
+                scrollCacheExtent: ScrollCacheExtent.pixels(listItemExtent * 2),
+                key: const PageStorageKey('game-library-scroll'),
+                controller: scrollController,
+                itemExtent: listItemExtent,
+                padding: const EdgeInsets.all(12),
+                addAutomaticKeepAlives: false,
+                itemCount: gameIds.length,
+                findChildIndexCallback: _findIndex,
+                itemBuilder: (context, index) => Padding(
+                  key: ValueKey(gameIds[index]),
+                  padding: EdgeInsets.only(bottom: listSpacing),
+                  child: _card(gameIds[index], design),
+                ),
               ),
-              itemCount: gameIds.length,
-              findChildIndexCallback: _findIndex,
-              itemBuilder: (context, index) => _card(gameIds[index], design),
-            )
-          : ListView.builder(
-              scrollCacheExtent: ScrollCacheExtent.pixels(listItemExtent * 2),
-              key: const PageStorageKey('game-library-scroll'),
-              controller: scrollController,
-              itemExtent: listItemExtent,
-              padding: const EdgeInsets.all(12),
-              addAutomaticKeepAlives: false,
-              itemCount: gameIds.length,
-              findChildIndexCallback: _findIndex,
-              itemBuilder: (context, index) {
-                final card = _card(gameIds[index], design);
-                return slimList
-                    ? card
-                    : Padding(
-                        key: ValueKey(gameIds[index]),
-                        padding: EdgeInsets.only(bottom: listSpacing),
-                        child: card,
-                      );
-              },
-            ),
+      ),
     );
+    final scrolled = gutter
+        ? _ScrollbarGutter(controller: scrollController, child: library)
+        : library;
     return widget.animateEntries
         ? NotificationListener(
             onNotification: _revealCoordinator.onNotification,
-            child: SizeChangedLayoutNotifier(child: library),
+            child: SizeChangedLayoutNotifier(child: scrolled),
           )
-        : library;
+        : scrolled;
   }
 
   int? _findIndex(Key key) => key is ValueKey<int> ? _indexOf[key.value] : null;
@@ -825,4 +840,30 @@ class _GameLibraryDragSelectionLayerState
       ),
     );
   }
+}
+
+/// The library's scrollbar in a gutter of its own, [_width] wide, right of
+/// the cards and their padding, so it never covers a card. It looks as every
+/// other scrollbar does (the theme's margins), [_edge] in from the library's
+/// edge so its track doesn't run into it: its track is 6 px from the cards,
+/// as close as a hovered card, which grows 6 px, may come without touching
+/// it. As wide a strip on the left keeps the cards centred, 24 px in. Its track spans the cards' height: padded,
+/// not the theme's main-axis margin, which only keeps the thumb from the
+/// track's ends.
+class const _ScrollbarGutter({
+  required final ScrollController controller,
+  required final Widget child,
+}) extends StatelessWidget {
+  static const _width = 12.0;
+  static const _edge = 4.0;
+
+  @override
+  Widget build(BuildContext context) => AppScrollbar(
+    controller: controller,
+    padding: const EdgeInsets.fromLTRB(0, 12, _edge, 12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _width),
+      child: child,
+    ),
+  );
 }

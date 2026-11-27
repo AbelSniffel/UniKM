@@ -52,16 +52,16 @@ const double kSliderHandleGap = 3.0;
 // Grid View
 const double kGridCardWidth = 460.0;
 const double kGridCardHeight = 215.0;
-const double kGridCardSpacing = 6.0;
+const double kGridCardSpacing = 8.0;
 
 // List View
 const double kListCardHeight = 110.0;
 const double kListCardImageWidth = 220.0;
-const double kListCardSpacing = 6.0;
+const double kListCardSpacing = 8.0;
 
 // Slim List View
 const double kSlimListCardHeight = 44.0;
-const double kSlimListCardSpacing = 0.0;
+const double kSlimListCardSpacing = 8.0;
 
 // =============================================================================
 // DIMENSIONS - WINDOW
@@ -115,29 +115,27 @@ const int kDefaultAutoUpdateIntervalMinutes = 10;
 // =============================================================================
 // STEAM API
 // =============================================================================
-const String kSteamStoreApiBase = 'https://store.steampowered.com/api';
+const String kSteamStoreBase = 'https://store.steampowered.com';
+const String kSteamStoreApiBase = '$kSteamStoreBase/api';
 const String kSteamCdnBase = 'https://steamcdn-a.akamaihd.net';
 
-String get kSteamStoreBase =>
-    kSteamStoreApiBase.replaceFirst(RegExp(r'/api/?$'), '');
 String steamStoreApiUrl(String path) => '$kSteamStoreApiBase/$path';
 String steamStoreUrl(String path) => '$kSteamStoreBase/$path';
-String steamAppPageUrl(String appId) => steamStoreUrl('app/$appId');
-String steamSearchPageUrl(String term) =>
-    steamStoreUrl('search/?term=${Uri.encodeComponent(term)}');
 
 /// The store page for [appId], or a store search for [title] without one.
 String steamPageUrl({required String appId, required String title}) =>
-    appId.isNotEmpty ? steamAppPageUrl(appId) : steamSearchPageUrl(title);
-String steamRegisterKeyPageUrl(String key) =>
-    steamStoreUrl('account/registerkey?key=${Uri.encodeComponent(key)}');
+    appId.isNotEmpty
+    ? steamStoreUrl('app/$appId')
+    : steamStoreUrl('search/?term=${Uri.encodeComponent(title)}');
 
 /// The store page that redeems [key] on [platform], or null when that store
 /// has no such link.
 String? redeemPageUrl(String platform, String key) => key.isEmpty
     ? null
     : switch (platform) {
-        'Steam' => steamRegisterKeyPageUrl(key),
+        'Steam' => steamStoreUrl(
+          'account/registerkey?key=${Uri.encodeComponent(key)}',
+        ),
         'GOG' => 'https://www.gog.com/redeem/${Uri.encodeComponent(key)}',
         _ => null,
       };

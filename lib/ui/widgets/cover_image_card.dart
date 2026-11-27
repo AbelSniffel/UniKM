@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../core/constants/app_constants.dart';
 import '../../core/services/platform_file_actions.dart';
 import '../../core/theme/app_theme.dart';
+import 'button_theme_sync.dart';
 import 'dialog_helpers.dart';
 import 'field_end_buttons.dart';
 import 'game_cover_image.dart';
@@ -25,7 +26,6 @@ class const CoverImageCard({
   super.key,
   required final TextEditingController controller,
   required final VoidCallback onChanged,
-  final Widget? platformSelector,
   final bool isDlc = false,
   final bool isUsed = false,
   final bool hasDeadline = false,
@@ -34,6 +34,10 @@ class const CoverImageCard({
   /// Shows the path under the image. Without it, hovering the image names
   /// the path and offers to clear it.
   final bool showPath = true,
+
+  /// Covers the card may show next, decoded ahead (see
+  /// [GameCoverImage.prefetch]).
+  final List<String> prefetch = const [],
 }) extends StatefulWidget {
   static const preferredWidth = 320.0;
 
@@ -123,72 +127,83 @@ class _CoverImageCardState extends State<CoverImageCard> {
               : path;
           final image = path.isEmpty
               ? null
-              : RepaintBoundary(child: GameCoverImage(coverImage: path));
+              : RepaintBoundary(
+                  child: GameCoverImage(
+                    coverImage: path,
+                    prefetch: widget.prefetch,
+                  ),
+                );
           return HoverBuilder(
             cursor: SystemMouseCursors.click,
-            builder: (context, hovered) => AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-                color: image == null ? Colors.transparent : theme.surface,
-              ),
-              foregroundDecoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(theme.cornerRadius),
-                border: Border.all(
-                  color: _dragging || hovered ? theme.accent : theme.border,
-                  width: _dragging || hovered ? 2 : 1,
+            // The hover outline eases in; a new theme applies at once.
+            builder: (context, hovered) => ButtonThemeSync(
+              theme: theme,
+              builder: (context, snapTheme) => AnimatedContainer(
+                duration: snapTheme
+                    ? Duration.zero
+                    : const Duration(milliseconds: 120),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
+                  color: image == null ? Colors.transparent : theme.surface,
                 ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: LayoutBuilder(
-                  builder: (context, constraints) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (constraints.hasTightHeight)
-                        Expanded(child: _buildPreview(theme, image, hovered))
-                      else
-                        AspectRatio(
-                          aspectRatio: 2,
-                          child: _buildPreview(theme, image, hovered),
-                        ),
-                      if (widget.showPath)
-                        Tooltip(
-                          message: label,
-                          child: InkWell(
-                            onTap: _editPath,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      label,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 12,
+                foregroundDecoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(theme.cornerRadius),
+                  border: Border.all(
+                    color: _dragging || hovered ? theme.accent : theme.border,
+                    width: _dragging || hovered ? 2 : 1,
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (constraints.hasTightHeight)
+                          Expanded(child: _buildPreview(theme, image, hovered))
+                        else
+                          AspectRatio(
+                            aspectRatio: 2,
+                            child: _buildPreview(theme, image, hovered),
+                          ),
+                        if (widget.showPath)
+                          Tooltip(
+                            message: label,
+                            child: InkWell(
+                              onTap: _editPath,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Text(
+                                        label,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                if (path.isNotEmpty)
-                                  IconButton(
-                                    tooltip: 'Clear selection',
-                                    style: theme.compactIconButtonStyle,
-                                    onPressed: _editing
-                                        ? null
-                                        : _clearSelection,
-                                    icon: const Icon(Icons.close, size: 18),
-                                  ),
-                              ],
+                                  if (path.isNotEmpty)
+                                    IconButton(
+                                      tooltip: 'Clear selection',
+                                      style: theme.compactIconButtonStyle,
+                                      onPressed: _editing
+                                          ? null
+                                          : _clearSelection,
+                                      icon: const Icon(Icons.close, size: 18),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -254,24 +269,11 @@ class _CoverImageCardState extends State<CoverImageCard> {
           bottom: 8,
           child: GameCardBadges.deadlineBadge(theme, widget.deadlineDate),
         ),
-      if (widget.platformSelector != null || widget.isDlc)
+      if (widget.isDlc)
         Positioned(
           right: 5,
           top: 5,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 4,
-            children: [
-              if (widget.platformSelector != null)
-                Material(
-                  color: theme.surface.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(theme.cornerRadius),
-                  child: widget.platformSelector,
-                ),
-              if (widget.isDlc)
-                IgnorePointer(child: GameCardBadges.dlcChip(theme)),
-            ],
-          ),
+          child: IgnorePointer(child: GameCardBadges.dlcChip(theme)),
         ),
     ],
   );

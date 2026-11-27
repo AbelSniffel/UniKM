@@ -117,11 +117,7 @@ class const DialogInteractionScope({
 // DialogHeader
 // ---------------------------------------------------------------------------
 
-/// A row containing [icon] + [title], optionally with a close button.
-///
-/// Two layout variants:
-/// - **AlertDialog title** (default): compact icon + title row.
-/// - **Custom Dialog header**: larger icon (28), bold 20 px title, close button.
+/// A row containing [icon] + [title].
 ///
 /// ```dart
 /// AlertDialog(
@@ -138,23 +134,19 @@ class const DialogHeader({
   /// Defaults to the theme's accent.
   final Color? iconColor,
 
-  /// Defaults to 28 when [showCloseButton] is true, else platform default.
+  /// Defaults to the platform's icon size.
   final double? iconSize,
 
   /// Defaults to the theme's primary text colour.
   final Color? titleColor,
-
-  /// If true, adds a themed close `IconButton` at the trailing edge.
-  final bool showCloseButton = false,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
-    final effectiveSize = iconSize ?? (showCloseButton ? 28.0 : null);
     return Row(
       children: [
         if (icon != null) ...[
-          Icon(icon!, color: iconColor ?? theme.accent, size: effectiveSize),
+          Icon(icon!, color: iconColor ?? theme.accent, size: iconSize),
           const SizedBox(width: 8),
         ],
         Expanded(
@@ -163,16 +155,11 @@ class const DialogHeader({
             style: TextStyle(
               color: titleColor ?? theme.textPrimary,
               fontSize: 16,
-              fontWeight: showCloseButton ? FontWeight.w600 : FontWeight.w700,
+              fontWeight: FontWeight.w700,
             ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (showCloseButton)
-          IconButton(
-            icon: Icon(Icons.close, color: theme.textSecondary),
-            onPressed: () => Navigator.pop(context),
-          ),
       ],
     );
   }
@@ -237,7 +224,6 @@ class const DialogActionBar({
 
   /// Whether to show the cancel button.
   final bool showCancel = false,
-  final String cancelLabel = 'Cancel',
   final IconData? confirmIcon,
   final String confirmLabel = 'Confirm',
 
@@ -260,13 +246,12 @@ class const DialogActionBar({
     final effectiveShowCancel = showCancel || onCancel != null;
     final cancelButton = OutlinedButton(
       onPressed: isLoading ? null : (onCancel ?? () => Navigator.pop(context)),
-      child: Text(cancelLabel),
+      child: const Text('Cancel'),
     );
 
     final effectiveEnabled = !isLoading && isEnabled;
 
     final Widget spinnerWidget = AppCircularProgressIndicator(
-      color: destructive ? theme.onSecondaryText : null,
       strokeWidth: theme.progressIndicatorStrokeWidth,
       size: spinnerSize,
     );
@@ -553,7 +538,6 @@ Future<bool> showConfirmDialog({
   required String title,
   required String message,
   String confirmLabel = 'Confirm',
-  String cancelLabel = 'Cancel',
   bool showCancel = false,
   IconData? confirmIcon,
   bool destructive = false,
@@ -577,7 +561,6 @@ Future<bool> showConfirmDialog({
             onConfirm: () => Navigator.pop(ctx, true),
             showCancel: showCancel,
             onCancel: showCancel ? () => Navigator.pop(ctx, false) : null,
-            cancelLabel: cancelLabel,
             confirmLabel: confirmLabel,
             confirmIcon: confirmIcon,
             destructive: destructive,

@@ -34,18 +34,4 @@ class AppLog {
     error: error,
     stackTrace: stackTrace,
   );
-
-  /// Error-level messages (emitted in all builds).
-  static void e(
-    String message, {
-    Object? error,
-    StackTrace? stackTrace,
-    String? name,
-  }) => developer.log(
-    message,
-    name: name ?? _defaultName,
-    level: 1000,
-    error: error,
-    stackTrace: stackTrace,
-  );
 }

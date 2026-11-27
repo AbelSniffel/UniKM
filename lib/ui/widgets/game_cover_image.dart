@@ -33,6 +33,12 @@ class const GameCoverImage({
 
   /// Called once if the image fails to load (URL 404, missing file, etc.).
   final VoidCallback? onError,
+
+  /// Covers this one may show next, as when the Game Editor moves to the
+  /// game before or after: decoded ahead at this cover's size, so the
+  /// switch finds them ready instead of showing the placeholder until they
+  /// decode.
+  final List<String> prefetch = const [],
 }) extends StatefulWidget {
   @override
   State<GameCoverImage> createState() => _GameCoverImageState();
@@ -43,6 +49,17 @@ class const GameCoverImage({
   /// rounded up to steps of 128, so small size changes reuse a decode.
   static int decodeWidth(double width, double pixelRatio) =>
       ((width * pixelRatio / 128).ceil() * 128).clamp(128, 2048);
+
+  /// The provider of the cover at [raw], a URL, an asset or a file, decoded
+  /// [cacheWidth] pixels wide, as a [GameCoverImage] shows it.
+  static ImageProvider provider(String raw, int cacheWidth) =>
+      raw.startsWith('http')
+      ? ResizeImage.resizeIfNeeded(
+          cacheWidth,
+          null,
+          CachedNetworkImageProvider(raw),
+        )
+      : localProvider(raw, cacheWidth);
 
   /// The provider of the local cover at [raw], an asset or a file, decoded
   /// [cacheWidth] pixels wide.
@@ -92,6 +109,27 @@ class _GameCoverImageState extends State<GameCoverImage> {
     super.dispose();
   }
 
+  /// The [GameCoverImage.prefetch] covers asked for, by path and width.
+  final _prefetched = <(String, int)>{};
+
+  /// Decodes the [GameCoverImage.prefetch] covers after this frame, so the
+  /// shown cover decodes first. The image cache keeps them, within its
+  /// limits, as it keeps any cover shown.
+  void _prefetch(int cacheWidth) {
+    for (final raw in widget.prefetch) {
+      final path = raw.trim();
+      if (path.isEmpty || !_prefetched.add((path, cacheWidth))) continue;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        precacheImage(
+          GameCoverImage.provider(path, cacheWidth),
+          context,
+          onError: (_, _) {},
+        );
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -116,6 +154,7 @@ class _GameCoverImageState extends State<GameCoverImage> {
         _imageKey = key;
         _image = _buildImage(cacheWidth);
       }
+      _prefetch(cacheWidth);
       return _image!;
     },
   );

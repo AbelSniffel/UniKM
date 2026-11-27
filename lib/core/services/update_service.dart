@@ -262,7 +262,7 @@ class UpdateService({
       final encoded = jsonEncode(releases.map((r) => r.toJson()).toList());
       await file.writeAsString(encoded);
     } catch (_) {
-      // Non-critical â€” ignore write errors.
+      // Non-critical: ignore write errors.
     }
   }
 

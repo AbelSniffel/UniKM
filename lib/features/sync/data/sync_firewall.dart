@@ -17,12 +17,10 @@ class const WindowsFirewallCheckResult({
 class const LinuxFirewallCheckResult({
   required final bool available,
   final bool active = false,
-  final bool uniKMAllowed = false,
   final bool udpPortAllowed = false,
   final bool tcpPortAllowed = false,
-  final String firewallTool = '',
 }) {
-  bool get fullyAllowed => uniKMAllowed && udpPortAllowed && tcpPortAllowed;
+  bool get fullyAllowed => udpPortAllowed && tcpPortAllowed;
 }
 
 typedef FirewallProcessRunner = Future<ProcessResult> Function(
@@ -222,21 +220,12 @@ class SyncFirewall({FirewallProcessRunner? runProcess}) {
         return LinuxFirewallCheckResult(
           available: true,
           active: true,
-          // A rule for the app's own path also counts.
-          uniKMAllowed:
-              status.contains(Platform.resolvedExecutable.toLowerCase()) ||
-              udpAllowed ||
-              tcpAllowed,
           udpPortAllowed: udpAllowed,
           tcpPortAllowed: tcpAllowed,
-          firewallTool: 'ufw',
         );
       }
       // ufw is installed but not active
-      return const LinuxFirewallCheckResult(
-        available: true,
-        firewallTool: 'ufw',
-      );
+      return const LinuxFirewallCheckResult(available: true);
     } catch (_) {}
 
     // Try firewalld (common on Fedora/RHEL/CentOS)
@@ -250,16 +239,11 @@ class SyncFirewall({FirewallProcessRunner? runProcess}) {
         return LinuxFirewallCheckResult(
           available: true,
           active: true,
-          uniKMAllowed: udpOpen && tcpOpen,
           udpPortAllowed: udpOpen,
           tcpPortAllowed: tcpOpen,
-          firewallTool: 'firewalld',
         );
       }
-      return const LinuxFirewallCheckResult(
-        available: true,
-        firewallTool: 'firewalld',
-      );
+      return const LinuxFirewallCheckResult(available: true);
     } catch (_) {}
 
     // Try iptables as fallback
@@ -274,10 +258,8 @@ class SyncFirewall({FirewallProcessRunner? runProcess}) {
         return LinuxFirewallCheckResult(
           available: true,
           active: true,
-          uniKMAllowed: hasRule,
           udpPortAllowed: hasRule,
           tcpPortAllowed: hasRule,
-          firewallTool: 'iptables',
         );
       }
     } catch (_) {}
@@ -345,19 +327,18 @@ class SyncFirewall({FirewallProcessRunner? runProcess}) {
   /// removes them with every tool. True when any discovery rule changed.
   Future<bool> _applyLinuxRules({required bool add}) async {
     var anyApplied = false;
+    // [_runWithElevation] reports failures rather than throwing them.
     for (final (tool, rule) in _linuxRuleTools(add: add)) {
-      try {
-        if (await _runWithElevation(tool, rule(SyncPorts.discovery, 'udp'))) {
-          anyApplied = true;
-        } else if (add) {
-          continue;
-        }
-        await _runWithElevation(tool, rule(SyncPorts.transfer, 'tcp'));
-        if (tool == 'firewall-cmd' && anyApplied) {
-          await _runWithElevation(tool, ['--reload']);
-        }
-        if (add) return true;
-      } catch (_) {}
+      if (await _runWithElevation(tool, rule(SyncPorts.discovery, 'udp'))) {
+        anyApplied = true;
+      } else if (add) {
+        continue;
+      }
+      await _runWithElevation(tool, rule(SyncPorts.transfer, 'tcp'));
+      if (tool == 'firewall-cmd' && anyApplied) {
+        await _runWithElevation(tool, ['--reload']);
+      }
+      if (add) return true;
     }
     return anyApplied;
   }

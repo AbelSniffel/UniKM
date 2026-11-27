@@ -676,24 +676,26 @@ class SyncPayloadCodec({
           deleted++;
         }
         if (modern) {
-          await db.acceptRemoteSyncRecord(
-            syncId: syncId!,
-            localGameId: localId,
-            gameKey: key,
-            changeClock: (tombstone['changeClock'] as num).toInt(),
-            changeOrigin: tombstone['changeOrigin'] as String,
-            deletedAt: deletedAt > 0 ? deletedAt : 1,
-          );
-          recordsBySync[syncId] = {
+          final record = {
             ...tombstone,
             'id': localId,
             'deletedAt': deletedAt > 0 ? deletedAt : 1,
           };
+          await db.acceptRemoteSyncRecords([
+            {
+              ...record,
+              'syncId': syncId!,
+              'gameKey': key,
+              'changeClock': (tombstone['changeClock'] as num).toInt(),
+              'changeOrigin': tombstone['changeOrigin'] as String,
+            },
+          ]);
+          recordsBySync[syncId] = record;
         } else if (local != null) {
-          await db.recordGameDeletionTombstones(
-            [local.id],
-            gameKeysById: {local.id: local.gameKey},
-            deletedAtMillis: deletedAt,
+          await db.recordGameDeletionTombstone(
+            local.id,
+            local.gameKey,
+            deletedAt,
           );
         }
       }

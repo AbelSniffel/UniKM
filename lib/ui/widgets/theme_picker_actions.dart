@@ -30,34 +30,32 @@ class const ThemePickerActions({
       visualDensity: VisualDensity.standard,
       shape: shape,
     );
+    List<Widget> iconButton(String message, VoidCallback? run, IconData icon) =>
+        [
+          if (run != null) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: message,
+              child: ElevatedButton(
+                onPressed: run,
+                style: iconStyle,
+                child: Icon(icon, size: 18),
+              ),
+            ),
+          ],
+        ];
     final manage = onEdit == null && onDelete == null
         ? const SizedBox.shrink(key: ValueKey('theme-manage-hidden'))
         : Row(
             key: const ValueKey('theme-manage'),
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (onEdit != null) ...[
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Edit current theme',
-                  child: ElevatedButton(
-                    onPressed: onEdit,
-                    style: iconStyle,
-                    child: const Icon(Icons.edit_outlined, size: 18),
-                  ),
-                ),
-              ],
-              if (onDelete != null) ...[
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Delete current theme',
-                  child: ElevatedButton(
-                    onPressed: onDelete,
-                    style: iconStyle,
-                    child: const Icon(Icons.delete_outline, size: 18),
-                  ),
-                ),
-              ],
+              ...iconButton('Edit current theme', onEdit, Icons.edit_outlined),
+              ...iconButton(
+                'Delete current theme',
+                onDelete,
+                Icons.delete_outline,
+              ),
             ],
           );
     return Row(
@@ -86,9 +84,7 @@ class const ThemePickerActions({
         ),
         // Timed with the tab slide, so the buttons arrive with their tab.
         AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : kTabTransition,
+          duration: context.motion(kTabTransition),
           switchInCurve: kTabTransitionCurve,
           switchOutCurve: kTabTransitionCurve.flipped,
           transitionBuilder: (child, animation) => SizeTransition(

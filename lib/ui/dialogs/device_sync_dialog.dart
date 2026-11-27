@@ -82,7 +82,6 @@ String _formatLastSync(DateTime? value) =>
 /// [pairingResult] completes.
 Future<bool> showOutgoingPairCodeDialog({
   required BuildContext context,
-  required AppThemeData theme,
   required String peerName,
   required String code,
   required void Function() onCancel,
@@ -303,11 +302,7 @@ class _DeviceSyncDialogState extends ConsumerState<_DeviceSyncDialog> {
         ElevatedButton.icon(
           onPressed: canRefresh ? _refreshDiscovery : null,
           icon: isRefreshing
-              ? AppCircularProgressIndicator(
-                  size: 16,
-                  strokeWidth: 2,
-                  color: theme.textSecondary,
-                )
+              ? const AppCircularProgressIndicator(size: 16, strokeWidth: 2)
               : null,
           label: Text(isRefreshing ? 'Searching…' : 'Refresh'),
         ),
@@ -664,7 +659,6 @@ class const _SyncContent({
                   discovered,
                   confirmCode: (code) => showOutgoingPairCodeDialog(
                     context: context,
-                    theme: theme,
                     peerName: discovered.name,
                     code: code,
                     onCancel: () {

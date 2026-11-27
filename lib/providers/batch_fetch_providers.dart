@@ -36,19 +36,17 @@ class const BatchFetchState({
   GameFetchStatus? getStatus(int gameId) => gameStatuses[gameId];
 
   BatchFetchState copyWith({
-    bool? isActive,
     Map<int, GameFetchStatus>? gameStatuses,
     int? currentGameId,
-    int? totalGames,
     int? completedGames,
     bool clearCurrentGame = false,
   }) => BatchFetchState(
-    isActive: isActive ?? this.isActive,
+    isActive: isActive,
     gameStatuses: gameStatuses ?? this.gameStatuses,
     currentGameId: clearCurrentGame
         ? null
         : (currentGameId ?? this.currentGameId),
-    totalGames: totalGames ?? this.totalGames,
+    totalGames: totalGames,
     completedGames: completedGames ?? this.completedGames,
   );
 }

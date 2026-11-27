@@ -60,28 +60,23 @@ Future<String> _getCacheFilePath() async {
   }
 }
 
-/// In-memory disk cache (loaded once, write-through updates)
+/// The disk cache, read into memory once and written through on updates.
+/// It also serves repeated lookups within a session.
 class _DiskCache._() {
-  static _DiskCache? _instance;
-  static _DiskCache get instance => _instance ??= _DiskCache._();
+  static final instance = _DiskCache._();
 
-  Map<String, dynamic>? _cache;
+  Map<String, dynamic> _cache = {};
   Future<void> _writeTail = Future.value();
   int _requestedRevision = 0;
   int _savedRevision = 0;
 
-  // Single shared Future used by all concurrent callers so we only read the
-  // file once even when multiple async operations call _ensureLoaded at the
-  // same time.  After the load completes, _cache is non-null and the Future
-  // is kept around (the null check below makes it a no-op on re-entry).
+  /// Shared by every caller, so the file is read once. Once it is read,
+  /// callers get a future of their own zone's.
   Future<void>? _loadFuture;
+  bool _loaded = false;
 
-  /// Load cache from disk into memory (call once at app startup or first access)
-  Future<void> _ensureLoaded() {
-    if (_cache != null) return Future.value();
-    // All concurrent callers share the same Future so disk is only read once.
-    return _loadFuture ??= _loadFromDisk();
-  }
+  Future<void> _ensureLoaded() =>
+      _loaded ? Future.value() : _loadFuture ??= _loadFromDisk();
 
   Future<void> _loadFromDisk() async {
     try {
@@ -92,11 +87,12 @@ class _DiskCache._() {
     } catch (_) {
       _cache = {};
     }
+    _loaded = true;
   }
 
   Future<Map<String, dynamic>?> _entry(String title) async {
     await _ensureLoaded();
-    return _cache?[_normalizeCacheKey(title)] as Map<String, dynamic>?;
+    return _cache[_normalizeCacheKey(title)] as Map<String, dynamic>?;
   }
 
   /// Get cached result (memory-first)
@@ -162,12 +158,9 @@ class _DiskCache._() {
       'cached_at': DateTime.now().millisecondsSinceEpoch / 1000.0,
     };
 
-    _cache ??= {};
-    _cache![key] = entry;
-
-    // Also write under normalized result name key
-    final keyFromName = _normalizeCacheKey(r.name);
-    if (keyFromName != key) _cache![keyFromName] = entry;
+    _cache[key] = entry;
+    // Also under the result's own name.
+    _cache[_normalizeCacheKey(r.name)] = entry;
 
     await _persist();
   }
@@ -175,22 +168,20 @@ class _DiskCache._() {
   Future<Map<String, dynamic>> exportForSync() async {
     await _ensureLoaded();
     return {
-      for (final MapEntry(:key, :value) in (_cache ?? const {}).entries)
+      for (final MapEntry(:key, :value) in _cache.entries)
         if (value is Map) key: Map<String, dynamic>.from(value),
     };
   }
 
   Future<void> mergeFromSync(Map<String, dynamic> incoming) async {
     await _ensureLoaded();
-    _cache ??= <String, dynamic>{};
-
     for (final entry in incoming.entries) {
       final key = entry.key;
       final remote = entry.value;
       if (remote is! Map) continue;
 
       // Preserve this device's image_url while overwriting other fields.
-      final local = _cache![key];
+      final local = _cache[key];
       final localImageUrl = local is Map ? local['image_url'] : null;
       final merged = Map<String, dynamic>.from(remote);
       if (localImageUrl != null) {
@@ -199,7 +190,7 @@ class _DiskCache._() {
         merged.remove('image_url');
       }
 
-      _cache![key] = merged;
+      _cache[key] = merged;
     }
 
     await _persist();
@@ -369,23 +360,6 @@ class const SteamSearchResult({
   String toString() => 'SteamSearchResult(appId: $appId, name: $name)';
 }
 
-/// Insertion order tracks recency; reads and writes move entries to the end.
-class _LruCache<K, V extends Object>(final int maxSize) {
-  final _cache = <K, V>{};
-
-  V? get(K key) {
-    final value = _cache.remove(key);
-    if (value != null) _cache[key] = value;
-    return value;
-  }
-
-  void put(K key, V value) {
-    _cache.remove(key);
-    if (_cache.length >= maxSize) _cache.remove(_cache.keys.first);
-    _cache[key] = value;
-  }
-}
-
 /// Steam integration service
 class SteamService({Dio? dio, Directory? imagesDirectory}) {
   // Matching runs per candidate; compile each pattern once.
@@ -406,9 +380,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   );
 
   final Dio _dio;
-
-  /// LRU cache with 500 entry limit to prevent unbounded memory growth
-  final _LruCache<String, SteamSearchResult> _cache = _LruCache(500);
   Directory? _imagesDir;
   DateTime? _lastRequestAt;
   final Duration _minRequestInterval = const Duration(milliseconds: 350);
@@ -416,7 +387,7 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   this : _dio = dio ?? Dio(), _imagesDir = imagesDirectory {
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 15);
-    // Use a more permissive User-Agent and Accept headers like the Sonnet implementation
+    // A browser's User-Agent and Accept headers.
     _dio.options.headers['User-Agent'] =
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
     _dio.options.headers['Accept'] = 'application/json,text/html,*/*';
@@ -499,27 +470,14 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   Future<SteamSearchResult?> searchGame(
     String title, {
     bool forceRefresh = false,
-    bool fetchTags = true,
-    bool fetchReviews = true,
   }) async {
     if (title.trim().isEmpty) return null;
 
-    // Check in-memory cache first unless we're forcing a refresh
-    final normalizedTitle = _normalizeCacheKey(title);
+    // Results from earlier in this session or from previous ones are reused
+    // without another network round trip.
     if (!forceRefresh) {
-      final cached = _cache.get(normalizedTitle);
+      final cached = await getCachedResultForTitle(title);
       if (cached != null) return cached;
-
-      // Fall back to the persistent disk cache so that results from previous
-      // sessions (or earlier in the same batch) are reused without another
-      // network round-trip.
-      final diskCached = await getCachedResultForTitle(title);
-      if (diskCached != null) {
-        // Warm the LRU cache so subsequent calls for the same title are
-        // instant without touching the disk again.
-        _cache.put(normalizedTitle, diskCached);
-        return diskCached;
-      }
     }
 
     // Generate search variants
@@ -540,16 +498,11 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
         final result = await _fetchBestMatchResult(
           title,
           items,
-          fetchTags: fetchTags,
-          fetchReviews: fetchReviews,
           searchSource: source,
           searchSourcesTried: List.unmodifiable(searchSourcesTried),
         );
         if (result != null) {
-          // An empty result is the fallback for a failed details request.
-          if (result.dataSources.isNotEmpty) {
-            await _cacheResultSafely(normalizedTitle, result);
-          }
+          await _cacheResultSafely(_normalizeCacheKey(title), result);
           return result;
         }
       }
@@ -561,8 +514,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   Future<SteamSearchResult?> _fetchBestMatchResult(
     String title,
     List<Map<String, dynamic>> items, {
-    required bool fetchTags,
-    required bool fetchReviews,
     required SteamSearchSource searchSource,
     required List<SteamSearchSource> searchSourcesTried,
   }) async {
@@ -574,8 +525,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
     final primaryResult = await _fetchGameDetails(
       match['id'].toString(),
       match['name'] as String,
-      fetchTags: fetchTags,
-      fetchReviews: fetchReviews,
       searchSource: searchSource,
       searchSourcesTried: searchSourcesTried,
     );
@@ -602,8 +551,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
       final altResult = await _fetchGameDetails(
         candidate['id'].toString(),
         candidate['name'] as String?,
-        fetchTags: fetchTags,
-        fetchReviews: fetchReviews,
         searchSource: searchSource,
         searchSourcesTried: searchSourcesTried,
       );
@@ -627,9 +574,12 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
     return score;
   }
 
+  /// Caches [result] under [key] and its own name. A result without data
+  /// is the fallback for failed requests, so it is left out and a later
+  /// lookup tries again.
   Future<void> _cacheResultSafely(String key, SteamSearchResult result) async {
+    if (result.dataSources.isEmpty) return;
     try {
-      _cache.put(key, result);
       await _DiskCache.instance.writeEntry(key, result);
     } catch (e) {
       AppLog.d('Failed to cache search result: $e');
@@ -648,7 +598,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   Future<String?> downloadImage(
     String appId, {
     String? title,
-    bool useLibraryImage = false,
     String? imageUrl,
     bool replace = false,
   }) async {
@@ -681,22 +630,20 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
     final legacyHeader = SteamApi.headerImage(appId);
     final hasCurrentUrl =
         imageUrl != null && imageUrl.isNotEmpty && imageUrl != legacyHeader;
-    if (!useLibraryImage) {
-      try {
-        if (!hasCurrentUrl) {
-          final response = await _getWithRetry(
-            SteamApi.appDetails,
-            queryParameters: {'appids': appId},
-          );
-          final header = response.data?[appId]?['data']?['header_image'];
-          if (header is String && header.isNotEmpty) urls.add(header);
-        }
-      } catch (_) {
-        // Cached artwork and legacy URLs remain usable when metadata is offline.
+    try {
+      if (!hasCurrentUrl) {
+        final response = await _getWithRetry(
+          SteamApi.appDetails,
+          queryParameters: {'appids': appId},
+        );
+        final header = response.data?[appId]?['data']?['header_image'];
+        if (header is String && header.isNotEmpty) urls.add(header);
       }
-      if (imageUrl != null && imageUrl.isNotEmpty) urls.add(imageUrl);
-      urls.add(legacyHeader);
+    } catch (_) {
+      // Cached artwork and legacy URLs remain usable when metadata is offline.
     }
+    if (imageUrl != null && imageUrl.isNotEmpty) urls.add(imageUrl);
+    urls.add(legacyHeader);
     urls.add(SteamApi.libraryImage(appId));
     for (final url in urls) {
       try {
@@ -915,8 +862,6 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
   Future<SteamSearchResult?> _fetchGameDetails(
     String appId,
     String? name, {
-    bool fetchTags = true,
-    bool fetchReviews = true,
     required SteamSearchSource searchSource,
     required List<SteamSearchSource> searchSourcesTried,
   }) async {
@@ -930,10 +875,8 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
       String? headerImage;
 
       // One SteamSpy response serves both tags and the review fallback.
-      final spy = fetchTags || fetchReviews
-          ? await _fetchSteamSpy(appId)
-          : null;
-      if (fetchTags && spy != null) {
+      final spy = await _fetchSteamSpy(appId);
+      if (spy != null) {
         final steamspyTags = _steamSpyTags(spy);
         if (steamspyTags.isNotEmpty) {
           dataSources.add(SteamDataSource.steamSpy);
@@ -971,60 +914,56 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
               ? developers.join(', ')
               : null;
 
-          if (fetchTags) {
-            // Add genres and categories as tags
-            _addTags(
-              tags,
-              [
-                ...details['genres'] as List<dynamic>? ?? [],
-                ...details['categories'] as List<dynamic>? ?? [],
-              ].map(
-                (item) => _normalizeTag(item['description'] as String? ?? ''),
-              ),
-            );
-          }
+          // Add genres and categories as tags
+          _addTags(
+            tags,
+            [
+              ...details['genres'] as List<dynamic>? ?? [],
+              ...details['categories'] as List<dynamic>? ?? [],
+            ].map(
+              (item) => _normalizeTag(item['description'] as String? ?? ''),
+            ),
+          );
         }
       }
 
-      if (fetchReviews) {
-        // Attempt to fetch review summary from the Steam "appreviews" endpoint
-        try {
-          final reviewsResp = await _getWithRetry(
-            SteamApi.appReviews(appId),
-            queryParameters: {
-              'json': '1',
-              'language': 'all',
-              'filter': 'all',
-              'num_per_page': '0',
-            },
-          );
+      // Attempt to fetch review summary from the Steam "appreviews" endpoint
+      try {
+        final reviewsResp = await _getWithRetry(
+          SteamApi.appReviews(appId),
+          queryParameters: {
+            'json': '1',
+            'language': 'all',
+            'filter': 'all',
+            'num_per_page': '0',
+          },
+        );
 
-          if (reviewsResp.statusCode == 200 && reviewsResp.data != null) {
-            final summary =
-                (reviewsResp.data as Map<String, dynamic>)['query_summary']
-                    as Map<String, dynamic>?;
-            if (summary != null) {
-              final totalPositive = (summary['total_positive'] as int?) ?? 0;
-              final totalNegative = (summary['total_negative'] as int?) ?? 0;
-              final total = totalPositive + totalNegative;
-              if (total > 0) {
-                dataSources.add(SteamDataSource.reviews);
-                reviewCount = total;
-                reviewScore = ((totalPositive / total) * 100).round();
-              }
+        if (reviewsResp.statusCode == 200 && reviewsResp.data != null) {
+          final summary =
+              (reviewsResp.data as Map<String, dynamic>)['query_summary']
+                  as Map<String, dynamic>?;
+          if (summary != null) {
+            final totalPositive = (summary['total_positive'] as int?) ?? 0;
+            final totalNegative = (summary['total_negative'] as int?) ?? 0;
+            final total = totalPositive + totalNegative;
+            if (total > 0) {
+              dataSources.add(SteamDataSource.reviews);
+              reviewCount = total;
+              reviewScore = ((totalPositive / total) * 100).round();
             }
           }
-        } catch (e) {
-          // Ignore review fetch errors - reviews are optional
         }
-        // The store's summary can be unavailable (it may answer with a
-        // redirect instead of JSON); SteamSpy carries the same counts.
-        final spyReviews = spy == null ? null : _steamSpyReviews(spy);
-        if (reviewScore == null && spyReviews != null) {
-          dataSources.add(SteamDataSource.reviews);
-          reviewCount = spyReviews.count;
-          reviewScore = spyReviews.score;
-        }
+      } catch (e) {
+        // Ignore review fetch errors - reviews are optional
+      }
+      // The store's summary can be unavailable (it may answer with a
+      // redirect instead of JSON); SteamSpy carries the same counts.
+      final spyReviews = spy == null ? null : _steamSpyReviews(spy);
+      if (reviewScore == null && spyReviews != null) {
+        dataSources.add(SteamDataSource.reviews);
+        reviewCount = spyReviews.count;
+        reviewScore = spyReviews.score;
       }
 
       // Return result even if tags are empty (image/review data are useful on their own)
@@ -1042,8 +981,7 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
         dataSources: List.unmodifiable(dataSources),
       );
     } catch (e) {
-      // Return a basic result without details. It is not cached, so a later
-      // lookup retries instead of reusing the empty fallback.
+      // A basic result without details, which is not cached.
       _log('Failed to fetch details for AppID $appId: $e');
       return SteamSearchResult(
         appId: appId,
@@ -1086,11 +1024,15 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
     return null;
   }
 
+  /// SteamSpy's user tags, the most voted first. They come as a map of
+  /// tag to votes, or an empty list when an app has none.
   List<String> _steamSpyTags(Map<String, dynamic> data) {
-    final tagEntries = _parseSteamSpyTags(data['tags'])
-      ..sort((a, b) => b.score.compareTo(a.score));
+    final votes = data['tags'];
+    if (votes is! Map) return const [];
+    final ranked = votes.entries.toList()
+      ..sort((a, b) => _votes(b.value).compareTo(_votes(a.value)));
     final tags = <String>{};
-    _addTags(tags, tagEntries.map((entry) => _normalizeTag(entry.tag)));
+    _addTags(tags, ranked.map((entry) => _normalizeTag(entry.key.toString())));
     return tags.toList();
   }
 
@@ -1102,46 +1044,8 @@ class SteamService({Dio? dio, Directory? imagesDirectory}) {
     return (score: (positive / total * 100).round(), count: total);
   }
 
-  List<({String tag, int score})> _parseSteamSpyTags(dynamic rawTags) {
-    final entries = <({String tag, int score})>[];
-
-    if (rawTags is Map) {
-      rawTags.forEach((key, value) {
-        final tag = key.toString().trim();
-        if (tag.isEmpty) return;
-        entries.add((tag: tag, score: _coerceTagScore(value)));
-      });
-      return entries;
-    }
-
-    if (rawTags is List) {
-      for (final item in rawTags) {
-        if (item is String) {
-          final tag = item.trim();
-          if (tag.isNotEmpty) entries.add((tag: tag, score: 0));
-          continue;
-        }
-
-        if (item is Map) {
-          final dynamic rawTag =
-              item['tag'] ?? item['name'] ?? item['label'] ?? item['id'];
-          final tag = rawTag?.toString().trim() ?? '';
-          if (tag.isEmpty) continue;
-          final score = _coerceTagScore(
-            item['score'] ?? item['votes'] ?? item['count'] ?? item['weight'],
-          );
-          entries.add((tag: tag, score: score));
-        }
-      }
-    }
-
-    return entries;
-  }
-
-  int _coerceTagScore(dynamic value) {
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
+  static int _votes(Object? value) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 }
 
 /// Provider for SteamService

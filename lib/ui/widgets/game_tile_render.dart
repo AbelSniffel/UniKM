@@ -8,7 +8,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart'
@@ -27,6 +26,7 @@ import '../pages/home_sections/game_card_reveal.dart' show RevealViewportBox;
 import 'game_card_badges.dart';
 import 'game_card_painters.dart';
 import 'game_card_tags.dart';
+import 'settings_card_inset.dart';
 import 'game_cover_image.dart';
 import 'platform_icon.dart';
 
@@ -251,13 +251,14 @@ class RenderGameTile({
     if (value.fetchStatus != old.fetchStatus) {
       _switchFetch(old.fetchStatus, value.fetchStatus);
     }
-    _tintTowards(_tintFor(value));
-    if (value.tagsVisible != _tagsShown) {
-      // Only a list card has a tag row to reveal.
-      value.design == GameTileDesign.list
-          ? _revealTags(value.tagsVisible)
-          : _tagsShown = value.tagsVisible;
+    if (value.design != old.design) {
+      // A new design starts in its own fill: its reveal takes its still
+      // images in the first frame, which would keep an easing fill unseen.
+      _tintFrom = _tintTo = _tintFor(value);
+    } else {
+      _tintTowards(_tintFor(value));
     }
+    _tagsShown = value.tagsVisible;
     if (value.game.title != old.game.title) markNeedsSemanticsUpdate();
     markNeedsLayout();
   }
@@ -315,7 +316,9 @@ class RenderGameTile({
     }
   }
 
-  /// The slim row's accent tint, eased as an [AnimatedContainer] eases it.
+  /// The slim row's fill, eased as an [AnimatedContainer] eases it: a faint
+  /// wash of the text colour at rest, a stronger one hovered, and a light
+  /// accent wash selected, which [_paintSlim] presses in.
   AnimationController? _tintController;
   CurvedAnimation? _tintCurve;
   Color? _tintFrom, _tintTo;
@@ -325,11 +328,52 @@ class RenderGameTile({
 
   Color? _tintFor(GameTileData d) => d.design != GameTileDesign.slim
       ? null
-      : d.theme.accent.withValues(
-          alpha: d.selected
-              ? (d.hovered ? 0.80 : 0.65)
-              : (d.hovered ? 0.40 : 0.0),
+      : d.selected
+      ? d.theme.accent.withValues(
+          alpha: d.hovered ? _slimSelectedHoverAlpha : _slimSelectedAlpha,
+        )
+      : d.theme.textPrimary.withValues(
+          alpha: d.hovered ? _slimHoverAlpha : _slimIdleAlpha,
         );
+
+  /// The slim row's fills: the text colour's at rest and hovered, the
+  /// accent's selected, and its hover outline's width.
+  static const _slimIdleAlpha = 0.05;
+  static const _slimHoverAlpha = 0.14;
+  static const _slimSelectedAlpha = 0.26;
+  static const _slimSelectedHoverAlpha = 0.34;
+  static const _slimOutlineWidth = 1.5;
+
+  /// How deep a selected card is pressed in, of the tag
+  /// chips' lighting at full strength (theirs is
+  /// [SettingsCardInset.defaultDepthStrength]).
+  static const _selectedDepthStrength = 1.0;
+
+  /// The tag chips' inset at [depth] over the card at [offset], with
+  /// [radius]: drawn from the image the chips share once settled.
+  void _paintInset(
+    Canvas canvas,
+    Offset offset,
+    double depth,
+    BorderRadius radius,
+  ) {
+    final inset = SettingsCardInset.painterFor(
+      depth: depth,
+      depthStrength: _selectedDepthStrength,
+      radius: radius,
+      surfaceColor: _data.theme.background,
+      devicePixelRatio: _data.text.pixelRatio,
+    );
+    if (inset == null) return;
+    canvas
+      ..save()
+      ..translate(offset.dx, offset.dy);
+    inset.paint(canvas, size);
+    canvas.restore();
+  }
+
+  /// A hovered slim row's outline: the text colour at this opacity.
+  static const _slimHoverOutlineAlpha = 0.45;
 
   void _tintTowards(Color? tint) {
     if (tint == _tintTo) return;
@@ -384,8 +428,8 @@ class RenderGameTile({
     if (from == null) _fetchIcons.lastOrNull?.controller.value = 1;
   }
 
-  /// The slim row's selection and fetch chips grow in and shrink away, as an
-  /// [AnimatedSize] around them does.
+  /// The slim row's selection and fetch chips fold in and away, as a
+  /// HorizontalFold does, and their box resizes as an [AnimatedSize] would.
   AnimationController? _extrasController;
   CurvedAnimation? _extrasCurve;
   bool _hasExtrasBox = false;
@@ -398,11 +442,20 @@ class RenderGameTile({
   /// starts the animation, needs no other.
   double _extrasLaidOut = 1;
 
+  /// What the extras showed last, kept while they fold away.
+  ({GameFetchStatus? fetch, bool selected}) _lastExtras = (
+    fetch: null,
+    selected: false,
+  );
+
+  /// The extras' fade while they fold in or away.
+  double _extrasOpacity = 1;
+
   void _resizeExtras(Size target) {
     _extrasFrom = _extrasSize;
     _extrasTo = target;
     final controller = _extrasController ??=
-        AnimationController(duration: kFastAnimation, vsync: vsync)
+        AnimationController(duration: kMediumAnimation, vsync: vsync)
           ..addListener(() {
             if (_extrasController!.value != _extrasLaidOut) markNeedsLayout();
           });
@@ -414,30 +467,9 @@ class RenderGameTile({
     controller.forward(from: 0);
   }
 
-  /// The list card's tag row, revealed and hidden as a [SizeTransition] and
-  /// a fade would: it grows up from the bottom, fading in, faster than it
-  /// goes.
-  AnimationController? _tagsController;
-  CurvedAnimation? _tagsSize, _tagsOpacity;
+  /// Whether the list card shows its tag row: it appears and goes at once,
+  /// as the card's other chips do.
   bool _tagsShown = true;
-
-  void _revealTags(bool visible) {
-    _tagsShown = visible;
-    final controller = _tagsController ??= _controller(kVeryFastAnimation)
-      ..reverseDuration = kFastAnimation
-      ..value = visible ? 0 : 1;
-    _tagsSize ??= CurvedAnimation(
-      parent: controller,
-      curve: Curves.easeInOutCirc,
-      reverseCurve: Curves.easeInOutCirc,
-    );
-    _tagsOpacity ??= CurvedAnimation(
-      parent: controller,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeOutCubic,
-    );
-    visible ? controller.forward() : controller.reverse();
-  }
 
   @override
   void attach(PipelineOwner owner) {
@@ -462,7 +494,6 @@ class RenderGameTile({
       _selection,
       _tintController,
       _extrasController,
-      _tagsController,
       for (final fade in [..._fades, ..._fetchIcons]) fade.controller,
     ]) {
       controller?.dispose();
@@ -527,14 +558,9 @@ class RenderGameTile({
     final key = (raw, cacheWidth);
     if (key == _coverKey) return;
     _coverKey = key;
-    final provider = raw.startsWith('http')
-        ? ResizeImage.resizeIfNeeded(
-            cacheWidth,
-            null,
-            CachedNetworkImageProvider(raw),
-          )
-        : GameCoverImage.localProvider(raw, cacheWidth);
-    _setCoverStream(provider.resolve(_data.images));
+    _setCoverStream(
+      GameCoverImage.provider(raw, cacheWidth).resolve(_data.images),
+    );
   }
 
   void _setCoverStream(ImageStream? stream) {
@@ -983,9 +1009,9 @@ class RenderGameTile({
         if (_fetchVisual(icon.status) case (_, final data?, final color?))
           icon.status: _icon(data, iconSize, color),
     };
-    final extras = [
-      if (d.fetchStatus case final status?) _slimFetchChip(status),
-      if (d.selected)
+    List<_Chip> extrasFor(GameFetchStatus? fetch, bool selected) => [
+      if (fetch != null) _slimFetchChip(fetch),
+      if (selected)
         _squareChip(
           d.theme.accent,
           kBadgeHeight,
@@ -994,16 +1020,17 @@ class RenderGameTile({
           slot: GameTileSlot.selected,
         ),
     ];
+    double widthOf(List<_Chip> chips) =>
+        chips.fold(0.0, (sum, chip) => sum + chip.size.width) +
+        6.0 * math.max(0, chips.length - 1);
+    final extras = extrasFor(d.fetchStatus, d.selected);
+    if (extras.isNotEmpty) {
+      _lastExtras = (fetch: d.fetchStatus, selected: d.selected);
+    }
 
     // The box the extras grow in exists while the row has any chip.
     final hasBox = base.isNotEmpty || extras.isNotEmpty;
-    final target = extras.isEmpty
-        ? Size.zero
-        : Size(
-            extras.fold(0.0, (sum, chip) => sum + chip.size.width) +
-                6.0 * (extras.length - 1),
-            kBadgeHeight,
-          );
+    final target = Size(widthOf(extras), kBadgeHeight);
     if (!hasBox) {
       _hasExtrasBox = false;
     } else if (!_hasExtrasBox) {
@@ -1019,12 +1046,25 @@ class RenderGameTile({
         ? BoxConstraints.loose(const Size(double.infinity, 32))
               .constrain(_extrasSize)
         : Size.zero;
+    // Coming from or going to none, they unfold sideways from their leading
+    // edge as they fade in, and fold away showing what they showed last, as
+    // a HorizontalFold does. Between two sets the box only resizes.
+    final folding = _extrasFrom.width == 0 || _extrasTo.width == 0;
+    final shown = extras.isNotEmpty || box.width == 0
+        ? extras
+        : extrasFor(_lastExtras.fetch, _lastExtras.selected);
+    final shownWidth = widthOf(shown);
+    _extrasOpacity = !folding || shownWidth == 0
+        ? 1
+        : (box.width / shownWidth).clamp(0.0, 1.0);
 
     // A row of the title, then the chips, 10 in from the sides, 6 from the
     // top and bottom, each centred on its height.
     const row = Rect.fromLTWH(10, 6, 0, 32);
     final rowWidth = size.width - 20;
-    final separator = extras.isNotEmpty && base.isNotEmpty ? 6.0 : 0.0;
+    final separator = shown.isNotEmpty && base.isNotEmpty
+        ? 6.0 * _extrasOpacity
+        : 0.0;
     final trailingWidth =
         base.fold(0.0, (sum, chip) => sum + chip.size.width) +
         6.0 * math.max(0, base.length - 1) +
@@ -1035,17 +1075,23 @@ class RenderGameTile({
       hasBox ? box.height : 0,
     );
     final titleWidth = math.max(0.0, rowWidth - trailingWidth);
-    final title = _title = _text(
+    TextPainter titleIn(Color color) => _text(
       game.title,
-      TextStyle(
-        color: d.theme.textPrimary,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
+      TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600),
       maxLines: 1,
       minWidth: titleWidth,
       maxWidth: titleWidth,
     );
+    // Black or white, whichever reads on the row as it settles: the page
+    // under its fill. A used game's light tint is left out, so rows
+    // in the same state never differ by it.
+    final laidOut = titleIn(d.theme.textPrimary);
+    final readable = contrastColor(
+      Color.alphaBlend(_tintFor(d) ?? Colors.transparent, d.theme.background),
+    );
+    final title = _title = readable == d.theme.textPrimary
+        ? laidOut
+        : titleIn(readable);
     _titleBox = Size(titleWidth, title.height);
     _titleOffset = Offset(row.left, row.top + (row.height - title.height) / 2);
 
@@ -1059,9 +1105,10 @@ class RenderGameTile({
     _chips = base;
     x += separator;
     _extrasBox = Offset(x, top + (trailingHeight - box.height) / 2) & box;
-    // Right-aligned and centred in their box, which clips them.
-    var extraX = _extrasBox.right - target.width;
-    for (final chip in extras) {
+    // Centred in their box, which clips them: from its leading edge while
+    // folding, right-aligned while it resizes.
+    var extraX = folding ? _extrasBox.left : _extrasBox.right - target.width;
+    for (final chip in shown) {
       chip.offset = Offset(
         extraX,
         _extrasBox.top + (_extrasBox.height - chip.size.height) / 2,
@@ -1074,7 +1121,75 @@ class RenderGameTile({
         _spinnerRect = _center(_fetchIconBox, spinner) & spinner;
       }
     }
-    _extras = extras;
+    _extras = shown;
+  }
+
+  /// The list card's gradient, turned this far about the card's centre.
+  static const _listGradientAngle = 25 * math.pi / 180;
+  static const _listGradientStops = [0.10, 0.5, 1.0];
+
+  /// The list card's gradient colours, from its left end: blended from the
+  /// resting ones toward the hover ones by [hover], then toward the selected
+  /// ones by [selected], so a state change eases in with the card's own
+  /// hover and selection animations instead of jumping. By default, those
+  /// animations' values.
+  List<Color> _listGradient({double? hover, double? selected}) {
+    final d = _data;
+    final theme = d.theme;
+    final idle = theme.listCardDefaultGradient;
+    final h = hover ?? _hoverValue;
+    // Evenly over the selection's whole duration: its own curve overshoots
+    // and would reach the selected colours almost at once.
+    final s = selected ?? Curves.easeInOut.transform(_selection?.value ?? 0);
+    Color at(int i) => Color.lerp(
+      Color.lerp(idle[i], theme.listCardHoverGradient[i], h),
+      theme.listCardSelectedGradient[i],
+      s,
+    )!;
+    return [theme.background, at(1), at(0)];
+  }
+
+  /// The list card's gradient.
+  LinearGradient get _cardGradient => LinearGradient(
+    transform: const GradientRotation(_listGradientAngle),
+    colors: _listGradient(),
+    stops: _listGradientStops,
+  );
+
+  /// The list card's background at [point], as its gradient paints it over
+  /// the page. A used game's tint is left out, so cards in the same state
+  /// never differ by it.
+  Color _listBackgroundAt(Offset point) {
+    // The state the card settles in, not a frame of its animation.
+    final colors = _listGradient(
+      hover: _data.hovered ? 1 : 0,
+      selected: _data.selected ? 1 : 0,
+    );
+    const stops = _listGradientStops;
+    // How far along the gradient's axis [point] lies.
+    final fromCentre = point - size.center(Offset.zero);
+    final t =
+        0.5 +
+        (fromCentre.dx * math.cos(_listGradientAngle) +
+                fromCentre.dy * math.sin(_listGradientAngle)) /
+            size.width;
+    final Color gradient;
+    if (t <= stops[0]) {
+      gradient = colors[0];
+    } else if (t <= stops[1]) {
+      gradient = Color.lerp(
+        colors[0],
+        colors[1],
+        (t - stops[0]) / (stops[1] - stops[0]),
+      )!;
+    } else {
+      gradient = Color.lerp(
+        colors[1],
+        colors[2],
+        math.min(1, (t - stops[1]) / (stops[2] - stops[1])),
+      )!;
+    }
+    return Color.alphaBlend(gradient, _data.theme.background);
   }
 
   /// The cover's placeholder, the selection check, and the fetch overlays'
@@ -1197,33 +1312,32 @@ class RenderGameTile({
       sideWidth,
     );
     _chips.addAll(side);
-    final title = _title = _text(
+    TextPainter titleIn(Color color) => _text(
       game.title,
-      TextStyle(
-        color: d.theme.textPrimary,
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-      ),
+      TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w500),
       // Two lines still leave room for the tag row.
       maxLines: 2,
       maxWidth: columnWidth,
     );
+    // Black or white, whichever reads on the gradient at the title's middle.
+    final laidOut = titleIn(d.theme.textPrimary);
+    final readable = contrastColor(
+      _listBackgroundAt(_pane.topLeft + laidOut.size.center(Offset.zero)),
+    );
+    final title = _title = readable == d.theme.textPrimary
+        ? laidOut
+        : titleIn(readable);
     _titleOffset = _pane.topLeft;
     _titleBox = title.size;
-    _tagsWidth = columnWidth;
-    if (d.showTags && game.tags.isNotEmpty && (_tagsShown || _tagsShowing)) {
+    if (d.showTags && game.tags.isNotEmpty && _tagsShown) {
       _layoutTags(columnWidth);
     }
   }
 
-  bool get _tagsShowing => (_tagsController?.value ?? 0) > 0;
-
-  /// The list card's content pane, and its tag row's badges, its height and
-  /// width.
+  /// The list card's content pane, and its tag row's badges and height.
   Rect _pane = Rect.zero;
   var _tagBadges = <_Chip>[];
   double _tagsHeight = 0;
-  double _tagsWidth = 0;
 
   /// The tag row: as many tags as fit, in one badge, and a badge counting
   /// the rest, measured at [width] in steps of 8.
@@ -1462,15 +1576,9 @@ class RenderGameTile({
   }
 
   void _paintCard(PaintingContext context, Offset offset) {
-    // Zoomed about its centre while hovered.
-    final scale =
-        1.0 +
-        _hoverValue *
-            switch (_data.design) {
-              GameTileDesign.grid => 0.015,
-              GameTileDesign.list => 0.006,
-              GameTileDesign.slim => 0.012,
-            };
+    // Zoomed about its centre while hovered, its longer side growing 6 px
+    // each way whatever the window's size, inside the library's padding.
+    final scale = 1.0 + _hoverValue * 12 / math.max(size.width, size.height);
     final zoomed = scale != 1.0;
     if (zoomed) {
       _scaleAbout(context.canvas, offset + size.center(Offset.zero), scale);
@@ -1531,7 +1639,7 @@ class RenderGameTile({
       devicePixelRatio: d.text.pixelRatio,
     ).paint(canvas, size);
     canvas.restore();
-    _paintSelection(context, rect);
+    _paintSelection(context, rect, framed: true);
     _paintFetchOverlays(context, offset, rect);
     for (final chip in _chips) {
       chip.paint(context.canvas, offset);
@@ -1549,17 +1657,35 @@ class RenderGameTile({
         : Rect.fromLTWH(inner.left, inner.top, imageWidth, inner.height);
   }
 
-  /// The selection overlay: a tint and frame, a check in the middle.
+  /// The selection overlay: a tint, pressed in as a selected slim row is,
+  /// with a check in the middle, and [framed] in the accent over the inset
+  /// (a grid card's cover would otherwise hide which one is selected).
   void _paintSelection(
     PaintingContext context,
     Rect rect, {
     double? imageWidth,
+    bool framed = false,
   }) {
     final t = (_selectionCurve?.value ?? 0).clamp(0.0, 1.0);
     if (t <= 0) return;
     final theme = _data.theme;
     final canvas = context.canvas;
-    _paintDecoration(canvas, rect, theme.selectionOverlayDecoration(t));
+    final overlay = theme.selectionOverlayDecoration(t);
+    _paintDecoration(canvas, rect, overlay);
+    _paintInset(canvas, rect.topLeft, t, overlay.borderRadius! as BorderRadius);
+    if (framed) {
+      _paintDecoration(
+        canvas,
+        rect,
+        BoxDecoration(
+          border: Border.all(
+            color: theme.accent.withValues(alpha: t),
+            width: 3,
+          ),
+          borderRadius: overlay.borderRadius,
+        ),
+      );
+    }
     final side = 18 + 18 * t;
     final box =
         _center(_overImage(rect, imageWidth), Size.square(side)) &
@@ -1664,20 +1790,11 @@ class RenderGameTile({
     final rect = offset & size;
     final radius = BorderRadius.circular(theme.cornerRadius);
     final canvas = context.canvas;
-    final colors = d.selected
-        ? theme.listCardSelectedGradient
-        : d.hovered
-        ? theme.listCardHoverGradient
-        : theme.listCardDefaultGradient;
     _paintDecoration(
       canvas,
       rect,
       BoxDecoration(
-        gradient: LinearGradient(
-          transform: GradientRotation(25 * math.pi / 180),
-          colors: [theme.background, colors[1], colors[0]],
-          stops: const [0.10, 0.5, 1.0],
-        ),
+        gradient: _cardGradient,
         boxShadow: _hoverShadow(_hoverValue, 0.18),
         borderRadius: radius,
       ),
@@ -1722,37 +1839,15 @@ class RenderGameTile({
     }
   }
 
-  /// The tag row at the bottom of the pane, as much of it as has grown in,
-  /// faded as much.
+  /// The tag row at the bottom of the pane.
   void _paintTags(Canvas canvas, Offset offset) {
-    if (_tagBadges.isEmpty) return;
-    final controller = _tagsController;
-    final grown = controller == null ? 1.0 : _tagsSize!.value;
-    final alpha = controller == null
-        ? 255
-        : Color.getAlphaFromOpacity(_tagsOpacity!.value);
-    if (grown <= 0 || alpha == 0) return;
-    final shown = _tagsHeight * grown;
-    final bottom = offset.dy + _pane.bottom;
-    // Two ClipRects' hard edges.
-    canvas
-      ..save()
-      ..clipRect(
-        Rect.fromLTWH(
-          offset.dx + _pane.left,
-          bottom - shown,
-          _tagsWidth,
-          shown,
-        ),
-        doAntiAlias: false,
-      );
-    final faded = _fadeLayer(canvas, alpha);
-    final origin = Offset(offset.dx + _pane.left, bottom - _tagsHeight + 6);
+    final origin = Offset(
+      offset.dx + _pane.left,
+      offset.dy + _pane.bottom - _tagsHeight + 6,
+    );
     for (final chip in _tagBadges) {
       chip.paint(canvas, origin);
     }
-    if (faded) canvas.restore();
-    canvas.restore();
   }
 
   void _paintSlim(PaintingContext context, Offset offset) {
@@ -1760,16 +1855,21 @@ class RenderGameTile({
     var canvas = context.canvas;
     final rect = offset & size;
     final theme = d.theme;
-    _paintDecoration(
-      canvas,
+    // Rounded as the list cards are, at most into a pill.
+    final shape = RRect.fromRectAndRadius(
       rect,
-      BoxDecoration(
-        color: theme.surface.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.zero,
-      ),
+      Radius.circular(math.min(theme.cornerRadius, rect.height / 2)),
     );
+    // Its fill, with a used row's tint and pattern over it.
+    final tint = _tint;
+    if (tint != null && tint.a > 0) {
+      canvas.drawRRect(shape, Paint()..color = tint);
+    }
     if (d.game.isUsed) {
-      canvas.drawRect(rect, Paint()..color = theme.slimUsedOverlay);
+      canvas
+        ..save()
+        ..clipRRect(shape)
+        ..drawRect(rect, Paint()..color = theme.slimUsedOverlay);
       _paintUsedPattern(
         canvas,
         rect,
@@ -1777,20 +1877,36 @@ class RenderGameTile({
         const Size.fromHeight(kSlimListCardHeight),
         tileToCanvas: true,
       );
+      canvas.restore();
     }
-    final tint = _tint;
-    if (tint != null && tint.a > 0) {
-      canvas.drawRect(rect, Paint()..color = tint);
+    // A selected row is pressed in as a toggled tag chip is, fading in and
+    // out evenly with the selection; settled, the inset is drawn from the
+    // image the chips share. A hovered row, selected or not, is outlined in
+    // the text colour.
+    final pressed = Curves.easeInOut.transform(_selection?.value ?? 0);
+    if (pressed > 0) {
+      _paintInset(canvas, offset, pressed, BorderRadius.all(shape.tlRadius));
+    }
+    if (_hoverValue > 0) {
+      canvas.drawRRect(
+        shape.deflate(_slimOutlineWidth / 2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _slimOutlineWidth
+          ..color = theme.textPrimary.withValues(
+            alpha: _slimHoverOutlineAlpha * _hoverValue,
+          ),
+      );
     }
     for (final fade in _fades) {
       final alpha = Color.getAlphaFromOpacity(fade.controller.value);
       if (alpha == 0) continue;
       final faded = _fadeLayer(canvas, alpha, rect);
-      canvas.drawRect(
-        rect,
+      canvas.drawRRect(
+        shape,
         Paint()
           ..color = _fetchVisual(fade.status).$1.withValues(
-            alpha: fade.status == GameFetchStatus.done ? 0.24 : 0.44,
+            alpha: fade.status == GameFetchStatus.done ? 0.16 : 0.26,
           ),
       );
       if (faded) canvas.restore();
@@ -1806,10 +1922,16 @@ class RenderGameTile({
       canvas
         ..save()
         ..clipRect(_extrasBox.shift(offset), doAntiAlias: false);
+      final faded = _fadeLayer(
+        context.canvas,
+        Color.getAlphaFromOpacity(_extrasOpacity),
+        _extrasBox.shift(offset),
+      );
       for (final chip in _extras) {
-        chip.paint(canvas, offset);
+        chip.paint(context.canvas, offset);
       }
       _paintFetchIcons(context, offset);
+      if (faded) context.canvas.restore();
       context.canvas.restore();
     }
   }

@@ -157,12 +157,9 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   bool _isExporting = false;
 
   Future<void> _exportSqliteBackup(String destinationPath) async {
-    final configured = ref.read(currentDatabasePathProvider);
     final sourcePath =
         ref.read(encryptedDbSessionProvider)?.tempDbPath ??
-        (configured.isNotEmpty
-            ? configured
-            : await AppDatabase.getDatabasePath());
+        await AppDatabase.resolvePath(ref.read(currentDatabasePathProvider));
 
     // Use VACUUM INTO for a consistent, compact snapshot.
     final sourceDb = sqlite3.sqlite3.open(

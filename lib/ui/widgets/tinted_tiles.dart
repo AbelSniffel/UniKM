@@ -96,7 +96,7 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
     final trailing = widget.selected == null
         ? widget.trailing
         : AnimatedSwitcher(
-            duration: _selectionDuration(context),
+            duration: context.motion(_selectionTime),
             switchInCurve: Curves.easeOutBack,
             switchOutCurve: Curves.easeIn,
             transitionBuilder: (child, animation) => FadeTransition(
@@ -114,7 +114,7 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
     // tile losing its choice eases out instead of snapping.
     return TweenAnimationBuilder<double>(
       tween: Tween(end: chosen ? 1 : 0),
-      duration: _selectionDuration(context),
+      duration: context.motion(_selectionTime),
       curve: Curves.easeOutCubic,
       builder: (context, t, _) {
         // A raised action rests on the settings cards' fill, untinted; a
@@ -176,8 +176,5 @@ class _TintedOptionTileState extends State<TintedOptionTile> {
   }
 
   /// Matches [SettingsCardInset]'s depth change.
-  static Duration _selectionDuration(BuildContext context) =>
-      MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : const Duration(milliseconds: 140);
+  static const _selectionTime = Duration(milliseconds: 140);
 }

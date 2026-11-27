@@ -89,6 +89,8 @@ class const AppTabBar({
         boxShadow: [SurfaceDepth.shadow(isDark: theme.isDark)],
       ),
       child: Material(
+        // A new corner radius applies at once, as it does to the shadow.
+        animationDuration: Duration.zero,
         color: theme.tabUnselected,
         borderRadius: BorderRadius.all(radius),
         clipBehavior: Clip.antiAlias,
@@ -119,13 +121,12 @@ class const AppTabBar({
     onChanged?.call(index);
   }
 
+  /// Only the outer ends of the joined tabs have rounded corners.
   BorderRadius _radiusFor(int index, Radius radius, BuildContext context) =>
-      _tabBorderRadius(
-        index: index,
-        count: tabs.length,
-        radius: radius.x,
-        textDirection: Directionality.of(context),
-      );
+      BorderRadiusDirectional.horizontal(
+        start: index == 0 ? radius : Radius.zero,
+        end: index == tabs.length - 1 ? radius : Radius.zero,
+      ).resolve(Directionality.of(context));
 }
 
 /// One tab's surface: the unselected tab fill easing into the selected one
@@ -138,16 +139,13 @@ class const AppTabSurface({
   required final VoidCallback? onTap,
   required final Widget Function(BuildContext context, Color color) builder,
   final EdgeInsetsGeometry padding = EdgeInsets.zero,
-  final ValueChanged<bool>? onHover,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: selected ? 1 : 0, end: selected ? 1 : 0),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : kTabTransition,
+      duration: context.motion(kTabTransition),
       curve: kTabTransitionCurve,
       builder: (context, amount, _) {
         final background = Color.lerp(
@@ -173,7 +171,6 @@ class const AppTabSurface({
               splashColor: theme.navItemHover,
               highlightColor: theme.tabSelected,
               onTap: onTap,
-              onHover: onHover,
               child: Padding(padding: padding, child: builder(context, color)),
             ),
           ),
@@ -255,9 +252,7 @@ class _AppTabTransitionState extends State<AppTabTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : kTabTransition;
+    final duration = context.motion(kTabTransition);
     if (!widget.slide) {
       // Page-like sections fade in alone, so no second copy is ever mounted.
       return AnimatedSwitcher(
@@ -336,22 +331,4 @@ class _KeepAliveState extends State<_KeepAlive>
     super.build(context);
     return widget.child;
   }
-}
-
-/// Only the outer ends of the joined tabs have rounded corners.
-BorderRadius _tabBorderRadius({
-  required int index,
-  required int count,
-  required double radius,
-  required TextDirection textDirection,
-}) {
-  final corner = Radius.circular(radius);
-  final start = index == 0 ? corner : Radius.zero;
-  final end = index == count - 1 ? corner : Radius.zero;
-  return BorderRadiusDirectional.only(
-    topStart: start,
-    bottomStart: start,
-    topEnd: end,
-    bottomEnd: end,
-  ).resolve(textDirection);
 }

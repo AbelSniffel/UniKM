@@ -1,7 +1,6 @@
 // Encryption-related dialogs for database security
 
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/biometric_unlock.dart';
 import '../../core/services/encryption_manager.dart';
@@ -17,34 +16,21 @@ import '../widgets/password_field.dart';
 class const EnableEncryptionDialog({
   super.key,
   required final AppThemeData theme,
-  final EncryptionManager? encryptionManager,
 
   /// Title shown in the dialog header.
   final String title = 'Enable Encryption',
 
   /// Label for the confirm button.
   final String confirmLabel = 'Enable',
-}) extends ConsumerStatefulWidget {
+}) extends StatefulWidget {
   static Future<String?> _show(
     BuildContext context,
     EnableEncryptionDialog dialog,
-  ) => showAppDialog<String?>(
-    context: context,
-    builder: (context) => DialogInteractionScope(
-      onDismiss: () => Navigator.of(context).pop(),
-      child: dialog,
-    ),
-  );
+  ) => showAppDialog<String?>(context: context, builder: (_) => dialog);
 
   /// Shows the dialog for enabling encryption on an existing database.
-  static Future<String?> show(
-    BuildContext context,
-    AppThemeData theme,
-    EncryptionManager encryptionManager,
-  ) => _show(
-    context,
-    EnableEncryptionDialog(theme: theme, encryptionManager: encryptionManager),
-  );
+  static Future<String?> show(BuildContext context, AppThemeData theme) =>
+      _show(context, EnableEncryptionDialog(theme: theme));
 
   /// Shows the dialog for creating a password on a newly created encrypted
   /// database. Returns the password or `null` when the user declines.
@@ -61,12 +47,10 @@ class const EnableEncryptionDialog({
   );
 
   @override
-  ConsumerState<EnableEncryptionDialog> createState() =>
-      _EnableEncryptionDialogState();
+  State<EnableEncryptionDialog> createState() => _EnableEncryptionDialogState();
 }
 
-class _EnableEncryptionDialogState
-    extends ConsumerState<EnableEncryptionDialog> {
+class _EnableEncryptionDialogState extends State<EnableEncryptionDialog> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();

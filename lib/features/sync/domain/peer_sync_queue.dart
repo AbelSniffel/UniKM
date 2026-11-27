@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
-
 /// A change remains dirty until an attempt covering that generation completes.
 /// New edits during a transfer therefore cannot be cleared by its completion.
 class const PeerSyncWork({
@@ -37,8 +35,6 @@ class PeerSyncQueue({
   int _order = 0;
   PeerSyncWork? _active;
 
-  @visibleForTesting
-  bool get hasPendingWork => _pending.isNotEmpty;
   bool get isActive => _active != null;
 
   void replacePeers(Iterable<String> peerIds) {

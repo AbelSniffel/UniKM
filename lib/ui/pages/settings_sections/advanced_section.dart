@@ -39,15 +39,6 @@ class const AdvancedSection({
 
   static List<SettingsSearchGroup> get searchGroups => [systemSearchGroup];
 
-  static const _frameRateOptions = <MapEntry<String, String>>[
-    MapEntry('auto', 'Auto'),
-    MapEntry('60', '60 fps'),
-    MapEntry('90', '90 fps'),
-    MapEntry('120', '120 fps'),
-    MapEntry('144', '144 fps'),
-    MapEntry('240', '240 fps'),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = context.appTheme;
@@ -74,8 +65,9 @@ class const AdvancedSection({
                 icon: frameRateSpec.icon,
                 value: currentFrameRate,
                 choices: [
-                  for (final option in _frameRateOptions)
-                    SettingsChoice(option.key, option.value),
+                  const SettingsChoice('auto', 'Auto'),
+                  for (final fps in const [60, 90, 120, 144, 240])
+                    SettingsChoice('$fps', '$fps fps'),
                 ],
                 onChanged: settingsNotifier.setter(
                   SettingsKeys.frameRatePreference,

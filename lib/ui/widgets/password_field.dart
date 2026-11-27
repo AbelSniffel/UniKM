@@ -1,9 +1,4 @@
 /// A reusable password text-field with built-in visibility toggle.
-///
-/// Replaces 8–10 duplicate password `TextFormField` blocks across:
-/// - encryption_dialogs.dart (5 fields)
-/// - database_unlock_dialog.dart (1 field)
-/// - backup_dialogs.dart (optional future usage)
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -96,22 +91,13 @@ FormFieldValidator<String> requiredPassword({
 
 /// Returns a validator that checks both presence and minimum length.
 FormFieldValidator<String> requiredPasswordWithLength({
-  int minLength = 4,
   String emptyMessage = 'Password is required',
-  String? tooShortMessage,
 }) => (value) {
   if (value == null || value.isEmpty) return emptyMessage;
-  if (value.length < minLength) {
-    return tooShortMessage ?? 'Password must be at least $minLength characters';
-  }
+  if (value.length < 4) return 'Password must be at least 4 characters';
   return null;
 };
 
 /// Returns a confirm-password validator that checks the value matches [match].
-FormFieldValidator<String> confirmPassword(
-  TextEditingController match, {
-  String message = 'Passwords do not match',
-}) => (value) {
-  if (value != match.text) return message;
-  return null;
-};
+FormFieldValidator<String> confirmPassword(TextEditingController match) =>
+    (value) => value != match.text ? 'Passwords do not match' : null;

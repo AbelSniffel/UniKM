@@ -18,11 +18,8 @@ final _digitPattern = RegExp(r'\d');
 
 Future<DateTime?> showDeadlinePickerDialog({
   required BuildContext context,
-  required AppThemeData theme,
   DateTime? initialDate,
   DateTime? firstDate,
-  DateTime? lastDate,
-  bool useRootNavigator = true,
   DateTime? currentDate,
 }) {
   final today = DateUtils.dateOnly(currentDate ?? DateTime.now());
@@ -30,9 +27,7 @@ Future<DateTime?> showDeadlinePickerDialog({
   // A far-off default end makes the month pager ~100k pages long, and its
   // fractional page width then fails Flutter's layout precision assert,
   // freezing the app.
-  final latestDate = DateUtils.dateOnly(
-    lastDate ?? DateTime(today.year + 100, 12, 31),
-  );
+  final latestDate = DateTime(today.year + 100, 12, 31);
   final fallbackDate = today.isBefore(earliestDate) ? earliestDate : today;
   final selectedDate = _clampDate(
     DateUtils.dateOnly(initialDate ?? fallbackDate),
@@ -42,7 +37,6 @@ Future<DateTime?> showDeadlinePickerDialog({
 
   return showAppDialog<DateTime>(
     context: context,
-    useRootNavigator: useRootNavigator,
     builder: (dialogContext) => _DeadlinePickerDialog(
       initialDate: selectedDate,
       firstDate: earliestDate,
@@ -101,10 +95,8 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
   void _syncExactDateFromSelectedDate() =>
       _setText(_exactDateController, dayMonthYearFormat.format(_selectedDate));
 
-  DateTime get _currentDateOnly => DateUtils.dateOnly(widget.currentDate);
-
   void _syncDayAmountFromSelectedDate() {
-    final dayAmount = calendarDaysUntil(_selectedDate, _currentDateOnly);
+    final dayAmount = calendarDaysUntil(_selectedDate, widget.currentDate);
     _setText(_dayAmountController, dayAmount < 0 ? '' : '$dayAmount');
   }
 
@@ -170,9 +162,9 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
     }
 
     final computedDate = DateTime(
-      _currentDateOnly.year,
-      _currentDateOnly.month,
-      _currentDateOnly.day + parsedDays,
+      widget.currentDate.year,
+      widget.currentDate.month,
+      widget.currentDate.day + parsedDays,
     );
 
     if (computedDate.isBefore(widget.firstDate) ||
@@ -263,7 +255,7 @@ class _DeadlinePickerDialogState extends State<_DeadlinePickerDialog> {
       contentChildren: [
         _SelectedDateCard(
           date: _selectedDate,
-          daysLeft: calendarDaysUntil(_selectedDate, _currentDateOnly),
+          daysLeft: calendarDaysUntil(_selectedDate, widget.currentDate),
         ),
         Container(
           key: const ValueKey('deadline-calendar-panel'),

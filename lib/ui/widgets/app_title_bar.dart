@@ -62,7 +62,7 @@ class const AppTitleBar({super.key}) extends ConsumerWidget {
                   ),
 
                   // Menu button with Import/Export options
-                  _MenuButton(),
+                  const _MenuButton(),
                   const _SyncButton(),
 
                   const Spacer(),
@@ -96,12 +96,7 @@ class const AppTitleBar({super.key}) extends ConsumerWidget {
 }
 
 /// Menu button with Import/Export options
-class const _MenuButton() extends StatefulWidget {
-  @override
-  State<_MenuButton> createState() => _MenuButtonState();
-}
-
-class _MenuButtonState extends State<_MenuButton> {
+class const _MenuButton() extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;

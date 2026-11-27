@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_slider_theme.dart';
+import '../../core/utils/color_utils.dart';
 
 /// Shows [message] above [child] in the theme sliders' value bubble while a
 /// mouse hovers it, or briefly after a touch.
@@ -85,10 +86,7 @@ class _SliderStyleTooltipState extends State<SliderStyleTooltip>
             valueIndicatorColor: color,
             valueIndicatorTextStyle:
                 (themed.valueIndicatorTextStyle ?? const TextStyle()).copyWith(
-                  // White text unless it falls below 3:1 contrast.
-                  color: color.computeLuminance() > 0.3
-                      ? Colors.black
-                      : Colors.white,
+                  color: contrastColor(color),
                 ),
           );
     // Sliders cap their label's text scale at 1.3.

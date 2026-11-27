@@ -230,7 +230,7 @@ class DeadlineNotificationService._() {
   );
 
   /// Simulates deadline notifications for expired, due today, and expiring soon games.
-  Future<void> simulateDeadlineNotifications(WidgetRef ref) async {
+  Future<void> simulateDeadlineNotifications() async {
     final now = DateTime.now();
     DateTime daysAgo(int days) => now.subtract(Duration(days: days));
     Game sample(

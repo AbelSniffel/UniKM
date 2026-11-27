@@ -12,10 +12,11 @@ import '../../core/theme/app_theme.dart';
 import '../../models/game.dart';
 import '../controllers/game_editor_fields.dart';
 import '../../providers/app_providers.dart';
-import 'delete_games_dialog.dart';
 import '../widgets/app_progress_indicator.dart';
 import '../widgets/cover_image_card.dart';
 import '../widgets/game_editor_layout.dart';
+import '../widgets/game_selection_actions.dart';
+import '../widgets/nav_button_group.dart';
 import '../widgets/deadline_chip.dart';
 import '../widgets/game_options_row.dart';
 import '../widgets/dialog_helpers.dart';
@@ -249,24 +250,18 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     } catch (e) {
       NotificationManager.instance.error('Failed to save: $e');
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Future<void> _confirmDelete() async {
-    final theme = ref.read(themeProvider);
-    final confirmed = await showDeleteGamesDialog(
+    final deleted = await GameSelectionActions.deleteGames(
       context,
-      theme,
-      1,
-      gameTitle: _currentGame.title,
+      ref,
+      ref.read(themeProvider),
+      [_currentGame],
     );
-
-    if (confirmed) {
-      await ref.read(gamesProvider.notifier).deleteGame(_currentGame.id);
-      NotificationManager.instance.success('Game deleted');
-      if (mounted) Navigator.pop(context, true);
-    }
+    if (deleted && mounted) Navigator.pop(context, true);
   }
 
   void _copyKey() {
@@ -339,12 +334,15 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     }
   }
 
+  /// The cached Steam data's date for the shown game, unless another game
+  /// is shown by the time it is read.
   Future<void> _loadSteamCacheAt() async {
+    final gameId = _currentGame.id;
     final preview = AppDialogPreviewScope.maybeOf(context);
     final cached = preview != null
         ? preview.steamCachedAt
         : await getCachedAtForTitle(_fields.title.text.trim());
-    if (mounted) _steamCacheAt.value = cached;
+    if (mounted && _currentGame.id == gameId) _steamCacheAt.value = cached;
   }
 
   /// Whether the edits differ from the saved game. Edits undone by hand,
@@ -422,8 +420,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     final showSkmId = ref.watch(
       settingsProvider.select(
         (settings) =>
-            (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
-            DefaultSettings.showGameDetailsSkmId,
+            readSetting<bool>(settings, SettingsKeys.showGameDetailsSkmId),
       ),
     );
     _builtDirty = _isDirty;
@@ -529,11 +526,24 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
   Future<void> _openSteamPage() =>
       openSteamPage(appId: _steamAppId, title: _fields.title.text.trim());
 
+  /// The covers of the games before and after this one, decoded ahead so
+  /// moving to either shows its art at once.
+  List<String> get _neighbourCovers {
+    final games = ref.read(gamesByIdProvider);
+    return [
+      for (final index in [_currentIndex - 1, _currentIndex + 1])
+        if (index >= 0 && index < _gameIds.length)
+          ?games[_gameIds[index]]?.coverImage,
+    ];
+  }
+
   Widget _buildContent(AppThemeData theme, bool showSkmId) {
     final tags = ref.watch(tagsProvider);
+    final neighbourCovers = _neighbourCovers;
     return GameEditorLayout(
       theme: theme,
       cornerRadius: theme.panelRadius,
+      prefetchCovers: neighbourCovers,
       heading: 'Game Editor',
       cover: CoverImageCard(
         isDlc: _isDlc,
@@ -543,6 +553,7 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
         controller: _fields.coverImage,
         onChanged: _markChanged,
         showPath: false,
+        prefetch: neighbourCovers,
       ),
       coverController: _fields.coverImage,
       actions: [
@@ -612,68 +623,79 @@ class _GameEditorDialogState extends ConsumerState<GameEditorDialog> {
     );
   }
 
-  /// Two filled arrow buttons around a darker tinted label, on a raised
-  /// strip, so it is hard to miss.
+  /// The previous and next buttons around the game's place in the list:
+  /// a navigation button group, as the selection ribbon's, raised on the
+  /// navigation panel's colour so it reads over the dimmed library. An arrow
+  /// that can go somewhere rests on an accent fill; one that cannot is only
+  /// a dimmed arrow.
   Widget _buildNavigationBar(AppThemeData theme) {
-    final radius = BorderRadius.circular(theme.cornerRadius);
-    final arrowStyle = IconButton.styleFrom(
-      backgroundColor: theme.primaryButton,
-      foregroundColor: theme.primaryButtonText,
-      disabledBackgroundColor: theme.primaryButtonDisabled,
-      disabledForegroundColor: theme.primaryButtonDisabledText,
-      shape: RoundedRectangleBorder(borderRadius: radius),
-    );
     Widget arrow(IconData icon, String tooltip, int delta) {
       final target = _currentIndex + delta;
-      return IconButton(
-        style: arrowStyle,
-        icon: Icon(icon),
-        tooltip: tooltip,
-        onPressed: target >= 0 && target < _gameIds.length
-            ? () => _navigate(delta)
-            : null,
+      final enabled = target >= 0 && target < _gameIds.length;
+      final button = AppNavigationButton(
+        isSelected: false,
+        isEnabled: enabled,
+        isHorizontal: true,
+        onTap: enabled ? () => _navigate(delta) : null,
+        iconData: icon,
+        tooltipMessage: tooltip,
+        padding: const EdgeInsets.all(6),
+        minWidth: 36,
+      );
+      if (!enabled) return button;
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.accent.withValues(alpha: 0.30),
+          borderRadius: BorderRadius.circular(
+            math.max(0, theme.cornerRadius * 1.5 - NavButtonGroup.padding),
+          ),
+        ),
+        child: button,
       );
     }
 
     return Center(
       child: Material(
-        color: theme.surface,
-        elevation: 4,
+        color: theme.navBackground,
+        elevation: 6,
         shape: RoundedRectangleBorder(
-          borderRadius: radius,
-          side: BorderSide(color: theme.accent.withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
+          side: BorderSide(color: theme.border),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 4,
-            children: [
-              arrow(Icons.chevron_left, 'Previous Game', -1),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
+        child: NavButtonGroup(
+          isHorizontal: true,
+          accented: true,
+          children: [
+            arrow(Icons.chevron_left, 'Previous Game', -1),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Game ',
+                    children: [
+                      TextSpan(
+                        text: '${_currentIndex + 1}',
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(text: ' of ${_gameIds.length}'),
+                    ],
                   ),
-                  decoration: BoxDecoration(
-                    color: theme.accent.withValues(alpha: 0.12),
-                    borderRadius: radius,
-                  ),
-                  child: Text(
-                    'Game ${_currentIndex + 1} of ${_gameIds.length}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
-              arrow(Icons.chevron_right, 'Next Game', 1),
-            ],
-          ),
+            ),
+            arrow(Icons.chevron_right, 'Next Game', 1),
+          ],
         ),
       ),
     );

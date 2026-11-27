@@ -150,7 +150,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     _autoBackupTimer = Timer.periodic(interval, (_) async {
       if (!mounted) return;
       setNextBackup(DateTime.now().add(interval));
-      // Auto backups stay silent; developer mode reports successes.
+      // Auto backups stay silent.
       try {
         final db = ref.read(databaseProvider);
         if (db == null) return;
@@ -159,12 +159,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         if (!mounted || mark == _lastAutoBackupMark) return;
         final result = await ref.read(backupServiceProvider).createBackup();
         if (result.success) _lastAutoBackupMark = mark;
-        if (result.success &&
-            ref.read(appShellSettingsProvider).developerMode) {
-          NotificationManager.instance.info(
-            'Auto backup created: ${result.backupInfo?.displayName}',
-          );
-        }
       } catch (e) {
         AppLog.w('Auto backup failed', error: e);
       }
@@ -446,7 +440,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
     ref.listen<bool>(selectionRibbonOpenProvider, (previous, next) {
       if (previous == null || previous == next) return;
       if (!next) {
-        ref.read(selectionMultiSelectModeProvider.notifier).setEnabled(false);
+        ref.read(selectionMultiSelectModeProvider.notifier).set(false);
       }
       setState(() => _navSelectionTransitionActive = true);
       _navSelectionAnimTimer?.cancel();
@@ -529,8 +523,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold>
         nav_panel.NavItem(
           label: item.label,
           tooltipLabel: item == NavItem.addGames ? 'Add Games' : null,
-          icon: item.unselectedIcon,
-          selectedIcon: item.selectedIcon,
+          icon: item.icon,
         ),
     ];
 

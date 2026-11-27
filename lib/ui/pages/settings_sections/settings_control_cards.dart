@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../widgets/button_theme_sync.dart';
 import '../../widgets/nav_button_group.dart';
 import '../../widgets/settings_card_inset.dart';
 import '../../widgets/settings_card_indicator.dart';
@@ -381,66 +382,77 @@ class _SettingsControlCardState extends State<_SettingsControlCard> {
     final background = theme.background.withValues(
       alpha: widget.enabled ? SettingsCardInset.cardFillAlpha : 0.45,
     );
-    final material = Material(
-      animationDuration: const Duration(milliseconds: 140),
-      color: matched
-          ? Color.alphaBlend(theme.accent.withValues(alpha: 0.12), background)
-          : background,
-      shape: RoundedRectangleBorder(
-        borderRadius: radius,
-        side: !widget.enabled
-            ? BorderSide.none
-            : BorderSide(
-                color: borderColor,
-                width: highlighted || matched ? 1.5 : 1,
-              ),
-      ),
-      child: InkWell(
-        borderRadius: radius,
-        mouseCursor: !widget.enabled
-            ? SystemMouseCursors.forbidden
-            : widget.onTap == null
-            ? MouseCursor.defer
-            : SystemMouseCursors.click,
-        // A ripple without the accent tint while held.
-        highlightColor: Colors.transparent,
-        onFocusChange: (value) => setState(() => _focused = value),
-        onTap: widget.onTap,
-        child: Padding(
-          // The option tiles' padding: text alone starts further in, and a
-          // toggle's label and description stop short of its bar.
-          padding: EdgeInsets.all(_cardPadding).copyWith(
-            left: icon == null ? 14 : null,
-            right: isToggle ? SettingsCardMiniDot.barExtent : null,
-          ),
-          child: Opacity(
-            opacity: widget.enabled ? 1 : 0.42,
-            // Only the row is built in the layout callback.
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final row = constraints.maxWidth;
-                // A third of the row at least beside a long label.
-                final trailingWidth = besideLabel == null
-                    ? row * 0.65
-                    : (row - besideLabel).clamp(row / 3, row * 0.65);
-                // A control's height on every card.
-                return ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: kElementHeight),
-                  child: Row(
-                    children: [
-                      ?iconSquare,
-                      label,
-                      if (!isToggle) ...[
-                        const SizedBox(width: 12),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: trailingWidth),
-                          child: widget.trailing,
-                        ),
+    // Its outline eases in and out, but a new theme applies at once, so the
+    // shape keeps up with the lighting drawn over it.
+    final material = ButtonThemeSync(
+      theme: theme,
+      builder: (context, snapTheme) => Material(
+        animationDuration: snapTheme
+            ? Duration.zero
+            : const Duration(milliseconds: 140),
+        color: matched
+            ? Color.alphaBlend(theme.accent.withValues(alpha: 0.12), background)
+            : background,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: !widget.enabled
+              ? BorderSide.none
+              : BorderSide(
+                  color: borderColor,
+                  width: highlighted || matched ? 1.5 : 1,
+                ),
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          mouseCursor: !widget.enabled
+              ? SystemMouseCursors.forbidden
+              : widget.onTap == null
+              ? MouseCursor.defer
+              : SystemMouseCursors.click,
+          // A ripple without the accent tint while held.
+          highlightColor: Colors.transparent,
+          onFocusChange: (value) => setState(() => _focused = value),
+          onTap: widget.onTap,
+          child: Padding(
+            // The option tiles' padding: text alone starts further in, and a
+            // toggle's label and description stop short of its bar.
+            padding: EdgeInsets.all(_cardPadding).copyWith(
+              left: icon == null ? 14 : null,
+              right: isToggle ? SettingsCardMiniDot.barExtent : null,
+            ),
+            child: Opacity(
+              opacity: widget.enabled ? 1 : 0.42,
+              // Only the row is built in the layout callback.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final row = constraints.maxWidth;
+                  // A third of the row at least beside a long label.
+                  final trailingWidth = besideLabel == null
+                      ? row * 0.65
+                      : (row - besideLabel).clamp(row / 3, row * 0.65);
+                  // A control's height on every card.
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: kElementHeight,
+                    ),
+                    child: Row(
+                      children: [
+                        ?iconSquare,
+                        label,
+                        if (!isToggle) ...[
+                          const SizedBox(width: 12),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: trailingWidth,
+                            ),
+                            child: widget.trailing,
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),

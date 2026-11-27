@@ -29,6 +29,22 @@ class const ThemeEditorDialog({
   required final AppThemeData theme,
   final AppThemeData? existingTheme,
 }) extends ConsumerStatefulWidget {
+  /// Opens the editor from the nearest navigator's context. A settings page
+  /// keeps its own copy of the app theme, which the route would otherwise
+  /// take along, and the editor would not show its own live preview. The
+  /// theme is read now, as the opener may be gone while the editor is open.
+  static Future<void> show(
+    BuildContext context,
+    WidgetRef ref, {
+    AppThemeData? existing,
+  }) {
+    final theme = ref.read(themeProvider);
+    return showAppDialog<void>(
+      context: Navigator.of(context).context,
+      builder: (_) => ThemeEditorDialog(theme: theme, existingTheme: existing),
+    );
+  }
+
   @override
   ConsumerState<ThemeEditorDialog> createState() => _ThemeEditorDialogState();
 }

@@ -60,19 +60,10 @@ class Game({
   /// Get platform enum
   GamePlatform get platformEnum => GamePlatform.fromDisplayName(platform);
 
-  DateTime? get _deadlineDateOnly {
-    if (!hasDeadline || deadlineDate == null) return null;
-    return DateUtils.dateOnly(deadlineDate!);
-  }
-
-  /// Get days until deadline using date-only values.
-  int? get daysUntilDeadline {
-    final normalizedDeadline = _deadlineDateOnly;
-    if (normalizedDeadline == null) return null;
-
-    final today = DateUtils.dateOnly(DateTime.now());
-    return calendarDaysUntil(normalizedDeadline, today);
-  }
+  /// Calendar days until the deadline; null without one.
+  int? get daysUntilDeadline => hasDeadline && deadlineDate != null
+      ? calendarDaysUntil(deadlineDate!, DateTime.now())
+      : null;
 
   /// Check if the deadline has passed.
   bool get isExpired {

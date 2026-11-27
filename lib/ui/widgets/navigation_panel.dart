@@ -41,7 +41,6 @@ bool isVeryNarrowAppLayout(
 class const NavItem({
   required final String label,
   required final IconData icon,
-  final IconData? selectedIcon,
   final bool hasNotification = false,
 
   /// When set, overrides all icon rendering with a custom widget builder.
@@ -279,10 +278,8 @@ class const _ThemeSelector({
     final expansionMode = ref.watch(
       appShellSettingsProvider.select((settings) => settings.navExpansionMode),
     );
-    final isHorizontal =
-        position == NavBarPosition.top || position == NavBarPosition.bottom;
-
-    final isVert = !isHorizontal;
+    final isVert =
+        position == NavBarPosition.left || position == NavBarPosition.right;
     return ClipRRect(
       borderRadius: BorderRadius.circular(theme.cornerRadius * 1.5),
       child: Stack(
@@ -351,17 +348,11 @@ class const _NavButton({
   Widget build(BuildContext context) {
     final textOnly = appearance == NavBarAppearance.textOnly;
     final showText = !isCollapsed && appearance != NavBarAppearance.iconOnly;
-    final displayIcon = item.selectedIcon ?? item.icon;
     final tooltipText = isLocked
         ? '${item.tooltipLabel ?? item.label} (Locked during fetch)'
         : (isCollapsed ? (item.tooltipLabel ?? item.label) : '');
 
-    Widget Function(BuildContext, Color, double)? iconBuilder;
-    if (!isLocked) {
-      if (item.iconBuilder != null) {
-        iconBuilder = (context, color, size) => item.iconBuilder!(color, size);
-      }
-    }
+    final custom = isLocked ? null : item.iconBuilder;
 
     return AppNavigationButton(
       isSelected: isSelected,
@@ -371,9 +362,11 @@ class const _NavButton({
       onTap: onTap,
       // Text-only buttons keep their icon mounted and shrink it away as the
       // label grows, so automatic expansion morphs instead of jumping.
-      iconData: isLocked ? Icons.lock_rounded : displayIcon,
+      iconData: isLocked ? Icons.lock_rounded : item.icon,
       hideIconWithLabel: textOnly,
-      iconBuilder: iconBuilder,
+      iconBuilder: custom == null
+          ? null
+          : (context, color, size) => custom(color, size),
       labelText: item.label,
       labelVisible: showText,
       labelFadeDuration: kNavButtonExpandAnimation,

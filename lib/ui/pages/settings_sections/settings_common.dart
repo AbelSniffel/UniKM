@@ -231,7 +231,6 @@ typedef SpecToggleSettingEntry = ({
 });
 
 Widget buildSpecToggleSettingList({
-  required AppThemeData theme,
   required List<SpecToggleSettingEntry> entries,
 }) {
   if (entries.isEmpty) return const SizedBox.shrink();

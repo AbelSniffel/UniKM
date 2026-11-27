@@ -5,14 +5,6 @@ import '../../models/game.dart';
 class DuplicateKeyChecker._() {
   static String normalize(String key) => key.toLowerCase().trim();
 
-  static Map<String, Game> buildExistingKeyMap(Iterable<Game> existingGames) {
-    final map = <String, Game>{};
-    for (final game in existingGames) {
-      map[normalize(game.gameKey)] = game;
-    }
-    return map;
-  }
-
   static Game? findExistingByKey(String key, Iterable<Game> existingGames) {
     final normalized = normalize(key);
     for (final game in existingGames) {
@@ -25,7 +17,9 @@ class DuplicateKeyChecker._() {
     Iterable<String> inputKeys,
     Iterable<Game> existingGames,
   ) {
-    final existingByNormalizedKey = buildExistingKeyMap(existingGames);
+    final existingByNormalizedKey = {
+      for (final game in existingGames) normalize(game.gameKey): game,
+    };
     final duplicates = <String, Game>{};
 
     for (final inputKey in inputKeys) {

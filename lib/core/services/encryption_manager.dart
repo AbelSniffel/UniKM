@@ -233,8 +233,12 @@ class EncryptionManager(final String dbPath) {
     final salt = SecretKeyData.random(length: EncryptionConfig.saltLength)
         .bytes;
     final key = await _deriveKey(password, Uint8List.fromList(salt));
+    final keyBytes = await key.extractBytes();
+    // Off the UI isolate, as saves are: AES-GCM over the file is pure Dart.
     await _replaceEncryptedFile(
-      await _encryptDatabaseBytes(plaintext, salt, key),
+      await Isolate.run(
+        () => _encryptDatabaseBytes(plaintext, salt, SecretKey(keyBytes)),
+      ),
     );
   }
 

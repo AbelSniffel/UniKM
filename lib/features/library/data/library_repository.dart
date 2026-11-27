@@ -113,8 +113,8 @@ class const LibraryRepository(final AppDatabase database) {
       );
     }
     await database.setTagsForGame(id, tagIds);
-    final revision = await database.markLocalDataChanged();
-    await database.recordGameUpsert(id, localRevision: revision);
+    await database.markLocalDataChanged();
+    await database.clearGameTombstone(id);
     return id;
   });
 
@@ -126,7 +126,7 @@ class const LibraryRepository(final AppDatabase database) {
           throw StateError('The game no longer exists');
         }
         if (tagIds != null) await database.setTagsForGame(game.id, tagIds);
-        final revision = await database.markLocalDataChanged();
-        await database.recordGameUpsert(game.id, localRevision: revision);
+        await database.markLocalDataChanged();
+        await database.clearGameTombstone(game.id);
       });
 }

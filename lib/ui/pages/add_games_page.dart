@@ -139,9 +139,7 @@ class _AddGamesPageState extends ConsumerState<AddGamesPage>
 
     final selectedTab = ref.read(addGamesSelectedTabProvider);
     if (selectedTab != _tabController.index) {
-      ref
-          .read(addGamesSelectedTabProvider.notifier)
-          .setIndex(_tabController.index);
+      ref.read(addGamesSelectedTabProvider.notifier).set(_tabController.index);
     }
   }
 
@@ -371,14 +369,13 @@ class _SingleEntryTabState extends ConsumerState<_SingleEntryTab> {
     ref.read(addGamesSingleEntryDraftProvider.notifier).reset();
   }
 
+  /// The cached Steam data's date for the title, unless it changed again
+  /// while this was read; none for an empty title.
   Future<void> _loadSingleEntryCacheAt() async {
     final title = _fields.title.text.trim();
-    if (title.isEmpty) return;
-    _singleSteamCacheAt = await getCachedAtForTitle(title);
-    if (mounted) {
-      setState(() {});
-      _saveDraft();
-    }
+    final cachedAt = title.isEmpty ? null : await getCachedAtForTitle(title);
+    if (!mounted || _fields.title.text.trim() != title) return;
+    _update(() => _singleSteamCacheAt = cachedAt);
   }
 
   void _applySteamPreview({

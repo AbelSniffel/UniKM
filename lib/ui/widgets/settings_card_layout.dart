@@ -9,7 +9,6 @@ double settingsCardWidth({
   required double availableWidth,
   required int cardCount,
   double minimumCardWidth = kInteractionCardMinWidth,
-  double maximumCardWidth = kInteractionCardMaxWidth,
   double spacing = 8,
 }) {
   final fitting = ((availableWidth + spacing) / (minimumCardWidth + spacing))
@@ -19,7 +18,7 @@ double settingsCardWidth({
   }
   final columns = math.max(1, math.min(cardCount, fitting));
   return math.min(
-    maximumCardWidth,
+    kInteractionCardMaxWidth,
     (availableWidth - spacing * (columns - 1)) / columns,
   );
 }

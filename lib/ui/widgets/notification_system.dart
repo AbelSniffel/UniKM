@@ -1,5 +1,4 @@
 /// Toast notification system
-/// Matches the original Python notification system with 7 types and 6 positions
 library;
 
 import 'dart:async';
@@ -15,15 +14,21 @@ import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import 'tinted_card.dart';
 
-/// Notification types
-enum NotificationType() {
-  success,
-  error,
-  warning,
-  info,
-  update,
-  download,
-  steam,
+/// Notification types: the [label] a toast titles itself with when it has
+/// no title, its [icon], and how long it stays ([dismissAfter]; zero keeps
+/// update and progress/task notifications).
+enum NotificationType(
+  final String label,
+  final IconData icon,
+  final Duration dismissAfter,
+) {
+  success('Done', Icons.check_circle_outline, Duration(seconds: 5)),
+  error('Error', Icons.error_outline, Duration(seconds: 7)),
+  warning('Warning', Icons.warning_amber_outlined, Duration(seconds: 6)),
+  info('Info', Icons.info_outline, Duration(seconds: 5)),
+  update('Update', Icons.update, Duration.zero),
+  download('Download', Icons.download, Duration.zero),
+  steam('Steam', Icons.cloud_download_outlined, Duration.zero),
 }
 
 /// How a notification's main action is drawn. [text] sits beside the
@@ -32,16 +37,6 @@ enum NotificationActionStyle() {
   text,
   outlined,
   elevated,
-}
-
-/// Notification positions
-enum NotificationPosition() {
-  topLeft,
-  topCenter,
-  topRight,
-  bottomLeft,
-  bottomCenter,
-  bottomRight,
 }
 
 /// Notification data
@@ -167,7 +162,7 @@ class NotificationHandle(final NotificationManager _manager, final String id) {
       clearProgress: true,
       clearAction: true,
       clearSecondaryAction: true,
-      autoDismissAfter: NotificationManager.defaultDuration(type),
+      autoDismissAfter: type.dismissAfter,
       dismissible: true,
     );
   }
@@ -189,32 +184,8 @@ class NotificationManager._() {
   final Map<String, Duration> _pausedElapsed = <String, Duration>{};
   final _controller = StreamController<List<AppNotification>>.broadcast();
 
-  bool _enabled = true;
-  bool get enabled => _enabled;
-
-  void setEnabled(bool enabled) {
-    _enabled = enabled;
-    if (!enabled) dismissAll();
-  }
-
   Stream<List<AppNotification>> get notifications => _controller.stream;
   List<AppNotification> get currentNotifications => _notifications.toList();
-
-  NotificationPosition _position = NotificationPosition.topRight;
-  NotificationPosition get position => _position;
-
-  void setPosition(NotificationPosition position) => _position = position;
-
-  /// Auto-hide delay; zero keeps update and progress/task notifications.
-  static Duration defaultDuration(NotificationType type) => switch (type) {
-    NotificationType.success ||
-    NotificationType.info => const Duration(milliseconds: 5000),
-    NotificationType.error => const Duration(milliseconds: 7000),
-    NotificationType.warning => const Duration(milliseconds: 6000),
-    NotificationType.update ||
-    NotificationType.download ||
-    NotificationType.steam => Duration.zero,
-  };
 
   NotificationHandle showHandle({
     required String message,
@@ -234,8 +205,6 @@ class NotificationManager._() {
     bool dismissible = true,
     Duration? autoDismissAfter,
   }) {
-    if (!_enabled) return NotificationHandle(this, 'disabled');
-
     final existing = dedupe
         ? _notifications
               .where((n) => n.message == message && n.type == type)
@@ -243,7 +212,7 @@ class NotificationManager._() {
         : null;
     if (existing != null) return NotificationHandle(this, existing.id);
 
-    final dismissAfter = autoDismissAfter ?? defaultDuration(type);
+    final dismissAfter = autoDismissAfter ?? type.dismissAfter;
     final autoDismisses =
         !persistent && progress == null && dismissAfter != Duration.zero;
     final notification = AppNotification(
@@ -423,12 +392,8 @@ class NotificationManager._() {
 class const NotificationHost({super.key, required final Widget child})
     extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => _NotificationHostStack(
-    children: [
-      child,
-      NotificationOverlay(position: NotificationManager.instance.position),
-    ],
-  );
+  Widget build(BuildContext context) =>
+      _NotificationHostStack(children: [child, const NotificationOverlay()]);
 }
 
 /// The widget inspector picks the smallest widget under the pointer from
@@ -496,11 +461,8 @@ class _RenderNotificationHostStack({super.textDirection}) extends RenderStack {
   }
 }
 
-/// Notification overlay widget
-class const NotificationOverlay({
-  super.key,
-  final NotificationPosition position = NotificationPosition.topRight,
-}) extends StatelessWidget {
+/// Notification overlay widget: the toasts, stacked at the top right.
+class const NotificationOverlay({super.key}) extends StatelessWidget {
   /// How many notifications show at once; newer ones wait their turn.
   static const maxVisible = 8;
 
@@ -513,28 +475,18 @@ class const NotificationOverlay({
       final notifications = snapshot.data ?? [];
       if (notifications.isEmpty) return const SizedBox.shrink();
 
-      final isTop = position.name.startsWith('top');
-      final isLeft = position.name.endsWith('Left');
-      final isRight = position.name.endsWith('Right');
       return Positioned(
-        top: isTop ? 16 : null,
-        bottom: isTop ? null : 16,
-        left: isLeft ? 16 : null,
-        right: isRight ? 16 : null,
+        top: 16,
+        right: 16,
         // A full stack on a short window scrolls instead of overflowing.
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: math.max(0, MediaQuery.sizeOf(context).height - 32),
           ),
           child: SingleChildScrollView(
-            reverse: !isTop,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: isLeft
-                  ? CrossAxisAlignment.start
-                  : isRight
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 for (final n in notifications.take(maxVisible))
                   NotificationToast(
@@ -741,10 +693,10 @@ class _NotificationToastState extends State<NotificationToast>
         size: TintedCardSize.large,
         liveRegion: true,
         color: color,
-        icon: _getTypeIcon(),
+        icon: notification.type.icon,
         // Spins while the task runs; the bar and figure show how far it is.
         busy: progress != null,
-        title: notification.title ?? _typeLabel,
+        title: notification.title ?? notification.type.label,
         subtitle: notification.message,
         figure: progress == null
             ? null
@@ -776,16 +728,6 @@ class _NotificationToastState extends State<NotificationToast>
       ),
     );
   }
-
-  String get _typeLabel => switch (widget.notification.type) {
-    NotificationType.success => 'Done',
-    NotificationType.error => 'Error',
-    NotificationType.warning => 'Warning',
-    NotificationType.info => 'Info',
-    NotificationType.update => 'Update',
-    NotificationType.download => 'Download',
-    NotificationType.steam => 'Steam',
-  };
 
   /// Across the card: any progress filling a row with the actions at its
   /// end; otherwise text actions at the end and an outlined or elevated main
@@ -846,16 +788,6 @@ class _NotificationToastState extends State<NotificationToast>
       ?button,
     ];
   }
-
-  IconData _getTypeIcon() => switch (widget.notification.type) {
-    NotificationType.success => Icons.check_circle_outline,
-    NotificationType.error => Icons.error_outline,
-    NotificationType.warning => Icons.warning_amber_outlined,
-    NotificationType.info => Icons.info_outline,
-    NotificationType.update => Icons.update,
-    NotificationType.download => Icons.download,
-    NotificationType.steam => Icons.cloud_download_outlined,
-  };
 
   Color _getTypeColor() => switch (widget.notification.type) {
     NotificationType.success => context.appTheme.success,

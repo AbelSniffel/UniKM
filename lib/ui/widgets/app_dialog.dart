@@ -38,12 +38,11 @@ Future<T?> showAppDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
-  bool useRootNavigator = true,
 }) {
   final preview = AppDialogPreviewScope.maybeOf(context);
   if (preview != null) return preview.present<T>(builder);
   // As [showDialog] builds its route, with a quicker close.
-  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  final navigator = Navigator.of(context, rootNavigator: true);
   return navigator.push<T>(
     _AppDialogRoute<T>(
       context: context,

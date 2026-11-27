@@ -1,9 +1,11 @@
 import 'package:material_ui/material_ui.dart';
 
+final _spaces = RegExp(r'\s+');
+
 /// The lowercase words of a settings search.
 List<String> searchWords(String query) => query
     .toLowerCase()
-    .split(RegExp(r'\s+'))
+    .split(_spaces)
     .where((word) => word.isNotEmpty)
     .toList(growable: false);
 

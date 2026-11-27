@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// Recessed lighting for active settings cards, with an optional raised rest
 /// state for toggle buttons. All shading stays inside the
 /// live card outline, so layout, hit testing, and child ink remain unchanged.
@@ -71,9 +73,7 @@ class const SettingsCardInset({
           ? -1
           : 0,
     ),
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 140),
+    duration: context.motion(const Duration(milliseconds: 140)),
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, depth, child) {

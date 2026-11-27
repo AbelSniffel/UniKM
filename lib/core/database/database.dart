@@ -146,8 +146,7 @@ class AppDatabase extends _$AppDatabase {
 
       // Clean up any orphaned entries which could have accumulated in
       // earlier versions where cascading deletes weren't enforced. Those
-      // orphaned rows prevented `deleteUnusedTags` from working properly
-      // and are the root cause of the bug reported by the user.
+      // orphaned rows kept unused tags from being cleaned up.
       if (from < 5) {
         await customStatement(
           'DELETE FROM game_tags WHERE game_id NOT IN (SELECT id FROM games) OR '
@@ -509,42 +508,13 @@ class AppDatabase extends _$AppDatabase {
       await _readSyncMetadataValue(_syncOriginKey) ?? '';
 
   Future<Set<String>> getSyncRecordIds() async {
-    final rows = await customSelect(
-      'SELECT sync_id FROM $_syncRecordsTable',
-    ).get();
+    final rows = await customSelect('SELECT sync_id FROM $_syncRecordsTable')
+        .get();
     return rows.map((row) => row.read<String>('sync_id')).toSet();
   }
 
-  /// Retains an imported version unchanged for subsequent relays. The local
+  /// Retains imported versions unchanged for subsequent relays. The local
   /// journal cursor advances, but the origin/version never become a new edit.
-  Future<void> acceptRemoteSyncRecord({
-    required String syncId,
-    required int? localGameId,
-    required String gameKey,
-    required int changeClock,
-    required String changeOrigin,
-    int deletedAt = 0,
-  }) async {
-    final revision = await markLocalDataChanged();
-    await customStatement(
-      'UPDATE $_syncMetadataTable SET value = MAX(CAST(value AS INTEGER), ?) WHERE key = ?',
-      [changeClock, _syncClockKey],
-    );
-    if (localGameId != null && deletedAt == 0) {
-      await customStatement(_deleteOtherSyncRecordsSql, [localGameId, syncId]);
-      await clearGameTombstone(localGameId);
-    }
-    await customStatement(_upsertSyncRecordSql, [
-      syncId,
-      localGameId,
-      gameKey,
-      changeClock,
-      changeOrigin,
-      deletedAt,
-      revision,
-    ]);
-  }
-
   Future<void> acceptRemoteSyncRecords(
     List<Map<String, dynamic>> records,
   ) async {
@@ -680,39 +650,23 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> recordGameUpsert(int gameId, {int? localRevision}) async {
+  /// Records that a game with [gameKey] was deleted at [deletedAt].
+  Future<void> recordGameDeletionTombstone(
+    int gameId,
+    String gameKey,
+    int deletedAt,
+  ) async {
     if (gameId <= 0) return;
-
-    if (localRevision == null) await bumpLocalSyncRevision();
-    await clearGameTombstone(gameId);
-  }
-
-  Future<void> recordGameDeletionTombstones(
-    List<int> gameIds, {
-    Map<int, String>? gameKeysById,
-    int? localRevision,
-    int? deletedAtMillis,
-  }) async {
-    final normalizedIds = gameIds
-        .where((id) => id > 0)
-        .toSet()
-        .toList(growable: false);
-    if (normalizedIds.isEmpty) return;
-
-    final revision = localRevision ?? await bumpLocalSyncRevision();
-    final deletedAt = deletedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
-    for (final gameId in normalizedIds) {
-      final gameKey = (gameKeysById?[gameId] ?? '').trim();
-      await customStatement(
-        'INSERT INTO $_syncGameTombstonesTable(game_id, game_key, deleted_at, local_revision) '
-        'VALUES(?, ?, ?, ?) '
-        'ON CONFLICT(game_id) DO UPDATE SET '
-        'game_key = excluded.game_key, '
-        'deleted_at = excluded.deleted_at, '
-        'local_revision = excluded.local_revision',
-        <Object>[gameId, gameKey, deletedAt, revision],
-      );
-    }
+    final revision = await bumpLocalSyncRevision();
+    await customStatement(
+      'INSERT INTO $_syncGameTombstonesTable(game_id, game_key, deleted_at, local_revision) '
+      'VALUES(?, ?, ?, ?) '
+      'ON CONFLICT(game_id) DO UPDATE SET '
+      'game_key = excluded.game_key, '
+      'deleted_at = excluded.deleted_at, '
+      'local_revision = excluded.local_revision',
+      <Object>[gameId, gameKey.trim(), deletedAt, revision],
+    );
   }
 
   Future<Map<String, dynamic>?> getPeerSyncCheckpoint(String peerId) async {
@@ -803,8 +757,8 @@ class AppDatabase extends _$AppDatabase {
   /// Insert a new game
   Future<int> insertGame(GamesCompanion game) => transaction(() async {
     final id = await into(games).insert(gameInsertWithDefaults(game));
-    final revision = await markLocalDataChanged();
-    await recordGameUpsert(id, localRevision: revision);
+    await markLocalDataChanged();
+    await clearGameTombstone(id);
     return id;
   });
 
@@ -812,23 +766,16 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> updateGame(GameEntry game) => transaction(() async {
     final changed = await update(games).replace(game);
     if (changed) {
-      final revision = await markLocalDataChanged();
-      await recordGameUpsert(game.id, localRevision: revision);
+      await markLocalDataChanged();
+      await clearGameTombstone(game.id);
     }
     return changed;
   });
 
-  /// Update specific fields of a game
+  /// Update a game's cover and Steam metadata
   Future<int> updateGameFields(
     int id, {
-    String? title,
-    String? gameKey,
-    String? platform,
-    String? notes,
-    bool? isUsed,
     String? coverImage,
-    bool? hasDeadline,
-    DateTime? deadlineDate,
     bool? isDlc,
     String? steamAppId,
     String? developer,
@@ -840,18 +787,7 @@ class AppDatabase extends _$AppDatabase {
     if (existing == null) return 0;
 
     final updated = existing.copyWith(
-      title: title ?? existing.title,
-      gameKey: gameKey ?? existing.gameKey,
-      platform: platform ?? existing.platform,
-      notes: notes ?? existing.notes,
-      isUsed: isUsed ?? existing.isUsed,
       coverImage: coverImage ?? existing.coverImage,
-      hasDeadline: hasDeadline ?? existing.hasDeadline,
-      deadlineDate: hasDeadline == false
-          ? const Value(null)
-          : deadlineDate != null
-          ? Value(deadlineDate)
-          : const Value.absent(),
       isDlc: isDlc ?? existing.isDlc,
       steamAppId: steamAppId ?? existing.steamAppId,
       developer: developer ?? existing.developer,
@@ -934,13 +870,15 @@ class AppDatabase extends _$AppDatabase {
   /// Watch all tags
   Stream<List<TagEntry>> watchAllTags() => select(tags).watch();
 
-  /// Get tag by name (case-insensitive)
-  Future<TagEntry?> getTagByName(String name) =>
-      (select(tags)
-            ..where((t) => t.name.lower().equals(name.toLowerCase()))
-            ..orderBy([(t) => OrderingTerm.asc(t.id)])
-            ..limit(1))
-          .getSingleOrNull();
+  /// The oldest tag named [name], whatever its case. Compared in Dart, as
+  /// SQLite's lower() folds only ASCII letters.
+  Future<TagEntry?> getTagByName(String name) async {
+    final key = name.toLowerCase();
+    final all = await (select(
+      tags,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    return all.firstWhereOrNull((tag) => tag.name.toLowerCase() == key);
+  }
 
   /// Get or create tag by name
   Future<TagEntry> getOrCreateTag(
@@ -989,19 +927,6 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deleteAllCustomTags() =>
       (delete(tags)..where((t) => t.isSteamTag.equals(false))).go();
 
-  /// Delete unused tags (tags not associated with any game)
-  Future<int> deleteUnusedTags() async {
-    // Compute the set of tag IDs that are still referenced by *existing*
-    // games. Older schema versions did not cascade deletes from `games` into
-    // `game_tags`, so it's possible to have orphaned rows here; joining with
-    // `games` filters those out.
-    final usedTagIds = selectOnly(gameTags, distinct: true)
-      ..addColumns([gameTags.tagId])
-      ..join([innerJoin(games, games.id.equalsExp(gameTags.gameId))]);
-
-    return (delete(tags)..where((t) => t.id.isNotInQuery(usedTagIds))).go();
-  }
-
   /// One-time cleanup: remove legacy default tags (custom-only).
   ///
   /// This removes the legacy tags and their game relationships.
@@ -1009,8 +934,6 @@ class AppDatabase extends _$AppDatabase {
   /// IMPORTANT: This targets only non-Steam tags to avoid interfering with
   /// Steam-provided tags.
   Future<int> deleteLegacyDefaultCustomTags() async {
-    if (kLegacyDefaultTagNames.isEmpty) return 0;
-
     final legacyTags =
         await (select(tags)..where(
               (t) =>
@@ -1034,29 +957,17 @@ class AppDatabase extends _$AppDatabase {
   /// - Deletes unused Steam tags.
   /// - Deletes unused legacy default custom tags.
   /// - Keeps unused user custom tags.
-  Future<int> deleteUnusedNonUserTags() async {
+  Future<int> deleteUnusedNonUserTags() {
     final usedTagIds = selectOnly(gameTags, distinct: true)
       ..addColumns([gameTags.tagId])
       ..join([innerJoin(games, games.id.equalsExp(gameTags.gameId))]);
-
-    final deletedSteamUnused =
-        await (delete(tags)..where(
-              (t) => t.isSteamTag.equals(true) & t.id.isNotInQuery(usedTagIds),
-            ))
-            .go();
-
-    if (kLegacyDefaultTagNames.isEmpty) return deletedSteamUnused;
-
-    final deletedLegacyUnused =
-        await (delete(tags)..where(
-              (t) =>
-                  t.isSteamTag.equals(false) &
-                  t.name.isIn(kLegacyDefaultTagNames.toList()) &
-                  t.id.isNotInQuery(usedTagIds),
-            ))
-            .go();
-
-    return deletedSteamUnused + deletedLegacyUnused;
+    return (delete(tags)..where(
+          (t) =>
+              t.id.isNotInQuery(usedTagIds) &
+              (t.isSteamTag.equals(true) |
+                  t.name.isIn(kLegacyDefaultTagNames.toList())),
+        ))
+        .go();
   }
 
   // ===========================================================================
@@ -1229,11 +1140,10 @@ class AppDatabase extends _$AppDatabase {
     return p.join(uniKMDir.path, kDatabaseName);
   }
 
-  /// Get database file
-  static Future<File> getDatabaseFile() async {
-    final path = await getDatabasePath();
-    return File(path);
-  }
+  /// [configured], the path saved in settings, or the default path when
+  /// none is saved.
+  static Future<String> resolvePath(String configured) async =>
+      configured.isNotEmpty ? configured : getDatabasePath();
 
   /// Clear all user data (games/tags/relationships/backups) but keep schema.
   Future<void> clearAllData() async {
@@ -1254,10 +1164,9 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Open the database connection
-LazyDatabase _openConnection() => LazyDatabase(() async {
-  final file = await AppDatabase.getDatabaseFile();
-  return _nativeConnection(file);
-});
+LazyDatabase _openConnection() => LazyDatabase(
+  () async => _nativeConnection(File(await AppDatabase.getDatabasePath())),
+);
 
 /// An encrypted save snapshots the file through a second connection
 /// (VACUUM INTO). Writes wait for it to finish instead of failing with

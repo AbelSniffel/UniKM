@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/settings_model.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../providers/app_providers.dart';
 import 'settings_common.dart';
 
@@ -63,7 +62,6 @@ class const CardDisplaySection({
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = context.appTheme;
     final cardSettings = ref.watch(gameCardSettingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
@@ -77,7 +75,6 @@ class const CardDisplaySection({
           // The section's own title names it.
           showTitle: false,
           childBuilder: () => buildSpecToggleSettingList(
-            theme: theme,
             entries: [
               (
                 spec: showPlatformSpec,
@@ -111,7 +108,6 @@ class const CardDisplaySection({
           titleIcon: Icons.visibility_outlined,
           searchQuery: searchQuery,
           childBuilder: () => buildSpecToggleSettingList(
-            theme: theme,
             entries: [
               (
                 spec: showTagsOnHoverOnlySpec,

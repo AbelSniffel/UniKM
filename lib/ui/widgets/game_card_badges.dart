@@ -31,13 +31,8 @@ abstract final class GameCardBadges {
 
   // ── Primitive builders ────────────────────────────────────────────────────
 
-  static BorderRadius chipBorderRadius(
-    AppThemeData theme,
-    double extent, {
-    double multiplier = 1.0,
-  }) => BorderRadius.circular(
-    math.min(theme.cornerRadius * multiplier, extent / 2),
-  );
+  static BorderRadius chipBorderRadius(AppThemeData theme, double extent) =>
+      BorderRadius.circular(math.min(theme.cornerRadius, extent / 2));
 
   /// What a rating chip shows: its tooltip, fill and icon.
   static ({String tooltip, Color fill, IconData icon}) ratingInfo(
@@ -66,10 +61,7 @@ abstract final class GameCardBadges {
   deadlineInfo(AppThemeData theme, DateTime? deadlineDate) {
     final daysLeft = deadlineDate == null
         ? 0
-        : calendarDaysUntil(
-            DateUtils.dateOnly(deadlineDate),
-            DateUtils.dateOnly(DateTime.now()),
-          );
+        : calendarDaysUntil(deadlineDate, DateTime.now());
     final isExpired = daysLeft < 0;
     final dueText = daysLeft == 0 ? 'Today' : '$daysLeft days';
     final date = deadlineDate == null

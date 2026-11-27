@@ -38,12 +38,6 @@ class ThemeNotifier extends Notifier<AppThemeData> {
         kDarkTheme;
   }
 
-  /// Settings that make [id] the active theme.
-  static Map<String, dynamic> _activeTheme(String id) => {
-    SettingsKeys.activeTheme: id,
-    SettingsKeys.currentTheme: id,
-  };
-
   /// Start previewing a theme without persisting
   /// Call cancelPreview() to restore the original theme
   /// Call savePreviewTheme() to persist the preview theme
@@ -70,7 +64,9 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     _previewOriginalTheme = null; // Clear preview state
     state = theme;
-    await ref.read(settingsProvider.notifier).setMany(_activeTheme(theme.id));
+    await ref
+        .read(settingsProvider.notifier)
+        .set(SettingsKeys.activeTheme, theme.id);
   }
 
   /// Save a custom theme
@@ -88,7 +84,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     customThemes.add(jsonEncode(theme.toJson()));
     await settings.setMany({
       SettingsKeys.customThemes: customThemes,
-      ..._activeTheme(theme.id),
+      SettingsKeys.activeTheme: theme.id,
     });
     state = theme;
   }
@@ -141,7 +137,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
 
     await settings.setMany({
       SettingsKeys.customThemes: customThemes,
-      if (lastImportedId != null) ..._activeTheme(lastImportedId),
+      SettingsKeys.activeTheme: ?lastImportedId,
     });
 
     if (lastImportedId != null) {
@@ -172,7 +168,7 @@ class ThemeNotifier extends Notifier<AppThemeData> {
     // If current theme was deleted, switch to Dark theme
     if (isActiveTheme) {
       state = kDarkTheme;
-      await settings.setMany(_activeTheme(kDarkTheme.id));
+      await settings.set(SettingsKeys.activeTheme, kDarkTheme.id);
     }
   }
 }

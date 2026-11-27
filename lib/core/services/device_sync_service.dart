@@ -68,8 +68,6 @@ class const DeviceSyncCodeCheckResult({
   final int remoteRevision = 0,
   final int localKnownRemoteRevision = 0,
   final int remoteKnownLocalRevision = 0,
-  final int localKnownRemoteSyncAtMillis = 0,
-  final int remoteKnownLocalSyncAtMillis = 0,
   final String localSyncRevisionId = '',
   final String remoteSyncRevisionId = '',
   final int localDbTimestampMillis = 0,
@@ -114,7 +112,6 @@ class const _PeerPingResult({
   final String? remoteDbName,
   final int remoteRevision = 0,
   final int remoteKnownLocalRevision = 0,
-  final int remoteKnownLocalSyncAtMillis = 0,
   final String? remoteSyncRevisionId,
   final int remoteDbTimestampMillis = 0,
   final bool remoteReceiverSyncInFlight = false,
@@ -128,7 +125,6 @@ class const _PeerPingResult({
         remoteDbName: (payload['dbName'] as String?)?.trim(),
         remoteRevision: _intOf(payload, 'localRevision'),
         remoteKnownLocalRevision: _intOf(payload, 'peerKnownRevision'),
-        remoteKnownLocalSyncAtMillis: _intOf(payload, 'peerKnownSyncAt'),
         remoteSyncRevisionId: (payload['syncRevisionId'] as String?)?.trim(),
         remoteDbTimestampMillis: _intOf(payload, 'dbTimestampMillis'),
         remoteReceiverSyncInFlight: payload['receiverSyncInFlight'] == true,
@@ -363,10 +359,7 @@ class DeviceSyncService({
   SyncRevocationLedger? _revocationCache;
 
   List<TrustedSyncPeer> get _trustedPeers {
-    final raw =
-        ref.read(settingsProvider)[SettingsKeys.syncTrustedPeersJson]
-            as String? ??
-        DefaultSettings.syncTrustedPeersJson;
+    final raw = _setting<String>(SettingsKeys.syncTrustedPeersJson);
     if (raw != _trustedPeersJson) {
       _trustedPeersJson = raw;
       _trustedPeerList = decodeTrustedPeers(raw);
@@ -572,22 +565,35 @@ class DeviceSyncService({
     'transferPort': transferPort,
   };
 
-  Future<Map<String, dynamic>> _getLocalSyncStateForPeer(String peerId) async {
+  /// This device's sync state, and what it last heard from [peerId].
+  Future<
+    ({
+      int revision,
+      int dbTimestamp,
+      int peerKnownRevision,
+      int peerKnownSyncAt,
+      String contentDigest,
+    })
+  >
+  _localSyncStateForPeer(String peerId) async {
     final db = ref.read(databaseProvider);
-    final localRevision = db == null ? 0 : await db.getLocalSyncRevision();
-    final localDbTimestamp = db == null
-        ? 0
-        : await db.getSyncDbTimestampMillis();
-    final checkpoint = db == null
-        ? null
-        : await db.getPeerSyncCheckpoint(peerId);
-    return {
-      'localRevision': localRevision,
-      'localDbTimestamp': localDbTimestamp,
-      'peerKnownRevision': (checkpoint?['lastRevision'] as int?) ?? 0,
-      'peerKnownSyncAt': (checkpoint?['lastSyncAt'] as int?) ?? 0,
-      'contentDigest': db == null ? '' : await _codec.getDatasetDigest(),
-    };
+    if (db == null) {
+      return (
+        revision: 0,
+        dbTimestamp: 0,
+        peerKnownRevision: 0,
+        peerKnownSyncAt: 0,
+        contentDigest: '',
+      );
+    }
+    final checkpoint = await db.getPeerSyncCheckpoint(peerId);
+    return (
+      revision: await db.getLocalSyncRevision(),
+      dbTimestamp: await db.getSyncDbTimestampMillis(),
+      peerKnownRevision: checkpoint?['lastRevision'] as int? ?? 0,
+      peerKnownSyncAt: checkpoint?['lastSyncAt'] as int? ?? 0,
+      contentDigest: await _codec.getDatasetDigest(),
+    );
   }
 
   Future<DeviceSyncSnapshot> loadSnapshot() async {
@@ -596,13 +602,11 @@ class DeviceSyncService({
 
     final trustedPeers = _trustedPeers;
 
-    final lastSyncIso =
-        (settings[SettingsKeys.syncLastSyncAtIso] as String?) ??
-        DefaultSettings.syncLastSyncAtIso;
-
-    final enabled =
-        (settings[SettingsKeys.syncEnabled] as bool?) ??
-        DefaultSettings.syncEnabled;
+    final lastSyncIso = readSetting<String>(
+      settings,
+      SettingsKeys.syncLastSyncAtIso,
+    );
+    final enabled = readSetting<bool>(settings, SettingsKeys.syncEnabled);
 
     // Refresh device name on load
     await refreshDeviceName();
@@ -616,9 +620,7 @@ class DeviceSyncService({
 
     return DeviceSyncSnapshot(
       enabled: enabled,
-      autoOnStartup:
-          (settings[SettingsKeys.syncAutoOnStartup] as bool?) ??
-          DefaultSettings.syncAutoOnStartup,
+      autoOnStartup: readSetting(settings, SettingsKeys.syncAutoOnStartup),
       deviceId: deviceId,
       status: DeviceSyncStatus.idle,
       trustedPeers: trustedPeers,
@@ -653,32 +655,14 @@ class DeviceSyncService({
 
         final type = payload['type'];
         if (type != _discoverResponseType && type != _announceType) return;
-
-        final fromMap = _sender(payload);
-        if (fromMap == null) return;
-        final peerId = (fromMap['id'] as String?)?.trim() ?? '';
-        if (peerId.isEmpty || peerId == deviceId) return;
-
-        final peerName = (fromMap['name'] as String?)?.trim();
-        final peerType = syncDeviceTypeFromWire(
-          fromMap['deviceType'] as String? ?? fromMap['device_type'] as String?,
+        // A reply may name the address to use; otherwise it is the sender's.
+        final host = (payload['host'] as String?)?.trim() ?? '';
+        final peer = _peerFromPacket(
+          payload,
+          deviceId,
+          host.isEmpty ? datagram.address.address : host,
         );
-        final host = (payload['host'] as String?)?.trim();
-        final port = (payload['port'] as num?)?.toInt() ?? defaultLanPort;
-        final advertisedTransferPort = (payload['transferPort'] as num?)
-            ?.toInt();
-
-        discoveredById[peerId] = DiscoveredSyncPeer(
-          id: peerId,
-          name: _normalizeDeviceName(peerName, fallbackType: peerType),
-          host: (host == null || host.isEmpty)
-              ? datagram.address.address
-              : host,
-          port: port,
-          transferPort: advertisedTransferPort,
-          syncProtocol: _intOf(payload, 'protocol'),
-          deviceType: peerType,
-        );
+        if (peer != null) discoveredById[peer.id] = peer;
         // A failed send closes this socket; the scan just finds fewer devices.
       }, onError: (Object _) {});
 
@@ -740,9 +724,7 @@ class DeviceSyncService({
   //      trust and answers, and the initiator saves trust on that answer.
   // Steps 4 and 5 and the answer are MACed with the exchanged static keys.
 
-  bool get _syncEnabled =>
-      (ref.read(settingsProvider)[SettingsKeys.syncEnabled] as bool?) ??
-      DefaultSettings.syncEnabled;
+  bool get _syncEnabled => _setting(SettingsKeys.syncEnabled);
 
   static List<int> _randomBytes(int length) {
     final random = math.Random.secure();
@@ -786,7 +768,8 @@ class DeviceSyncService({
     return (value % 1000000).toString().padLeft(6, '0');
   }
 
-  static Future<void> _sendPairMessage(
+  /// Writes [message] as one JSON line, as pairing and handshakes do.
+  static Future<void> _sendJsonLine(
     Socket socket,
     Map<String, dynamic> message,
   ) {
@@ -882,7 +865,7 @@ class DeviceSyncService({
 
       final localSpub = base64.decode(await _localStaticPubB64());
       final nonce = _randomBytes(32);
-      await _sendPairMessage(connection, {
+      await _sendJsonLine(connection, {
         't': 'pair',
         'pair': _pairVersion,
         'syncProtocol': _protocolVersion,
@@ -914,7 +897,7 @@ class DeviceSyncService({
       }
       remoteSpub = base64.encode(receiverSpub);
 
-      await _sendPairMessage(connection, {
+      await _sendJsonLine(connection, {
         't': 'pair_reveal',
         'nonce': base64.encode(nonce),
       });
@@ -976,7 +959,7 @@ class DeviceSyncService({
       );
       requireActive();
       confirmSent = true;
-      await _sendPairMessage(
+      await _sendJsonLine(
         connection,
         await _attachControlAuthForFingerprint(
           payload: {'t': 'pair_confirm'},
@@ -1038,10 +1021,7 @@ class DeviceSyncService({
   ) async {
     if (hello['pair'] != _pairVersion ||
         hello['syncProtocol'] != _protocolVersion) {
-      await _sendPairMessage(socket, {
-        't': 'pair_refused',
-        'reason': 'version',
-      });
+      await _sendJsonLine(socket, {'t': 'pair_refused', 'reason': 'version'});
       return;
     }
     final localDeviceId = await _ensureDeviceId();
@@ -1061,7 +1041,7 @@ class DeviceSyncService({
     }
     // One prompt at a time.
     if (_incomingPairing != null) {
-      await _sendPairMessage(socket, {'t': 'pair_refused', 'reason': 'busy'});
+      await _sendJsonLine(socket, {'t': 'pair_refused', 'reason': 'busy'});
       return;
     }
     final pairing = _incomingPairing = _IncomingPairing();
@@ -1069,7 +1049,7 @@ class DeviceSyncService({
       final initiatorSpubB64 = base64.encode(initiatorSpub);
       final localSpub = base64.decode(await _localStaticPubB64());
       final nonce = _randomBytes(32);
-      await _sendPairMessage(socket, {
+      await _sendJsonLine(socket, {
         't': 'pair_keys',
         'from': _localIdentityMap(localDeviceId),
         'spub': base64.encode(localSpub),
@@ -1132,13 +1112,10 @@ class DeviceSyncService({
         return;
       }
       if (!accepted) {
-        await _sendPairMessage(socket, {
-          't': 'pair_decision',
-          'accepted': false,
-        });
+        await _sendJsonLine(socket, {'t': 'pair_decision', 'accepted': false});
         return;
       }
-      await _sendPairMessage(
+      await _sendJsonLine(
         socket,
         await _attachControlAuthForFingerprint(
           payload: {'t': 'pair_decision', 'accepted': true},
@@ -1166,7 +1143,7 @@ class DeviceSyncService({
         pairingId: requestId,
       );
       _emitSyncEvent(PeerTrustedEvent(trusted));
-      await _sendPairMessage(
+      await _sendJsonLine(
         socket,
         await _attachControlAuthForFingerprint(
           payload: {'t': 'pair_done'},
@@ -1253,9 +1230,7 @@ class DeviceSyncService({
     TrustedSyncPeer peer, {
     String? remoteFingerprint,
   }) async {
-    final localId =
-        (ref.read(settingsProvider)[SettingsKeys.syncDeviceId] as String?) ??
-        '';
+    final localId = _setting<String>(SettingsKeys.syncDeviceId);
     final payload = await _attachControlAuthForFingerprint(
       payload: {
         'type': _untrustType,
@@ -1449,10 +1424,7 @@ class DeviceSyncService({
     required String? remoteDbName,
   }) async {
     final name = (remoteDbName ?? '').trim();
-    final currentBasePath =
-        (ref.read(settingsProvider)[SettingsKeys.databasePath] as String?)
-            ?.trim() ??
-        '';
+    final currentBasePath = _setting<String>(SettingsKeys.databasePath).trim();
     if (name.isEmpty ||
         currentBasePath.isEmpty ||
         p.basename(currentBasePath) == name) {
@@ -1487,10 +1459,7 @@ class DeviceSyncService({
         'Unable to switch database file automatically right now. Please retry.',
       );
     }
-    final current =
-        (ref.read(settingsProvider)[SettingsKeys.databasePath] as String?)
-            ?.trim() ??
-        '';
+    final current = _setting<String>(SettingsKeys.databasePath).trim();
     var target = p.join(p.dirname(await AppDatabase.getDatabasePath()), name);
     if (!File(target).existsSync() && current.isNotEmpty) {
       final beside = p.join(p.dirname(current), name);
@@ -1508,8 +1477,7 @@ class DeviceSyncService({
     bool fullScan = false,
     DeviceSyncCodeCheckResult? preflight,
   }) async {
-    if (!_foreground ||
-        ref.read(settingsProvider)[SettingsKeys.syncEnabled] != true) {
+    if (!_foreground || !_syncEnabled) {
       throw const DeviceSyncException('Device sync is paused.');
     }
     var target = _trustedPeerById(peerId);
@@ -1577,7 +1545,7 @@ class DeviceSyncService({
         currentPeer == null ||
         currentPeer.pairingId != peer.pairingId ||
         currentPeer.fingerprint != peer.fingerprint ||
-        ref.read(settingsProvider)[SettingsKeys.syncEnabled] != true) {
+        !_syncEnabled) {
       throw const DeviceSyncException(
         'Database or pairing changed during sync. Start sync again.',
       );
@@ -1613,10 +1581,9 @@ class DeviceSyncService({
     required _ProgressReporter progress,
   }) async {
     final settings = ref.read(settingsProvider);
-    final enabled =
-        (settings[SettingsKeys.syncEnabled] as bool?) ??
-        DefaultSettings.syncEnabled;
-    if (!enabled) throw const DeviceSyncException('Device sync is disabled.');
+    if (!readSetting<bool>(settings, SettingsKeys.syncEnabled)) {
+      throw const DeviceSyncException('Device sync is disabled.');
+    }
 
     final trustedPeers = _trustedPeers;
     if (trustedPeers.isEmpty) {
@@ -2052,14 +2019,14 @@ class DeviceSyncService({
     return parts.join(' and ');
   }
 
+  T _setting<T>(String key) => readSetting<T>(ref.read(settingsProvider), key);
+
   Future<void> _setSetting<T>(String key, T value) =>
       ref.read(settingsProvider.notifier).set(key, value);
 
   Future<String> _ensureDeviceId() async {
     final settings = ref.read(settingsProvider);
-    var deviceId =
-        (settings[SettingsKeys.syncDeviceId] as String?) ??
-        DefaultSettings.syncDeviceId;
+    var deviceId = readSetting<String>(settings, SettingsKeys.syncDeviceId);
 
     if (deviceId.isEmpty) {
       deviceId = _uuid.v4();
@@ -2591,7 +2558,7 @@ class DeviceSyncService({
 
     final token = (payload['token'] as String?)?.trim();
     final replyPort = (payload['replyPort'] as num?)?.toInt() ?? datagram.port;
-    final peerState = await _getLocalSyncStateForPeer(fromId);
+    final state = await _localSyncStateForPeer(fromId);
 
     final pongPayload = await _attachControlAuthIfTrusted(
       payload: {
@@ -2599,15 +2566,15 @@ class DeviceSyncService({
         'protocol': _protocolVersion,
         'token': token,
         'from': _localIdentityMap(deviceId),
-        'localRevision': peerState['localRevision'],
-        'dbTimestampMillis': peerState['localDbTimestamp'],
-        'peerKnownRevision': peerState['peerKnownRevision'],
-        'peerKnownSyncAt': peerState['peerKnownSyncAt'],
+        'localRevision': state.revision,
+        'dbTimestampMillis': state.dbTimestamp,
+        'peerKnownRevision': state.peerKnownRevision,
+        'peerKnownSyncAt': state.peerKnownSyncAt,
         'trusted': _isTrustedPeer(fromId),
         'dbName': _currentDatabaseName(),
         'syncRevisionId': _currentSyncCode(),
         'receiverSyncInFlight': _receiverSyncInFlight,
-        'contentDigest': peerState['contentDigest'],
+        'contentDigest': state.contentDigest,
         'syncProtocol': _protocolVersion,
         'transferPort': transferPort,
       },
@@ -2771,59 +2738,43 @@ class DeviceSyncService({
       }
       return DeviceSyncCodeCheckResult(reachable: false, peer: target);
     }
-    final localState = await _getLocalSyncStateForPeer(target.id);
-    final localRevision = localState['localRevision'] as int? ?? 0;
-    final localKnownRemoteRevision =
-        localState['peerKnownRevision'] as int? ?? 0;
-    final localKnownRemoteSyncAtMillis =
-        localState['peerKnownSyncAt'] as int? ?? 0;
-    final localDbTimestampMillis = localState['localDbTimestamp'] as int? ?? 0;
+    final local = await _localSyncStateForPeer(target.id);
     final localDbName = _currentDatabaseName();
-    final localSyncRevisionId = _currentSyncCode();
     final remoteDbName = ping.remoteDbName;
-
-    final dbNameMismatch =
-        remoteDbName != null &&
-        remoteDbName.isNotEmpty &&
-        localDbName.isNotEmpty &&
-        remoteDbName != localDbName;
-    final remoteSyncRevisionId = (ping.remoteSyncRevisionId ?? '').trim();
-
     return DeviceSyncCodeCheckResult(
       reachable: ping.reachable,
       peer: target,
       localDbName: localDbName,
       remoteDbName: remoteDbName,
-      dbNameMismatch: dbNameMismatch,
-      localRevision: localRevision,
+      dbNameMismatch:
+          remoteDbName != null &&
+          remoteDbName.isNotEmpty &&
+          localDbName.isNotEmpty &&
+          remoteDbName != localDbName,
+      localRevision: local.revision,
       remoteRevision: ping.remoteRevision,
-      localKnownRemoteRevision: localKnownRemoteRevision,
+      localKnownRemoteRevision: local.peerKnownRevision,
       remoteKnownLocalRevision: ping.remoteKnownLocalRevision,
-      localKnownRemoteSyncAtMillis: localKnownRemoteSyncAtMillis,
-      remoteKnownLocalSyncAtMillis: ping.remoteKnownLocalSyncAtMillis,
-      localSyncRevisionId: localSyncRevisionId,
-      remoteSyncRevisionId: remoteSyncRevisionId,
-      localDbTimestampMillis: localDbTimestampMillis,
+      localSyncRevisionId: _currentSyncCode(),
+      remoteSyncRevisionId: (ping.remoteSyncRevisionId ?? '').trim(),
+      localDbTimestampMillis: local.dbTimestamp,
       remoteDbTimestampMillis: ping.remoteDbTimestampMillis,
       remoteReceiverSyncInFlight: ping.remoteReceiverSyncInFlight,
-      localContentDigest: localState['contentDigest'] as String? ?? '',
+      localContentDigest: local.contentDigest,
       remoteContentDigest: ping.remoteContentDigest,
       remoteSyncProtocol: ping.remoteSyncProtocol,
     );
   }
 
   String _currentSyncCode() {
-    final settings = ref.read(settingsProvider);
-    final revisionId =
-        (settings[SettingsKeys.syncDbRevisionId] as String?)?.trim() ?? '';
+    final revisionId = _setting<String>(SettingsKeys.syncDbRevisionId).trim();
     return revisionId.isEmpty ? 'initial' : revisionId;
   }
 
   /// Returns just the filename (e.g. "UniKM_Games.db") of the active database
   /// so peers can detect when they are using different database files.
   String _currentDatabaseName() {
-    final settings = ref.read(settingsProvider);
-    final path = (settings[SettingsKeys.databasePath] as String?)?.trim() ?? '';
+    final path = _setting<String>(SettingsKeys.databasePath).trim();
     if (path.isEmpty) return '';
     return p.basename(path);
   }
@@ -2875,33 +2826,46 @@ class DeviceSyncService({
     Map<String, dynamic> payload,
     String deviceId,
   ) {
-    final fromMap = _sender(payload);
-    if (fromMap == null) return;
-    final peerId = (fromMap['id'] as String?)?.trim() ?? '';
-    if (peerId.isEmpty || peerId == deviceId) return;
-    final peerName = (fromMap['name'] as String?)?.trim();
-    final peerType = syncDeviceTypeFromWire(
-      fromMap['deviceType'] as String? ?? fromMap['device_type'] as String?,
+    // An announcement is trusted only for the address it came from.
+    final peer = _peerFromPacket(payload, deviceId, datagram.address.address);
+    if (peer == null) return;
+    final previous = _freshAnnouncedPeerById(peer.id);
+    _announcedPeers[peer.id] = peer;
+    _announcedPeersSeenAt[peer.id] = DateTime.now();
+    _offlinePeersSeenAt.remove(peer.id);
+    if (previous == null ||
+        previous.host != peer.host ||
+        previous.port != peer.port ||
+        previous.syncProtocol != peer.syncProtocol) {
+      _emitSyncEvent(PeerAvailableEvent(peer));
+    }
+  }
+
+  /// The device an announcement or discovery reply describes, reached at
+  /// [host]; null without a sender, or when the sender is this device.
+  DiscoveredSyncPeer? _peerFromPacket(
+    Map<String, dynamic> payload,
+    String deviceId,
+    String host,
+  ) {
+    final from = _sender(payload);
+    final id = (from?['id'] as String?)?.trim() ?? '';
+    if (from == null || id.isEmpty || id == deviceId) return null;
+    final type = syncDeviceTypeFromWire(
+      from['deviceType'] as String? ?? from['device_type'] as String?,
     );
-    final port = (payload['port'] as num?)?.toInt() ?? defaultLanPort;
-    final previous = _freshAnnouncedPeerById(peerId);
-    _announcedPeers[peerId] = DiscoveredSyncPeer(
-      id: peerId,
-      name: _normalizeDeviceName(peerName, fallbackType: peerType),
-      host: datagram.address.address,
-      port: port,
+    return DiscoveredSyncPeer(
+      id: id,
+      name: _normalizeDeviceName(
+        (from['name'] as String?)?.trim(),
+        fallbackType: type,
+      ),
+      host: host,
+      port: (payload['port'] as num?)?.toInt() ?? defaultLanPort,
       transferPort: (payload['transferPort'] as num?)?.toInt(),
       syncProtocol: _intOf(payload, 'protocol'),
-      deviceType: peerType,
+      deviceType: type,
     );
-    _announcedPeersSeenAt[peerId] = DateTime.now();
-    _offlinePeersSeenAt.remove(peerId);
-    if (previous == null ||
-        previous.host != datagram.address.address ||
-        previous.port != port ||
-        previous.syncProtocol != _announcedPeers[peerId]!.syncProtocol) {
-      _emitSyncEvent(PeerAvailableEvent(_announcedPeers[peerId]!));
-    }
   }
 
   void _handleOffline(
@@ -3292,10 +3256,14 @@ class DeviceSyncService({
 
   Future<SimpleKeyPair> _loadStaticKeyPair() async {
     final settings = ref.read(settingsProvider);
-    final storedPriv =
-        (settings[SettingsKeys.syncStaticPrivateKey] as String?)?.trim() ?? '';
-    final storedPub =
-        (settings[SettingsKeys.syncStaticPublicKey] as String?)?.trim() ?? '';
+    final storedPriv = readSetting<String>(
+      settings,
+      SettingsKeys.syncStaticPrivateKey,
+    ).trim();
+    final storedPub = readSetting<String>(
+      settings,
+      SettingsKeys.syncStaticPublicKey,
+    ).trim();
     if (storedPriv.isNotEmpty && storedPub.isNotEmpty) {
       try {
         return await SyncCrypto.importKeyPair(storedPriv, storedPub);
@@ -3336,12 +3304,15 @@ class DeviceSyncService({
 
     // Send client hello.
     final token = _uuid.v4();
-    socket.add(
-      utf8.encode(
-        '${jsonEncode({'v': 2, 'syncProtocol': _protocolVersion, 'peerId': localDeviceId, 'token': token, 'pairingId': targetPeer.pairingId, 'eph': base64.encode(localEphemeralPub.bytes), 'spub': base64.encode(localStaticPub.bytes)})}\n',
-      ),
-    );
-    await socket.flush();
+    await _sendJsonLine(socket, {
+      'v': 2,
+      'syncProtocol': _protocolVersion,
+      'peerId': localDeviceId,
+      'token': token,
+      'pairingId': targetPeer.pairingId,
+      'eph': base64.encode(localEphemeralPub.bytes),
+      'spub': base64.encode(localStaticPub.bytes),
+    });
 
     // One reader serves the hello line and every frame after it.
     final reader = SyncByteReader(socket);
@@ -3471,8 +3442,7 @@ class DeviceSyncService({
           remoteStaticPubB64: revoked.fingerprint,
           pairingId: revoked.pairingId,
         );
-        socket.add(utf8.encode('${jsonEncode(rejection)}\n'));
-        await socket.flush();
+        await _sendJsonLine(socket, rejection);
       }
       return null;
     }
@@ -3498,13 +3468,12 @@ class DeviceSyncService({
     final serverEphemeral = await SyncCrypto.generateKeyPair();
     final serverEphemeralPub = await serverEphemeral.extractPublicKey();
 
-    // Send server hello.
-    socket.add(
-      utf8.encode(
-        '${jsonEncode({'v': 2, 'syncProtocol': _protocolVersion, 'eph': base64.encode(serverEphemeralPub.bytes), 'spub': base64.encode(serverStaticPub.bytes)})}\n',
-      ),
-    );
-    await socket.flush();
+    await _sendJsonLine(socket, {
+      'v': 2,
+      'syncProtocol': _protocolVersion,
+      'eph': base64.encode(serverEphemeralPub.bytes),
+      'spub': base64.encode(serverStaticPub.bytes),
+    });
 
     final clientEphPub = SyncCrypto.publicKeyFromBase64(clientEphB64);
     final clientStaticPub = SyncCrypto.publicKeyFromBase64(clientStaticPubB64);

@@ -1,6 +1,4 @@
-/// Shared clipboard operations for game data
-///
-/// Consolidates duplicate copy methods from the game cards and home_page.dart.
+/// Shared clipboard operations for game data.
 library;
 
 import '../../core/constants/app_constants.dart';
@@ -35,9 +33,7 @@ class GameClipboard._() {
   ) {
     final withKeys = targets.where((game) => game.gameKey.isNotEmpty).toList();
     if (withKeys.isEmpty) return;
-    final text = withKeys.map(format).join('\n');
-    if (text.isEmpty) return;
-    KeyPrivacy.copy(text);
+    KeyPrivacy.copy(withKeys.map(format).join('\n'));
     _notifyCopy(withKeys.length, type);
   }
 

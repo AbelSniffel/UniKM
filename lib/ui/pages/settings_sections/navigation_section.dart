@@ -29,24 +29,17 @@ class const NavigationSection({
     icon: Icons.view_sidebar_outlined,
   );
   // Horizontal and vertical panels keep separate placements with one label.
-  static const SettingTextSpec navButtonArrangementHorizontalSpec =
-      SettingTextSpec(
-        label: 'Button Placement',
-        icon: Icons.smart_button_outlined,
-      );
-  static const navButtonArrangementVerticalSpec =
-      navButtonArrangementHorizontalSpec;
+  static const SettingTextSpec navButtonArrangementSpec = SettingTextSpec(
+    label: 'Button Placement',
+    icon: Icons.smart_button_outlined,
+  );
   static const SettingTextSpec gradientSwapSpec = SettingTextSpec(
     label: 'Swap primary & accent colors',
     description: 'Alternative look for the gradient bar',
   );
   static const SettingsSearchGroup navigationSearchGroup = SettingsSearchGroup(
     title: 'Navigation Bar',
-    settings: [
-      navPositionSpec,
-      navButtonArrangementHorizontalSpec,
-      navButtonArrangementVerticalSpec,
-    ],
+    settings: [navPositionSpec, navButtonArrangementSpec],
     extraTexts: [
       'Layout',
       'Navigation Button Placement',
@@ -136,8 +129,8 @@ class const NavigationSection({
                 onChanged: settingsNotifier.setter(SettingsKeys.navBarPosition),
               ),
               SettingsButtonGroupCard<NavButtonArrangement>(
-                label: navButtonArrangementHorizontalSpec.label,
-                icon: navButtonArrangementHorizontalSpec.icon,
+                label: navButtonArrangementSpec.label,
+                icon: navButtonArrangementSpec.icon,
                 value: navButtonArrangement,
                 choices: [
                   for (final arrangement in NavButtonArrangement.values)
@@ -325,12 +318,10 @@ class const GradientOrderIcon({
 /// The swap icon's two arrows, each wholly in its own colour: the top one
 /// in [leading], the bottom one in [trailing]. The arrows overlap in height,
 /// so colouring the icon's halves would tint each with the other's colour.
-class _SwapArrowsPainter extends CustomPainter {
-  _SwapArrowsPainter({required this.leading, required this.trailing});
-
-  final Color leading;
-  final Color trailing;
-
+class const _SwapArrowsPainter({
+  required final Color leading,
+  required final Color trailing,
+}) extends CustomPainter {
   // Icons.swap_horiz's arrows on its 24 px grid.
   static final _top = Path()
     ..moveTo(21, 9)

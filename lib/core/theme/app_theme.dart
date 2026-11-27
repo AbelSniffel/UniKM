@@ -27,10 +27,6 @@ class const AppThemeData({
   required final Color baseAccent,
   final IconData? iconData,
   final double cornerRadius = 8.0,
-  final double scrollbarRadius = 8.0,
-  final double inputPaddingVertical = 10.0,
-  final double inputPaddingHorizontal = 12.0,
-  final double progressIndicatorStrokeWidth = 3.0,
 }) extends ThemeExtension<AppThemeData> {
   /// Every field, for comparing themes by value. `==` stays identity:
   /// providers compare their states with it.
@@ -42,11 +38,10 @@ class const AppThemeData({
     baseAccent,
     iconData,
     cornerRadius,
-    scrollbarRadius,
-    inputPaddingHorizontal,
-    inputPaddingVertical,
-    progressIndicatorStrokeWidth,
   );
+
+  /// The stroke of spinners drawn in the theme.
+  double get progressIndicatorStrokeWidth => 3;
 
   /// The radius for a corner [gap] inside one of [outer], the theme's corner
   /// radius by default, so the two curves share a centre (see
@@ -73,6 +68,8 @@ class const AppThemeData({
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(cornerRadius),
     ),
+    // See the button themes in [toThemeData].
+    animationDuration: Duration.zero,
   ).copyWith(foregroundBuilder: _growIconOnHover);
 
   /// Grows an icon button's icon on hover or selection, as the navigation
@@ -123,7 +120,6 @@ class const AppThemeData({
           ? themeIconFromCodePoint(json['icon_code_point'] as int)
           : null,
       cornerRadius: (json['corner_radius'] as num?)?.toDouble() ?? 8.0,
-      scrollbarRadius: (json['scrollbar_radius'] as num?)?.toDouble() ?? 8.0,
     );
   }
 
@@ -136,7 +132,6 @@ class const AppThemeData({
     'base_accent': colorToHex(baseAccent),
     if (iconData != null) 'icon_code_point': iconData!.codePoint,
     'corner_radius': cornerRadius,
-    'scrollbar_radius': scrollbarRadius,
   };
 
   /// Copy with new values
@@ -148,26 +143,15 @@ class const AppThemeData({
     Color? baseSecondary,
     Color? baseAccent,
     IconData? iconData,
-    bool clearIcon = false,
     double? cornerRadius,
-    double? scrollbarRadius,
-    double? inputPaddingHorizontal,
-    double? inputPaddingVertical,
-    double? progressIndicatorStrokeWidth,
   }) => AppThemeData(
     id: id ?? this.id,
     name: name ?? this.name,
     baseBackground: baseBackground ?? this.baseBackground,
     baseSecondary: baseSecondary ?? this.baseSecondary,
     baseAccent: baseAccent ?? this.baseAccent,
-    iconData: clearIcon ? null : (iconData ?? this.iconData),
+    iconData: iconData ?? this.iconData,
     cornerRadius: cornerRadius ?? this.cornerRadius,
-    scrollbarRadius: scrollbarRadius ?? this.scrollbarRadius,
-    inputPaddingHorizontal:
-        inputPaddingHorizontal ?? this.inputPaddingHorizontal,
-    inputPaddingVertical: inputPaddingVertical ?? this.inputPaddingVertical,
-    progressIndicatorStrokeWidth:
-        progressIndicatorStrokeWidth ?? this.progressIndicatorStrokeWidth,
   );
 
   @override
@@ -179,22 +163,6 @@ class const AppThemeData({
       baseSecondary: Color.lerp(baseSecondary, other.baseSecondary, t),
       baseAccent: Color.lerp(baseAccent, other.baseAccent, t),
       cornerRadius: lerpDouble(cornerRadius, other.cornerRadius, t),
-      scrollbarRadius: lerpDouble(scrollbarRadius, other.scrollbarRadius, t),
-      inputPaddingHorizontal: lerpDouble(
-        inputPaddingHorizontal,
-        other.inputPaddingHorizontal,
-        t,
-      ),
-      inputPaddingVertical: lerpDouble(
-        inputPaddingVertical,
-        other.inputPaddingVertical,
-        t,
-      ),
-      progressIndicatorStrokeWidth: lerpDouble(
-        progressIndicatorStrokeWidth,
-        other.progressIndicatorStrokeWidth,
-        t,
-      ),
     );
   }
 
@@ -299,14 +267,9 @@ class const AppThemeData({
   /// Input field focus wrap-around amount.
   double get inputBorderWrapFocus => cornerRadius * 0.62;
 
-  /// Selected-card overlay shared by game cards and preview cards: a
-  /// secondary tint of [fillAlpha] inside an accent border, faded in by [t].
-  BoxDecoration selectionOverlayDecoration(
-    double t, {
-    double fillAlpha = 0.55,
-  }) => BoxDecoration(
-    color: secondary.withValues(alpha: fillAlpha * t),
-    border: Border.all(color: accent.withValues(alpha: t), width: 3),
+  /// A selected game card's overlay: a secondary tint, faded in by [t].
+  BoxDecoration selectionOverlayDecoration(double t) => BoxDecoration(
+    color: secondary.withValues(alpha: 0.55 * t),
     borderRadius: BorderRadius.circular(cornerRadius),
   );
 
@@ -489,7 +452,9 @@ class const AppThemeData({
         shape: rounded,
       ),
 
-      // Buttons
+      // Buttons. Their Material would ease a new corner radius in over
+      // 200 ms while their fill, lighting and outline take it at once, so
+      // they follow the theme instantly, as everything else does.
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: withButtonDepth(
           ElevatedButton.styleFrom(
@@ -499,6 +464,7 @@ class const AppThemeData({
             disabledForegroundColor: primaryButtonDisabledText,
             shape: rounded,
             elevation: 0,
+            animationDuration: Duration.zero,
             padding: const EdgeInsets.symmetric(
               horizontal: kButtonPaddingHorizontal,
             ),
@@ -516,6 +482,7 @@ class const AppThemeData({
             foregroundColor: textPrimary,
             side: BorderSide(color: border),
             shape: rounded,
+            animationDuration: Duration.zero,
             padding: const EdgeInsets.symmetric(
               horizontal: kButtonPaddingHorizontal,
             ),
@@ -531,6 +498,7 @@ class const AppThemeData({
         style: TextButton.styleFrom(
           foregroundColor: accent,
           shape: rounded,
+          animationDuration: Duration.zero,
           padding: const EdgeInsets.symmetric(
             horizontal: kTextButtonPaddingHorizontal,
           ),
@@ -562,9 +530,9 @@ class const AppThemeData({
           minWidth: 42,
           minHeight: kElementHeight,
         ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: inputPaddingHorizontal,
-          vertical: inputPaddingVertical,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
         ),
       ),
 
@@ -713,6 +681,10 @@ class const AppThemeData({
 extension AppThemeContext on BuildContext {
   AppThemeData get appTheme =>
       Theme.of(this).extension<AppThemeData>() ?? kDarkTheme;
+
+  /// [duration], or none while animations are turned off.
+  Duration motion(Duration duration) =>
+      MediaQuery.disableAnimationsOf(this) ? Duration.zero : duration;
 }
 
 /// An outline drawn as an underline that wraps up the corners by
@@ -1000,11 +972,6 @@ class const FramedInputBorder({
   }
 }
 
-enum AppNavigationButtonVariant() {
-  navigation,
-  settingsSection,
-}
-
 class const AppNavigationButton({
   super.key,
   required final bool isSelected,
@@ -1017,13 +984,8 @@ class const AppNavigationButton({
   iconBuilder,
   final String? tooltipMessage,
   final EdgeInsetsGeometry? padding,
-  final AlignmentGeometry alignment = Alignment.center,
   final Color? selectedBackgroundColor,
   final double minWidth = 40,
-  final double minHeight = 26,
-  final Duration duration = Duration.zero,
-  final AppNavigationButtonVariant variant =
-      AppNavigationButtonVariant.navigation,
   final double iconSize = kIconSize,
   final bool labelVisible = true,
   final Duration labelFadeDuration = Duration.zero,
@@ -1033,10 +995,6 @@ class const AppNavigationButton({
   /// still show an icon while collapsed.
   final bool hideIconWithLabel = false,
   final bool hasNotification = false,
-
-  /// The color of the hover and press highlights, at the navigation item
-  /// strengths; the theme's accent by default.
-  final Color? tint,
 
   /// Sits after a horizontal button's label without growing on hover, such
   /// as a menu chevron.
@@ -1074,12 +1032,10 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
   late final AnimationController _hoverController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 100),
-    reverseDuration: const Duration(milliseconds: 100),
   );
   late final AnimationController _selectionController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 100),
-    reverseDuration: const Duration(milliseconds: 100),
     value: widget.isSelected ? 1.0 : 0.0,
   );
   late final AnimationController _labelVisibilityController =
@@ -1211,12 +1167,6 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
     );
   }
 
-  Color get _hoverColor =>
-      widget.tint?.withValues(alpha: 0.30) ?? context.appTheme.navItemHover;
-
-  Color get _pressedColor =>
-      widget.tint?.withValues(alpha: 0.40) ?? context.appTheme.navItemSelected;
-
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -1256,8 +1206,8 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
         final backgroundColor = !widget.isEnabled
             ? Colors.transparent
             : Color.lerp(
-                    Color.lerp(Colors.transparent, _hoverColor, hoverT),
-                    widget.selectedBackgroundColor ?? _pressedColor,
+                    Color.lerp(Colors.transparent, theme.navItemHover, hoverT),
+                    widget.selectedBackgroundColor ?? theme.navItemSelected,
                     selectionT,
                   ) ??
                   Colors.transparent;
@@ -1277,7 +1227,7 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
             color: backgroundColor,
             // Hover and selection are animated above. Apply theme geometry
             // directly so radius edits don't trail behind the other controls.
-            animationDuration: widget.duration,
+            animationDuration: Duration.zero,
             borderRadius: borderRadius,
             child: ButtonNotificationPulse(
               enabled: widget.hasNotification && widget.isEnabled,
@@ -1286,18 +1236,17 @@ class _AppNavigationButtonState extends State<AppNavigationButton>
               child: InkWell(
                 onTap: widget.isEnabled ? widget.onTap : null,
                 borderRadius: borderRadius,
-                splashColor: _hoverColor,
-                highlightColor: _pressedColor,
-                hoverColor: _hoverColor,
+                splashColor: theme.navItemHover,
+                highlightColor: theme.navItemSelected,
+                hoverColor: theme.navItemHover,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minWidth: widget.minWidth,
-                    minHeight: widget.minHeight,
+                    minHeight: 26,
                   ),
                   child: Padding(
                     padding: effectivePadding,
-                    child: Align(
-                      alignment: widget.alignment,
+                    child: Center(
                       child: _buildContent(
                         iconColor: iconColor,
                         labelStyle: labelStyle,

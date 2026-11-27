@@ -235,9 +235,12 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       onChanged: _notifier.setSearchQueryDebounced,
       onCleared: () => _notifier.setSearchQuery(''),
     );
-    final actions = _buttonRow(key: const ValueKey('home-toolbar-actions'), [
-      _buildFiltersToggleButton(theme, filters, platformFilter),
-    ]);
+    // As tall as the search bar.
+    final actions = SizedBox(
+      key: const ValueKey('home-toolbar-actions'),
+      height: kElementHeight,
+      child: _buildFiltersToggleButton(theme, filters, platformFilter),
+    );
     if (!narrow) {
       return Row(
         children: [
@@ -266,18 +269,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader>
       ],
     );
   }
-
-  /// Separate header buttons in a row, all as tall as the search bar.
-  static Widget _buttonRow(List<Widget> children, {Key? key}) => SizedBox(
-    height: kElementHeight,
-    child: Row(
-      key: key,
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: kElementHSpacing,
-      children: children,
-    ),
-  );
 
   Widget _buildFiltersToggleButton(
     AppThemeData theme,

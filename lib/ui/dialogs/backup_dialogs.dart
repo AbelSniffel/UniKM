@@ -49,10 +49,9 @@ Future<void> _reloadDatabaseFromSettings(
     return;
   }
 
-  final configuredPath = container.read(currentDatabasePathProvider);
-  final basePath = configuredPath.isNotEmpty
-      ? configuredPath
-      : await AppDatabase.getDatabasePath();
+  final basePath = await AppDatabase.resolvePath(
+    container.read(currentDatabasePathProvider),
+  );
 
   container.read(databaseSwitchingProvider.notifier).set(true);
   try {
@@ -123,7 +122,6 @@ class _BackupDialogState extends ConsumerState<_BackupDialog>
   }
 
   Future<void> _loadBackups() async {
-    setState(() => _isLoading = true);
     try {
       final backups = await ref.read(backupServiceProvider).listBackups();
       if (mounted) setState(() => _backups = backups);

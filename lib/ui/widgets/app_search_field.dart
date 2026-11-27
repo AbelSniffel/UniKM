@@ -1,9 +1,4 @@
 /// A themed search text field matching the app's visual language.
-///
-/// Replaces 3 duplicate search TextField blocks in:
-/// - home_page.dart
-/// - tag_list.dart
-/// - settings_page.dart
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -15,15 +10,6 @@ import 'horizontal_fold.dart';
 
 /// A themed search [TextField] with prefix search icon, optional clear button,
 /// and rounded border using [AppThemeData] colours.
-///
-/// ```dart
-/// AppSearchField(
-///   theme: theme,
-///   hintText: 'Search by title or key...',
-///   controller: searchController,
-///   onChanged: (value) => ref.read(provider.notifier).setSearchQuery(value),
-/// )
-/// ```
 class const AppSearchField({
   super.key,
   required final ValueChanged<String> onChanged,

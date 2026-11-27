@@ -20,13 +20,6 @@ class const SettingsStore(final SharedPreferences _prefs) {
     return {
       for (final MapEntry(:key, :value) in settingDefaults.entries)
         key: _readPreference(key, value),
-      SettingsKeys.autoCheckIntervalMinutes:
-          DefaultSettings.autoCheckIntervalMinutes,
-      // The current-theme alias falls back to the legacy active-theme key.
-      SettingsKeys.currentTheme:
-          _prefs.getString(SettingsKeys.currentTheme) ??
-          _prefs.getString(SettingsKeys.activeTheme) ??
-          DefaultSettings.activeTheme,
       for (final MapEntry(:key, value: (values, fallback))
           in enumSettingDefaults.entries)
         key: _readEnum(

@@ -136,10 +136,8 @@ class _PreviewCardState extends State<PreviewCard> {
 
   @override
   Widget build(BuildContext context) {
-    const borderWidth = 0.0;
     final theme = context.appTheme;
     final outerRadius = BorderRadius.circular(theme.cornerRadius);
-    final innerRadius = math.max(0.0, theme.cornerRadius - borderWidth);
     final selected = widget.isSelected;
     // The ring, dot and name chip share one selection motion. Each animates
     // only its own small subtree, and only while the selection changes, so
@@ -147,9 +145,7 @@ class _PreviewCardState extends State<PreviewCard> {
     Widget onSelection(Widget Function(double t) builder) =>
         TweenAnimationBuilder<double>(
           tween: Tween(end: selected ? 1 : 0),
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : kMediumAnimation,
+          duration: context.motion(kMediumAnimation),
           curve: Curves.easeOutCubic,
           builder: (_, t, _) => builder(t),
         );
@@ -211,8 +207,8 @@ class _PreviewCardState extends State<PreviewCard> {
                   background,
                   if (widget.icon != null)
                     Positioned(
-                      right: borderWidth + 2,
-                      bottom: borderWidth,
+                      right: 2,
+                      bottom: 0,
                       child: Icon(
                         widget.icon,
                         size: widget.height == null ? 32 : 45,
@@ -230,31 +226,28 @@ class _PreviewCardState extends State<PreviewCard> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(borderWidth),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(innerRadius),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // The live clip above controls every splash, including one
-                    // already running when a selected theme changes the corners.
-                    Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        key: widget.tapKey,
-                        excludeFromSemantics: true,
-                        onTap: widget.onTap == null ? null : _onTap,
-                        onTapUp: widget.onDoubleTap == null ? null : _onTapUp,
-                        onTapCancel: widget.onDoubleTap == null
-                            ? null
-                            : _resetTapHistory,
-                        child: const SizedBox.expand(),
-                      ),
+            ClipRRect(
+              borderRadius: outerRadius,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // The live clip above controls every splash, including one
+                  // already running when a selected theme changes the corners.
+                  Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      key: widget.tapKey,
+                      excludeFromSemantics: true,
+                      onTap: widget.onTap == null ? null : _onTap,
+                      onTapUp: widget.onDoubleTap == null ? null : _onTapUp,
+                      onTapCancel: widget.onDoubleTap == null
+                          ? null
+                          : _resetTapHistory,
+                      child: const SizedBox.expand(),
                     ),
-                    ?widget.foreground,
-                  ],
-                ),
+                  ),
+                  ?widget.foreground,
+                ],
               ),
             ),
             Positioned.fill(
@@ -262,7 +255,8 @@ class _PreviewCardState extends State<PreviewCard> {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: outerRadius,
-                    border: Border.all(color: theme.border, width: borderWidth),
+                    // A hairline: the thinnest edge the display can draw.
+                    border: Border.all(color: theme.border, width: 0),
                   ),
                 ),
               ),

@@ -198,10 +198,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
     final searchQuery = ref.watch(settingsPageSearchQueryProvider);
     final isSearching = searchQuery.isNotEmpty;
-    final effectiveSection = searchQuery.isNotEmpty ? 'all' : selectedSection;
-    final selectedSectionDefinition = _selectedSectionDefinitionFor(
-      selectedSection,
-    );
+    final effectiveSection = isSearching ? 'all' : selectedSection;
 
     void selectSection(String sectionId) =>
         ref.read(settingsPageSelectedSectionProvider.notifier).set(sectionId);
@@ -225,18 +222,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .set(value.trim().toLowerCase()),
       sections: effectiveSection == 'all'
           ? _settingsSections
-          : [?selectedSectionDefinition],
+          : _settingsSections.where((s) => s.id == selectedSection).toList(),
     );
 
     return Row(children: [if (!narrow) rail, body]);
-  }
-
-  _SettingsSectionDefinition? _selectedSectionDefinitionFor(String sectionId) {
-    for (final section in _settingsSections) {
-      if (section.id == sectionId) return section;
-    }
-
-    return null;
   }
 }
 
@@ -301,7 +290,6 @@ class _SettingsRailItemState extends State<_SettingsRailItem> {
     final theme = context.appTheme;
     final radius = BorderRadius.circular(theme.cornerRadius);
     final enabled = widget.onTap != null;
-    final animate = !MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
       selected: widget.selected,
@@ -315,9 +303,7 @@ class _SettingsRailItemState extends State<_SettingsRailItem> {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: AnimatedContainer(
-              duration: animate
-                  ? const Duration(milliseconds: 160)
-                  : Duration.zero,
+              duration: context.motion(const Duration(milliseconds: 160)),
               curve: Curves.easeOutCubic,
               height: 40,
               decoration: BoxDecoration(
@@ -336,9 +322,7 @@ class _SettingsRailItemState extends State<_SettingsRailItem> {
                   // panel's icons do.
                   child: AnimatedScale(
                     scale: enabled && (widget.selected || _hovered) ? 1.2 : 1,
-                    duration: animate
-                        ? const Duration(milliseconds: 100)
-                        : Duration.zero,
+                    duration: context.motion(const Duration(milliseconds: 100)),
                     child: Icon(
                       widget.icon,
                       size: 22,

@@ -26,9 +26,8 @@ import '../../widgets/tag_list.dart';
 /// to name even their longest choices, such as "Humble Bundle".
 const double kHomeFilterSidebarWidth = 380;
 
-/// The opacity of the surface colour veiling the panel behind the strips
-/// above and below the tags (platform and sort, and Show only), so they stand
-/// a little apart from the tags on the panel's own surface.
+/// The opacity of the surface colour veiling the panel behind the whole
+/// filter box: platform and sort, the tags, and Show only.
 const double kHomeFilterBandAlpha = 0.60;
 
 /// In the panel below the toolbar the tag list scrolls past this height.
@@ -225,15 +224,11 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       ],
     );
 
-    // In from the sides: the sidebar's 12 px, or below the toolbar its own
-    // 14 px, so everything lines up with the search bar.
-    final inset = EdgeInsets.symmetric(
-      horizontal: widget.sidebar ? 12 : 14,
-      vertical: 12,
-    );
+    // 12 px in from the sides, in the sidebar or the box below the toolbar.
+    const inset = EdgeInsets.all(12);
 
-    // A strip across the top or foot, veiling the panel's surface, which
-    // the tags between the strips keep, with a line on its side facing them.
+    // A strip across the top or foot, with a line on its side facing the
+    // tags. The veil under the whole box is shared with the tags.
     Widget band(Widget child, {required bool top}) {
       final line = BorderSide(color: theme.border);
       return DecoratedBox(
@@ -241,10 +236,7 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         decoration: BoxDecoration(
           border: top ? Border(bottom: line) : Border(top: line),
         ),
-        child: Material(
-          color: theme.surface.withValues(alpha: kHomeFilterBandAlpha),
-          child: Padding(padding: inset, child: child),
-        ),
+        child: Padding(padding: inset, child: child),
       );
     }
 
@@ -316,13 +308,16 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
         key: const ValueKey('home-filter-group-tags'),
         child: tags,
       );
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          band(sorters, top: true),
-          if (fill) Expanded(child: box) else box,
-          band(options, top: false),
-        ],
+      return Material(
+        color: theme.surface.withValues(alpha: kHomeFilterBandAlpha),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            band(sorters, top: true),
+            if (fill) Expanded(child: box) else box,
+            band(options, top: false),
+          ],
+        ),
       );
     }
 
@@ -348,20 +343,29 @@ class _HomeFiltersPanelState extends ConsumerState<HomeFiltersPanel> {
       );
     }
 
-    // Below the toolbar, laid out as in the sidebar, edge to edge, with a
-    // line parting it from the toolbar as the header's border parts the
-    // sidebar from the header.
+    // Below the toolbar, laid out as in the sidebar, in a box of its own
+    // as the sidebar is: lined up with the search bar's sides, a gap above
+    // the header's foot, rounded like the game cards and outlined.
+    final radius = BorderRadius.circular(theme.cornerRadius);
     return AnimatedHeight(
       duration: kFilterExpandAnimation,
       curve: kFilterPanelCurve,
-      child: DecoratedBox(
+      child: Padding(
         key: const ValueKey('home-filter-panel-height'),
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: theme.border)),
-        ),
-        child: KeyedSubtree(
-          key: const ValueKey('home-filter-panel'),
-          child: filterBox(fill: false),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.border),
+            borderRadius: radius,
+          ),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: KeyedSubtree(
+              key: const ValueKey('home-filter-panel'),
+              child: filterBox(fill: false),
+            ),
+          ),
         ),
       ),
     );
@@ -439,10 +443,11 @@ class _HomeFilterSidebarLayoutState
               child: library,
             ),
             if (widget.showSidebar)
+              // As far from the top and foot as the library's cards are.
               Positioned(
-                top: 0,
+                top: _kSidebarGap,
                 right: kHomeFilterSidebarWidth * (shown - 1),
-                bottom: 0,
+                bottom: _kSidebarGap,
                 width: kHomeFilterSidebarWidth,
                 // Kept while closed, so the tag search keeps its text.
                 child: Visibility(
@@ -458,29 +463,64 @@ class _HomeFilterSidebarLayoutState
   }
 }
 
+/// The sidebar's gap above and below it: the library's padding, so it
+/// lines up with the cards.
+const double _kSidebarGap = 12;
+
 class const _HomeFilterSidebar() extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
+    // Rounded on the library's side as the game cards are.
+    final radius = BorderRadius.horizontal(
+      left: Radius.circular(theme.cornerRadius),
+    );
     return RepaintBoundary(
       key: const ValueKey('home-filter-sidebar'),
-      // The line facing the library, drawn over the sidebar's surface,
-      // which would otherwise cover it.
-      child: DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: theme.border)),
-        ),
+      // The outline, drawn over the sidebar's surface, which would
+      // otherwise cover it.
+      child: CustomPaint(
+        foregroundPainter: _SidebarOutline(radius, theme.border),
         // The navigation panel's surface, as the header and settings
         // section list have.
-        child: PanelPatternSurface(
-          child: Material(
-            type: MaterialType.transparency,
-            textStyle: DefaultTextStyle.of(context).style,
-            child: const HomeFiltersPanel(sidebar: true),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: PanelPatternSurface(
+            child: Material(
+              type: MaterialType.transparency,
+              textStyle: DefaultTextStyle.of(context).style,
+              child: const HomeFiltersPanel(sidebar: true),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The sidebar's outline on its top, library side and foot, but not along
+/// the window's edge: a uniform border's right side, pushed past the edge
+/// and clipped away.
+class const _SidebarOutline(final BorderRadius radius, final Color color)
+    extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas
+      ..save()
+      ..clipRect(rect)
+      ..drawRRect(
+        radius
+            .toRRect(Rect.fromLTRB(0, 0, size.width + 1, size.height))
+            .deflate(0.5),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = color,
+      )
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_SidebarOutline old) =>
+      old.radius != radius || old.color != color;
 }

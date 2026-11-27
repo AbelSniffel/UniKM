@@ -165,10 +165,10 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
     final batchFetchActive = ref.watch(
       batchFetchProvider.select((state) => state.isActive),
     );
-    final settings = ref.watch(settingsProvider);
-    final showId =
-        (settings[SettingsKeys.showGameDetailsSkmId] as bool?) ??
-        DefaultSettings.showGameDetailsSkmId;
+    final showId = readSetting<bool>(
+      ref.watch(settingsProvider),
+      SettingsKeys.showGameDetailsSkmId,
+    );
     final showSyncDeviceId = ref.watch(showSyncDeviceIdProvider);
     final showSyncStatus = ref.watch(showSyncStatusProvider);
     final showSeasonal = ref.watch(showSeasonalPatternsProvider);
@@ -227,7 +227,7 @@ class _DevWindowOverlayState extends ConsumerState<DevWindowOverlay> {
         section('Deadlines', [
           action('Simulate alerts', Icons.timelapse, () async {
             await DeadlineNotificationService.instance
-                .simulateDeadlineNotifications(ref);
+                .simulateDeadlineNotifications();
             NotificationManager.instance.info(
               'Deadline notifications simulated',
             );

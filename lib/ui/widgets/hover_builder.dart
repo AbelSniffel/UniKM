@@ -1,8 +1,4 @@
-/// Reusable hover state builder widget
-///
-/// Eliminates the repeated pattern of:
-/// - bool _isHovered = false;
-/// - MouseRegion with onEnter/onExit setState calls
+/// Reusable hover state builder widget.
 library;
 
 import 'package:material_ui/material_ui.dart';

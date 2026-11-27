@@ -306,11 +306,9 @@ class UpdateNotifier extends Notifier<UpdateState> {
     try {
       final updatesSettings = ref.read(updatesSettingsProvider);
       _updateService = _serviceFor(updatesSettings);
-      final currentVersion = kAppVersion;
-
       // One release-list request serves the check and the version list.
       final result = await _updateService.checkForUpdates(
-        currentVersion: currentVersion,
+        currentVersion: kAppVersion,
         includePrerelease: updatesSettings.includePrerelease,
         skippedVersions: updatesSettings.skippedVersions,
       );

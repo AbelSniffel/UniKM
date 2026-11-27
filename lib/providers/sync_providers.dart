@@ -769,24 +769,23 @@ class DeviceSyncNotifier extends AsyncNotifier<DeviceSyncSnapshot> {
         confirmCode: confirmCode,
         onUserCancel: onUserCancel,
       );
-
-      final nextTrusted = [
-        ...current.trustedPeers.where((p) => p.id != trusted.id),
-        trusted,
-      ];
-
+      // Pairing can take a minute; start from what changed meanwhile.
+      final latest = state.value ?? current;
       state = AsyncData(
-        current.copyWith(
-          trustedPeers: nextTrusted,
+        latest.copyWith(
+          trustedPeers: [
+            ...latest.trustedPeers.where((p) => p.id != trusted.id),
+            trusted,
+          ],
           pendingPairRequests: _service.getPendingPairRequests(),
           statusMessage: 'Paired with ${trusted.name}.',
         ),
       );
-      _ensureBackgroundTimer(state.value ?? current);
+      _ensureBackgroundTimer(state.value!);
       _markPeerDirty(trusted.id, immediate: true, resetBackoff: true);
     } on PairingEndedException catch (ended) {
       state = AsyncData(
-        current.copyWith(
+        (state.value ?? current).copyWith(
           status: DeviceSyncStatus.idle,
           pendingPairRequests: _service.getPendingPairRequests(),
           statusMessage: ended.status,

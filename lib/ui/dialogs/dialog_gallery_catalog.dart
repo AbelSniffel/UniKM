@@ -141,7 +141,6 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
     'Deadline picker',
     (c) => showDeadlinePickerDialog(
       context: c,
-      theme: _theme(c),
       currentDate: galleryDate,
       initialDate: galleryGame.deadlineDate,
     ),
@@ -314,7 +313,6 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
   DialogGalleryEntry('pair-code', 'Outgoing pairing code', (c) {
     showOutgoingPairCodeDialog(
       context: c,
-      theme: _theme(c),
       peerName: galleryPeer.name,
       code: '123456',
       onCancel: () {},
@@ -378,20 +376,7 @@ List<DialogGalleryEntry> buildDialogGalleryCatalog() => [
         confirmLabel: confirmation.action,
         destructive: confirmation.destructive,
         showCancel: confirmation.id == 'unpair',
-        titleIcon:
-            const {
-              'delete-backup',
-              'delete-tag',
-              'delete-all-tags',
-              'cleanup-tags',
-              'unused-tags',
-              'delete-theme',
-              'replace-data',
-              'reset-settings',
-              'unpair',
-            }.contains(confirmation.id)
-            ? confirmation.icon
-            : null,
+        titleIcon: confirmation.icon,
         confirmIcon: confirmation.id == 'unpair' ? Icons.link_off : null,
       ),
     ),

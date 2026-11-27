@@ -3,35 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_providers.dart';
 
+/// The app's spinner, always in the theme's accent.
 class AppCircularProgressIndicator extends ConsumerWidget {
-  const AppCircularProgressIndicator({
-    super.key,
-    this.color,
-    this.strokeWidth,
-    this.size,
-  }) : _asIcon = false,
-       _page = false;
+  const AppCircularProgressIndicator({super.key, this.strokeWidth, this.size})
+    : _asIcon = false,
+      _page = false;
 
   /// Stands in for an [Icon] of [size], or of the surrounding icon size: as
   /// wide as an icon's glyph, inside the same padding, with the theme's
   /// stroke.
   const AppCircularProgressIndicator.icon({super.key, this.size})
-    : color = null,
-      strokeWidth = null,
+    : strokeWidth = null,
       _asIcon = true,
       _page = false;
 
   /// Alone on a loading page: a pixel heavier than the theme's stroke.
   const AppCircularProgressIndicator.page({super.key})
-    : color = null,
-      strokeWidth = null,
+    : strokeWidth = null,
       size = null,
       _asIcon = false,
       _page = true;
 
   final bool _asIcon;
   final bool _page;
-  final Color? color;
   final double? strokeWidth;
 
   /// Square size; without it the indicator takes its default size.

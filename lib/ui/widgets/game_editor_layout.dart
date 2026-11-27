@@ -71,6 +71,10 @@ class const GameEditorLayout({
 
   /// Rounds the backdrop's top corners to the container's.
   final double cornerRadius = 0,
+
+  /// Covers the backdrop may show next, decoded ahead (see
+  /// [GameCoverImage.prefetch]).
+  final List<String> prefetchCovers = const [],
 }) extends StatelessWidget {
   /// Width at which the cover sits beside the title, and the notes beside
   /// the tags.
@@ -127,6 +131,7 @@ class const GameEditorLayout({
       if (cover == null) return body;
       return GameBanner(
         coverController: cover,
+        prefetchCovers: prefetchCovers,
         cornerRadius: cornerRadius,
         solidHeight: GameBannerBackdrop.solidHeightFor(
           wide: wide,
@@ -370,6 +375,7 @@ class const GameBanner({
   super.key,
   required final Widget child,
   final TextEditingController? coverController,
+  final List<String> prefetchCovers = const [],
 
   /// Rounds the backdrop's top corners to the container's.
   final double cornerRadius = 0,
@@ -391,6 +397,7 @@ class const GameBanner({
             ),
             child: GameBannerBackdrop(
               coverController: coverController,
+              prefetchCovers: prefetchCovers,
               solidHeight: solidHeight,
             ),
           ),
@@ -412,6 +419,9 @@ class const GameBannerBackdrop({
 
   /// The cover whose art is blurred in; without one only the tint shows.
   final TextEditingController? coverController,
+
+  /// Covers it may show next, decoded ahead (see [GameCoverImage.prefetch]).
+  final List<String> prefetchCovers = const [],
 
   /// How far down the backdrop stays at full strength.
   final double solidHeight = headerHeight,
@@ -534,6 +544,7 @@ class const GameBannerBackdrop({
                                 scale: 1.4,
                                 child: GameCoverImage(
                                   coverImage: value.text.trim(),
+                                  prefetch: prefetchCovers,
                                 ),
                               ),
                             ),

@@ -2,6 +2,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
@@ -137,21 +138,22 @@ Future<PreparedEncryptedDatabaseImport> decryptSteamKm2DatabaseToTemp(
     throw const FormatException('Not a SteamKM2 encrypted database');
   }
 
+  final view = ByteData.sublistView(data);
   var offset = 4;
   final version = data[offset++];
   if (version != EncryptionConfig.metaVersion) {
     throw FormatException('Unsupported SteamKM2 encryption version: $version');
   }
 
-  final saltLength = _readUint16(data, offset);
+  final saltLength = view.getUint16(offset);
   offset += 2;
   final salt = data.sublist(offset, offset + saltLength);
   offset += saltLength;
 
-  final iterations = _readUint32(data, offset);
+  final iterations = view.getUint32(offset);
   offset += 4;
 
-  final nonceLength = _readUint16(data, offset);
+  final nonceLength = view.getUint16(offset);
   offset += 2;
   final nonce = data.sublist(offset, offset + nonceLength);
   offset += nonceLength;
@@ -250,20 +252,25 @@ bool _looksLikeSteamKm1EncryptedExport(Uint8List bytes) {
   }
 }
 
+/// Off the UI isolate: SteamKM1's 480,000 rounds take about a second.
 Future<crypto.SecretKey> _deriveSecretKey({
   required String password,
   required List<int> salt,
   required int iterations,
-}) {
-  final pbkdf2 = crypto.Pbkdf2(
-    macAlgorithm: crypto.Hmac.sha256(),
-    iterations: iterations,
-    bits: 256,
-  );
-  return pbkdf2.deriveKey(
-    secretKey: crypto.SecretKey(utf8.encode(password)),
-    nonce: salt,
-  );
+}) async {
+  final bytes = await Isolate.run(() async {
+    final key =
+        await crypto.Pbkdf2(
+          macAlgorithm: crypto.Hmac.sha256(),
+          iterations: iterations,
+          bits: 256,
+        ).deriveKey(
+          secretKey: crypto.SecretKey(utf8.encode(password)),
+          nonce: salt,
+        );
+    return key.extractBytes();
+  });
+  return crypto.SecretKey(bytes);
 }
 
 /// Leaves padding to [_removePkcs7Padding].
@@ -297,12 +304,3 @@ Uint8List _removePkcs7Padding(Uint8List data) {
 
   return Uint8List.sublistView(data, 0, data.length - padLength);
 }
-
-int _readUint16(Uint8List data, int offset) =>
-    (data[offset] << 8) | data[offset + 1];
-
-int _readUint32(Uint8List data, int offset) =>
-    (data[offset] << 24) |
-    (data[offset + 1] << 16) |
-    (data[offset + 2] << 8) |
-    data[offset + 3];

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
-
 /// Serializes saves and acknowledges only revisions whose writer completed.
 /// A failed save remains dirty; a later request can retry it.
 class EncryptedSaveCoordinator(final Future<void> Function() write) {
@@ -7,8 +5,6 @@ class EncryptedSaveCoordinator(final Future<void> Function() write) {
   int _requestedRevision = 0;
   int _savedRevision = 0;
 
-  @visibleForTesting
-  int get savedRevision => _savedRevision;
   bool get isDirty => _savedRevision < _requestedRevision;
 
   Future<void> save() {

@@ -89,13 +89,13 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
     return show(dialogContext, ref.read(themeProvider));
   }
 
-  /// Opens the configured database again from the start.
   /// Starts or ends a boot, ending with [error] when it failed.
   void _setBooting(bool booting, [Object? error]) => setState(() {
     _booting = booting;
     _error = error;
   });
 
+  /// Opens the configured database again from the start.
   Future<void> _restartBootstrap() {
     setState(() {
       _booting = true;
@@ -188,10 +188,9 @@ class _UniKMBootstrapState extends ConsumerState<UniKMBootstrap> {
         }
       }
 
-      final configuredPath = prefs.getString(SettingsKeys.databasePath) ?? '';
-      final baseDbPath = configuredPath.isNotEmpty
-          ? configuredPath
-          : await AppDatabase.getDatabasePath();
+      final baseDbPath = await AppDatabase.resolvePath(
+        prefs.getString(SettingsKeys.databasePath) ?? '',
+      );
 
       // Before any password prompt: another window may own this file.
       await DatabaseLock.acquire(baseDbPath);

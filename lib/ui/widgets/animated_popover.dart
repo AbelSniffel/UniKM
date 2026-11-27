@@ -21,14 +21,11 @@ class _AnimatedPopoverState extends State<AnimatedPopover>
     with SingleTickerProviderStateMixin {
   final _menu = MenuController();
   final _buttonFocus = FocusNode();
-  late final _animation =
-      AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 500),
-        reverseDuration: const Duration(milliseconds: 300),
-      )..addStatusListener((_) {
-        if (mounted) setState(() {});
-      });
+  // Its durations are set in build, as reduced motion allows.
+  late final _animation = AnimationController(vsync: this)
+    ..addStatusListener((_) {
+      if (mounted) setState(() {});
+    });
   late final _height = CurvedAnimation(
     parent: _animation,
     curve: const Cubic(.3, 0, 0, 1),
@@ -51,13 +48,9 @@ class _AnimatedPopoverState extends State<AnimatedPopover>
 
   @override
   Widget build(BuildContext context) {
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    _animation.duration = reducedMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 500);
-    _animation.reverseDuration = reducedMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 300);
+    _animation
+      ..duration = context.motion(const Duration(milliseconds: 500))
+      ..reverseDuration = context.motion(const Duration(milliseconds: 300));
     final closing = !_animation.status.isForwardOrCompleted;
 
     return RawMenuAnchor(

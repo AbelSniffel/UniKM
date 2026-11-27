@@ -32,16 +32,13 @@ class DesktopWindowSession {
 // NAV ITEMS
 // =============================================================================
 
-/// The top-level navigation destinations in the app.
-enum NavItem(
-  final String label,
-  final IconData selectedIcon,
-  final IconData unselectedIcon,
-) {
-  home('Library', Icons.home, Icons.home_outlined),
-  addGames('Add', Icons.add_circle, Icons.add_circle_outline),
-  updates('Updates', Icons.download_rounded, Icons.download_rounded),
-  settings('Settings', Icons.settings, Icons.settings_outlined);
+/// The top-level navigation destinations in the app. The buttons always
+/// show the filled [icon], chosen or not.
+enum NavItem(final String label, final IconData icon) {
+  home('Library', Icons.home),
+  addGames('Add', Icons.add_circle),
+  updates('Updates', Icons.download_rounded),
+  settings('Settings', Icons.settings);
 
   /// The destinations with a navigation button, in order. Updates opens from
   /// the navigation panel's More menu.
@@ -121,17 +118,7 @@ final appearanceThemeTabProvider =
 
 const String kAutoDetectPlatformValue = '__auto__';
 
-final addGamesSelectedTabProvider =
-    NotifierProvider<AddGamesSelectedTabNotifier, int>(
-      AddGamesSelectedTabNotifier.new,
-    );
-
-class AddGamesSelectedTabNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void setIndex(int index) => state = index.clamp(0, 1);
-}
+final addGamesSelectedTabProvider = sessionValueProvider(0);
 
 class const AddGamesSingleEntryDraft({
   final String title = '',
@@ -192,19 +179,7 @@ final viewModeProvider = NotifierProvider<ViewModeNotifier, GameListViewMode>(
 /// Last selected game ID for range selection
 final lastSelectedGameIdProvider = sessionValueProvider<int?>(null);
 
-final selectionMultiSelectModeProvider =
-    NotifierProvider<SelectionMultiSelectModeNotifier, bool>(
-      SelectionMultiSelectModeNotifier.new,
-    );
-
-class SelectionMultiSelectModeNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void setEnabled(bool enabled) => state = enabled;
-
-  void toggle() => state = !state;
-}
+final selectionMultiSelectModeProvider = sessionValueProvider(false);
 
 /// Whether the home page's selection ribbon is open. Selecting a game opens
 /// it, and only its close button closes it: emptying the selection any other

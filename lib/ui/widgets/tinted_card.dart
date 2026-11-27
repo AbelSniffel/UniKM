@@ -225,6 +225,8 @@ class const TintedCard({
     }
     final radius = BorderRadius.circular(theme.cornerRadius);
     final card = Material(
+      // A new corner radius applies at once, as it does to the shadow.
+      animationDuration: Duration.zero,
       color: backdrop == null ? tint : Color.alphaBlend(tint, backdrop!),
       shape: RoundedRectangleBorder(borderRadius: radius, side: side),
       clipBehavior: Clip.antiAlias,

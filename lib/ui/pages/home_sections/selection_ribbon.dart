@@ -107,8 +107,9 @@ class const SelectionRibbon({super.key}) extends ConsumerWidget {
         label: 'Multi-select',
         icon: Icons.library_add_check_outlined,
         selected: isMultiSelectEnabled,
-        onPressed: () =>
-            ref.read(selectionMultiSelectModeProvider.notifier).toggle(),
+        onPressed: () => ref
+            .read(selectionMultiSelectModeProvider.notifier)
+            .set(!isMultiSelectEnabled),
       ),
       _RibbonAction(
         id: 'all',
@@ -170,9 +171,7 @@ class const SelectionRibbon({super.key}) extends ConsumerWidget {
           // grows back with the next selection.
           TweenAnimationBuilder<double>(
             tween: Tween(end: selectedCount > 0 ? 1 : 0),
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : kFastAnimation,
+            duration: context.motion(kFastAnimation),
             curve: Curves.easeOutCubic,
             child: _SelectedGamesStrip(),
             builder: (context, height, strip) => ClipRect(
@@ -468,146 +467,156 @@ class const _RibbonBar({
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    key: const ValueKey('selection-ribbon-bar'),
-    height: kNavigationPanelHorizontalExtent,
-    // Groups fill the height left, like the navigation panel's.
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final countStyle = Theme.of(context).textTheme.bodyMedium!
-              .copyWith(color: theme.accent, fontWeight: FontWeight.w600);
-          const singleGroupWidth = _groupEdges + _button;
-          // Room for the close button, which is larger on touch platforms.
-          const clearWidth = 40.0;
-          // Each button adds its width and the spacing before it: the group's
-          // edges plus the gap between groups when it starts a new group.
-          final cumulativeWidths = <double>[0];
-          for (var index = 0; index < actions.length; index++) {
-            final startsGroup =
-                index == 0 || actions[index].group != actions[index - 1].group;
-            cumulativeWidths.add(
-              cumulativeWidths.last +
-                  _button +
-                  (startsGroup
-                      ? _groupEdges + (index > 0 ? _gap : 0)
-                      : NavButtonGroup.padding),
-            );
-          }
-          double summaryWidth(String text) =>
-              24 + _textWidth(context, text, countStyle);
-          // How many actions fit beside a summary of [width].
-          int fitting(double width) {
-            final available =
-                constraints.maxWidth - width - clearWidth - 2 * _gap;
-            if (cumulativeWidths.last <= available) return actions.length;
-            var count = 0;
-            while (count < actions.length &&
-                cumulativeWidths[count + 1] + singleGroupWidth + _gap <=
-                    available) {
-              count++;
-            }
-            return count;
-          }
-
-          // "Selected" shows only while every action still fits.
-          var summaryText = '$selectedCount Selected';
-          var summary = summaryWidth(summaryText);
-          var visibleCount = fitting(summary);
-          if (visibleCount < actions.length) {
-            summaryText = '$selectedCount';
-            summary = summaryWidth(summaryText);
-            visibleCount = fitting(summary);
-          }
-          final groups = <List<_RibbonAction>>[];
-          for (final action in actions.take(visibleCount)) {
-            if (groups.isEmpty || groups.last.last.group != action.group) {
-              groups.add([]);
-            }
-            groups.last.add(action);
-          }
-          final hasOverflow = visibleCount < actions.length;
-          final controlsWidth =
-              cumulativeWidths[visibleCount] +
-              (hasOverflow
-                  ? singleGroupWidth + (visibleCount > 0 ? _gap : 0)
-                  : 0);
-          final centeredLeft = (constraints.maxWidth - controlsWidth) / 2;
-          final controlsLeft = centeredLeft.clamp(
-            summary + _gap,
-            constraints.maxWidth - clearWidth - _gap - controlsWidth,
-          );
-          // The Steam group folds in and out after the selection group, so
-          // the groups around it slide apart or together.
-          final steam = groups
-              .where((group) => group.first.group == _RibbonActionGroup.steam)
-              .firstOrNull;
-          Widget buttons(List<_RibbonAction> group) => _group(
-            group.first.group.name,
-            [for (final action in group) _actionButton(action)],
-          );
-          final row = <Widget>[];
-          void add(Widget group) => row.add(
-            row.isEmpty
-                ? group
-                : Padding(
-                    padding: const EdgeInsets.only(left: _gap),
-                    child: group,
-                  ),
-          );
-          for (final group in groups) {
-            if (group == steam) continue;
-            add(buttons(group));
-            if (group.first.group == _RibbonActionGroup.selection) {
-              // Its gap to the group before it folds with it.
-              row.add(
-                HorizontalFold(
-                  key: const ValueKey('selection-steam-slot'),
-                  child: steam == null
-                      ? null
-                      : Padding(
-                          padding: const EdgeInsets.only(left: _gap),
-                          child: buttons(steam),
-                        ),
-                ),
+  Widget build(BuildContext context) => DecoratedBox(
+    // A line across its top, there with or without the chip strip above.
+    position: DecorationPosition.foreground,
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: theme.border)),
+    ),
+    child: SizedBox(
+      key: const ValueKey('selection-ribbon-bar'),
+      height: kNavigationPanelHorizontalExtent,
+      // Groups fill the height left, like the navigation panel's.
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final countStyle = Theme.of(context).textTheme.bodyMedium!
+                .copyWith(color: theme.accent, fontWeight: FontWeight.w600);
+            const singleGroupWidth = _groupEdges + _button;
+            // Room for the close button, which is larger on touch platforms.
+            const clearWidth = 40.0;
+            // Each button adds its width and the spacing before it: the group's
+            // edges plus the gap between groups when it starts a new group.
+            final cumulativeWidths = <double>[0];
+            for (var index = 0; index < actions.length; index++) {
+              final startsGroup =
+                  index == 0 ||
+                  actions[index].group != actions[index - 1].group;
+              cumulativeWidths.add(
+                cumulativeWidths.last +
+                    _button +
+                    (startsGroup
+                        ? _groupEdges + (index > 0 ? _gap : 0)
+                        : NavButtonGroup.padding),
               );
             }
-          }
-          if (hasOverflow) {
-            add(
-              _group('more', [_moreMenu(actions.skip(visibleCount).toList())]),
+            double summaryWidth(String text) =>
+                24 + _textWidth(context, text, countStyle);
+            // How many actions fit beside a summary of [width].
+            int fitting(double width) {
+              final available =
+                  constraints.maxWidth - width - clearWidth - 2 * _gap;
+              if (cumulativeWidths.last <= available) return actions.length;
+              var count = 0;
+              while (count < actions.length &&
+                  cumulativeWidths[count + 1] + singleGroupWidth + _gap <=
+                      available) {
+                count++;
+              }
+              return count;
+            }
+
+            // "Selected" shows only while every action still fits.
+            var summaryText = '$selectedCount Selected';
+            var summary = summaryWidth(summaryText);
+            var visibleCount = fitting(summary);
+            if (visibleCount < actions.length) {
+              summaryText = '$selectedCount';
+              summary = summaryWidth(summaryText);
+              visibleCount = fitting(summary);
+            }
+            final groups = <List<_RibbonAction>>[];
+            for (final action in actions.take(visibleCount)) {
+              if (groups.isEmpty || groups.last.last.group != action.group) {
+                groups.add([]);
+              }
+              groups.last.add(action);
+            }
+            final hasOverflow = visibleCount < actions.length;
+            final controlsWidth =
+                cumulativeWidths[visibleCount] +
+                (hasOverflow
+                    ? singleGroupWidth + (visibleCount > 0 ? _gap : 0)
+                    : 0);
+            final centeredLeft = (constraints.maxWidth - controlsWidth) / 2;
+            final controlsLeft = centeredLeft.clamp(
+              summary + _gap,
+              constraints.maxWidth - clearWidth - _gap - controlsWidth,
             );
-          }
-          final controls = Transform.translate(
-            offset: Offset(controlsLeft - centeredLeft, 0),
-            child: Row(
-              key: const ValueKey('selection-action-groups'),
-              mainAxisSize: MainAxisSize.min,
-              children: row,
-            ),
-          );
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _selectionSummary(summaryText, countStyle),
+            // The Steam group folds in and out after the selection group, so
+            // the groups around it slide apart or together.
+            final steam = groups
+                .where((group) => group.first.group == _RibbonActionGroup.steam)
+                .firstOrNull;
+            Widget buttons(List<_RibbonAction> group) => _group(
+              group.first.group.name,
+              [for (final action in group) _actionButton(action)],
+            );
+            final row = <Widget>[];
+            void add(Widget group) => row.add(
+              row.isEmpty
+                  ? group
+                  : Padding(
+                      padding: const EdgeInsets.only(left: _gap),
+                      child: group,
+                    ),
+            );
+            for (final group in groups) {
+              if (group == steam) continue;
+              add(buttons(group));
+              if (group.first.group == _RibbonActionGroup.selection) {
+                // Its gap to the group before it folds with it.
+                row.add(
+                  HorizontalFold(
+                    key: const ValueKey('selection-steam-slot'),
+                    child: steam == null
+                        ? null
+                        : Padding(
+                            padding: const EdgeInsets.only(left: _gap),
+                            child: buttons(steam),
+                          ),
+                  ),
+                );
+              }
+            }
+            if (hasOverflow) {
+              add(
+                _group('more', [
+                  _moreMenu(actions.skip(visibleCount).toList()),
+                ]),
+              );
+            }
+            final controls = Transform.translate(
+              offset: Offset(controlsLeft - centeredLeft, 0),
+              child: Row(
+                key: const ValueKey('selection-action-groups'),
+                mainAxisSize: MainAxisSize.min,
+                children: row,
               ),
-              controls,
-              Align(
-                alignment: Alignment.centerRight,
-                // The same close button as the app's dialogs.
-                child: IconButton(
-                  key: const ValueKey('selection-clear'),
-                  tooltip: 'Close',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close),
+            );
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _selectionSummary(summaryText, countStyle),
                 ),
-              ),
-            ],
-          );
-        },
+                controls,
+                Align(
+                  alignment: Alignment.centerRight,
+                  // The same close button as the app's dialogs.
+                  child: IconButton(
+                    key: const ValueKey('selection-clear'),
+                    tooltip: 'Close',
+                    onPressed: onClose,
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     ),
   );

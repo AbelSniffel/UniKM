@@ -233,28 +233,32 @@ abstract final class GameSelectionActions {
   // Delete
   // ───────────────────────────────────────────────────────────────────────────
 
-  static Future<void> deleteGames(
+  /// Deletes [targets] once confirmed; whether they were deleted. Every way
+  /// to delete (menus, the selection ribbon, the Delete key, the Game
+  /// Editor) goes through here, so each waits out a sync or Steam fetch and
+  /// reports a failure.
+  static Future<bool> deleteGames(
     BuildContext context,
     WidgetRef ref,
     AppThemeData theme,
     List<Game> targets,
   ) async {
-    if (_syncOperationLocked(ref.read, action: 'delete games')) return;
+    if (_syncOperationLocked(ref.read, action: 'delete games')) return false;
     if (ref.read(batchFetchProvider).isActive) {
       NotificationManager.instance.warning(
         'Cannot delete games while Steam data fetch is in progress',
       );
-      return;
+      return false;
     }
 
-    if (targets.isEmpty) return;
+    if (targets.isEmpty) return false;
     final confirmed = await showDeleteGamesDialog(
       context,
       theme,
       targets.length,
       gameTitle: targets.length == 1 ? targets.first.title : null,
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     final ids = targets.map((g) => g.id).toList();
     final ok = await ref.read(gamesProvider.notifier).deleteGames(ids);
@@ -262,7 +266,7 @@ abstract final class GameSelectionActions {
     if (!ok) {
       final error = ref.read(gamesProvider.select((s) => s.error));
       NotificationManager.instance.error(error ?? 'Failed to delete games');
-      return;
+      return false;
     }
 
     NotificationManager.instance.success(
@@ -270,5 +274,6 @@ abstract final class GameSelectionActions {
           ? 'Deleted: ${targets.first.title}'
           : 'Deleted ${targets.length} games',
     );
+    return true;
   }
 }

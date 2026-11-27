@@ -7,9 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/shortcuts/app_shortcuts.dart';
 import '../dialogs/copy_actions_dialog.dart';
-import '../dialogs/delete_games_dialog.dart';
 import '../../providers/app_providers.dart';
-import '../widgets/notification_system.dart';
+import '../widgets/game_selection_actions.dart';
 import 'home_sections/game_library_view.dart';
 import 'home_sections/home_filters_panel.dart';
 import 'home_sections/home_header.dart';
@@ -146,29 +145,13 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _handleDeleteSelection(BuildContext context) async {
     if (_searchFocusNode.hasFocus) return;
 
-    final selectedIds = ref.read(gamesProvider).selectedGameIds;
-    if (selectedIds.isEmpty) return;
-
-    final theme = ref.read(themeProvider);
-    final confirmed = await showDeleteGamesDialog(
+    final selected = ref.read(selectedGamesProvider);
+    if (selected.isEmpty) return;
+    await GameSelectionActions.deleteGames(
       context,
-      theme,
-      selectedIds.length,
-      gameTitle: selectedIds.length == 1
-          ? ref
-                .read(gamesProvider)
-                .games
-                .where((game) => selectedIds.contains(game.id))
-                .firstOrNull
-                ?.title
-          : null,
+      ref,
+      ref.read(themeProvider),
+      selected,
     );
-
-    if (confirmed) {
-      await ref.read(gamesProvider.notifier).deleteGames(selectedIds.toList());
-      NotificationManager.instance.success(
-        'Deleted ${selectedIds.length} game${selectedIds.length > 1 ? 's' : ''}',
-      );
-    }
   }
 }

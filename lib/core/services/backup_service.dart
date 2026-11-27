@@ -225,11 +225,8 @@ class BackupService({
   }
 
   /// Get the current database path (configured or default)
-  Future<String> _getBaseDatabasePath() async {
-    final configured = ref.read(currentDatabasePathProvider);
-    if (configured.isNotEmpty) return configured;
-    return AppDatabase.getDatabasePath();
-  }
+  Future<String> _getBaseDatabasePath() =>
+      AppDatabase.resolvePath(ref.read(currentDatabasePathProvider));
 
   /// Create a backup of the current database
   ///
@@ -335,9 +332,6 @@ class BackupService({
   Future<List<BackupInfo>> listBackups() async {
     final backupsDir = await getBackupsDirectory();
     final backups = <(BackupInfo, int)>[];
-
-    if (!await backupsDir.exists()) return const [];
-
     await for (final entity in backupsDir.list()) {
       if (entity is File) {
         final fileName = p.basename(entity.path);

@@ -36,7 +36,6 @@ class const PlatformFileActions._() {
     required String dialogTitle,
     required String fileName,
     required List<String> allowedExtensions,
-    String mobileSubdirectory = 'exports',
   }) async {
     if (!isMobilePlatform) {
       final outputPath = await _selectDesktopSavePath(
@@ -55,7 +54,7 @@ class const PlatformFileActions._() {
     // save dialog once written.
     final outputPath = await createManagedFilePath(
       fileName: fileName,
-      subdirectory: mobileSubdirectory,
+      subdirectory: 'exports',
     );
 
     return PlatformSaveTarget(
@@ -96,14 +95,16 @@ class const PlatformFileActions._() {
     return path == null || path.isEmpty ? null : path;
   }
 
-  static Future<String> createUniquePathInDirectory({
-    required String directoryPath,
+  /// A path for [fileName] in the app's own `UniKM/[subdirectory]`, with a
+  /// `_2`, `_3`… suffix when the name is taken.
+  static Future<String> createManagedFilePath({
     required String fileName,
+    String subdirectory = 'exports',
   }) async {
-    final targetDirectory = Directory(directoryPath);
-    if (!await targetDirectory.exists()) {
-      await targetDirectory.create(recursive: true);
-    }
+    final rootDirectory = await getApplicationDocumentsDirectory();
+    final targetDirectory = await Directory(
+      p.join(rootDirectory.path, 'UniKM', subdirectory),
+    ).create(recursive: true);
 
     final baseName = p.basenameWithoutExtension(fileName);
     final extension = p.extension(fileName);
@@ -121,22 +122,6 @@ class const PlatformFileActions._() {
     return candidatePath;
   }
 
-  static Future<String> createManagedFilePath({
-    required String fileName,
-    String subdirectory = 'exports',
-  }) async {
-    final rootDirectory = await getApplicationDocumentsDirectory();
-    final targetDirectoryPath = p.join(
-      rootDirectory.path,
-      'UniKM',
-      subdirectory,
-    );
-    return createUniquePathInDirectory(
-      directoryPath: targetDirectoryPath,
-      fileName: fileName,
-    );
-  }
-
   /// Hands a staged export on, as [PlatformSaveTarget.handoff] says. A
   /// shared one is kept unless the share is declined; a saved one leaves
   /// only the copy the user saved. False when the user backs out.
@@ -148,7 +133,7 @@ class const PlatformFileActions._() {
       case ExportHandoff.none:
         return true;
       case ExportHandoff.share:
-        if (await shareFile(target.file, subject: subject)) return true;
+        if (await _shareFile(target.file, subject)) return true;
         await _discard(target.file);
         return false;
       case ExportHandoff.saveAs:
@@ -173,15 +158,10 @@ class const PlatformFileActions._() {
     }
   }
 
-  static Future<bool> shareFile(
-    File file, {
-    String? subject,
-    String? text,
-  }) async {
+  static Future<bool> _shareFile(File file, String subject) async {
     final result = await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: subject, text: text),
+      ShareParams(files: [XFile(file.path)], subject: subject),
     );
-
     return result.status == ShareResultStatus.success;
   }
 

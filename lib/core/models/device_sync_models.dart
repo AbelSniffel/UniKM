@@ -39,9 +39,6 @@ class const DeviceSyncSnapshot({
     List<TrustedSyncPeer>? trustedPeers,
     List<DiscoveredSyncPeer>? discoveredPeers,
     List<PendingPairRequest>? pendingPairRequests,
-    DateTime? lastSyncAt,
-    bool clearLastSyncAt = false,
-    String? lastTrustedPeerId,
     bool clearLastTrustedPeerId = false,
     String? statusMessage,
     bool clearStatusMessage = false,
@@ -58,10 +55,8 @@ class const DeviceSyncSnapshot({
     trustedPeers: trustedPeers ?? this.trustedPeers,
     discoveredPeers: discoveredPeers ?? this.discoveredPeers,
     pendingPairRequests: pendingPairRequests ?? this.pendingPairRequests,
-    lastSyncAt: clearLastSyncAt ? null : (lastSyncAt ?? this.lastSyncAt),
-    lastTrustedPeerId: clearLastTrustedPeerId
-        ? null
-        : (lastTrustedPeerId ?? this.lastTrustedPeerId),
+    lastSyncAt: lastSyncAt,
+    lastTrustedPeerId: clearLastTrustedPeerId ? null : lastTrustedPeerId,
     statusMessage: clearStatusMessage
         ? null
         : (statusMessage ?? this.statusMessage),
@@ -221,8 +216,6 @@ class const TrustedSyncPeer({
     String? host,
     int? port,
     SyncDeviceType? deviceType,
-    String? fingerprint,
-    String? pairingId,
     int? transferPort,
     String? lastSeenAtIso,
   }) => TrustedSyncPeer(
@@ -231,8 +224,8 @@ class const TrustedSyncPeer({
     host: host ?? this.host,
     port: port ?? this.port,
     deviceType: deviceType ?? this.deviceType,
-    fingerprint: fingerprint ?? this.fingerprint,
-    pairingId: pairingId ?? this.pairingId,
+    fingerprint: fingerprint,
+    pairingId: pairingId,
     transferPort: transferPort ?? this.transferPort,
     lastSeenAtIso: lastSeenAtIso ?? this.lastSeenAtIso,
   );

@@ -129,9 +129,6 @@ class TagsNotifier extends Notifier<List<Tag>> {
     return true;
   }, failure: false);
 
-  Future<int> deleteUnusedTags() =>
-      _persist((db) => db.deleteUnusedTags(), refreshAfter: true);
-
   /// One-time cleanup: remove legacy default tags (custom-only).
   Future<int> deleteLegacyDefaultCustomTags() =>
       _persist((db) => db.deleteLegacyDefaultCustomTags(), refreshAfter: true);

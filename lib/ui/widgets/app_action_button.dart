@@ -70,7 +70,6 @@ class const AppActionButton({
   /// Selected text, indicator, and highlighted border color.
   final Color? accentColor,
 
-  final bool showStatus = true,
   final bool readOnly = false,
 
   /// Hide an off toggle's surface only while it is neither hovered nor active.
@@ -236,9 +235,7 @@ class const AppActionButton({
                       ? 0.45
                       : 0.65,
                 ),
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 110),
+                duration: context.motion(const Duration(milliseconds: 110)),
                 curve: Curves.easeOutCubic,
                 child: lighting,
                 // Only opacity animates. New theme RGB applies immediately,
@@ -272,7 +269,7 @@ class const AppActionButton({
         onPressed: readOnly ? null : onTap,
         style: style.copyWith(
           animationDuration: snapTheme ? Duration.zero : null,
-          foregroundBuilder: selected == null || !showStatus
+          foregroundBuilder: selected == null
               ? null
               : (context, states, label) => withStatus(
                   label!,
@@ -345,9 +342,7 @@ class const AppButtonSelectionIndicator({
     // Tweens only how lit it is, so a theme change recolours it at once.
     return TweenAnimationBuilder<double>(
       tween: Tween(end: selected ? 1 : 0),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 120),
+      duration: context.motion(const Duration(milliseconds: 120)),
       curve: Curves.easeOutCubic,
       builder: (context, lit, _) => Container(
         width: size,

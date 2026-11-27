@@ -27,17 +27,12 @@ double platformIconSizeFor(GamePlatform platform, {double? minHeight}) {
       ? math.max(23.0, math.min(minHeight * 0.6, 28.0))
       : 18.0;
 
-  double multiplier;
-  if (platform == GamePlatform.steam) {
-    multiplier = 1.14;
-  } else if (platform == GamePlatform.nintendo ||
-      platform == GamePlatform.itchio) {
-    multiplier = 0.91;
-  } else {
-    multiplier = 1.0;
-  }
-
-  return base * multiplier;
+  return base *
+      switch (platform) {
+        GamePlatform.steam => 1.14,
+        GamePlatform.nintendo || GamePlatform.itchio => 0.91,
+        _ => 1.0,
+      };
 }
 
 class const PlatformIcon({

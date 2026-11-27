@@ -241,26 +241,23 @@ class _AnimatedGradientBarState extends ConsumerState<AnimatedGradientBar>
     final accent = colors.length > 1 ? colors[1] : primary;
     final bg = widget.theme?.surface ?? Colors.black;
 
+    final vertical = widget.isVertical;
     return RepaintBoundary(
-      child: widget.isVertical
-          ? LayoutBuilder(
-              builder: (_, c) => SizedBox(
-                width:
-                    widget.width ??
-                    (c.maxWidth.isFinite ? c.maxWidth : widget.height),
-                height: c.maxHeight.isFinite ? c.maxHeight : widget.height,
-                child: _painter(primary, accent, bg, true),
-              ),
-            )
-          : LayoutBuilder(
-              builder: (_, c) => SizedBox(
-                height: widget.height,
-                width:
-                    widget.width ??
-                    (c.maxWidth.isFinite ? c.maxWidth : widget.width),
-                child: _painter(primary, accent, bg, false),
-              ),
-            ),
+      child: LayoutBuilder(
+        // [height] is the bar's thickness: across a vertical bar, which
+        // otherwise fills the height it is given.
+        builder: (_, c) => SizedBox(
+          width:
+              widget.width ??
+              (c.maxWidth.isFinite
+                  ? c.maxWidth
+                  : (vertical ? widget.height : null)),
+          height: !vertical
+              ? widget.height
+              : (c.maxHeight.isFinite ? c.maxHeight : widget.height),
+          child: _painter(primary, accent, bg, vertical),
+        ),
+      ),
     );
   }
 
@@ -367,13 +364,6 @@ class _GradientPainter(
       const [0, 0.22, 0.42, 0.7, 1],
     );
 
-  // Idle fractions for painter-level animations (pulse/heart). Kept local to
-  // the painter so drawing logic doesn't depend on State implementation.
-  static const _idleFraction = {
-    GradientAnimation.pulse: 0.5,
-    GradientAnimation.heart: 0.5,
-  };
-
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -428,8 +418,8 @@ class _GradientPainter(
     // Pulse should start from a true "off" state, then rise to a peak and
     // return to off before the idle pause. Use a cosine-based hump so
     // activeT==0 maps to alpha==minAlpha.
-    final idle = _idleFraction[GradientAnimation.pulse] ?? 0.0;
-    final period = 1.0 + idle; // active (1.0) + idle
+    // Active for 1, then idle for half as long.
+    const period = 1.5;
     final t = progress % period;
 
     // Minimum visible alpha when "off". Set to 0.0 for fully off start.
@@ -615,7 +605,7 @@ class _GradientPainter(
 
     _paint.shader = ui.Gradient.linear(
       vert ? Offset(0, -len) : Offset(-len, 0),
-      vert ? Offset(0, 0) : Offset(0, 0),
+      Offset.zero,
       colors,
       stops,
       TileMode.mirror,

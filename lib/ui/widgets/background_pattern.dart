@@ -29,8 +29,10 @@ class const PanelPatternWindow({super.key, required final Widget child})
 
 /// A panel background (the navigation panel's color and pattern) that shows
 /// its part of the window-wide pattern, so panels line up wherever they sit.
-/// A [page] surface has the app background instead, and a much fainter
-/// pattern while pages show it.
+/// A [page] surface paints no color: it lies on the app background, which
+/// the window's Scaffold already paints, and shows a much fainter pattern
+/// while pages show it. A second fill there would cost a full-area layer
+/// every frame.
 class const PanelPatternSurface({
   super.key,
   final bool page = false,
@@ -51,7 +53,7 @@ class const PanelPatternSurface({
     final patternStrength = ref.watch(patternStrengthProvider);
     final showOnPage = ref.watch(pagePatternProvider);
     return _PanelPatternSurface(
-      color: page ? theme.background : theme.navBackground,
+      color: page ? null : theme.navBackground,
       pixelRatio: MediaQuery.devicePixelRatioOf(context),
       recolorLater: ref.read(themeProvider.notifier).isPreviewMode,
       pattern: BackgroundPatternPainter(
@@ -71,7 +73,7 @@ class const PanelPatternSurface({
 }
 
 class const _PanelPatternSurface({
-  required final Color color,
+  required final Color? color,
   required final BackgroundPatternPainter pattern,
   required final double pixelRatio,
   required final bool recolorLater,
@@ -103,7 +105,7 @@ class const _PanelPatternSurface({
 /// [_recolorDelay]: redrawing every tile on each step of a color drag halved
 /// the frame rate on a weak GPU.
 class _RenderPanelPatternSurface(
-  var Color _color,
+  var Color? _color,
   var BackgroundPatternPainter _pattern,
   var double _pixelRatio,
   var bool _recolorLater,
@@ -149,8 +151,9 @@ class _RenderPanelPatternSurface(
     }
   }
 
-  // Painted under the recording, whose tiles hold only the pattern.
-  set color(Color value) {
+  // Painted under the recording, whose tiles hold only the pattern; a page
+  // surface has none.
+  set color(Color? value) {
     if (value == _color) return;
     _color = value;
     markNeedsPaint();
@@ -267,7 +270,9 @@ class _RenderPanelPatternSurface(
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    context.canvas.drawRect(offset & size, Paint()..color = _color);
+    if (_color case final color?) {
+      context.canvas.drawRect(offset & size, Paint()..color = color);
+    }
     if (_pattern.isVisible) {
       final area = _area;
       if (!_covers(area)) {
@@ -661,21 +666,17 @@ class const BackgroundPatternPainter({
   List<double> get _tierAlphas =>
       preview ? const [0.6, 0.38, 0.24] : const [0.4, 0.24, 0.14];
 
-  /// A soft halo of [path], blurred by [blur], for drawing under it; along
-  /// the line for a [stroke] width.
+  /// A soft halo of [path], blurred by [blur], for drawing under it.
   void _glow(
     Canvas canvas,
     Path path,
     Color color,
     double alpha,
-    double blur, {
-    double? stroke,
-  }) => canvas.drawPath(
+    double blur,
+  ) => canvas.drawPath(
     path,
     Paint()
       ..color = _tone(color, alpha)
-      ..style = stroke == null ? PaintingStyle.fill : PaintingStyle.stroke
-      ..strokeWidth = stroke ?? 0
       ..strokeCap = StrokeCap.round
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur),
   );

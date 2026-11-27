@@ -8,7 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/animated_popover.dart';
-import '../../widgets/app_dialog.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -167,9 +166,12 @@ class const AppearanceSection({
               const SizedBox(height: 10),
               // Only the panel animates its height, so the actions below
               // move with the groupbox instead of jumping to their place.
-              _animatedPanelHeight(
-                visibleTab,
-                AppTabTransition(
+              // Only a Default/Custom switch animates it; a resizing window
+              // reflows the cards at once, as the other card panels do.
+              TabHeightTransition(
+                key: const ValueKey('appearance-theme-size'),
+                tab: visibleTab,
+                child: AppTabTransition(
                   index: visibleTab,
                   child: visibleThemes.isEmpty
                       ? Padding(
@@ -194,7 +196,7 @@ class const AppearanceSection({
                                 selected: current.id == themeData.id,
                                 onDoubleTap: builtInIds.contains(themeData.id)
                                     ? null
-                                    : () => _openThemeEditor(
+                                    : () => ThemeEditorDialog.show(
                                         context,
                                         ref,
                                         existing: themeData,
@@ -209,9 +211,13 @@ class const AppearanceSection({
               ),
               const SizedBox(height: 10),
               ThemePickerActions(
-                onCreate: () => _openThemeEditor(context, ref),
+                onCreate: () => ThemeEditorDialog.show(context, ref),
                 onEdit: canManageCurrent
-                    ? () => _openThemeEditor(context, ref, existing: current)
+                    ? () => ThemeEditorDialog.show(
+                        context,
+                        ref,
+                        existing: current,
+                      )
                     : null,
                 onDelete: canManageCurrent
                     ? () => deleteCustomThemeWithConfirmation(
@@ -236,28 +242,6 @@ class const AppearanceSection({
       ],
     );
   }
-}
-
-// Only a Default/Custom switch animates the height; a resizing window
-// reflows the cards at once, as the other card panels do.
-Widget _animatedPanelHeight(int tab, Widget panel) => TabHeightTransition(
-  key: const ValueKey('appearance-theme-size'),
-  tab: tab,
-  child: panel,
-);
-
-void _openThemeEditor(
-  BuildContext context,
-  WidgetRef ref, {
-  AppThemeData? existing,
-}) {
-  // Capture before opening: resizing may replace the footer while the editor
-  // stays open, so its route builder must not read the initiating widget ref.
-  final theme = ref.read(themeProvider);
-  showAppDialog<void>(
-    context: context,
-    builder: (_) => ThemeEditorDialog(theme: theme, existingTheme: existing),
-  );
 }
 
 Future<void> _importThemes(BuildContext context, WidgetRef ref) async {

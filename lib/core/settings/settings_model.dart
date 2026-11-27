@@ -4,8 +4,6 @@ library;
 
 import 'dart:io';
 
-import '../constants/app_constants.dart';
-
 /// Navigation bar position options
 enum NavBarPosition(final String displayName) {
   left('Left'),
@@ -88,12 +86,6 @@ enum GradientAnimationSpeed(final String displayName, final double multiplier) {
   veryFast('Very fast', 2.0),
 }
 
-/// Tooltip animation styles
-enum TooltipAnimation(final String displayName) {
-  fade('Fade'),
-  slide('Slide'),
-}
-
 /// Game list view mode
 enum GameListViewMode(final String displayName) {
   grid('Grid'),
@@ -130,7 +122,6 @@ class SettingsKeys._() {
   static const String autoUpdateCheck = 'auto_update_check';
   static const String updateRepo = 'update_repo';
   static const String includePreReleases = 'include_pre_releases';
-  static const String autoCheckIntervalMinutes = 'auto_check_interval_minutes';
   static const String skippedVersions = 'skipped_versions';
   static const String githubApiToken = 'github_api_token';
 
@@ -161,8 +152,6 @@ class SettingsKeys._() {
   // Animations
   static const String gradientAnimation = 'gradient_animation';
   static const String gradientAnimationSpeed = 'gradient_animation_speed';
-  static const String tooltipAnimation = 'tooltip_animation';
-  static const String tooltipShowDelay = 'tooltip_show_delay';
   // When true, gradient bars will swap the theme primary and accent colors
   static const String swapGradientColors = 'swap_gradient_colors';
 
@@ -187,7 +176,6 @@ class SettingsKeys._() {
 
   // Database
   static const String databasePath = 'database_path';
-  static const String isEncrypted = 'is_encrypted';
   static const String recentDatabasePaths = 'recent_database_paths';
 
   // Device Sync
@@ -203,10 +191,6 @@ class SettingsKeys._() {
   static const String syncStaticPrivateKey = 'sync_static_private_key';
   static const String syncStaticPublicKey = 'sync_static_public_key';
 
-  // Additional UI Settings (used by settings page)
-  static const String currentTheme = 'current_theme';
-  static const String showPlatformBadges = 'show_platform_badges';
-  static const String showTagChips = 'show_tag_chips';
   static const String showRatings = 'show_ratings';
 
   // Notifications
@@ -221,8 +205,6 @@ class SettingsKeys._() {
   static const String hideInRecents = 'hide_in_recents';
 
   // Debug
-  static const String developerMode = 'developer_mode';
-  static const String showStatusBar = 'show_status_bar';
   static const String showGameDetailsSkmId = 'show_game_details_skm_id';
   static const String showSyncDeviceId = 'show_sync_device_id';
   static const String showSyncStatus = 'show_sync_status';
@@ -244,8 +226,6 @@ class SettingsKeys._() {
 
 /// Default settings values
 class DefaultSettings._() {
-  static const int autoCheckIntervalMinutes = kDefaultAutoUpdateIntervalMinutes;
-
   // Theme & UI
   static const String activeTheme = 'Dark';
 
@@ -268,7 +248,6 @@ class DefaultSettings._() {
   static const GradientAnimation gradientAnimation = GradientAnimation.scroll;
   static const GradientAnimationSpeed gradientAnimationSpeed =
       GradientAnimationSpeed.standard;
-  static const TooltipAnimation tooltipAnimation = TooltipAnimation.slide;
 
   // Game List
   static const GameListViewMode gameListViewMode = GameListViewMode.list;
@@ -282,7 +261,6 @@ class DefaultSettings._() {
   static const String syncLastSyncAtIso = '';
 
   // Debug
-  static const bool showStatusBar = false;
   static const bool showGameDetailsSkmId = false;
 }
 
@@ -296,7 +274,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.githubApiToken: '',
   SettingsKeys.activeTheme: DefaultSettings.activeTheme,
   SettingsKeys.customThemes: <String>[],
-  SettingsKeys.tooltipShowDelay: 600,
   // Swap primary & accent used by gradient bars (off by default)
   SettingsKeys.swapGradientColors: false,
   SettingsKeys.patternStrength: 1.0,
@@ -311,14 +288,11 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.showTagsOnHoverOnly: true,
   SettingsKeys.showDeadlineChip: true,
   SettingsKeys.slimListView: Platform.isAndroid || Platform.isIOS,
-  SettingsKeys.showPlatformBadges: true,
-  SettingsKeys.showTagChips: true,
   SettingsKeys.showRatings: true,
   SettingsKeys.autoBackupEnabled: true,
   SettingsKeys.autoBackupIntervalMinutes: 5,
   SettingsKeys.backupMaxCount: 10,
   SettingsKeys.databasePath: '',
-  SettingsKeys.isEncrypted: false,
   SettingsKeys.recentDatabasePaths: const <String>[],
   SettingsKeys.syncEnabled: DefaultSettings.syncEnabled,
   SettingsKeys.syncAutoOnStartup: DefaultSettings.syncAutoOnStartup,
@@ -337,8 +311,6 @@ Map<String, Object> get settingDefaults => {
   SettingsKeys.maskKeys: true,
   SettingsKeys.autoLockMinutes: 0,
   SettingsKeys.hideInRecents: false,
-  SettingsKeys.developerMode: false,
-  SettingsKeys.showStatusBar: DefaultSettings.showStatusBar,
   SettingsKeys.showGameDetailsSkmId: DefaultSettings.showGameDetailsSkmId,
   SettingsKeys.showSyncDeviceId: false,
   SettingsKeys.showSyncStatus: false,
@@ -382,10 +354,6 @@ const enumSettingDefaults = <String, (List<Enum>, Enum)>{
   SettingsKeys.gradientAnimationSpeed: (
     GradientAnimationSpeed.values,
     DefaultSettings.gradientAnimationSpeed,
-  ),
-  SettingsKeys.tooltipAnimation: (
-    TooltipAnimation.values,
-    DefaultSettings.tooltipAnimation,
   ),
   SettingsKeys.gameListViewMode: (
     GameListViewMode.values,
@@ -452,7 +420,6 @@ NotificationsSettings notificationsSettingsFromMap(
 
 typedef UpdatesSettings = ({
   bool autoCheckEnabled,
-  int autoCheckIntervalMinutes,
   bool includePrerelease,
   List<String> skippedVersions,
   String updateRepo,
@@ -461,7 +428,6 @@ typedef UpdatesSettings = ({
 
 UpdatesSettings updatesSettingsFromMap(Map<String, dynamic> settings) => (
   autoCheckEnabled: readSetting(settings, SettingsKeys.autoUpdateCheck),
-  autoCheckIntervalMinutes: DefaultSettings.autoCheckIntervalMinutes,
   includePrerelease: readSetting(settings, SettingsKeys.includePreReleases),
   skippedVersions: readSetting(settings, SettingsKeys.skippedVersions),
   updateRepo: readSetting(settings, SettingsKeys.updateRepo),
@@ -496,7 +462,6 @@ typedef AppShellSettings = ({
   GradientAnimation gradientAnimation,
   bool autoBackupEnabled,
   int autoBackupIntervalMinutes,
-  bool developerMode,
   double windowWidth,
   double windowHeight,
   double? windowX,
@@ -514,7 +479,6 @@ AppShellSettings appShellSettingsFromMap(Map<String, dynamic> settings) => (
     settings,
     SettingsKeys.autoBackupIntervalMinutes,
   ),
-  developerMode: readSetting(settings, SettingsKeys.developerMode),
   windowWidth: readSetting(settings, SettingsKeys.windowWidth),
   windowHeight: readSetting(settings, SettingsKeys.windowHeight),
   windowX: settings[SettingsKeys.windowX] as double?,

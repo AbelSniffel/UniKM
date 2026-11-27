@@ -64,36 +64,21 @@ double weightedSimilarity(String a, String b) {
   final tokensA = sa.split(' ');
   final tokensB = sb.split(' ');
 
-  double totalWeightA = 0.0;
-  double totalWeightB = 0.0;
-  final weightsA = <double>[];
+  // Number tokens weigh most, then roman numerals, then by length.
+  double weight(String t) =>
+      t.length +
+      (_numberPattern.hasMatch(t)
+          ? 3.0
+          : _romanPattern.hasMatch(t)
+          ? 2.0
+          : 0.0);
+  final weightsA = tokensA.map(weight).toList();
+  final totalWeightA = weightsA.fold(0.0, (sum, w) => sum + w);
+  final totalWeightB = tokensB.map(weight).fold(0.0, (sum, w) => sum + w);
+  final hasNumberA = tokensA.any(_numberPattern.hasMatch);
+  final hasNumberB = tokensB.any(_numberPattern.hasMatch);
 
   double tokenMatchWeight = 0.0;
-
-  bool hasNumberA = false;
-  bool hasNumberB = false;
-
-  for (final t in tokensA) {
-    double w = t.length.toDouble();
-    if (_numberPattern.hasMatch(t)) {
-      w += 3.0; // number tokens are very important
-      hasNumberA = true;
-    } else if (_romanPattern.hasMatch(t)) {
-      w += 2.0; // roman numerals matter
-    }
-    weightsA.add(w);
-    totalWeightA += w;
-  }
-  for (final t in tokensB) {
-    double w = t.length.toDouble();
-    if (_numberPattern.hasMatch(t)) {
-      w += 3.0;
-      hasNumberB = true;
-    } else if (_romanPattern.hasMatch(t)) {
-      w += 2.0;
-    }
-    totalWeightB += w;
-  }
 
   // Exact token matches weighted by token weight
   for (var i = 0; i < tokensA.length; i++) {

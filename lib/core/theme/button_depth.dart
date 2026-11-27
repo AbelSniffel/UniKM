@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../constants/app_constants.dart';
+import 'app_theme.dart';
 
 /// Shared depth lighting that follows each button's resolved Material shape.
 ButtonStyle withButtonDepth(ButtonStyle base, {required bool outlined}) =>
@@ -150,9 +151,7 @@ class const ButtonDepthLayer({
           ? -0.45
           : 1,
     ),
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 110),
+    duration: context.motion(const Duration(milliseconds: 110)),
     curve: Curves.easeOutCubic,
     child: child,
     builder: (_, depth, child) => CustomPaint(
@@ -206,9 +205,6 @@ class const ButtonDepthPainter(
       oldDelegate.textDirection != textDirection;
 }
 
-Duration _fade(BuildContext context, Duration duration) =>
-    MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
-
 /// Fades label and icon colors between their enabled and disabled values.
 class const _AnimatedButtonForeground({
   required final bool disabled,
@@ -221,7 +217,7 @@ class const _AnimatedButtonForeground({
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(end: disabled ? 0 : 1),
-    duration: _fade(context, kFastAnimation),
+    duration: context.motion(kFastAnimation),
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, enabled, child) => DefaultTextStyle.merge(
@@ -250,13 +246,13 @@ class const _AnimatedButtonSurface({
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(end: disabled ? 0 : 1),
-    duration: _fade(context, kFastAnimation),
+    duration: context.motion(kFastAnimation),
     curve: Curves.easeOutCubic,
     child: child,
     builder: (context, enabled, child) => TweenAnimationBuilder<double>(
       // Matches Material's implicit elevation animation.
       tween: Tween(end: shadow && !disabled && !pressed ? 1 : 0),
-      duration: _fade(context, kThemeChangeDuration),
+      duration: context.motion(kThemeChangeDuration),
       curve: Curves.fastOutSlowIn,
       child: Ink(
         decoration: ShapeDecoration(

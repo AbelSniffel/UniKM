@@ -22,7 +22,6 @@ class const DeadlineChip({
   Future<void> _chooseDate(BuildContext context) async {
     final selected = await showDeadlinePickerDialog(
       context: context,
-      theme: context.appTheme,
       initialDate: date ?? DateTime.now(),
       firstDate: firstDate,
     );

@@ -60,9 +60,6 @@ class const SectionGroupBox({
   final EdgeInsets padding = const EdgeInsets.all(12),
   final IconData? titleIcon,
   final Widget? trailing,
-
-  /// Header action groups use the same breakpoint as full-width settings cards.
-  final bool stackTrailingWhenCompact = false,
   final CrossAxisAlignment headerCrossAxisAlignment = CrossAxisAlignment.start,
 
   /// Gap below a top title, before the body content.
@@ -80,10 +77,6 @@ class const SectionGroupBox({
   /// the bordered/background container is shown. Useful when you want the
   /// groupbox strip visuals (borders, alternating colours) without labels.
   final bool showTitle = true,
-
-  /// Titles a framed box in the text colour, as flat headings are, instead
-  /// of the accent.
-  final bool plainTitle = false,
 }) extends ConsumerWidget {
   /// The surface's opacity while the pattern shows on pages ([tinted]).
   static const double patternAlpha = 0.8;
@@ -142,7 +135,7 @@ class const SectionGroupBox({
 
   Widget _buildHeaderText(AppThemeData theme, {bool flat = false}) {
     final titleStyle = TextStyle(
-      color: flat || plainTitle ? theme.textPrimary : theme.accent,
+      color: flat ? theme.textPrimary : theme.accent,
       fontSize: 16,
       fontWeight: FontWeight.w600,
       height: 1.35,
@@ -162,13 +155,11 @@ class const SectionGroupBox({
   Widget _buildFrame(BuildContext context, double highlightValue, bool tinted) {
     final theme = context.appTheme;
     final baseBorderColor = theme.border;
-    final effectiveBorderColor =
-        Color.lerp(
-          baseBorderColor,
-          theme.accent,
-          highlightValue.clamp(0.0, 1.0),
-        ) ??
-        baseBorderColor;
+    final effectiveBorderColor = Color.lerp(
+      baseBorderColor,
+      theme.accent,
+      highlightValue.clamp(0.0, 1.0),
+    )!;
     final highlightBg = theme.accent.withValues(alpha: 0.10 * highlightValue);
     final pos = groupPosition;
 
@@ -204,7 +195,7 @@ class const SectionGroupBox({
       color: bgColor,
       textStyle: DefaultTextStyle.of(context).style,
       animationDuration: Duration.zero,
-      child: _buildTopTitle(theme, outerRadius),
+      child: _buildTopTitle(theme),
     );
     // Keep controls mounted when search filtering changes connected corners.
     final bgLayer = ClipRRect(
@@ -242,50 +233,23 @@ class const SectionGroupBox({
     );
   }
 
-  // Both header layouts are built outside the layout callback, so a width
-  // change only picks one instead of rebuilding the title and trailing.
-  Widget _buildHeader(AppThemeData theme, {bool flat = false}) {
-    final title = Expanded(child: _buildTitleRow(theme, flat: flat));
-    Column header(List<Widget> children) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 4,
-      children: children,
-    );
-    final inline = header([
-      Row(
-        crossAxisAlignment: _alignment(flat),
-        spacing: 12,
-        children: [title, ?trailing],
-      ),
-    ]);
-    if (!stackTrailingWhenCompact || trailing == null) return inline;
-    final stacked = header([
-      Row(crossAxisAlignment: _alignment(flat), children: [title]),
-      Align(alignment: Alignment.centerRight, child: trailing!),
-    ]);
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          constraints.maxWidth <= kSettingsCompactLayoutBreakpoint
-          ? stacked
-          : inline,
-    );
-  }
+  Widget _buildHeader(AppThemeData theme, {bool flat = false}) => Row(
+    crossAxisAlignment: _alignment(flat),
+    spacing: 12,
+    children: [
+      Expanded(child: _buildTitleRow(theme, flat: flat)),
+      ?trailing,
+    ],
+  );
 
-  Widget _buildTopTitle(AppThemeData theme, BorderRadius outerRadius) {
-    // Title header rounds only its own top corners (clipped by outer layer).
-    final titleHeaderRadius = BorderRadius.only(
-      topLeft: outerRadius.topLeft,
-      topRight: outerRadius.topRight,
-    );
-
-    final titleHeader = Container(
+  Widget _buildTopTitle(AppThemeData theme) {
+    final titleHeader = Padding(
       padding: EdgeInsets.fromLTRB(
         padding.left,
         padding.top,
         padding.right,
         headerBottomPadding,
       ),
-      decoration: BoxDecoration(borderRadius: titleHeaderRadius),
       child: _buildHeader(theme),
     );
 

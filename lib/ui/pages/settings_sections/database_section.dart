@@ -22,6 +22,7 @@ import '../../../core/services/encryption_manager.dart';
 import '../../../core/services/platform_file_actions.dart';
 import '../../../core/settings/settings_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/format_utils.dart';
 import '../../../providers/app_providers.dart';
 import '../../dialogs/backup_dialogs.dart';
 import '../../dialogs/encryption_dialogs.dart';
@@ -246,9 +247,7 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
     setState(() => _busy = true);
     try {
       final path = DatabaseSessionLoader.basePath(
-        configuredPath.isNotEmpty
-            ? configuredPath
-            : await AppDatabase.getDatabasePath(),
+        await AppDatabase.resolvePath(configuredPath),
       );
       if (!mounted) return;
       final manager = container.read(encryptionManagerProvider(path));
@@ -271,7 +270,6 @@ class _EncryptionControlsState extends ConsumerState<_EncryptionControls> {
     final password = await EnableEncryptionDialog.show(
       context,
       context.appTheme,
-      controller.manager,
     );
     if (password == null) return;
     await controller.enable(password);
@@ -500,9 +498,7 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
 
   Future<void> _initializeDatabasePath({required String configuredPath}) async {
     final request = ++_pathRequest;
-    final resolvedPath = configuredPath.isNotEmpty
-        ? configuredPath
-        : await AppDatabase.getDatabasePath();
+    final resolvedPath = await AppDatabase.resolvePath(configuredPath);
     if (!mounted || request != _pathRequest) return;
     setState(() {
       _activeDbPath = resolvedPath;
@@ -622,7 +618,6 @@ class _DatabaseSectionState extends ConsumerState<DatabaseSection> {
                   onTap: () => showDeviceSyncDialog(context),
                 ),
                 buildSpecToggleSettingList(
-                  theme: context.appTheme,
                   entries: [
                     (
                       spec: DatabaseSection.enableLocalDeviceSyncSpec,
@@ -881,20 +876,6 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
         .set(SettingsKeys.recentDatabasePaths, recents);
   }
 
-  String _formatBytes(int bytes) {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    double size = bytes.toDouble();
-    int unitIndex = 0;
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex += 1;
-    }
-
-    final precision = size >= 100 ? 0 : (size >= 10 ? 1 : 2);
-    return '${size.toStringAsFixed(precision)} ${units[unitIndex]}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = context.appTheme;
@@ -1026,7 +1007,7 @@ class _ChangeDatabaseDialogState extends ConsumerState<_ChangeDatabaseDialog>
                                 title: p.basename(resolvedPath),
                                 subtitle: sizeBytes == null
                                     ? resolvedPath
-                                    : '${_formatBytes(sizeBytes)} • $resolvedPath',
+                                    : '${formatFileSize(sizeBytes)} • $resolvedPath',
                                 isEncrypted: file?.isEncrypted ?? false,
                                 available: file?.exists ?? false,
                                 onTap: file?.exists == true
